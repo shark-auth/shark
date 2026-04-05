@@ -97,6 +97,32 @@ func (ts *TestServer) PostJSON(path string, body interface{}) *http.Response {
 	return resp
 }
 
+// PatchJSON sends a PATCH request with a JSON body and returns the response.
+func (ts *TestServer) PatchJSON(path string, body interface{}) *http.Response {
+	ts.T.Helper()
+
+	var bodyReader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			ts.T.Fatalf("marshaling request body: %v", err)
+		}
+		bodyReader = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequest("PATCH", ts.URL(path), bodyReader)
+	if err != nil {
+		ts.T.Fatalf("creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := ts.Client.Do(req)
+	if err != nil {
+		ts.T.Fatalf("sending request: %v", err)
+	}
+	return resp
+}
+
 // Get sends a GET request and returns the response.
 func (ts *TestServer) Get(path string) *http.Response {
 	ts.T.Helper()

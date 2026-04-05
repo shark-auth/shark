@@ -24,6 +24,7 @@ type Server struct {
 	Config           *config.Config
 	Router           chi.Router
 	SessionManager   *auth.SessionManager
+	PasskeyManager   *auth.PasskeyManager
 	OAuthManager     *auth.OAuthManager
 	MagicLinkManager *auth.MagicLinkManager
 	RBAC             *rbac.RBACManager
@@ -60,6 +61,15 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	for _, opt := range opts {
 		opt(s)
 	}
+
+	// Initialize Passkey manager
+	pm, err := auth.NewPasskeyManager(store, sm, cfg.Passkeys)
+	if err != nil {
+		// Log but don't fail - passkeys are optional
+		// If config is invalid (e.g. no RPID), passkey endpoints will return errors
+		pm = nil
+	}
+	s.PasskeyManager = pm
 
 	// Initialize OAuth manager
 	s.initOAuthManager()
@@ -108,13 +118,22 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 			// Passkeys
 			r.Route("/passkey", func(r chi.Router) {
-				r.Post("/register/begin", notImplemented)
-				r.Post("/register/finish", notImplemented)
-				r.Post("/login/begin", notImplemented)
-				r.Post("/login/finish", notImplemented)
-				r.Get("/credentials", notImplemented)
-				r.Delete("/credentials/{id}", notImplemented)
-				r.Patch("/credentials/{id}", notImplemented)
+				// Registration requires auth
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireSessionFunc(sm))
+					r.Post("/register/begin", s.handlePasskeyRegisterBegin)
+					r.Post("/register/finish", s.handlePasskeyRegisterFinish)
+				})
+				// Login is public
+				r.Post("/login/begin", s.handlePasskeyLoginBegin)
+				r.Post("/login/finish", s.handlePasskeyLoginFinish)
+				// Credential management requires auth
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireSessionFunc(sm))
+					r.Get("/credentials", s.handlePasskeyCredentialsList)
+					r.Delete("/credentials/{id}", s.handlePasskeyCredentialDelete)
+					r.Patch("/credentials/{id}", s.handlePasskeyCredentialRename)
+				})
 			})
 
 			// Magic Links
