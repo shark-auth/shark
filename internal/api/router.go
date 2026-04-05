@@ -6,8 +6,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/sharkauth/sharkauth/internal/audit"
 	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/storage"
 
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
@@ -20,6 +22,8 @@ type Server struct {
 	Router         chi.Router
 	SessionManager *auth.SessionManager
 	OAuthManager   *auth.OAuthManager
+	RBAC           *rbac.RBACManager
+	AuditLogger    *audit.Logger
 }
 
 // NewServer creates a new API server with all routes mounted.
@@ -33,8 +37,14 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 		SessionManager: sm,
 	}
 
-	// Initialize OAuth manager (providers are registered externally or via RegisterOAuthProviders)
+	// Initialize OAuth manager
 	s.initOAuthManager()
+
+	// Initialize RBAC manager
+	s.RBAC = rbac.NewRBACManager(store)
+
+	// Initialize Audit logger
+	s.AuditLogger = audit.NewLogger(store)
 
 	r := chi.NewRouter()
 
@@ -60,7 +70,7 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 				r.Use(mw.RequireMFA)
 				r.Get("/me", s.handleMe)
 			})
-			r.Post("/check", notImplemented)
+			r.Post("/check", s.handleAuthCheck)
 
 			// OAuth
 			r.Route("/oauth", func(r chi.Router) {
@@ -111,20 +121,20 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 		// Roles (admin)
 		r.Route("/roles", func(r chi.Router) {
 			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
-			r.Post("/", notImplemented)
-			r.Get("/", notImplemented)
-			r.Get("/{id}", notImplemented)
-			r.Put("/{id}", notImplemented)
-			r.Delete("/{id}", notImplemented)
-			r.Post("/{id}/permissions", notImplemented)
-			r.Delete("/{id}/permissions/{pid}", notImplemented)
+			r.Post("/", s.handleCreateRole)
+			r.Get("/", s.handleListRoles)
+			r.Get("/{id}", s.handleGetRole)
+			r.Put("/{id}", s.handleUpdateRole)
+			r.Delete("/{id}", s.handleDeleteRole)
+			r.Post("/{id}/permissions", s.handleAttachPermission)
+			r.Delete("/{id}/permissions/{pid}", s.handleDetachPermission)
 		})
 
 		// Permissions (admin)
 		r.Route("/permissions", func(r chi.Router) {
 			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
-			r.Post("/", notImplemented)
-			r.Get("/", notImplemented)
+			r.Post("/", s.handleCreatePermission)
+			r.Get("/", s.handleListPermissions)
 		})
 
 		// Users (admin)
@@ -133,11 +143,11 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 			r.Get("/", notImplemented)
 			r.Get("/{id}", notImplemented)
 			r.Delete("/{id}", notImplemented)
-			r.Post("/{id}/roles", notImplemented)
-			r.Delete("/{id}/roles/{rid}", notImplemented)
-			r.Get("/{id}/roles", notImplemented)
-			r.Get("/{id}/permissions", notImplemented)
-			r.Get("/{id}/audit-logs", notImplemented)
+			r.Post("/{id}/roles", s.handleAssignRole)
+			r.Delete("/{id}/roles/{rid}", s.handleRemoveRole)
+			r.Get("/{id}/roles", s.handleListUserRoles)
+			r.Get("/{id}/permissions", s.handleListUserPermissions)
+			r.Get("/{id}/audit-logs", s.handleUserAuditLogs)
 		})
 
 		// SSO connections (admin)
@@ -170,9 +180,9 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 		// Audit Logs (admin)
 		r.Route("/audit-logs", func(r chi.Router) {
 			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
-			r.Get("/", notImplemented)
-			r.Get("/{id}", notImplemented)
-			r.Post("/export", notImplemented)
+			r.Get("/", s.handleListAuditLogs)
+			r.Get("/{id}", s.handleGetAuditLog)
+			r.Post("/export", s.handleExportAuditLogs)
 		})
 
 		// Migration (admin)
