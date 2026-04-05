@@ -12,6 +12,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/rbac"
+	"github.com/sharkauth/sharkauth/internal/sso"
 	"github.com/sharkauth/sharkauth/internal/storage"
 
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
@@ -28,6 +29,7 @@ type Server struct {
 	RBAC             *rbac.RBACManager
 	AuditLogger      *audit.Logger
 	RateLimiter      *auth.TokenBucket
+	SSOHandlers      *SSOHandlers
 	magicLinkRL      *magicLinkRateLimiter
 }
 
@@ -67,6 +69,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 	// Initialize Audit logger
 	s.AuditLogger = audit.NewLogger(store)
+
+	// Initialize SSO manager + handlers
+	ssoManager := sso.NewSSOManager(store, sm, cfg)
+	s.SSOHandlers = NewSSOHandlers(ssoManager)
 
 	r := chi.NewRouter()
 
@@ -137,7 +143,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			})
 
 			// SSO auto-route
-			r.Get("/sso", notImplemented)
+			r.Get("/sso", s.SSOHandlers.SSOAutoRoute)
 		})
 
 		// Roles (admin)
@@ -172,20 +178,24 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{id}/audit-logs", s.handleUserAuditLogs)
 		})
 
-		// SSO connections (admin)
+		// SSO connections (admin + public endpoints)
 		r.Route("/sso", func(r chi.Router) {
-			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
-			r.Route("/connections", func(r chi.Router) {
-				r.Post("/", notImplemented)
-				r.Get("/", notImplemented)
-				r.Get("/{id}", notImplemented)
-				r.Put("/{id}", notImplemented)
-				r.Delete("/{id}", notImplemented)
+			// Admin CRUD
+			r.Group(func(r chi.Router) {
+				r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+				r.Route("/connections", func(r chi.Router) {
+					r.Post("/", s.SSOHandlers.CreateConnection)
+					r.Get("/", s.SSOHandlers.ListConnections)
+					r.Get("/{id}", s.SSOHandlers.GetConnection)
+					r.Put("/{id}", s.SSOHandlers.UpdateConnection)
+					r.Delete("/{id}", s.SSOHandlers.DeleteConnection)
+				})
 			})
-			r.Get("/saml/{connection_id}/metadata", notImplemented)
-			r.Post("/saml/{connection_id}/acs", notImplemented)
-			r.Get("/oidc/{connection_id}/auth", notImplemented)
-			r.Get("/oidc/{connection_id}/callback", notImplemented)
+			// Public SSO endpoints
+			r.Get("/saml/{connection_id}/metadata", s.SSOHandlers.SAMLMetadata)
+			r.Post("/saml/{connection_id}/acs", s.SSOHandlers.SAMLACS)
+			r.Get("/oidc/{connection_id}/auth", s.SSOHandlers.OIDCAuth)
+			r.Get("/oidc/{connection_id}/callback", s.SSOHandlers.OIDCCallback)
 		})
 
 		// API Keys (admin)
