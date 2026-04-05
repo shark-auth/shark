@@ -17,11 +17,12 @@ import (
 // TestServer wraps an httptest.Server with a pre-configured HTTP client that
 // handles cookies automatically. Provides helper methods for JSON requests.
 type TestServer struct {
-	Server *httptest.Server
-	Client *http.Client
-	Store  storage.Store
-	Config *config.Config
-	T      *testing.T
+	Server    *httptest.Server
+	Client    *http.Client
+	Store     storage.Store
+	Config    *config.Config
+	T         *testing.T
+	APIServer *api.Server
 }
 
 // NewTestServer creates a test HTTP server with all routes mounted.
@@ -53,11 +54,12 @@ func NewTestServer(t *testing.T) *TestServer {
 	})
 
 	return &TestServer{
-		Server: ts,
-		Client: client,
-		Store:  store,
-		Config: cfg,
-		T:      t,
+		Server:    ts,
+		Client:    client,
+		Store:     store,
+		Config:    cfg,
+		T:         t,
+		APIServer: srv,
 	}
 }
 
