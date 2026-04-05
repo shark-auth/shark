@@ -424,7 +424,7 @@ POST   /api/v1/api-keys/:id/rotate     — Rotate: generate new key, revoke old 
 
 **API key authentication:**
 ```
-Authorization: Bearer sk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Authorization: Bearer sh_xxx(32 random bytes base62-encoded)
 
 → Server hashes the key with SHA-256
 → Looks up key_hash in api_keys table
