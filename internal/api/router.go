@@ -3,12 +3,14 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sharkauth/sharkauth/internal/audit"
 	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/storage"
 
@@ -17,17 +19,30 @@ import (
 
 // Server holds dependencies for the HTTP API.
 type Server struct {
-	Store          storage.Store
-	Config         *config.Config
-	Router         chi.Router
-	SessionManager *auth.SessionManager
-	OAuthManager   *auth.OAuthManager
-	RBAC           *rbac.RBACManager
-	AuditLogger    *audit.Logger
+	Store            storage.Store
+	Config           *config.Config
+	Router           chi.Router
+	SessionManager   *auth.SessionManager
+	OAuthManager     *auth.OAuthManager
+	MagicLinkManager *auth.MagicLinkManager
+	RBAC             *rbac.RBACManager
+	AuditLogger      *audit.Logger
+	RateLimiter      *auth.TokenBucket
+	magicLinkRL      *magicLinkRateLimiter
+}
+
+// ServerOption configures optional dependencies for the Server.
+type ServerOption func(*Server)
+
+// WithEmailSender enables magic link functionality with the provided email sender.
+func WithEmailSender(sender email.Sender) ServerOption {
+	return func(s *Server) {
+		s.MagicLinkManager = auth.NewMagicLinkManager(s.Store, sender, s.SessionManager, s.Config)
+	}
 }
 
 // NewServer creates a new API server with all routes mounted.
-func NewServer(store storage.Store, cfg *config.Config) *Server {
+func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *Server {
 	sessionLifetime := cfg.Auth.SessionLifetimeDuration()
 	sm := auth.NewSessionManager(store, cfg.Server.Secret, sessionLifetime)
 
@@ -35,6 +50,13 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 		Store:          store,
 		Config:         cfg,
 		SessionManager: sm,
+		magicLinkRL:    newMagicLinkRateLimiter(60 * time.Second),
+		RateLimiter:    auth.NewTokenBucket(),
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(s)
 	}
 
 	// Initialize OAuth manager
@@ -91,8 +113,8 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 
 			// Magic Links
 			r.Route("/magic-link", func(r chi.Router) {
-				r.Post("/send", notImplemented)
-				r.Get("/verify", notImplemented)
+				r.Post("/send", s.handleMagicLinkSend)
+				r.Get("/verify", s.handleMagicLinkVerify)
 			})
 
 			// MFA
@@ -169,12 +191,12 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 		// API Keys (admin)
 		r.Route("/api-keys", func(r chi.Router) {
 			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
-			r.Post("/", notImplemented)
-			r.Get("/", notImplemented)
-			r.Get("/{id}", notImplemented)
-			r.Patch("/{id}", notImplemented)
-			r.Delete("/{id}", notImplemented)
-			r.Post("/{id}/rotate", notImplemented)
+			r.Post("/", s.handleCreateAPIKey)
+			r.Get("/", s.handleListAPIKeys)
+			r.Get("/{id}", s.handleGetAPIKey)
+			r.Patch("/{id}", s.handleUpdateAPIKey)
+			r.Delete("/{id}", s.handleRevokeAPIKey)
+			r.Post("/{id}/rotate", s.handleRotateAPIKey)
 		})
 
 		// Audit Logs (admin)

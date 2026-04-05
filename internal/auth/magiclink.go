@@ -1,0 +1,194 @@
+package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	gonanoid "github.com/matoous/go-nanoid/v2"
+
+	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/sharkauth/sharkauth/internal/storage"
+)
+
+var (
+	ErrMagicLinkExpired  = errors.New("magic link has expired")
+	ErrMagicLinkUsed     = errors.New("magic link has already been used")
+	ErrMagicLinkNotFound = errors.New("magic link not found")
+)
+
+// MagicLinkManager handles magic link token generation, email sending, and verification.
+type MagicLinkManager struct {
+	store    storage.Store
+	email    email.Sender
+	sessions *SessionManager
+	cfg      *config.Config
+}
+
+// NewMagicLinkManager creates a new MagicLinkManager.
+func NewMagicLinkManager(store storage.Store, emailSender email.Sender, sessions *SessionManager, cfg *config.Config) *MagicLinkManager {
+	return &MagicLinkManager{
+		store:    store,
+		email:    emailSender,
+		sessions: sessions,
+		cfg:      cfg,
+	}
+}
+
+// SendMagicLink generates a random token, stores its SHA-256 hash, and sends a magic link email.
+// Always returns nil to avoid leaking whether the email address exists.
+func (m *MagicLinkManager) SendMagicLink(ctx context.Context, emailAddr string) error {
+	// Generate 32 random bytes
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return fmt.Errorf("generating random token: %w", err)
+	}
+
+	// Encode as base64url (no padding for URL safety)
+	rawToken := base64.RawURLEncoding.EncodeToString(tokenBytes)
+
+	// SHA-256 hash for storage
+	hash := sha256.Sum256([]byte(rawToken))
+	tokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
+
+	// Compute expiry
+	lifetime := m.cfg.MagicLink.TokenLifetimeDuration()
+	now := time.Now().UTC()
+
+	// Generate token ID
+	id, _ := gonanoid.New()
+
+	// Store the hashed token
+	token := &storage.MagicLinkToken{
+		ID:        "mlt_" + id,
+		Email:     emailAddr,
+		TokenHash: tokenHash,
+		Used:      false,
+		ExpiresAt: now.Add(lifetime).Format(time.RFC3339),
+		CreatedAt: now.Format(time.RFC3339),
+	}
+
+	if err := m.store.CreateMagicLinkToken(ctx, token); err != nil {
+		return fmt.Errorf("storing magic link token: %w", err)
+	}
+
+	// Build the magic link URL
+	baseURL := strings.TrimRight(m.cfg.Server.BaseURL, "/")
+	magicLinkURL := fmt.Sprintf("%s/api/v1/auth/magic-link/verify?token=%s", baseURL, rawToken)
+
+	// Compute expiry in minutes for the email template
+	expiryMinutes := int(lifetime.Minutes())
+	if expiryMinutes < 1 {
+		expiryMinutes = 1
+	}
+
+	appName := "SharkAuth"
+	if m.cfg.SMTP.FromName != "" {
+		appName = m.cfg.SMTP.FromName
+	}
+
+	// Render the email template
+	htmlBody, err := email.RenderMagicLink(email.MagicLinkData{
+		AppName:       appName,
+		MagicLinkURL:  magicLinkURL,
+		ExpiryMinutes: expiryMinutes,
+	})
+	if err != nil {
+		return fmt.Errorf("rendering magic link email: %w", err)
+	}
+
+	// Send the email
+	msg := &email.Message{
+		To:      emailAddr,
+		Subject: fmt.Sprintf("Sign in to %s", appName),
+		HTML:    htmlBody,
+	}
+
+	if err := m.email.Send(msg); err != nil {
+		return fmt.Errorf("sending magic link email: %w", err)
+	}
+
+	return nil
+}
+
+// VerifyMagicLink verifies a raw token, creates or finds the user, creates a session, and returns both.
+func (m *MagicLinkManager) VerifyMagicLink(ctx context.Context, rawToken string) (*storage.User, *storage.Session, error) {
+	// Hash the provided token
+	hash := sha256.Sum256([]byte(rawToken))
+	tokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
+
+	// Look up by hash
+	token, err := m.store.GetMagicLinkTokenByHash(ctx, tokenHash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrMagicLinkNotFound
+		}
+		return nil, nil, fmt.Errorf("looking up magic link token: %w", err)
+	}
+
+	// Check if already used
+	if token.Used {
+		return nil, nil, ErrMagicLinkUsed
+	}
+
+	// Check expiry
+	expiresAt, err := time.Parse(time.RFC3339, token.ExpiresAt)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parsing token expiry: %w", err)
+	}
+	if time.Now().UTC().After(expiresAt) {
+		return nil, nil, ErrMagicLinkExpired
+	}
+
+	// Mark as used
+	if err := m.store.MarkMagicLinkTokenUsed(ctx, token.ID); err != nil {
+		return nil, nil, fmt.Errorf("marking magic link token used: %w", err)
+	}
+
+	// Find or create user
+	user, err := m.store.GetUserByEmail(ctx, token.Email)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, fmt.Errorf("looking up user by email: %w", err)
+		}
+
+		// Create new user with email_verified=true
+		id, _ := gonanoid.New()
+		now := time.Now().UTC().Format(time.RFC3339)
+		user = &storage.User{
+			ID:            "usr_" + id,
+			Email:         token.Email,
+			EmailVerified: true,
+			Metadata:      "{}",
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+		if err := m.store.CreateUser(ctx, user); err != nil {
+			return nil, nil, fmt.Errorf("creating user: %w", err)
+		}
+	} else {
+		// Existing user — ensure email is verified
+		if !user.EmailVerified {
+			user.EmailVerified = true
+			user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+			if err := m.store.UpdateUser(ctx, user); err != nil {
+				return nil, nil, fmt.Errorf("updating user email_verified: %w", err)
+			}
+		}
+	}
+
+	// Create session with auth_method="magic_link"
+	sess, err := m.sessions.CreateSession(ctx, user.ID, "", "", "magic_link")
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating session: %w", err)
+	}
+
+	return user, sess, nil
+}
