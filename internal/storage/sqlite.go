@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // SQLiteStore implements the Store interface using SQLite.
@@ -18,14 +18,7 @@ type SQLiteStore struct {
 // NewSQLiteStore opens a SQLite database at the given path and configures it
 // with WAL mode and foreign keys enabled.
 func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
-	// Append WAL and FK pragmas to DSN if not using in-memory
-	if !strings.Contains(dsn, "?") {
-		dsn += "?_journal_mode=WAL&_foreign_keys=ON"
-	} else {
-		dsn += "&_journal_mode=WAL&_foreign_keys=ON"
-	}
-
-	db, err := sql.Open("sqlite3", dsn)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("opening sqlite: %w", err)
 	}
@@ -36,7 +29,7 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("pinging sqlite: %w", err)
 	}
 
-	// Set pragmas explicitly as well
+	// Set pragmas via exec (modernc.org/sqlite doesn't support DSN pragmas)
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("setting WAL mode: %w", err)
