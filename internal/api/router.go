@@ -19,6 +19,7 @@ type Server struct {
 	Config         *config.Config
 	Router         chi.Router
 	SessionManager *auth.SessionManager
+	OAuthManager   *auth.OAuthManager
 }
 
 // NewServer creates a new API server with all routes mounted.
@@ -31,6 +32,9 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 		Config:         cfg,
 		SessionManager: sm,
 	}
+
+	// Initialize OAuth manager (providers are registered externally or via RegisterOAuthProviders)
+	s.initOAuthManager()
 
 	r := chi.NewRouter()
 
@@ -59,8 +63,8 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 
 			// OAuth
 			r.Route("/oauth", func(r chi.Router) {
-				r.Get("/{provider}", notImplemented)
-				r.Get("/{provider}/callback", notImplemented)
+				r.Get("/{provider}", s.handleOAuthStart)
+				r.Get("/{provider}/callback", s.handleOAuthCallback)
 			})
 
 			// Passkeys
