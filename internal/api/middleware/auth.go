@@ -3,6 +3,8 @@ package middleware
 import (
 	"context"
 	"net/http"
+
+	"github.com/sharkauth/sharkauth/internal/auth"
 )
 
 type contextKey string
@@ -40,22 +42,45 @@ func GetMFAPassed(ctx context.Context) bool {
 	return false
 }
 
+// RequireSessionFunc returns a middleware that validates the session cookie using the
+// given SessionManager and sets user ID, session ID, and MFA status in the context.
+// Returns 401 if no valid session is found.
+func RequireSessionFunc(sm *auth.SessionManager) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sessionID, err := sm.GetSessionFromRequest(r)
+			if err != nil {
+				http.Error(w, `{"error":"unauthorized","message":"No valid session"}`, http.StatusUnauthorized)
+				return
+			}
+
+			sess, err := sm.ValidateSession(r.Context(), sessionID)
+			if err != nil {
+				http.Error(w, `{"error":"unauthorized","message":"No valid session"}`, http.StatusUnauthorized)
+				return
+			}
+
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, UserIDKey, sess.UserID)
+			ctx = context.WithValue(ctx, SessionIDKey, sess.ID)
+			ctx = context.WithValue(ctx, MFAPassedKey, sess.MFAPassed)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // RequireSession is a middleware that validates the session cookie and sets the
 // user ID in the context. Returns 401 if no valid session is found.
-// This is a placeholder implementation. Wave 2 will implement full session
-// validation with gorilla/securecookie.
+// This is the legacy placeholder version; use RequireSessionFunc(sm) instead.
 func RequireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Placeholder: Wave 2 will implement session cookie parsing and validation.
-		// For now, check for a session cookie to have the structure in place.
-		cookie, err := r.Cookie("sharkauth_session")
+		cookie, err := r.Cookie("shark_session")
 		if err != nil || cookie.Value == "" {
 			http.Error(w, `{"error":"unauthorized","message":"No valid session"}`, http.StatusUnauthorized)
 			return
 		}
 
-		// Wave 2 will decode the cookie, look up the session, and check expiry.
-		// For now, pass through with the raw cookie value as a placeholder.
 		ctx := context.WithValue(r.Context(), SessionIDKey, cookie.Value)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

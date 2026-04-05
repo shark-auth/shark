@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/storage"
 
@@ -14,16 +15,21 @@ import (
 
 // Server holds dependencies for the HTTP API.
 type Server struct {
-	Store  storage.Store
-	Config *config.Config
-	Router chi.Router
+	Store          storage.Store
+	Config         *config.Config
+	Router         chi.Router
+	SessionManager *auth.SessionManager
 }
 
 // NewServer creates a new API server with all routes mounted.
 func NewServer(store storage.Store, cfg *config.Config) *Server {
+	sessionLifetime := cfg.Auth.SessionLifetimeDuration()
+	sm := auth.NewSessionManager(store, cfg.Server.Secret, sessionLifetime)
+
 	s := &Server{
-		Store:  store,
-		Config: cfg,
+		Store:          store,
+		Config:         cfg,
+		SessionManager: sm,
 	}
 
 	r := chi.NewRouter()
@@ -42,10 +48,13 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Auth routes (public)
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/signup", notImplemented)
-			r.Post("/login", notImplemented)
-			r.Post("/logout", notImplemented)
-			r.Get("/me", notImplemented)
+			r.Post("/signup", s.handleSignup)
+			r.Post("/login", s.handleLogin)
+			r.Post("/logout", s.handleLogout)
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireSessionFunc(sm))
+				r.Get("/me", s.handleMe)
+			})
 			r.Post("/check", notImplemented)
 
 			// OAuth
