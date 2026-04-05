@@ -25,12 +25,14 @@ A single Go binary that handles signup, login, sessions, OAuth, MFA, passkeys, m
 9. **SSO — SAML SP** (beta — connect to enterprise IdPs like Okta/Azure AD)
 10. **M2M API keys** (service-to-service auth — scoped, rotatable, rate-limit-aware)
 11. **Auth0 user import** (read their export JSON, verify bcrypt hashes, rehash on first login)
-12. **REST API** for everything above
-13. **TypeScript SDK** (`@sharkauth/js`) — fetch-based, zero-dependency, works in Node/browser/edge
-14. **YAML config** with env var overrides
-15. **SQLite storage** (embedded, zero-config)
-16. **Docker image** (one container, done)
-17. **Admin dashboard** (Svelte, embedded in the binary — user management, sessions, MFA, passkeys, RBAC, SSO connections, API keys, migration status)
+12. **Audit logs** (every auth event recorded — login, signup, MFA, role changes, SSO, API keys. Filterable, exportable, retention-configurable)
+13. **REST API** for everything above
+14. **TypeScript SDK** (`@sharkauth/js`) — fetch-based, zero-dependency, works in Node/browser/edge
+15. **YAML config** with env var overrides
+16. **SQLite storage** (embedded, zero-config)
+17. **Docker image** (one container, done)
+18. **Admin dashboard** (Svelte, embedded in the binary — user management, sessions, MFA, passkeys, RBAC, SSO connections, API keys, audit logs, migration status)
+19. **Automated test suite** (Go unit + integration tests with 60%+ coverage, SDK tests with Vitest, CI pipeline with gosec linting)
 
 ### What does NOT ship at launch:
 
@@ -253,7 +255,69 @@ CREATE TABLE api_keys (
     created_at   TEXT NOT NULL,
     revoked_at   TEXT                   -- soft-delete: set timestamp to revoke
 );
+
+-- Audit log tables
+
+CREATE TABLE audit_logs (
+    id         TEXT PRIMARY KEY,          -- "aud_" + nanoid
+    actor_id   TEXT,                      -- user or API key ID (null for system events)
+    actor_type TEXT DEFAULT 'user',       -- "user", "api_key", "system"
+    action     TEXT NOT NULL,             -- "user.login", "user.signup", "mfa.enabled", etc.
+    target_type TEXT,                     -- "user", "role", "session", "sso_connection", "api_key"
+    target_id  TEXT,                      -- ID of the affected resource
+    ip         TEXT,
+    user_agent TEXT,
+    metadata   TEXT DEFAULT '{}',        -- JSON: provider name, error reason, old/new values, etc.
+    status     TEXT DEFAULT 'success',   -- "success" or "failure"
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_audit_logs_actor   ON audit_logs(actor_id, created_at);
+CREATE INDEX idx_audit_logs_action  ON audit_logs(action, created_at);
+CREATE INDEX idx_audit_logs_target  ON audit_logs(target_id, created_at);
+CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
 ```
+
+**Audit log events captured:**
+
+| Action | Trigger |
+|--------|---------|
+| `user.signup` | New account created |
+| `user.login` | Successful password login |
+| `user.login_failed` | Bad password / unknown email |
+| `user.logout` | Session destroyed |
+| `user.deleted` | Admin deletes user |
+| `oauth.login` | OAuth login (metadata: provider) |
+| `passkey.registered` | New passkey added |
+| `passkey.login` | Passkey authentication |
+| `passkey.deleted` | Passkey removed |
+| `magic_link.sent` | Magic link email sent |
+| `magic_link.verified` | Magic link used |
+| `mfa.enrolled` | TOTP setup started |
+| `mfa.enabled` | TOTP verified / active |
+| `mfa.disabled` | MFA turned off |
+| `mfa.challenge_passed` | Correct TOTP code |
+| `mfa.challenge_failed` | Wrong TOTP code |
+| `mfa.recovery_used` | Recovery code consumed |
+| `role.created` | New role |
+| `role.updated` | Role permissions changed |
+| `role.deleted` | Role removed |
+| `role.assigned` | Role assigned to user |
+| `role.unassigned` | Role removed from user |
+| `sso.connection_created` | SAML/OIDC connection added |
+| `sso.connection_updated` | Connection config changed |
+| `sso.connection_deleted` | Connection removed |
+| `sso.login` | SSO authentication (metadata: connection_id) |
+| `api_key.created` | New M2M key |
+| `api_key.rotated` | Key rotated |
+| `api_key.revoked` | Key revoked |
+| `migration.started` | Auth0 import kicked off |
+| `migration.completed` | Import finished (metadata: counts) |
+| `session.revoked` | Admin or user revoked a session |
+
+**What is NOT logged:** passwords, tokens, secrets, full API keys, request/response bodies, PII beyond actor/target IDs.
+
+**Retention:** Self-hosted = unlimited (user controls their DB). Cloud Starter = 30 days. Cloud Growth = 90 days. Cloud Scale = 1 year. Retention enforced by a background goroutine that runs `DELETE FROM audit_logs WHERE created_at < ?` every hour.
 
 ---
 
@@ -438,6 +502,29 @@ Authorization: Bearer sh_xxx(32 random bytes base62-encoded)
 
 **Key format:** `sk_live_` + 32 random bytes base62-encoded (48 chars total). The `sk_live_` prefix makes keys easily identifiable in logs and secret scanners.
 
+### Audit Logs
+
+```
+GET    /api/v1/audit-logs                — List audit logs (paginated, filterable)
+GET    /api/v1/audit-logs/:id            — Get single audit log entry
+GET    /api/v1/users/:id/audit-logs      — Audit logs for a specific user (as actor or target)
+POST   /api/v1/audit-logs/export         — Export logs as JSON/CSV (date range required)
+```
+
+**Query parameters for `GET /api/v1/audit-logs`:**
+
+| Param | Example | Description |
+|-------|---------|-------------|
+| `action` | `user.login` | Filter by event type (supports comma-separated: `user.login,user.signup`) |
+| `actor_id` | `usr_abc123` | Filter by who did it |
+| `target_id` | `usr_xyz789` | Filter by what was affected |
+| `status` | `failure` | `success` or `failure` |
+| `ip` | `192.168.1.1` | Filter by IP address |
+| `from` | `2026-04-01T00:00:00Z` | Start of date range |
+| `to` | `2026-04-07T23:59:59Z` | End of date range |
+| `limit` | `50` | Page size (default 50, max 200) |
+| `cursor` | `aud_xxx` | Cursor-based pagination (ID of last item) |
+
 ### Admin + Migration
 
 ```
@@ -516,6 +603,11 @@ api_keys:
   default_rate_limit: 1000              # requests per hour for new keys
   key_max_lifetime: "365d"              # max allowed expires_at (0 = unlimited)
 
+audit:
+  retention: "0"                          # "0" = keep forever (self-hosted default)
+  cleanup_interval: "1h"                  # how often to purge expired logs
+  # Cloud overrides: Starter=30d, Growth=90d, Scale=365d
+
 admin:
   api_key: "${SHARKAUTH_ADMIN_KEY}"
 ```
@@ -561,10 +653,19 @@ sharkauth/
 │   │   ├── saml.go                      # SAML SP: metadata, ACS, assertion parsing
 │   │   ├── oidc.go                      # OIDC client: auth redirect, callback, token exchange
 │   │   └── connection.go                # SSO connection CRUD + domain routing
+│   ├── audit/
+│   │   ├── audit.go                     # Log(), Query(), Cleanup() — core audit engine
+│   │   └── middleware.go                # HTTP middleware that auto-logs requests
 │   ├── user/
 │   │   └── user.go
 │   ├── migrate/
 │   │   └── auth0.go
+│   ├── testutil/                        # Shared test infrastructure
+│   │   ├── db.go                        # NewTestDB (in-memory SQLite)
+│   │   ├── server.go                    # TestServer (httptest + cookiejar)
+│   │   ├── config.go                    # TestConfig with safe defaults
+│   │   ├── factories.go                 # CreateUser, CreateRole, CreateAPIKey, etc.
+│   │   └── email.go                     # MemoryEmailSender (captures sent emails)
 │   └── api/
 │       ├── router.go
 │       ├── auth_handlers.go             # Signup, login, logout, me
@@ -575,6 +676,7 @@ sharkauth/
 │       ├── rbac_handlers.go             # Roles, permissions, assignment, check
 │       ├── sso_handlers.go              # Connections, SAML ACS, OIDC callback
 │       ├── apikey_handlers.go           # M2M API key CRUD + rotate
+│       ├── audit_handlers.go            # Audit log list, detail, export
 │       ├── user_handlers.go             # Admin user endpoints
 │       └── migrate_handlers.go          # Migration endpoints
 ├── dashboard/                           # Svelte app, embedded in binary
@@ -593,6 +695,8 @@ sharkauth/
 │   │   │   │   └── [id]/+page.svelte    # Connection config (SAML cert upload, OIDC fields)
 │   │   │   ├── api-keys/
 │   │   │   │   └── +page.svelte         # API key list, create, revoke, rotate, usage stats
+│   │   │   ├── audit/
+│   │   │   │   └── +page.svelte         # Audit log stream (filter by action/user/date, live tail)
 │   │   │   └── migrations/
 │   │   │       └── +page.svelte         # Migration history + trigger new import
 │   │   └── lib/
@@ -697,6 +801,86 @@ npm publish      # → @sharkauth/js on npm
 
 ---
 
+## Testing Strategy
+
+### Philosophy
+
+Test as you build — not as a separate phase. Every feature gets at minimum one integration test before moving to the next. Target 60% coverage by launch. Focus on flows that would cause the most damage if broken.
+
+### Test Infrastructure (`internal/testutil/`)
+
+Built on Day 1 (Saturday morning of Weekend 1), used everywhere:
+
+- **`NewTestDB(t)`** — in-memory SQLite (`:memory:?_foreign_keys=on`). Each test gets its own DB. No cleanup. Tests run in parallel.
+- **`TestServer`** — wraps `httptest.Server` + `http.Client` with `cookiejar.Jar`. Maintains session cookies across requests automatically. Helpers: `PostJSON()`, `Get()`, `DecodeJSON[T]()`.
+- **`TestConfig`** — safe defaults for all config sections. Reduced Argon2id params (16MB memory, 1 iteration) so tests don't block on hashing.
+- **Factory functions** — `CreateUser()`, `CreateUserWithRole()`, `CreateAndLogin()`, `CreateAPIKey()`, etc. One-liners that set up test state.
+- **`MemoryEmailSender`** — implements `EmailSender` interface, captures sent emails in a slice. Used to test magic link flows without SMTP.
+- **`Clock` interface** — injectable time source. Tests use `TestClock` with `Advance(d)` to test expiry without `time.Sleep`.
+
+### What Gets Tested (and How)
+
+| Area | Type | Approach |
+|------|------|----------|
+| Password hashing (argon2id + bcrypt compat) | Unit | Real crypto, reduced params. Test round-trip, wrong password, bcrypt→argon2id rehash. |
+| TOTP generation/verification | Unit | Real `pquerna/otp`. Generate code at known time, verify. Test ±1 step tolerance, reject old codes. |
+| Recovery codes | Unit | Verify uniqueness, one-time use, hash comparison. |
+| Session create/validate/expire/revoke | Integration | Real SQLite. Test cookie setting, expiry via Clock, rotation on login. |
+| Signup → login → me → logout flow | Integration | `TestServer` + cookiejar. Full HTTP round-trip. |
+| MFA enroll → verify → login → challenge → upgrade | Integration | Generate real TOTP code from enrolled secret, verify partial session gates `/me`. |
+| OAuth callback | Integration | Mock provider (Google/GitHub) with `httptest.Server` returning fake tokens. Override `TokenURL`/`UserInfoURL` in config. Test one provider, trust the generic handler pattern for the rest. |
+| Passkey register/login begin | Integration | Test that `begin` endpoints return well-formed `PublicKeyCredentialCreationOptions`/`RequestOptions`. For `finish` endpoints, test error cases (bad challenge, expired). Trust `go-webauthn` library for crypto verification. Full passkey flow tested manually in browser. |
+| Magic link send → verify → session | Integration | `MemoryEmailSender` captures email, extract token, verify endpoint creates session. Test one-time use (second verify = 400). Test expiry via Clock. |
+| RBAC permission resolution | Unit | Table-driven tests. Admin wildcard, multiple roles merge, no roles = no access, specific action+resource matching. |
+| `RequirePermission` middleware | Integration | Create user with role, hit protected endpoint. Create user without role, verify 403. |
+| `POST /auth/check` | Integration | Exercise the permission check endpoint with various user/action/resource combos. |
+| API key hash + validate | Unit | Generate key, hash, verify. Wrong key fails. Constant-time comparison (`crypto/subtle`). |
+| API key scope enforcement | Integration | Key with `users:read` can GET users, gets 403 on POST roles. |
+| API key rate limiting | Integration | Exhaust rate limit, verify 429 on next request. |
+| Auth0 migration import | Integration | Load fixture JSON, verify users imported, bcrypt hashes verified, rehash on first login. |
+| Audit log capture | Integration | Perform an action (login, role change), query audit log endpoint, verify event recorded with correct actor/target/action. |
+| Session fixation | Security | Verify session token changes on login (not reused from signup). |
+| Login brute force | Security | 10 wrong passwords → 11th attempt (even correct) returns 429. |
+| Token expiry enforcement | Security | Magic link + session expiry via Clock. Expired = rejected. |
+| SSO OIDC callback | Integration | Mock OIDC provider. Test token exchange + user creation. |
+| SSO SAML ACS | Integration | Test with pre-built SAML assertion XML (from Okta dev account). Verify user created/linked. |
+
+### What Does NOT Get Tested (in the sprint)
+
+- **Dashboard Svelte components** — internal admin tool, manual QA is enough. Add Playwright post-launch.
+- **SAML XML parsing edge cases** — trust the SAML library, test your integration only.
+- **Each OAuth provider separately** — all 4 use the generic handler. Test GitHub mock, trust the pattern.
+- **Cookie encryption internals** — trust `gorilla/securecookie`. Test at HTTP level only.
+- **Email HTML template rendering** — visual, not functional. Manual check.
+- **Passkey `finish` crypto verification** — go-webauthn is conformance-tested.
+
+### SDK Testing (TypeScript)
+
+Stack: **Vitest + MSW (Mock Service Worker)**. MSW intercepts `fetch` at the network level — no real server needed.
+
+- Test request formatting (correct URLs, methods, JSON bodies)
+- Test response parsing (happy path + one error case per method)
+- Test passkey helpers (`base64url ↔ ArrayBuffer` conversion — pure functions)
+- Test error handling (network errors, 4xx/5xx, expired sessions)
+- `npm run typecheck` (tsc --noEmit) catches contract drift
+
+### CI Pipeline (GitHub Actions)
+
+```yaml
+# .github/workflows/ci.yml
+jobs:
+  lint:        # golangci-lint with gosec (catches weak crypto, SQL injection)
+  test-go:     # go test -race -coverprofile ./... — fail if <60% coverage
+  test-sdk:    # npm run typecheck && npm test (vitest)
+  build:       # compile Svelte → embed in Go → verify binary starts
+```
+
+### Estimated Effort
+
+~8 hours total across 17 days, woven into each feature's implementation slot. Not a separate phase.
+
+---
+
 ## 17-Day Sprint Plan
 
 ### Weekend 1 (April 11–12) — Core auth + OAuth
@@ -708,40 +892,48 @@ Morning (4h):
 - [ ] Config loader (YAML + env vars, including new passkey/smtp/social sections)
 - [ ] SQLite storage layer (connect, migrate full schema including new tables, CRUD)
 - [ ] User model + create/get/list
+- [ ] **`internal/testutil/` package** — `NewTestDB`, `TestServer`, `TestConfig`, factories, `MemoryEmailSender`
 
 Afternoon (4h):
 - [ ] Password hashing (Argon2id) + multi-hash verification (bcrypt compat)
+- [ ] **Unit tests: password hash round-trip, wrong password, bcrypt compat, rehash detection**
 - [ ] Session management (create, validate, revoke, cookie handling, auth_method tracking)
 - [ ] Signup + login + logout + me API handlers
-- [ ] Test with curl
+- [ ] **Integration test: signup → login → me → logout → login flow (TestServer + cookiejar)**
+- [ ] **Audit log engine** (`internal/audit/audit.go`) — `Log()` writes to DB, `Query()` with filters, `Cleanup()` goroutine
 
 Evening (3h):
 - [ ] Generic OAuth handler: provider registry pattern, redirect + callback
 - [ ] Google OAuth provider implementation
 - [ ] GitHub OAuth provider implementation
 - [ ] Admin endpoints behind API key
+- [ ] **Audit middleware** — auto-log `user.signup`, `user.login`, `user.login_failed`, `user.logout`
 
 **Sunday — More OAuth + Migration + MFA**
 
 Morning (4h):
 - [ ] Apple OAuth provider (JWT client_secret from .p8 key, id_token parsing)
 - [ ] Discord OAuth provider
+- [ ] **Integration test: OAuth callback with mock GitHub provider (httptest.Server)**
 - [ ] Test all four OAuth flows end-to-end
 - [ ] Error handling, input validation, HTTP status codes
 
 Afternoon (4h):
 - [ ] Auth0 migration: JSON parser, CLI command, API endpoint
 - [ ] Transparent bcrypt→argon2id rehash on first login
+- [ ] **Integration test: Auth0 import fixture → user created → bcrypt login → rehash verified**
 - [ ] MFA: TOTP secret generation (crypto/rand → base32)
 - [ ] MFA: QR URI builder (otpauth://totp/...)
 
 Evening (3h):
 - [ ] MFA: TOTP code validation (HMAC-SHA1, 30s window, ±1 step tolerance)
+- [ ] **Unit tests: TOTP verify, ±1 step tolerance, reject 5-min-old code, recovery code uniqueness**
 - [ ] MFA: Enroll + verify + challenge endpoints
 - [ ] MFA: Recovery codes (generate 10, hash with bcrypt, one-time use)
 - [ ] MFA: Login flow integration (partial session → challenge → upgrade)
 - [ ] MFA: Disable endpoint (require current code to turn off)
-- [ ] Test full MFA flow end-to-end
+- [ ] **Integration test: MFA enroll → verify → logout → login → mfa_required → challenge → /me works**
+- [ ] Audit: wire `mfa.enrolled`, `mfa.enabled`, `mfa.disabled`, `mfa.challenge_passed/failed` events
 
 ### Weeknights (April 13–17) — RBAC + SSO + Passkeys
 
@@ -749,11 +941,14 @@ Evening (3h):
 - [ ] RBAC: Roles + permissions CRUD
 - [ ] RBAC: Role-permission attachment
 - [ ] RBAC: User-role assignment
+- [ ] Audit: wire `role.created`, `role.updated`, `role.deleted`, `role.assigned`, `role.unassigned`
 
 **Tuesday evening (3h):**
 - [ ] RBAC: Permission resolution (user → roles → permissions)
+- [ ] **Unit tests: RBAC permission resolution — table-driven (admin wildcard, multi-role merge, no roles = no access)**
 - [ ] RBAC: `POST /auth/check` endpoint
 - [ ] RBAC: `RequirePermission` middleware
+- [ ] **Integration test: user with role hits protected endpoint (200), user without role (403)**
 - [ ] RBAC: Seed default roles (admin, member) on first boot
 
 **Wednesday evening (3h):**
@@ -767,6 +962,7 @@ Evening (3h):
 - [ ] SSO: SAML signature verification (x509 cert from IdP)
 - [ ] SSO: User creation/linking from SAML assertion
 - [ ] Test SAML with a free Okta dev account
+- [ ] Audit: wire `sso.connection_created`, `sso.login` events
 
 **Friday evening (3h):**
 - [ ] Passkeys: Add `go-webauthn/webauthn` dependency
@@ -774,6 +970,8 @@ Evening (3h):
 - [ ] Passkeys: Login begin/finish endpoints (assertion verification, sign_count update)
 - [ ] Passkeys: Credential CRUD (list, delete, rename)
 - [ ] Passkeys: Discoverable credential flow (no email required) + non-discoverable fallback
+- [ ] **Integration test: passkey `begin` endpoints return well-formed options (rp.id, challenge, user info)**
+- [ ] Audit: wire `passkey.registered`, `passkey.login`, `passkey.deleted`
 
 ### Weekend 2 (April 18–19) — Magic Links + M2M + Dashboard
 
@@ -786,6 +984,8 @@ Morning (4h):
 - [ ] Magic links: Send endpoint (rate limit: 1 per email per 60s)
 - [ ] Magic links: Verify endpoint (hash token, check expiry, create session, redirect)
 - [ ] Magic links: Create-on-first-use flow (new user gets account + email_verified=1)
+- [ ] **Integration test: magic link send → MemoryEmailSender captures email → extract token → verify → session active → second verify = 400 (one-time use)**
+- [ ] Audit: wire `magic_link.sent`, `magic_link.verified`
 
 Afternoon (4h):
 - [ ] M2M API keys: Key generation (sk_live_ + 32 random bytes base62)
@@ -794,12 +994,17 @@ Afternoon (4h):
 - [ ] M2M API keys: Rotate endpoint (atomic: create new, revoke old)
 - [ ] M2M API keys: Auth middleware (Bearer token → hash → lookup → scope check)
 - [ ] M2M API keys: In-memory token bucket rate limiter per key
+- [ ] **Unit tests: API key generation (sk_live_ prefix), hash round-trip, wrong key fails, constant-time comparison**
+- [ ] **Integration test: create key → API call with Bearer → scope enforcement (403 on wrong scope) → rate limit (429)**
+- [ ] Audit: wire `api_key.created`, `api_key.rotated`, `api_key.revoked`
 
 Evening (3h):
 - [ ] Integration testing: passkey register → passkey login → verify MFA skipped
 - [ ] Integration testing: magic link send → verify → session created
 - [ ] Integration testing: M2M key create → API call with key → scope enforcement
 - [ ] Test passkey flow in browser (need minimal HTML test page)
+- [ ] **Security tests: session fixation (token rotates on login), login brute force (10 fails → 429), token expiry (Clock-based)**
+- [ ] **Integration test: audit log — perform login + role change → GET /audit-logs → verify events recorded**
 
 **Sunday — Dashboard**
 
@@ -816,6 +1021,8 @@ Afternoon (4h):
 - [ ] Dashboard: Overview page — auth method distribution chart (password vs passkey vs magic link vs OAuth vs SSO)
 
 Evening (3h):
+- [ ] Dashboard: **Audit log view** (event stream with filters: action, user, date range, status. Cursor-based pagination. Export button.)
+- [ ] Audit log API handlers (`audit_handlers.go`) — list, detail, per-user, export
 - [ ] Integration testing: all dashboard views against live API
 - [ ] Fix edge cases, error messages, validation gaps
 - [ ] Passkey: Test with multiple authenticator types (platform + cross-platform)
@@ -836,6 +1043,7 @@ Evening (3h):
 
 **Wednesday evening (3h):**
 - [ ] SDK: Build + test (ESM + CJS output, verify types)
+- [ ] **SDK tests: Vitest + MSW — auth happy path, login error, passkey base64url helpers, type checking (tsc --noEmit)**
 - [ ] SDK: README with full code examples (all auth methods)
 - [ ] Example: Next.js App Router project (middleware.ts, login page, protected page)
 
@@ -872,7 +1080,8 @@ Afternoon (4h):
 
 Evening (2h):
 - [ ] End-to-end testing of Docker image
-- [ ] GitHub Actions: build + test + publish image to ghcr.io
+- [ ] **GitHub Actions CI: lint (golangci-lint + gosec) → test-go (race + 60% coverage gate) → test-sdk (typecheck + vitest) → build (Svelte + Go + verify binary starts)**
+- [ ] `go test ./... -race -cover` — verify 60%+ coverage, fix any gaps
 - [ ] Tag v0.1.0
 
 **Sunday — Launch**
