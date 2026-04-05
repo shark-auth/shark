@@ -188,6 +188,48 @@ func NewTestServerWithHandler(t *testing.T, handler http.Handler) *TestServer {
 	}
 }
 
+// Delete sends a DELETE request and returns the response.
+func (ts *TestServer) Delete(path string) *http.Response {
+	ts.T.Helper()
+
+	req, err := http.NewRequest("DELETE", ts.URL(path), nil)
+	if err != nil {
+		ts.T.Fatalf("creating request: %v", err)
+	}
+
+	resp, err := ts.Client.Do(req)
+	if err != nil {
+		ts.T.Fatalf("sending request: %v", err)
+	}
+	return resp
+}
+
+// DeleteJSON sends a DELETE request with a JSON body and returns the response.
+func (ts *TestServer) DeleteJSON(path string, body interface{}) *http.Response {
+	ts.T.Helper()
+
+	var bodyReader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			ts.T.Fatalf("marshaling request body: %v", err)
+		}
+		bodyReader = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequest("DELETE", ts.URL(path), bodyReader)
+	if err != nil {
+		ts.T.Fatalf("creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := ts.Client.Do(req)
+	if err != nil {
+		ts.T.Fatalf("sending request: %v", err)
+	}
+	return resp
+}
+
 // DecodeJSONResponse is a generic helper that decodes a JSON response body into
 // the specified type T. The response body is closed after reading.
 func DecodeJSONResponse[T any](t *testing.T, resp *http.Response) T {

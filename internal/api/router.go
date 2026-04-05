@@ -53,6 +53,7 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 			r.Post("/logout", s.handleLogout)
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireSessionFunc(sm))
+				r.Use(mw.RequireMFA)
 				r.Get("/me", s.handleMe)
 			})
 			r.Post("/check", notImplemented)
@@ -82,12 +83,21 @@ func NewServer(store storage.Store, cfg *config.Config) *Server {
 
 			// MFA
 			r.Route("/mfa", func(r chi.Router) {
-				r.Post("/enroll", notImplemented)
-				r.Post("/verify", notImplemented)
-				r.Post("/challenge", notImplemented)
-				r.Post("/recovery", notImplemented)
-				r.Delete("/", notImplemented)
-				r.Get("/recovery-codes", notImplemented)
+				// Challenge and recovery: require session (any, including partial mfa_passed=false)
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireSessionFunc(sm))
+					r.Post("/challenge", s.handleMFAChallenge)
+					r.Post("/recovery", s.handleMFARecovery)
+				})
+				// Enroll, verify, disable, recovery-codes: require full session (mfa_passed=true)
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(mw.RequireMFA)
+					r.Post("/enroll", s.handleMFAEnroll)
+					r.Post("/verify", s.handleMFAVerify)
+					r.Delete("/", s.handleMFADisable)
+					r.Get("/recovery-codes", s.handleMFARecoveryCodes)
+				})
 			})
 
 			// SSO auto-route
