@@ -24,7 +24,7 @@ magic_link:
 
 smtp:
   host: "smtp.resend.com"
-  port: 25
+  port: 465
   username: "resend"
   password: "${RESEND_API_KEY}"
   from: "raul@mail.buildersmty.com.mx"
