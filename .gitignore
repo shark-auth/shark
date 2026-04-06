@@ -1,0 +1,48 @@
+# Binary
+shark.exe
+shark
+
+# Database
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Local config (contains secrets)
+sharkauth.local.yaml
+
+# Planning / workflow artifacts
+.planning/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+
+# Node (dashboard & SDK)
+node_modules/
+dashboard/build/
+dashboard/.svelte-kit/
+sdk/dist/
+
+# Test
+coverage.out
+*.test
+cookies.txt
+
+# Docker
+.docker/
+
+# Environment
+.env
+.env.*
+!.env.example
