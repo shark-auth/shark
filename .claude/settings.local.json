@@ -17,7 +17,8 @@
       "Bash(dir /-c)",
       "Bash(go get:*)",
       "Bash(CGO_ENABLED=1 go vet:*)",
-      "Bash(CGO_ENABLED=0 go vet:*)"
+      "Bash(CGO_ENABLED=0 go vet:*)",
+      "Bash(grep:*)"
     ]
   }
 }

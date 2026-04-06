@@ -15,6 +15,7 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/api"
 	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
@@ -53,8 +54,11 @@ func main() {
 	}
 	log.Println("Migrations complete")
 
+	// Create email sender for magic links
+	emailSender := email.NewSMTPSender(cfg.SMTP)
+
 	// Create API server
-	srv := api.NewServer(store, cfg)
+	srv := api.NewServer(store, cfg, api.WithEmailSender(emailSender))
 
 	// Create HTTP server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)

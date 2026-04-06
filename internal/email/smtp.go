@@ -52,9 +52,21 @@ func (s *SMTPSender) Send(msg *Message) error {
 	body := headers + msg.HTML
 
 	// Connect to SMTP server
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("connecting to SMTP server: %w", err)
+	tlsConfig := &tls.Config{ServerName: s.host}
+	var conn net.Conn
+	if s.port == 465 {
+		// Port 465 uses implicit TLS (SMTPS)
+		var err error
+		conn, err = tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return fmt.Errorf("connecting to SMTP server (TLS): %w", err)
+		}
+	} else {
+		var err error
+		conn, err = net.Dial("tcp", addr)
+		if err != nil {
+			return fmt.Errorf("connecting to SMTP server: %w", err)
+		}
 	}
 
 	client, err := smtp.NewClient(conn, s.host)
@@ -64,13 +76,12 @@ func (s *SMTPSender) Send(msg *Message) error {
 	}
 	defer client.Close()
 
-	// Try STARTTLS if available
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		tlsConfig := &tls.Config{
-			ServerName: s.host,
-		}
-		if err := client.StartTLS(tlsConfig); err != nil {
-			return fmt.Errorf("STARTTLS: %w", err)
+	// Try STARTTLS if available (for port 587)
+	if s.port != 465 {
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			if err := client.StartTLS(tlsConfig); err != nil {
+				return fmt.Errorf("STARTTLS: %w", err)
+			}
 		}
 	}
 
