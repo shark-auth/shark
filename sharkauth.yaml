@@ -23,12 +23,12 @@ magic_link:
   redirect_url: "http://localhost:3000/auth/callback"
 
 smtp:
-  host: "${SMTP_HOST}"
-  port: 587
-  username: "${SMTP_USER}"
-  password: "${SMTP_PASS}"
-  from: "auth@myapp.com"
-  from_name: "My App"
+  host: "smtp.resend.com"
+  port: 25
+  username: "resend"
+  password: "${RESEND_API_KEY}"
+  from: "raul@mail.buildersmty.com.mx"
+  from_name: "BuildersMTY"
 
 mfa:
   issuer: "SharkAuth"
