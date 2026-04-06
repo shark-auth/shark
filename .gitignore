@@ -13,6 +13,7 @@ sharkauth.local.yaml
 
 # Planning / workflow artifacts
 .planning/
+.claude/
 
 # IDE
 .idea/
