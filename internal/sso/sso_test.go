@@ -156,7 +156,7 @@ func newTestSSOManager(t *testing.T) (*sso.SSOManager, storage.Store) {
 	t.Helper()
 	store := testutil.NewTestDB(t)
 	cfg := testutil.TestConfig()
-	sm := auth.NewSessionManager(store, cfg.Server.Secret, cfg.Auth.SessionLifetimeDuration())
+	sm := auth.NewSessionManager(store, cfg.Server.Secret, cfg.Auth.SessionLifetimeDuration(), cfg.Server.BaseURL)
 	mgr := sso.NewSSOManager(store, sm, cfg)
 	return mgr, store
 }

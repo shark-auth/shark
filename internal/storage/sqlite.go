@@ -229,11 +229,21 @@ func (s *SQLiteStore) DeleteExpiredSessions(ctx context.Context) (int64, error) 
 }
 
 func (s *SQLiteStore) UpdateSessionMFAPassed(ctx context.Context, id string, mfaPassed bool) error {
-	_, err := s.db.ExecContext(ctx,
+	result, err := s.db.ExecContext(ctx,
 		`UPDATE sessions SET mfa_passed = ? WHERE id = ?`,
 		boolToInt(mfaPassed), id,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // --- OAuthAccounts ---
