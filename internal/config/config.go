@@ -242,12 +242,15 @@ func Load(path string) (*Config, error) {
 	// Interpolate ${VAR_NAME} patterns in YAML values with actual env vars
 	interpolateEnvVars(k)
 
-	// Load environment variable overrides with SHARKAUTH_ prefix
+	// Load environment variable overrides with SHARKAUTH_ prefix.
+	// Nesting uses double-underscore: SHARKAUTH_SMTP__FROM_NAME -> smtp.from_name
+	// Single underscores are preserved as literal underscores in key names.
 	if err := k.Load(env.Provider("SHARKAUTH_", ".", func(s string) string {
-		return strings.Replace(
-			strings.ToLower(strings.TrimPrefix(s, "SHARKAUTH_")),
-			"_", ".", -1,
-		)
+		key := strings.TrimPrefix(s, "SHARKAUTH_")
+		key = strings.ToLower(key)
+		// Double underscore is the nesting separator
+		key = strings.ReplaceAll(key, "__", ".")
+		return key
 	}), nil); err != nil {
 		return nil, fmt.Errorf("loading env vars: %w", err)
 	}
