@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
 	"time"
@@ -81,7 +82,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queryState := r.URL.Query().Get("state")
-	if queryState == "" || queryState != stateCookie.Value {
+	if queryState == "" || subtle.ConstantTimeCompare([]byte(queryState), []byte(stateCookie.Value)) != 1 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error":   "invalid_state",
 			"message": "OAuth state mismatch",
