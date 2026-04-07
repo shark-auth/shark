@@ -2,9 +2,11 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -29,24 +31,23 @@ type SessionManager struct {
 	store       storage.Store
 	cookieCodec *securecookie.SecureCookie
 	lifetime    time.Duration
+	secure      bool
 }
 
 // NewSessionManager creates a new SessionManager.
 // The secret must be at least 32 bytes; it is used as hash key for securecookie.
-// A 32-byte block key is derived from the secret for AES encryption.
-func NewSessionManager(store storage.Store, secret string, lifetime time.Duration) *SessionManager {
+// A 32-byte block key is derived from the secret for AES encryption using SHA-256.
+// baseURL is used to determine whether to set the Secure flag on cookies.
+func NewSessionManager(store storage.Store, secret string, lifetime time.Duration, baseURL string) *SessionManager {
 	secretBytes := []byte(secret)
-	// Hash key: use full secret (or first 32 bytes) for HMAC signing
+	// Hash key: use first 32 bytes of secret for HMAC signing
 	hashKey := secretBytes
 	if len(hashKey) > 32 {
 		hashKey = hashKey[:32]
 	}
-	// Block key: must be exactly 16, 24, or 32 bytes for AES encryption.
-	// Derive a 32-byte key from the secret using a simple approach.
-	blockKey := make([]byte, 32)
-	for i := 0; i < 32; i++ {
-		blockKey[i] = secretBytes[i%len(secretBytes)]
-	}
+	// Block key: derive a 32-byte AES key using SHA-256
+	blockKeyHash := sha256.Sum256(append([]byte("sharkauth-block-key:"), secretBytes...))
+	blockKey := blockKeyHash[:]
 
 	codec := securecookie.New(hashKey, blockKey)
 
@@ -54,6 +55,7 @@ func NewSessionManager(store storage.Store, secret string, lifetime time.Duratio
 		store:       store,
 		cookieCodec: codec,
 		lifetime:    lifetime,
+		secure:      strings.HasPrefix(baseURL, "https://"),
 	}
 }
 
@@ -139,6 +141,7 @@ func (sm *SessionManager) SetSessionCookie(w http.ResponseWriter, sessionID stri
 		Value:    encoded,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   sm.secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(sm.lifetime.Seconds()),
 	})

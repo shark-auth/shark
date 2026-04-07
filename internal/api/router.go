@@ -47,7 +47,7 @@ func WithEmailSender(sender email.Sender) ServerOption {
 // NewServer creates a new API server with all routes mounted.
 func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *Server {
 	sessionLifetime := cfg.Auth.SessionLifetimeDuration()
-	sm := auth.NewSessionManager(store, cfg.Server.Secret, sessionLifetime)
+	sm := auth.NewSessionManager(store, cfg.Server.Secret, sessionLifetime, cfg.Server.BaseURL)
 
 	s := &Server{
 		Store:          store,
