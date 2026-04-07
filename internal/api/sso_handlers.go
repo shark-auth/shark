@@ -4,25 +4,52 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/sharkauth/sharkauth/internal/sso"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
+// ssoStateEntry holds an OIDC state with an expiry time.
+type ssoStateEntry struct {
+	connectionID string
+	expiresAt    time.Time
+}
+
 // SSOHandlers provides HTTP handlers for SSO endpoints.
 type SSOHandlers struct {
-	manager *sso.SSOManager
-	// stateStore tracks OIDC auth states. In production, use a proper
-	// server-side store; this in-memory map suffices for the initial implementation.
-	stateStore map[string]string // state -> connectionID
+	manager    *sso.SSOManager
+	mu         sync.Mutex
+	stateStore map[string]*ssoStateEntry
 }
 
 // NewSSOHandlers creates a new SSOHandlers.
 func NewSSOHandlers(manager *sso.SSOManager) *SSOHandlers {
-	return &SSOHandlers{
+	h := &SSOHandlers{
 		manager:    manager,
-		stateStore: make(map[string]string),
+		stateStore: make(map[string]*ssoStateEntry),
+	}
+	// Clean up expired states every 5 minutes
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			h.cleanupStates()
+		}
+	}()
+	return h
+}
+
+func (h *SSOHandlers) cleanupStates() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	now := time.Now()
+	for key, entry := range h.stateStore {
+		if now.After(entry.expiresAt) {
+			delete(h.stateStore, key)
+		}
 	}
 }
 
@@ -168,7 +195,12 @@ func (h *SSOHandlers) OIDCAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store state -> connectionID mapping for callback verification
-	h.stateStore[state] = connID
+	h.mu.Lock()
+	h.stateStore[state] = &ssoStateEntry{
+		connectionID: connID,
+		expiresAt:    time.Now().Add(10 * time.Minute),
+	}
+	h.mu.Unlock()
 
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
@@ -199,14 +231,19 @@ func (h *SSOHandlers) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify state matches
-	expectedConnID, ok := h.stateStore[state]
-	if !ok {
+	h.mu.Lock()
+	entry, ok := h.stateStore[state]
+	if ok {
+		delete(h.stateStore, state)
+	}
+	h.mu.Unlock()
+
+	if !ok || time.Now().After(entry.expiresAt) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid or expired state"})
 		return
 	}
-	delete(h.stateStore, state)
 
-	if expectedConnID != connID {
+	if entry.connectionID != connID {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "state does not match connection"})
 		return
 	}
