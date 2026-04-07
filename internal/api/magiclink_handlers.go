@@ -31,10 +31,19 @@ type magicLinkRateLimiter struct {
 }
 
 func newMagicLinkRateLimiter(cooldown time.Duration) *magicLinkRateLimiter {
-	return &magicLinkRateLimiter{
+	rl := &magicLinkRateLimiter{
 		lastSent: make(map[string]time.Time),
 		cooldown: cooldown,
 	}
+	// Clean up stale entries every 5 minutes
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			rl.cleanup()
+		}
+	}()
+	return rl
 }
 
 // allow returns true if the email is allowed to send a magic link (not rate limited).
@@ -48,6 +57,19 @@ func (rl *magicLinkRateLimiter) allow(emailAddr string) bool {
 	}
 	rl.lastSent[emailAddr] = time.Now()
 	return true
+}
+
+// cleanup removes entries older than 2x the cooldown period.
+func (rl *magicLinkRateLimiter) cleanup() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	cutoff := time.Now().Add(-2 * rl.cooldown)
+	for email, last := range rl.lastSent {
+		if last.Before(cutoff) {
+			delete(rl.lastSent, email)
+		}
+	}
 }
 
 // handleMagicLinkSend handles POST /api/v1/auth/magic-link/send.
