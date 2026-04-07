@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/sharkauth/sharkauth/internal/auth"
+	"github.com/sharkauth/sharkauth/internal/auth/providers"
 )
 
 const (
@@ -129,4 +130,26 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 // initOAuthManager creates the OAuthManager and registers configured providers.
 func (s *Server) initOAuthManager() {
 	s.OAuthManager = auth.NewOAuthManager(s.Store, s.SessionManager, s.Config)
+
+	baseURL := s.Config.Server.BaseURL
+
+	// Register Google if configured
+	if s.Config.Social.Google.ClientID != "" && s.Config.Social.Google.ClientSecret != "" {
+		s.OAuthManager.RegisterProvider(providers.NewGoogle(s.Config.Social.Google, baseURL))
+	}
+
+	// Register GitHub if configured
+	if s.Config.Social.GitHub.ClientID != "" && s.Config.Social.GitHub.ClientSecret != "" {
+		s.OAuthManager.RegisterProvider(providers.NewGitHub(s.Config.Social.GitHub, baseURL))
+	}
+
+	// Register Apple if configured
+	if s.Config.Social.Apple.ClientID != "" && s.Config.Social.Apple.TeamID != "" {
+		s.OAuthManager.RegisterProvider(providers.NewApple(s.Config.Social.Apple, baseURL))
+	}
+
+	// Register Discord if configured
+	if s.Config.Social.Discord.ClientID != "" && s.Config.Social.Discord.ClientSecret != "" {
+		s.OAuthManager.RegisterProvider(providers.NewDiscord(s.Config.Social.Discord, baseURL))
+	}
 }
