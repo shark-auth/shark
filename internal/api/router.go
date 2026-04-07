@@ -93,6 +93,11 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	r.Use(middleware.Recoverer)
 	r.Use(mw.RateLimit(100, 100)) // 100 req/s burst, 100 tokens
 
+	// CORS (must be before route handlers)
+	if len(cfg.Server.CORSOrigins) > 0 {
+		r.Use(mw.CORS(cfg.Server.CORSOrigins))
+	}
+
 	// Health check
 	r.Get("/healthz", s.handleHealthz)
 

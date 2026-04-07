@@ -31,9 +31,10 @@ type Config struct {
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Port    int    `koanf:"port"`
-	Secret  string `koanf:"secret"`
-	BaseURL string `koanf:"base_url"`
+	Port        int      `koanf:"port"`
+	Secret      string   `koanf:"secret"`
+	BaseURL     string   `koanf:"base_url"`
+	CORSOrigins []string `koanf:"cors_origins"`
 }
 
 // StorageConfig holds database settings.
