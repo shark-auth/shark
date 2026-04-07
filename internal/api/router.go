@@ -108,8 +108,6 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Use(mw.RequireMFA)
 				r.Get("/me", s.handleMe)
 			})
-			r.Post("/check", s.handleAuthCheck)
-
 			// OAuth
 			r.Route("/oauth", func(r chi.Router) {
 				r.Get("/{provider}", s.handleOAuthStart)
@@ -182,6 +180,12 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
 			r.Post("/", s.handleCreatePermission)
 			r.Get("/", s.handleListPermissions)
+		})
+
+		// Auth check (admin) — validates if a user has a specific permission
+		r.Group(func(r chi.Router) {
+			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+			r.Post("/auth/check", s.handleAuthCheck)
 		})
 
 		// Users (admin)
