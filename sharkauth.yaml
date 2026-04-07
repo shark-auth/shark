@@ -1,4 +1,4 @@
-# SharkAuth Configuration
+# SharkAuth Configuration — BuildersMTY Production
 #
 # Values with ${VAR_NAME} are resolved from environment variables.
 # Environment variable overrides use SHARKAUTH_ prefix with double-underscore
@@ -10,7 +10,7 @@
 server:
   port: 8080
   secret: "${SHARKAUTH_SECRET}"
-  base_url: "https://auth.myapp.com"
+  base_url: "https://auth.buildersmty.com.mx"
   cors_origins: []
 
 storage:
@@ -21,16 +21,16 @@ auth:
   password_min_length: 8
 
 passkeys:
-  rp_name: "My App"
-  rp_id: ""
-  origin: ""
+  rp_name: "BuildersMTY"
+  rp_id: "auth.buildersmty.com.mx"
+  origin: "https://auth.buildersmty.com.mx"
   attestation: "none"
   resident_key: "preferred"
   user_verification: "preferred"
 
 magic_link:
   token_lifetime: "10m"
-  redirect_url: "http://localhost:3000/auth/callback"
+  redirect_url: "https://auth.buildersmty.com.mx/auth/callback"
 
 smtp:
   host: "smtp.resend.com"
@@ -62,7 +62,7 @@ social:
 
 sso:
   saml:
-    sp_entity_id: "https://auth.myapp.com"
+    sp_entity_id: "https://auth.buildersmty.com.mx"
   oidc: {}
 
 api_keys:

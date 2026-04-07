@@ -10,6 +10,24 @@ import (
 	"github.com/sharkauth/sharkauth/internal/config"
 )
 
+// plainAuthNoTLSCheck is like smtp.PlainAuth but skips the TLS check.
+// Go's smtp.PlainAuth refuses to send credentials unless server.TLS is true,
+// but with implicit TLS (port 465 via tls.Dial), the SMTP client doesn't know
+// TLS is active — it only detects STARTTLS-negotiated TLS. This causes auth
+// to fail with "unencrypted connection" even though the transport IS encrypted.
+type plainAuthNoTLSCheck struct {
+	identity, username, password, host string
+}
+
+func (a *plainAuthNoTLSCheck) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	resp := []byte("\x00" + a.username + "\x00" + a.password)
+	return "PLAIN", resp, nil
+}
+
+func (a *plainAuthNoTLSCheck) Next(fromServer []byte, more bool) ([]byte, error) {
+	return nil, nil
+}
+
 // SMTPSender sends emails via SMTP with STARTTLS.
 type SMTPSender struct {
 	host     string
@@ -87,7 +105,14 @@ func (s *SMTPSender) Send(msg *Message) error {
 
 	// Authenticate if credentials are provided
 	if s.username != "" && s.password != "" {
-		auth := smtp.PlainAuth("", s.username, s.password, s.host)
+		var auth smtp.Auth
+		if s.port == 465 {
+			// Port 465 uses implicit TLS — Go's PlainAuth refuses to send
+			// credentials because it doesn't detect TLS on pre-established connections.
+			auth = &plainAuthNoTLSCheck{username: s.username, password: s.password, host: s.host}
+		} else {
+			auth = smtp.PlainAuth("", s.username, s.password, s.host)
+		}
 		if err := client.Auth(auth); err != nil {
 			return fmt.Errorf("SMTP auth: %w", err)
 		}

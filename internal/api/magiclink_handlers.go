@@ -111,7 +111,7 @@ func (s *Server) handleMagicLinkSend(w http.ResponseWriter, r *http.Request) {
 
 	// Always return success
 	writeJSON(w, http.StatusOK, map[string]string{
-		"message": "If an account exists, a magic link has been sent",
+		"message": "The magic link has been sent",
 	})
 }
 

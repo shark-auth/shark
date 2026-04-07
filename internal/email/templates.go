@@ -32,6 +32,22 @@ func RenderMagicLink(data MagicLinkData) (string, error) {
 	return buf.String(), nil
 }
 
+// PasswordResetData holds the template data for a password reset email.
+type PasswordResetData struct {
+	AppName       string
+	ResetURL      string
+	ExpiryMinutes int
+}
+
+// RenderPasswordReset renders the password reset email template.
+func RenderPasswordReset(data PasswordResetData) (string, error) {
+	var buf bytes.Buffer
+	if err := templates.ExecuteTemplate(&buf, "password_reset.html", data); err != nil {
+		return "", fmt.Errorf("rendering password reset template: %w", err)
+	}
+	return buf.String(), nil
+}
+
 // VerifyEmailData holds the template data for an email verification email.
 type VerifyEmailData struct {
 	AppName       string

@@ -55,7 +55,15 @@ func main() {
 	log.Println("Migrations complete")
 
 	// Create email sender for magic links
-	emailSender := email.NewSMTPSender(cfg.SMTP)
+	// Use Resend HTTP API when host is smtp.resend.com (SMTP ports blocked on most PaaS)
+	var emailSender email.Sender
+	if cfg.SMTP.Host == "smtp.resend.com" {
+		log.Println("Using Resend HTTP API for email delivery")
+		emailSender = email.NewResendSender(cfg.SMTP)
+	} else {
+		log.Println("Using SMTP for email delivery")
+		emailSender = email.NewSMTPSender(cfg.SMTP)
+	}
 
 	// Create API server
 	srv := api.NewServer(store, cfg, api.WithEmailSender(emailSender))

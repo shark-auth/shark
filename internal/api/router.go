@@ -145,6 +145,19 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Get("/verify", s.handleMagicLinkVerify)
 			})
 
+			// Password management
+			r.Route("/password", func(r chi.Router) {
+				// Public: forgot password flow
+				r.Post("/send-reset-link", s.handlePasswordResetSend)
+				r.Post("/reset", s.handlePasswordReset)
+				// Authenticated: change password
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(mw.RequireMFA)
+					r.Post("/change", s.handleChangePassword)
+				})
+			})
+
 			// MFA
 			r.Route("/mfa", func(r chi.Router) {
 				// Challenge and recovery: require session (any, including partial mfa_passed=false)

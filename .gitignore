@@ -1,6 +1,11 @@
 # Binary
 shark.exe
 shark
+sharkauth.exe
+sharkauth_old.yaml
+gosec_results.json
+config.json
+shark-auth
 
 # Database
 data/

@@ -32,6 +32,23 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+// passwordResetSendRequest is the request body for POST /api/v1/auth/password/send-reset-link.
+type passwordResetSendRequest struct {
+	Email string `json:"email"`
+}
+
+// passwordReset is the request body for POST /api/v1/auth/password/reset.
+type passwordReset struct {
+	Token string `json:"token"`
+	Password string `json:"password"`
+}
+
+// changePasswordRequest is the request body for POST /api/v1/auth/password/change.
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 // userResponse is the JSON response for user data.
 type userResponse struct {
 	ID            string  `json:"id"`
@@ -269,6 +286,205 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, userToResponse(user))
+}
+
+func (s *Server) handlePasswordResetSend(w http.ResponseWriter, r *http.Request) {
+	var req passwordResetSendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "Invalid JSON body",
+		})
+		return
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	if !emailRegex.MatchString(req.Email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_email",
+			"message": "Invalid email address",
+		})
+		return
+	}
+
+	successMsg := map[string]string{
+		"message": "If an account with that email exists, a password reset link has been sent",
+	}
+
+	// Always return 200 to avoid leaking whether the email exists
+	if s.MagicLinkManager == nil {
+		writeJSON(w, http.StatusOK, successMsg)
+		return
+	}
+
+	_, err := s.Store.GetUserByEmail(r.Context(), req.Email)
+	if err != nil {
+		writeJSON(w, http.StatusOK, successMsg)
+		return
+	}
+
+	// Send password reset email (errors are swallowed to avoid leaking info)
+	_ = s.MagicLinkManager.SendPasswordReset(r.Context(), req.Email)
+
+	writeJSON(w, http.StatusOK, successMsg)
+}
+
+func (s *Server) handlePasswordReset(w http.ResponseWriter, r *http.Request) {
+	var req passwordReset
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "Invalid JSON body",
+		})
+		return
+	}
+
+	if req.Token == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "Token is required",
+		})
+		return
+	}
+
+	minLen := s.Config.Auth.PasswordMinLength
+	if minLen == 0 {
+		minLen = 8
+	}
+	if len(req.Password) < minLen {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "weak_password",
+			"message": "Password must be at least 8 characters",
+		})
+		return
+	}
+
+	// Verify token and get associated email
+	tokenEmail, err := s.MagicLinkManager.VerifyPasswordResetToken(r.Context(), req.Token)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_token",
+			"message": "Invalid or expired reset token",
+		})
+		return
+	}
+
+	user, err := s.Store.GetUserByEmail(r.Context(), tokenEmail)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_token",
+			"message": "Invalid or expired reset token",
+		})
+		return
+	}
+
+	passwordHash, err := auth.HashPassword(req.Password, s.Config.Auth.Argon2id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	user.PasswordHash = &passwordHash
+	user.HashType = "argon2id"
+	user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := s.Store.UpdateUser(r.Context(), user); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Password has been reset successfully",
+	})
+}
+
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID := mw.GetUserID(r.Context())
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error":   "unauthorized",
+			"message": "No valid session",
+		})
+		return
+	}
+
+	var req changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "Invalid JSON body",
+		})
+		return
+	}
+
+	minLen := s.Config.Auth.PasswordMinLength
+	if minLen == 0 {
+		minLen = 8
+	}
+	if len(req.NewPassword) < minLen {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "weak_password",
+			"message": "Password must be at least 8 characters",
+		})
+		return
+	}
+
+	user, err := s.Store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error":   "unauthorized",
+			"message": "User not found",
+		})
+		return
+	}
+
+	// If user already has a password, verify the current one
+	if user.PasswordHash != nil {
+		if req.CurrentPassword == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error":   "current_password_required",
+				"message": "Current password is required",
+			})
+			return
+		}
+		match, err := auth.VerifyPassword(req.CurrentPassword, *user.PasswordHash)
+		if err != nil || !match {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{
+				"error":   "invalid_credentials",
+				"message": "Current password is incorrect",
+			})
+			return
+		}
+	}
+
+	passwordHash, err := auth.HashPassword(req.NewPassword, s.Config.Auth.Argon2id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	user.PasswordHash = &passwordHash
+	user.HashType = "argon2id"
+	user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := s.Store.UpdateUser(r.Context(), user); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Password changed successfully",
+	})
 }
 
 // writeJSON encodes data as JSON and writes it to the response.
