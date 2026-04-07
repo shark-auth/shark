@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -167,6 +169,30 @@ func (a *AuditConfig) CleanupIntervalDuration() time.Duration {
 	return parseDuration(a.CleanupInterval, 1*time.Hour)
 }
 
+// envVarPattern matches ${VAR_NAME} patterns in config values.
+var envVarPattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
+
+// interpolateEnvVars walks all koanf keys and replaces ${VAR} patterns
+// with actual environment variable values.
+func interpolateEnvVars(k *koanf.Koanf) {
+	for _, key := range k.Keys() {
+		val := k.String(key)
+		if val == "" {
+			continue
+		}
+		replaced := envVarPattern.ReplaceAllStringFunc(val, func(match string) string {
+			varName := envVarPattern.FindStringSubmatch(match)[1]
+			if envVal, ok := os.LookupEnv(varName); ok {
+				return envVal
+			}
+			return match // leave unresolved if env var not set
+		})
+		if replaced != val {
+			k.Set(key, replaced)
+		}
+	}
+}
+
 // Load reads configuration from a YAML file and applies environment variable overrides.
 // Environment variables use the prefix SHARKAUTH_ and replace dots with underscores.
 // For example, server.port becomes SHARKAUTH_SERVER_PORT.
@@ -212,6 +238,9 @@ func Load(path string) (*Config, error) {
 			return nil, fmt.Errorf("loading config file %s: %w", path, err)
 		}
 	}
+
+	// Interpolate ${VAR_NAME} patterns in YAML values with actual env vars
+	interpolateEnvVars(k)
 
 	// Load environment variable overrides with SHARKAUTH_ prefix
 	if err := k.Load(env.Provider("SHARKAUTH_", ".", func(s string) string {
