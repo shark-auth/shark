@@ -26,6 +26,7 @@ type Store interface {
 	GetSessionsByUserID(ctx context.Context, userID string) ([]*Session, error)
 	DeleteSession(ctx context.Context, id string) error
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	UpdateSessionMFAPassed(ctx context.Context, id string, mfaPassed bool) error
 
 	// OAuthAccounts
 	CreateOAuthAccount(ctx context.Context, acct *OAuthAccount) error

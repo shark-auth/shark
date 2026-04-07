@@ -174,24 +174,7 @@ func (sm *SessionManager) ClearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-// UpgradeMFA sets mfa_passed=1 on a session.
+// UpgradeMFA sets mfa_passed=true on a session atomically.
 func (sm *SessionManager) UpgradeMFA(ctx context.Context, sessionID string) error {
-	sess, err := sm.store.GetSessionByID(ctx, sessionID)
-	if err != nil {
-		return ErrSessionNotFound
-	}
-
-	sess.MFAPassed = true
-
-	// We need to delete and re-create because the storage interface doesn't have UpdateSession.
-	// Actually, let's check - we'll use a direct DB approach. But we shouldn't modify storage.
-	// The Session struct has MFAPassed - we delete the old session and create a new one with same ID.
-	if err := sm.store.DeleteSession(ctx, sessionID); err != nil {
-		return fmt.Errorf("deleting session for MFA upgrade: %w", err)
-	}
-	if err := sm.store.CreateSession(ctx, sess); err != nil {
-		return fmt.Errorf("re-creating session for MFA upgrade: %w", err)
-	}
-
-	return nil
+	return sm.store.UpdateSessionMFAPassed(ctx, sessionID, true)
 }
