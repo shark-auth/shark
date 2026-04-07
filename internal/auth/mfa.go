@@ -153,15 +153,23 @@ func (m *MFAManager) VerifyRecoveryCode(ctx context.Context, userID, code string
 	return false, nil
 }
 
-// generateRandomCode generates a random alphanumeric code of the given length.
+// generateRandomCode generates a random alphanumeric code of the given length
+// using rejection sampling to avoid modulo bias.
 func generateRandomCode(length int) string {
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand failed: " + err.Error())
+	alphabetLen := byte(len(recoveryCodeAlphabet))
+	// Find the largest multiple of alphabetLen that fits in a byte
+	maxValid := byte(256 - (256 % int(alphabetLen))) // 252 for alphabetLen=36
+	result := make([]byte, length)
+	buf := make([]byte, 1)
+	for i := 0; i < length; {
+		if _, err := rand.Read(buf); err != nil {
+			panic("crypto/rand failed: " + err.Error())
+		}
+		if buf[0] < maxValid {
+			result[i] = recoveryCodeAlphabet[buf[0]%alphabetLen]
+			i++
+		}
+		// else: reject and retry
 	}
-	alphabetLen := len(recoveryCodeAlphabet)
-	for i := range b {
-		b[i] = recoveryCodeAlphabet[int(b[i])%alphabetLen]
-	}
-	return string(b)
+	return string(result)
 }
