@@ -1,0 +1,69 @@
+server:
+  port: 8080
+  secret: "dev-secret-change-me-in-production-min-32-chars!!"
+  base_url: "http://localhost:8080"
+  cors_origins:
+    - "http://localhost:3000"
+
+storage:
+  path: "./data/sharkauth.db"
+
+auth:
+  session_lifetime: "30d"
+  password_min_length: 8
+
+passkeys:
+  rp_name: "SharkAuth Dev"
+  rp_id: "localhost"
+  origin: "http://localhost:8080"
+  attestation: "none"
+  resident_key: "preferred"
+  user_verification: "preferred"
+
+magic_link:
+  token_lifetime: "10m"
+  redirect_url: "http://localhost:3000/auth/callback"
+
+smtp:
+  host: ""
+  port: 587
+  username: ""
+  password: ""
+  from: "auth@localhost"
+  from_name: "SharkAuth Dev"
+
+mfa:
+  issuer: "SharkAuth"
+  recovery_codes: 10
+
+social:
+  google:
+    client_id: ""
+    client_secret: ""
+  github:
+    client_id: ""
+    client_secret: ""
+  apple:
+    client_id: ""
+    team_id: ""
+    key_id: ""
+    private_key_path: ""
+  discord:
+    client_id: ""
+    client_secret: ""
+
+sso:
+  saml:
+    sp_entity_id: "http://localhost:8080"
+  oidc: {}
+
+api_keys:
+  default_rate_limit: 1000
+  key_max_lifetime: "365d"
+
+audit:
+  retention: "0"
+  cleanup_interval: "1h"
+
+admin:
+  api_key: "admin-dev-key-123"

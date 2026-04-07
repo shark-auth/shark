@@ -1,7 +1,17 @@
+# SharkAuth Configuration
+#
+# Values with ${VAR_NAME} are resolved from environment variables.
+# Environment variable overrides use SHARKAUTH_ prefix with double-underscore
+# for nesting: SHARKAUTH_SMTP__FROM_NAME overrides smtp.from_name
+#
+# Single-level keys: SHARKAUTH_SMTP__HOST, SHARKAUTH_SMTP__PORT, SHARKAUTH_SMTP__PASSWORD
+# Multi-word keys:   SHARKAUTH_SERVER__BASE_URL, SHARKAUTH_AUTH__SESSION_LIFETIME
+
 server:
   port: 8080
   secret: "${SHARKAUTH_SECRET}"
   base_url: "https://auth.myapp.com"
+  cors_origins: []
 
 storage:
   path: "./data/sharkauth.db"
