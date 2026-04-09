@@ -154,6 +154,7 @@ CREATE TABLE api_keys (
     name         TEXT NOT NULL,
     key_hash     TEXT NOT NULL UNIQUE,
     key_prefix   TEXT NOT NULL,
+    key_suffix   TEXT NOT NULL DEFAULT '',
     scopes       TEXT DEFAULT '[]',
     rate_limit   INTEGER DEFAULT 1000,
     expires_at   TEXT,

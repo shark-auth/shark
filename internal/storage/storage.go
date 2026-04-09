@@ -98,6 +98,7 @@ type Store interface {
 	ListAPIKeys(ctx context.Context) ([]*APIKey, error)
 	UpdateAPIKey(ctx context.Context, key *APIKey) error
 	RevokeAPIKey(ctx context.Context, id string, revokedAt time.Time) error
+	CountActiveAPIKeysByScope(ctx context.Context, scope string) (int, error)
 
 	// AuditLogs
 	CreateAuditLog(ctx context.Context, log *AuditLog) error
@@ -239,6 +240,7 @@ type APIKey struct {
 	Name       string  `json:"name"`
 	KeyHash    string  `json:"-"`
 	KeyPrefix  string  `json:"key_prefix"`
+	KeySuffix  string  `json:"key_suffix"`
 	Scopes     string  `json:"scopes"`
 	RateLimit  int     `json:"rate_limit"`
 	ExpiresAt  *string `json:"expires_at,omitempty"`

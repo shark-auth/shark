@@ -29,6 +29,7 @@ type createAPIKeyResponse struct {
 	Name      string   `json:"name"`
 	Key       string   `json:"key"` // Full key, shown only on creation
 	KeyPrefix string   `json:"key_prefix"`
+	KeySuffix string   `json:"key_suffix"`
 	Scopes    []string `json:"scopes"`
 	RateLimit int      `json:"rate_limit"`
 	ExpiresAt *string  `json:"expires_at,omitempty"`
@@ -36,10 +37,11 @@ type createAPIKeyResponse struct {
 }
 
 // apiKeyResponse is returned for list/get (never includes the full key).
+// Display masked key as: sk_live_AbCd...xK9f
 type apiKeyResponse struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
-	KeyPrefix  string   `json:"key_prefix"`
+	KeyDisplay string   `json:"key_display"` // Masked: sk_live_AbCd...xK9f
 	Scopes     []string `json:"scopes"`
 	RateLimit  int      `json:"rate_limit"`
 	ExpiresAt  *string  `json:"expires_at,omitempty"`
@@ -98,7 +100,7 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate the API key
-	fullKey, keyHash, keyPrefix, err := auth.GenerateAPIKey()
+	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
@@ -130,6 +132,7 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Name:      req.Name,
 		KeyHash:   keyHash,
 		KeyPrefix: keyPrefix,
+		KeySuffix: keySuffix,
 		Scopes:    string(scopesJSON),
 		RateLimit: rateLimit,
 		ExpiresAt: req.ExpiresAt,
@@ -149,6 +152,7 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Name:      apiKey.Name,
 		Key:       fullKey,
 		KeyPrefix: apiKey.KeyPrefix,
+		KeySuffix: apiKey.KeySuffix,
 		Scopes:    req.Scopes,
 		RateLimit: rateLimit,
 		ExpiresAt: req.ExpiresAt,
@@ -305,6 +309,20 @@ func (s *Server) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prevent revoking the last admin key (scope "*")
+	var scopes []string
+	_ = json.Unmarshal([]byte(key.Scopes), &scopes)
+	if auth.CheckScope(scopes, "*") {
+		count, err := s.Store.CountActiveAPIKeysByScope(r.Context(), "*")
+		if err == nil && count <= 1 {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error":   "last_admin_key",
+				"message": "Cannot revoke the last admin API key. Create another admin key first.",
+			})
+			return
+		}
+	}
+
 	now := time.Now().UTC()
 	if err := s.Store.RevokeAPIKey(r.Context(), id, now); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
@@ -349,7 +367,7 @@ func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate new key
-	fullKey, keyHash, keyPrefix, err := auth.GenerateAPIKey()
+	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
@@ -367,6 +385,7 @@ func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Name:      oldKey.Name,
 		KeyHash:   keyHash,
 		KeyPrefix: keyPrefix,
+		KeySuffix: keySuffix,
 		Scopes:    oldKey.Scopes,
 		RateLimit: oldKey.RateLimit,
 		ExpiresAt: oldKey.ExpiresAt,
@@ -399,6 +418,7 @@ func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Name:      newKey.Name,
 		Key:       fullKey,
 		KeyPrefix: newKey.KeyPrefix,
+		KeySuffix: newKey.KeySuffix,
 		Scopes:    scopes,
 		RateLimit: newKey.RateLimit,
 		ExpiresAt: newKey.ExpiresAt,
@@ -414,10 +434,13 @@ func toAPIKeyResponse(k *storage.APIKey) apiKeyResponse {
 	var scopes []string
 	_ = json.Unmarshal([]byte(k.Scopes), &scopes)
 
+	// Masked display like OpenAI: sk_live_AbCd...xK9f
+	display := "sk_live_" + k.KeyPrefix + "..." + k.KeySuffix
+
 	return apiKeyResponse{
 		ID:         k.ID,
 		Name:       k.Name,
-		KeyPrefix:  k.KeyPrefix,
+		KeyDisplay: display,
 		Scopes:     scopes,
 		RateLimit:  k.RateLimit,
 		ExpiresAt:  k.ExpiresAt,

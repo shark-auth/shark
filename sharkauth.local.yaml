@@ -68,5 +68,6 @@ audit:
   retention: "0"
   cleanup_interval: "1h"
 
-admin:
-  api_key: "admin-dev-key-123"
+# Admin API keys are now managed via the M2M key system.
+# On first run, an admin key is generated and printed to stdout.
+# Use: Authorization: Bearer sk_live_...

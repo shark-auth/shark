@@ -137,6 +137,7 @@ func CreateAPIKey(t *testing.T, store storage.Store, name string) *storage.APIKe
 		Name:      name,
 		KeyHash:   keyHash,
 		KeyPrefix: "sk_live_t",
+		KeySuffix: "test",
 		Scopes:    `["users:read","users:write"]`,
 		RateLimit: 1000,
 		CreatedAt: now,

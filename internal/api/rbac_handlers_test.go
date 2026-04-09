@@ -68,7 +68,7 @@ func TestRBACIntegration(t *testing.T) {
 	resp.Body.Close()
 
 	// 6. Verify /auth/check returns allowed=true
-	resp = ts.PostJSON("/api/v1/auth/check", map[string]string{
+	resp = ts.PostJSONWithAdminKey("/api/v1/auth/check", map[string]string{
 		"user_id":  user.ID,
 		"action":   "write",
 		"resource": "articles",
@@ -85,7 +85,7 @@ func TestRBACIntegration(t *testing.T) {
 
 	// 7. Verify unassigned user gets allowed=false
 	unassigned := testutil.CreateUser(t, ts.Store, "no-role@example.com", nil)
-	resp = ts.PostJSON("/api/v1/auth/check", map[string]string{
+	resp = ts.PostJSONWithAdminKey("/api/v1/auth/check", map[string]string{
 		"user_id":  unassigned.ID,
 		"action":   "write",
 		"resource": "articles",
@@ -153,7 +153,7 @@ func TestRBACIntegration(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	resp = ts.PostJSON("/api/v1/auth/check", map[string]string{
+	resp = ts.PostJSONWithAdminKey("/api/v1/auth/check", map[string]string{
 		"user_id":  user.ID,
 		"action":   "write",
 		"resource": "articles",

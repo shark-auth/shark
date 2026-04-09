@@ -2,14 +2,19 @@ package testutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	gonanoid "github.com/matoous/go-nanoid/v2"
 
 	"github.com/sharkauth/sharkauth/internal/api"
+	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
@@ -24,10 +29,12 @@ type TestServer struct {
 	T           *testing.T
 	APIServer   *api.Server
 	EmailSender *MemoryEmailSender
+	AdminKey    string // Full admin API key (sk_live_...) for Bearer auth
 }
 
 // NewTestServer creates a test HTTP server with all routes mounted.
 // The server is automatically closed when the test completes.
+// An admin API key with "*" scope is automatically created for test use.
 func NewTestServer(t *testing.T) *TestServer {
 	t.Helper()
 
@@ -51,18 +58,40 @@ func NewTestServer(t *testing.T) *TestServer {
 		},
 	}
 
+	// Bootstrap an admin API key for tests
+	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
+	if err != nil {
+		t.Fatalf("generating admin key: %v", err)
+	}
+	id, _ := gonanoid.New()
+	now := time.Now().UTC().Format(time.RFC3339)
+	adminKey := &storage.APIKey{
+		ID:        "key_" + id,
+		Name:      "test-admin",
+		KeyHash:   keyHash,
+		KeyPrefix: keyPrefix,
+		KeySuffix: keySuffix,
+		Scopes:    `["*"]`,
+		RateLimit: 100000,
+		CreatedAt: now,
+	}
+	if err := store.CreateAPIKey(context.Background(), adminKey); err != nil {
+		t.Fatalf("creating test admin key: %v", err)
+	}
+
 	t.Cleanup(func() {
 		ts.Close()
 	})
 
 	return &TestServer{
-		Server:    ts,
-		Client:    client,
-		Store:     store,
-		Config:    cfg,
-		T:         t,
+		Server:      ts,
+		Client:      client,
+		Store:       store,
+		Config:      cfg,
+		T:           t,
 		APIServer:   srv,
 		EmailSender: emailSender,
+		AdminKey:    fullKey,
 	}
 }
 
@@ -134,7 +163,7 @@ func (ts *TestServer) Get(path string) *http.Response {
 	return resp
 }
 
-// GetWithAdminKey sends a GET request with the admin API key header.
+// GetWithAdminKey sends a GET request with the admin Bearer API key header.
 func (ts *TestServer) GetWithAdminKey(path string) *http.Response {
 	ts.T.Helper()
 
@@ -142,7 +171,7 @@ func (ts *TestServer) GetWithAdminKey(path string) *http.Response {
 	if err != nil {
 		ts.T.Fatalf("creating request: %v", err)
 	}
-	req.Header.Set("X-Admin-Key", ts.Config.Admin.APIKey)
+	req.Header.Set("Authorization", "Bearer "+ts.AdminKey)
 
 	resp, err := ts.Client.Do(req)
 	if err != nil {
@@ -151,7 +180,7 @@ func (ts *TestServer) GetWithAdminKey(path string) *http.Response {
 	return resp
 }
 
-// PostJSONWithAdminKey sends a POST request with a JSON body and the admin API key header.
+// PostJSONWithAdminKey sends a POST request with a JSON body and the admin Bearer API key header.
 func (ts *TestServer) PostJSONWithAdminKey(path string, body interface{}) *http.Response {
 	ts.T.Helper()
 
@@ -169,7 +198,7 @@ func (ts *TestServer) PostJSONWithAdminKey(path string, body interface{}) *http.
 		ts.T.Fatalf("creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Admin-Key", ts.Config.Admin.APIKey)
+	req.Header.Set("Authorization", "Bearer "+ts.AdminKey)
 
 	resp, err := ts.Client.Do(req)
 	if err != nil {
@@ -274,7 +303,7 @@ func DecodeJSONResponse[T any](t *testing.T, resp *http.Response) T {
 	return result
 }
 
-// DeleteWithAdminKey sends a DELETE request with the admin API key header.
+// DeleteWithAdminKey sends a DELETE request with the admin Bearer API key header.
 func (ts *TestServer) DeleteWithAdminKey(path string) *http.Response {
 	ts.T.Helper()
 
@@ -282,7 +311,7 @@ func (ts *TestServer) DeleteWithAdminKey(path string) *http.Response {
 	if err != nil {
 		ts.T.Fatalf("creating request: %v", err)
 	}
-	req.Header.Set("X-Admin-Key", ts.Config.Admin.APIKey)
+	req.Header.Set("Authorization", "Bearer "+ts.AdminKey)
 
 	resp, err := ts.Client.Do(req)
 	if err != nil {
@@ -291,7 +320,7 @@ func (ts *TestServer) DeleteWithAdminKey(path string) *http.Response {
 	return resp
 }
 
-// PutJSONWithAdminKey sends a PUT request with a JSON body and the admin API key header.
+// PutJSONWithAdminKey sends a PUT request with a JSON body and the admin Bearer API key header.
 func (ts *TestServer) PutJSONWithAdminKey(path string, body interface{}) *http.Response {
 	ts.T.Helper()
 
@@ -309,7 +338,7 @@ func (ts *TestServer) PutJSONWithAdminKey(path string, body interface{}) *http.R
 		ts.T.Fatalf("creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Admin-Key", ts.Config.Admin.APIKey)
+	req.Header.Set("Authorization", "Bearer "+ts.AdminKey)
 
 	resp, err := ts.Client.Do(req)
 	if err != nil {
@@ -318,7 +347,7 @@ func (ts *TestServer) PutJSONWithAdminKey(path string, body interface{}) *http.R
 	return resp
 }
 
-// PatchJSONWithAdminKey sends a PATCH request with a JSON body and the admin API key header.
+// PatchJSONWithAdminKey sends a PATCH request with a JSON body and the admin Bearer API key header.
 func (ts *TestServer) PatchJSONWithAdminKey(path string, body interface{}) *http.Response {
 	ts.T.Helper()
 
@@ -336,7 +365,7 @@ func (ts *TestServer) PatchJSONWithAdminKey(path string, body interface{}) *http
 		ts.T.Fatalf("creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Admin-Key", ts.Config.Admin.APIKey)
+	req.Header.Set("Authorization", "Bearer "+ts.AdminKey)
 
 	resp, err := ts.Client.Do(req)
 	if err != nil {

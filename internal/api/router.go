@@ -183,7 +183,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 		// Roles (admin)
 		r.Route("/roles", func(r chi.Router) {
-			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/", s.handleCreateRole)
 			r.Get("/", s.handleListRoles)
 			r.Get("/{id}", s.handleGetRole)
@@ -195,20 +195,20 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 		// Permissions (admin)
 		r.Route("/permissions", func(r chi.Router) {
-			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/", s.handleCreatePermission)
 			r.Get("/", s.handleListPermissions)
 		})
 
 		// Auth check (admin) — validates if a user has a specific permission
 		r.Group(func(r chi.Router) {
-			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/auth/check", s.handleAuthCheck)
 		})
 
 		// Users (admin)
 		r.Route("/users", func(r chi.Router) {
-			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Get("/", notImplemented)
 			r.Get("/{id}", notImplemented)
 			r.Delete("/{id}", notImplemented)
@@ -223,7 +223,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		r.Route("/sso", func(r chi.Router) {
 			// Admin CRUD
 			r.Group(func(r chi.Router) {
-				r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+				r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 				r.Route("/connections", func(r chi.Router) {
 					r.Post("/", s.SSOHandlers.CreateConnection)
 					r.Get("/", s.SSOHandlers.ListConnections)
@@ -241,7 +241,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 		// API Keys (admin)
 		r.Route("/api-keys", func(r chi.Router) {
-			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/", s.handleCreateAPIKey)
 			r.Get("/", s.handleListAPIKeys)
 			r.Get("/{id}", s.handleGetAPIKey)
@@ -252,7 +252,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 		// Audit Logs (admin)
 		r.Route("/audit-logs", func(r chi.Router) {
-			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Get("/", s.handleListAuditLogs)
 			r.Get("/{id}", s.handleGetAuditLog)
 			r.Post("/export", s.handleExportAuditLogs)
@@ -260,7 +260,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 		// Migration (admin)
 		r.Route("/migrate", func(r chi.Router) {
-			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/auth0", notImplemented)
 			r.Get("/{id}", notImplemented)
 		})

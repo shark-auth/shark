@@ -57,8 +57,5 @@ func TestConfig() *config.Config {
 			Retention:       "0",
 			CleanupInterval: "1h",
 		},
-		Admin: config.AdminConfig{
-			APIKey: "test-admin-key",
-		},
 	}
 }

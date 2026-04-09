@@ -98,8 +98,9 @@ func TestListAPIKeys(t *testing.T) {
 	var keys []map[string]interface{}
 	ts.DecodeJSON(resp, &keys)
 
-	if len(keys) != 2 {
-		t.Fatalf("expected 2 keys, got %d", len(keys))
+	// 3 = 1 bootstrap admin key + 2 created above
+	if len(keys) != 3 {
+		t.Fatalf("expected 3 keys (1 admin + 2 created), got %d", len(keys))
 	}
 
 	// Keys in list must NOT contain the full key
@@ -107,8 +108,8 @@ func TestListAPIKeys(t *testing.T) {
 		if _, hasKey := k["key"]; hasKey {
 			t.Error("list response must not contain full 'key' field")
 		}
-		if _, hasPrefix := k["key_prefix"]; !hasPrefix {
-			t.Error("list response must contain 'key_prefix'")
+		if _, hasDisplay := k["key_display"]; !hasDisplay {
+			t.Error("list response must contain 'key_display'")
 		}
 	}
 }
@@ -291,7 +292,7 @@ func TestAPIKeyBearerAuthWrongKey(t *testing.T) {
 	store := ts.Store
 
 	// Create a valid key in the DB
-	fullKey, keyHash, keyPrefix, err := auth.GenerateAPIKey()
+	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
 	if err != nil {
 		t.Fatalf("GenerateAPIKey error: %v", err)
 	}
@@ -303,6 +304,7 @@ func TestAPIKeyBearerAuthWrongKey(t *testing.T) {
 		Name:      "Test Key",
 		KeyHash:   keyHash,
 		KeyPrefix: keyPrefix,
+		KeySuffix: keySuffix,
 		Scopes:    `["users:read"]`,
 		RateLimit: 1000,
 		CreatedAt: now,
@@ -325,7 +327,7 @@ func TestAPIKeyBearerAuthRevokedKey(t *testing.T) {
 	store := ts.Store
 
 	// Create and then revoke a key
-	_, keyHash, keyPrefix, err := auth.GenerateAPIKey()
+	_, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
 	if err != nil {
 		t.Fatalf("GenerateAPIKey error: %v", err)
 	}
@@ -339,6 +341,7 @@ func TestAPIKeyBearerAuthRevokedKey(t *testing.T) {
 		Name:      "Revoked Key",
 		KeyHash:   keyHash,
 		KeyPrefix: keyPrefix,
+		KeySuffix: keySuffix,
 		Scopes:    `["users:read"]`,
 		RateLimit: 1000,
 		CreatedAt: nowStr,

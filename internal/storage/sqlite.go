@@ -801,9 +801,9 @@ func (s *SQLiteStore) GetSSOIdentitiesByUserID(ctx context.Context, userID strin
 
 func (s *SQLiteStore) CreateAPIKey(ctx context.Context, k *APIKey) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO api_keys (id, name, key_hash, key_prefix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		k.ID, k.Name, k.KeyHash, k.KeyPrefix, k.Scopes, k.RateLimit,
+		`INSERT INTO api_keys (id, name, key_hash, key_prefix, key_suffix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		k.ID, k.Name, k.KeyHash, k.KeyPrefix, k.KeySuffix, k.Scopes, k.RateLimit,
 		k.ExpiresAt, k.LastUsedAt, k.CreatedAt, k.RevokedAt,
 	)
 	return err
@@ -811,19 +811,19 @@ func (s *SQLiteStore) CreateAPIKey(ctx context.Context, k *APIKey) error {
 
 func (s *SQLiteStore) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (*APIKey, error) {
 	return s.scanAPIKey(s.db.QueryRowContext(ctx,
-		`SELECT id, name, key_hash, key_prefix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
+		`SELECT id, name, key_hash, key_prefix, key_suffix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
 		 FROM api_keys WHERE key_hash = ?`, keyHash))
 }
 
 func (s *SQLiteStore) GetAPIKeyByID(ctx context.Context, id string) (*APIKey, error) {
 	return s.scanAPIKey(s.db.QueryRowContext(ctx,
-		`SELECT id, name, key_hash, key_prefix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
+		`SELECT id, name, key_hash, key_prefix, key_suffix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
 		 FROM api_keys WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) ListAPIKeys(ctx context.Context) ([]*APIKey, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, key_hash, key_prefix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
+		`SELECT id, name, key_hash, key_prefix, key_suffix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
 		 FROM api_keys ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -833,7 +833,7 @@ func (s *SQLiteStore) ListAPIKeys(ctx context.Context) ([]*APIKey, error) {
 	var keys []*APIKey
 	for rows.Next() {
 		var k APIKey
-		if err := rows.Scan(&k.ID, &k.Name, &k.KeyHash, &k.KeyPrefix, &k.Scopes, &k.RateLimit,
+		if err := rows.Scan(&k.ID, &k.Name, &k.KeyHash, &k.KeyPrefix, &k.KeySuffix, &k.Scopes, &k.RateLimit,
 			&k.ExpiresAt, &k.LastUsedAt, &k.CreatedAt, &k.RevokedAt); err != nil {
 			return nil, err
 		}
@@ -860,12 +860,26 @@ func (s *SQLiteStore) RevokeAPIKey(ctx context.Context, id string, revokedAt tim
 
 func (s *SQLiteStore) scanAPIKey(row *sql.Row) (*APIKey, error) {
 	var k APIKey
-	err := row.Scan(&k.ID, &k.Name, &k.KeyHash, &k.KeyPrefix, &k.Scopes, &k.RateLimit,
+	err := row.Scan(&k.ID, &k.Name, &k.KeyHash, &k.KeyPrefix, &k.KeySuffix, &k.Scopes, &k.RateLimit,
 		&k.ExpiresAt, &k.LastUsedAt, &k.CreatedAt, &k.RevokedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &k, nil
+}
+
+func (s *SQLiteStore) CountActiveAPIKeysByScope(ctx context.Context, scope string) (int, error) {
+	var count int
+	pattern := fmt.Sprintf("%%%q%%", scope)
+	// Match keys that contain the scope in their JSON scopes array, are not revoked, and not expired
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM api_keys
+		 WHERE revoked_at IS NULL
+		 AND (expires_at IS NULL OR expires_at = '' OR expires_at > ?)
+		 AND (scopes LIKE ? OR scopes LIKE '%"*"%')`,
+		time.Now().UTC().Format(time.RFC3339), pattern,
+	).Scan(&count)
+	return count, err
 }
 
 // --- AuditLogs ---

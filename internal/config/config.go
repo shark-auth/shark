@@ -27,7 +27,6 @@ type Config struct {
 	SSO       SSOConfig       `koanf:"sso"`
 	APIKeys   APIKeysConfig   `koanf:"api_keys"`
 	Audit     AuditConfig     `koanf:"audit"`
-	Admin     AdminConfig     `koanf:"admin"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -158,11 +157,6 @@ type OIDCConfig struct{}
 type APIKeysConfig struct {
 	DefaultRateLimit int    `koanf:"default_rate_limit"`
 	KeyMaxLifetime   string `koanf:"key_max_lifetime"`
-}
-
-// AdminConfig holds admin dashboard/API settings.
-type AdminConfig struct {
-	APIKey string `koanf:"api_key"`
 }
 
 // AuditConfig holds audit log settings.

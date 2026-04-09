@@ -6,7 +6,7 @@ import (
 )
 
 func TestAPIKeyGeneration(t *testing.T) {
-	fullKey, keyHash, keyPrefix, err := GenerateAPIKey()
+	fullKey, keyHash, keyPrefix, _, err := GenerateAPIKey()
 	if err != nil {
 		t.Fatalf("GenerateAPIKey() error: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestAPIKeyGeneration(t *testing.T) {
 	}
 
 	// Generate a second key and verify uniqueness
-	fullKey2, keyHash2, _, err := GenerateAPIKey()
+	fullKey2, keyHash2, _, _, err := GenerateAPIKey()
 	if err != nil {
 		t.Fatalf("GenerateAPIKey() second call error: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestAPIKeyGeneration(t *testing.T) {
 }
 
 func TestAPIKeyHashRoundTrip(t *testing.T) {
-	fullKey, keyHash, _, err := GenerateAPIKey()
+	fullKey, keyHash, _, _, err := GenerateAPIKey()
 	if err != nil {
 		t.Fatalf("GenerateAPIKey() error: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestAPIKeyHashRoundTrip(t *testing.T) {
 }
 
 func TestAPIKeyWrongKey(t *testing.T) {
-	_, keyHash, _, err := GenerateAPIKey()
+	_, keyHash, _, _, err := GenerateAPIKey()
 	if err != nil {
 		t.Fatalf("GenerateAPIKey() error: %v", err)
 	}

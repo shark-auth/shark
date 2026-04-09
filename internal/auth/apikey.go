@@ -23,21 +23,26 @@ const (
 	keyPrefixLen = 8
 )
 
+// keySuffixLen is how many characters from the end of the encoded key to store for masked display.
+const keySuffixLen = 4
+
 // GenerateAPIKey creates a new API key: sk_live_ + 32 random bytes base62-encoded.
 // Returns the full key (shown once to the user), its SHA-256 hash (stored in DB),
-// and a display prefix (first 8 chars after sk_live_ for logs/dashboard).
-func GenerateAPIKey() (fullKey string, keyHash string, keyPrefix string, err error) {
+// a display prefix (first 8 chars after sk_live_), and a display suffix (last 4 chars)
+// for masked display like OpenAI: sk_live_AbCd...xK9f
+func GenerateAPIKey() (fullKey string, keyHash string, keyPrefix string, keySuffix string, err error) {
 	randomBytes := make([]byte, randomBytesLen)
 	if _, err := rand.Read(randomBytes); err != nil {
-		return "", "", "", fmt.Errorf("generating random bytes: %w", err)
+		return "", "", "", "", fmt.Errorf("generating random bytes: %w", err)
 	}
 
 	encoded := base62Encode(randomBytes)
 	fullKey = apiKeyPrefix + encoded
 	keyHash = HashAPIKey(fullKey)
 	keyPrefix = encoded[:keyPrefixLen]
+	keySuffix = encoded[len(encoded)-keySuffixLen:]
 
-	return fullKey, keyHash, keyPrefix, nil
+	return fullKey, keyHash, keyPrefix, keySuffix, nil
 }
 
 // HashAPIKey returns the hex-encoded SHA-256 hash of the given API key.

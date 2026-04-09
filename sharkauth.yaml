@@ -76,5 +76,6 @@ audit:
   retention: "0"
   cleanup_interval: "1h"
 
-admin:
-  api_key: "${SHARKAUTH_ADMIN_KEY}"
+# Admin API keys are now managed via the M2M key system.
+# On first run, an admin key is generated and printed to stdout.
+# Use: Authorization: Bearer sk_live_...

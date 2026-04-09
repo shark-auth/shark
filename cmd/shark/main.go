@@ -13,7 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	gonanoid "github.com/matoous/go-nanoid/v2"
+
 	"github.com/sharkauth/sharkauth/internal/api"
+	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/storage"
@@ -53,6 +56,40 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 	log.Println("Migrations complete")
+
+	// Bootstrap admin API key on first run
+	adminCount, err := store.CountActiveAPIKeysByScope(context.Background(), "*")
+	if err != nil {
+		log.Fatalf("Failed to check admin keys: %v", err)
+	}
+	if adminCount == 0 {
+		fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
+		if err != nil {
+			log.Fatalf("Failed to generate admin key: %v", err)
+		}
+		id, _ := gonanoid.New()
+		now := time.Now().UTC().Format(time.RFC3339)
+		adminKey := &storage.APIKey{
+			ID:        "key_" + id,
+			Name:      "default-admin",
+			KeyHash:   keyHash,
+			KeyPrefix: keyPrefix,
+			KeySuffix: keySuffix,
+			Scopes:    `["*"]`,
+			RateLimit: 0,
+			CreatedAt: now,
+		}
+		if err := store.CreateAPIKey(context.Background(), adminKey); err != nil {
+			log.Fatalf("Failed to create admin key: %v", err)
+		}
+		fmt.Println()
+		fmt.Println("  ADMIN API KEY (shown once — save it now)")
+		fmt.Println()
+		fmt.Printf("    %s\n", fullKey)
+		fmt.Println()
+		fmt.Println("  Use as: Authorization: Bearer <key>")
+		fmt.Println()
+	}
 
 	// Create email sender for magic links
 	// Use Resend HTTP API when host is smtp.resend.com (SMTP ports blocked on most PaaS)
