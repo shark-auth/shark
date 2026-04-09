@@ -71,33 +71,70 @@ Returns the authenticated user.
 
 ## Auth - Password Management
 
+### Forgot Password Flow
+
+The password reset flow involves three steps:
+
+1. **Your app** calls `POST /auth/password/send-reset-link` with the user's email
+2. **SharkAuth** sends an email with a link to your frontend's reset page (configured via `password_reset.redirect_url`), e.g. `https://yourapp.com/auth/reset-password?token=abc123`
+3. **Your frontend** reads the `token` query parameter, shows a "new password" form, and submits it to `POST /auth/password/reset`
+
+#### Configuration
+
+In `sharkauth.yaml`:
+```yaml
+password_reset:
+  redirect_url: "https://yourapp.com/auth/reset-password"
+```
+
+Or via environment variable: `SHARKAUTH_PASSWORD_RESET__REDIRECT_URL`
+
+The email link will be: `{redirect_url}?token={token}`
+
 ### POST `/auth/password/send-reset-link`
 
-Send a password reset email.
+Send a password reset email. Always returns 200 regardless of whether the email exists (to prevent user enumeration).
 
 **Request:**
 ```json
 { "email": "user@example.com" }
 ```
 
-**Response (200):** `{message: "If the email exists, a reset link has been sent."}`
+**Response (200):**
+```json
+{ "message": "If an account with that email exists, a password reset link has been sent" }
+```
+
+**Notes:**
+- The reset token expires after **15 minutes**
+- The email link points to your `password_reset.redirect_url` with a `?token=` query parameter
 
 ### POST `/auth/password/reset`
 
-Reset password using a token from the reset email.
+Reset password using a token from the reset email. This is the endpoint your frontend's reset page should POST to.
 
 **Request:**
 ```json
-{ "token": "reset-token", "password": "newpassword" }
+{ "token": "reset-token-from-query-param", "password": "newpassword" }
 ```
 
-**Response (200):** `{message: "Password has been reset."}`
+**Response (200):**
+```json
+{ "message": "Password has been reset successfully" }
+```
+
+**Errors:**
+| Status | Error | Cause |
+|--------|-------|-------|
+| 400 | `invalid_request` | Missing or malformed JSON body |
+| 400 | `invalid_token` | Token is invalid, expired, or already used |
+| 400 | `weak_password` | Password does not meet minimum length requirement |
 
 ### POST `/auth/password/change`
 
 **Auth:** Session + MFA
 
-Change password for the authenticated user.
+Change password for the authenticated user (requires knowing the current password).
 
 **Request:**
 ```json

@@ -119,7 +119,7 @@ func (m *MagicLinkManager) SendMagicLink(ctx context.Context, emailAddr string) 
 }
 
 // SendPasswordReset generates a random token, stores its SHA-256 hash, and sends a password reset email.
-// Always returns nil to avoid leaking whether the email address exists.
+// Returns errors on failure; the caller should log but not expose them to the client.
 func (m *MagicLinkManager) SendPasswordReset(ctx context.Context, emailAddr string) error {
 	// Generate 32 random bytes
 	tokenBytes := make([]byte, 32)
@@ -148,8 +148,8 @@ func (m *MagicLinkManager) SendPasswordReset(ctx context.Context, emailAddr stri
 		return fmt.Errorf("storing password reset token: %w", err)
 	}
 
-	baseURL := strings.TrimRight(m.cfg.Server.BaseURL, "/")
-	resetURL := fmt.Sprintf("%s/api/v1/auth/password/reset?token=%s", baseURL, rawToken)
+	redirectURL := strings.TrimRight(m.cfg.PasswordReset.RedirectURL, "/")
+	resetURL := fmt.Sprintf("%s?token=%s", redirectURL, rawToken)
 
 	appName := "SharkAuth"
 	if m.cfg.SMTP.FromName != "" {

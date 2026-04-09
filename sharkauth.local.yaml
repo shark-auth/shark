@@ -24,6 +24,9 @@ magic_link:
   token_lifetime: "10m"
   redirect_url: "http://localhost:3000/auth/callback"
 
+password_reset:
+  redirect_url: "http://localhost:3000/auth/reset-password"
+
 smtp:
   host: "smtp.resend.com"
   port: 465

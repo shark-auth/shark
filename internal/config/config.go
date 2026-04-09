@@ -17,10 +17,11 @@ import (
 type Config struct {
 	Server    ServerConfig    `koanf:"server"`
 	Storage   StorageConfig   `koanf:"storage"`
-	Auth      AuthConfig      `koanf:"auth"`
-	Passkeys  PasskeyConfig   `koanf:"passkeys"`
-	MagicLink MagicLinkConfig `koanf:"magic_link"`
-	SMTP      SMTPConfig      `koanf:"smtp"`
+	Auth          AuthConfig          `koanf:"auth"`
+	Passkeys      PasskeyConfig       `koanf:"passkeys"`
+	MagicLink     MagicLinkConfig     `koanf:"magic_link"`
+	PasswordReset PasswordResetConfig `koanf:"password_reset"`
+	SMTP          SMTPConfig          `koanf:"smtp"`
 	MFA       MFAConfig       `koanf:"mfa"`
 	Social    SocialConfig    `koanf:"social"`
 	SSO       SSOConfig       `koanf:"sso"`
@@ -82,6 +83,11 @@ type MagicLinkConfig struct {
 // TokenLifetimeDuration parses the token lifetime string into a time.Duration.
 func (m *MagicLinkConfig) TokenLifetimeDuration() time.Duration {
 	return parseDuration(m.TokenLifetime, 10*time.Minute)
+}
+
+// PasswordResetConfig holds password reset settings.
+type PasswordResetConfig struct {
+	RedirectURL string `koanf:"redirect_url"`
 }
 
 // SMTPConfig holds email sending settings.
@@ -217,7 +223,8 @@ func Load(path string) (*Config, error) {
 		"passkeys.resident_key":    "preferred",
 		"passkeys.user_verification": "preferred",
 		"magic_link.token_lifetime": "10m",
-		"magic_link.redirect_url":  "http://localhost:3000/auth/callback",
+		"magic_link.redirect_url":      "http://localhost:3000/auth/callback",
+		"password_reset.redirect_url":  "http://localhost:3000/auth/reset-password",
 		"smtp.port":               587,
 		"smtp.from_name":          "SharkAuth",
 		"mfa.issuer":              "SharkAuth",
