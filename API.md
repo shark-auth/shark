@@ -9,7 +9,7 @@ Base URL: `/api/v1`
 | Public | None | Signup, login, OAuth, magic links, password reset, SSO public endpoints |
 | Session | `shark_session` cookie | `/me`, passkey registration, MFA enrollment |
 | Session + MFA | Session with `mfa_passed=true` | `/me`, password change, MFA management |
-| Admin | `X-Admin-Key` header | RBAC, user management, API keys, audit logs |
+| Admin | `Authorization: Bearer sk_live_*` (admin scope) | RBAC, user management, API keys, audit logs |
 | Bearer | `Authorization: Bearer sk_live_*` | Machine-to-machine authentication |
 
 All responses return JSON. Errors use `{error, message}` format.
@@ -376,7 +376,7 @@ Auto-route to the appropriate SSO connection based on email domain.
 
 ## SSO Connections (Admin)
 
-**Auth:** `X-Admin-Key` header required for all endpoints.
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required for all endpoints.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -390,7 +390,7 @@ Auto-route to the appropriate SSO connection based on email domain.
 
 ## Roles (Admin)
 
-**Auth:** `X-Admin-Key` header required.
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -406,7 +406,7 @@ Auto-route to the appropriate SSO connection based on email domain.
 
 ## Permissions (Admin)
 
-**Auth:** `X-Admin-Key` header required.
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -419,7 +419,7 @@ Auto-route to the appropriate SSO connection based on email domain.
 
 ## Role-Permission Mapping (Admin)
 
-**Auth:** `X-Admin-Key` header required.
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -430,7 +430,7 @@ Auto-route to the appropriate SSO connection based on email domain.
 
 ## Auth Check (Admin)
 
-**Auth:** `X-Admin-Key` header required.
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
 
 ### POST `/auth/check`
 
@@ -450,7 +450,7 @@ Check if a user has a specific permission.
 
 ## User Management (Admin)
 
-**Auth:** `X-Admin-Key` header required.
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -467,7 +467,7 @@ Check if a user has a specific permission.
 
 ## API Keys (Admin)
 
-**Auth:** `X-Admin-Key` header required.
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
 
 ### POST `/api-keys`
 
@@ -499,7 +499,7 @@ Create a new API key. The full key is shown **only once** in the response.
 
 ## Audit Logs (Admin)
 
-**Auth:** `X-Admin-Key` header required.
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
 
 ### GET `/audit-logs`
 

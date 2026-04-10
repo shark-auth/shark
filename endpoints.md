@@ -132,17 +132,17 @@ print("Profile data:", profile_res.json())
 ```
 
 **Scenario B: Accessing with an Admin / API Key**
-For administrative endpoints (e.g. Roles, SSO Connections), you use the Admin Key directly.
+For administrative endpoints (e.g. Roles, SSO Connections), use the admin API key generated on first `shark serve`.
 
 ```python
 import requests
 
 API_BASE = "https://<your-railway-url>/api/v1"
-ADMIN_KEY = "your_admin_key" # Replace with your X-Admin-Key value
+ADMIN_KEY = "sk_live_..."  # printed to stdout on first run
 
 # Example: Get all roles
 headers = {
-    "X-Admin-Key": ADMIN_KEY,
+    "Authorization": f"Bearer {ADMIN_KEY}",
     "Content-Type": "application/json"
 }
 

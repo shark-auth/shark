@@ -15,7 +15,7 @@ Create a Postman environment called **SharkAuth Local** with:
 | Variable | Initial Value |
 |----------|---------------|
 | `base_url` | `http://localhost:8080` |
-| `admin_key` | `admin-dev-key-123` |
+| `admin_key` | `sk_live_...` _(printed to stdout on first `shark serve`)_ |
 | `user_email` | `test@example.com` |
 | `user_password` | `password123` |
 | `user_id` | _(empty — auto-set by tests)_ |
@@ -228,13 +228,13 @@ GET {{base_url}}/api/v1/auth/oauth/github
 
 All RBAC endpoints require the admin key header:
 ```
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 ```
 
 #### POST Create Role
 ```
 POST {{base_url}}/api/v1/roles
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 Content-Type: application/json
 
 {
@@ -254,7 +254,7 @@ if (pm.response.code === 201) {
 #### GET List Roles
 ```
 GET {{base_url}}/api/v1/roles
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 ```
 
 ---
@@ -262,7 +262,7 @@ X-Admin-Key: {{admin_key}}
 #### POST Create Permission
 ```
 POST {{base_url}}/api/v1/permissions
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 Content-Type: application/json
 
 {
@@ -282,7 +282,7 @@ if (pm.response.code === 201) {
 #### POST Attach Permission to Role
 ```
 POST {{base_url}}/api/v1/roles/{{role_id}}/permissions
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 Content-Type: application/json
 
 {
@@ -295,7 +295,7 @@ Content-Type: application/json
 #### POST Assign Role to User
 ```
 POST {{base_url}}/api/v1/users/{{user_id}}/roles
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 Content-Type: application/json
 
 {
@@ -308,7 +308,7 @@ Content-Type: application/json
 #### GET User Roles
 ```
 GET {{base_url}}/api/v1/users/{{user_id}}/roles
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 ```
 
 ---
@@ -316,7 +316,7 @@ X-Admin-Key: {{admin_key}}
 #### GET User Effective Permissions
 ```
 GET {{base_url}}/api/v1/users/{{user_id}}/permissions
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 ```
 
 ---
@@ -341,7 +341,7 @@ Content-Type: application/json
 #### POST Create API Key
 ```
 POST {{base_url}}/api/v1/api-keys
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 Content-Type: application/json
 
 {
@@ -363,7 +363,7 @@ if (pm.response.code === 201) {
 #### GET List API Keys
 ```
 GET {{base_url}}/api/v1/api-keys
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 ```
 Shows prefix + metadata only, never the full key.
 
@@ -372,7 +372,7 @@ Shows prefix + metadata only, never the full key.
 #### POST Rotate API Key
 ```
 POST {{base_url}}/api/v1/api-keys/{{key_id}}/rotate
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 ```
 Atomically creates new key and revokes old.
 
@@ -392,7 +392,7 @@ Works if the key has the required scope.
 #### POST Create SSO Connection
 ```
 POST {{base_url}}/api/v1/sso/connections
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 Content-Type: application/json
 
 {
@@ -420,7 +420,7 @@ GET {{base_url}}/api/v1/auth/sso?email=user@company.com
 #### GET List Audit Logs
 ```
 GET {{base_url}}/api/v1/audit-logs
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 ```
 **Query params** (all optional):
 - `?action=user.login,user.signup`
@@ -435,7 +435,7 @@ X-Admin-Key: {{admin_key}}
 #### GET User Audit Logs
 ```
 GET {{base_url}}/api/v1/users/{{user_id}}/audit-logs
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 ```
 
 ---
@@ -443,7 +443,7 @@ X-Admin-Key: {{admin_key}}
 #### POST Export Audit Logs
 ```
 POST {{base_url}}/api/v1/audit-logs/export
-X-Admin-Key: {{admin_key}}
+Authorization: Bearer {{admin_key}}
 Content-Type: application/json
 
 {

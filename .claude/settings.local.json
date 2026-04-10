@@ -18,7 +18,18 @@
       "Bash(go get:*)",
       "Bash(CGO_ENABLED=1 go vet:*)",
       "Bash(CGO_ENABLED=0 go vet:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(command -v gh)",
+      "Read(//usr/bin/**)",
+      "Bash(wc -l /home/raul/Desktop/projects/shark/internal/api/middleware/*.go)",
+      "Bash(wc -l /home/raul/Desktop/projects/shark/internal/email/*.go)",
+      "Bash(wc -l /home/raul/Desktop/projects/shark/internal/auth/providers/*.go)",
+      "Bash(go run:*)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

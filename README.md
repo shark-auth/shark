@@ -242,7 +242,7 @@ GET    /sso/oidc/{id}/callback               # OIDC callback (public)
 GET    /auth/sso                             # auto-route by domain header
 ```
 
-### RBAC (admin — requires `X-Admin-Key`)
+### RBAC (admin — requires `Authorization: Bearer sk_live_...`)
 
 ```
 POST   /roles                                # create role
@@ -336,7 +336,7 @@ user_roles      -- user_id, role_id
 sso_connections -- type (saml/oidc), name, domain, config fields, enabled
 sso_identities  -- user_id, connection_id, provider_sub
 
-api_keys        -- name, key_hash (SHA-256), key_prefix, scopes (JSON),
+api_keys        -- name, key_hash (SHA-256), key_prefix, key_suffix, scopes (JSON),
                 -- rate_limit, expires_at, last_used_at, revoked_at
 
 audit_logs      -- actor_id, actor_type, action, target_type, target_id,
@@ -393,6 +393,9 @@ magic_link:
   token_lifetime: "10m"
   redirect_url: "https://app.example.com/auth/callback"
 
+password_reset:
+  redirect_url: "https://app.example.com/auth/reset-password"
+
 smtp:
   host: "smtp.resend.com"                  # auto-detects Resend HTTP API
   port: 465
@@ -434,8 +437,9 @@ audit:
   retention: "0"                           # 0 = keep forever, "90d" = 90 days
   cleanup_interval: "1h"
 
-admin:
-  api_key: "${SHARKAUTH_ADMIN_KEY}"        # required for admin endpoints
+# Admin API keys are now managed via the M2M key system.
+# On first `shark serve`, an admin key (scope: *) is generated and printed to stdout.
+# Use: Authorization: Bearer sk_live_...
 ```
 
 ---
@@ -634,7 +638,7 @@ request
   -> [route matched]
   -> RequireSession     # validate shark_session cookie
   -> RequireMFA         # enforce mfa_passed=true
-  -> AdminAPIKey        # validate X-Admin-Key header
+  -> AdminAPIKey        # validate Authorization: Bearer sk_live_* (admin scope)
   -> RequireAPIKey      # validate Bearer sk_live_* token + scopes
   -> handler
 ```
