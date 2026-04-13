@@ -86,6 +86,36 @@ func RequireSession(next http.Handler) http.Handler {
 	})
 }
 
+// RequireEmailVerifiedFunc returns a middleware that checks if the authenticated user's
+// email is verified. Must be used after RequireSessionFunc (needs UserID in context).
+// The isVerified callback looks up the user and returns their email_verified status.
+func RequireEmailVerifiedFunc(isVerified func(ctx context.Context, userID string) (bool, error)) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID := GetUserID(r.Context())
+			if userID == "" {
+				http.Error(w, `{"error":"unauthorized","message":"No valid session"}`, http.StatusUnauthorized)
+				return
+			}
+
+			verified, err := isVerified(r.Context(), userID)
+			if err != nil {
+				http.Error(w, `{"error":"internal_error","message":"Internal server error"}`, http.StatusInternalServerError)
+				return
+			}
+
+			if !verified {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				w.Write([]byte(`{"error":"email_verification_required","message":"Please verify your email address before continuing"}`))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RequireMFA is a middleware that checks if MFA has been completed for the session.
 // Must be used after RequireSession.
 func RequireMFA(next http.Handler) http.Handler {

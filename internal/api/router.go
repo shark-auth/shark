@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -95,6 +96,16 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	ssoManager := sso.NewSSOManager(store, sm, cfg)
 	s.SSOHandlers = NewSSOHandlers(ssoManager)
 
+	// Email verification lookup for middleware
+	isEmailVerified := func(ctx context.Context, userID string) (bool, error) {
+		user, err := store.GetUserByID(ctx, userID)
+		if err != nil {
+			return false, err
+		}
+		return user.EmailVerified, nil
+	}
+	requireVerified := mw.RequireEmailVerifiedFunc(isEmailVerified)
+
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -120,10 +131,17 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/signup", s.handleSignup)
 			r.Post("/login", s.handleLogin)
 			r.Post("/logout", s.handleLogout)
+			// GET /me: allowed without email verification (so frontend can check status)
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireSessionFunc(sm))
 				r.Use(mw.RequireMFA)
 				r.Get("/me", s.handleMe)
+			})
+			// DELETE /me: requires verified email
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireSessionFunc(sm))
+				r.Use(mw.RequireMFA)
+				r.Use(requireVerified)
 				r.Delete("/me", s.handleDeleteMe)
 			})
 			// Email verification
@@ -143,18 +161,20 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 			// Passkeys
 			r.Route("/passkey", func(r chi.Router) {
-				// Registration requires auth
+				// Registration requires auth + verified email
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(requireVerified)
 					r.Post("/register/begin", s.handlePasskeyRegisterBegin)
 					r.Post("/register/finish", s.handlePasskeyRegisterFinish)
 				})
 				// Login is public
 				r.Post("/login/begin", s.handlePasskeyLoginBegin)
 				r.Post("/login/finish", s.handlePasskeyLoginFinish)
-				// Credential management requires auth
+				// Credential management requires auth + verified email
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(requireVerified)
 					r.Get("/credentials", s.handlePasskeyCredentialsList)
 					r.Delete("/credentials/{id}", s.handlePasskeyCredentialDelete)
 					r.Patch("/credentials/{id}", s.handlePasskeyCredentialRename)
@@ -172,26 +192,28 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				// Public: forgot password flow
 				r.Post("/send-reset-link", s.handlePasswordResetSend)
 				r.Post("/reset", s.handlePasswordReset)
-				// Authenticated: change password
+				// Authenticated: change password (requires verified email)
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireSessionFunc(sm))
 					r.Use(mw.RequireMFA)
+					r.Use(requireVerified)
 					r.Post("/change", s.handleChangePassword)
 				})
 			})
 
 			// MFA
 			r.Route("/mfa", func(r chi.Router) {
-				// Challenge and recovery: require session (any, including partial mfa_passed=false)
+				// Challenge and recovery: require session only (login flow, no email check)
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireSessionFunc(sm))
 					r.Post("/challenge", s.handleMFAChallenge)
 					r.Post("/recovery", s.handleMFARecovery)
 				})
-				// Enroll, verify, disable, recovery-codes: require full session (mfa_passed=true)
+				// Enroll, verify, disable, recovery-codes: require full session + verified email
 				r.Group(func(r chi.Router) {
 					r.Use(mw.RequireSessionFunc(sm))
 					r.Use(mw.RequireMFA)
+					r.Use(requireVerified)
 					r.Post("/enroll", s.handleMFAEnroll)
 					r.Post("/verify", s.handleMFAVerify)
 					r.Delete("/", s.handleMFADisable)

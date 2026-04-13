@@ -217,6 +217,35 @@ func (ts *TestServer) DecodeJSON(resp *http.Response, target interface{}) {
 	}
 }
 
+// SignupAndVerify creates a test user via signup and immediately marks their email as verified.
+// Returns the user ID. Use this when testing endpoints that require email verification.
+func (ts *TestServer) SignupAndVerify(email, password, name string) string {
+	ts.T.Helper()
+	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
+		"email":    email,
+		"password": password,
+		"name":     name,
+	})
+	if resp.StatusCode != 201 {
+		ts.T.Fatalf("SignupAndVerify: signup failed with status %d", resp.StatusCode)
+	}
+	var result map[string]interface{}
+	ts.DecodeJSON(resp, &result)
+	userID := result["id"].(string)
+
+	// Mark email as verified directly in the store
+	user, err := ts.Store.GetUserByID(context.Background(), userID)
+	if err != nil {
+		ts.T.Fatalf("SignupAndVerify: getting user: %v", err)
+	}
+	user.EmailVerified = true
+	if err := ts.Store.UpdateUser(context.Background(), user); err != nil {
+		ts.T.Fatalf("SignupAndVerify: verifying email: %v", err)
+	}
+
+	return userID
+}
+
 // NewTestServerWithHandler creates a test HTTP server with the given handler.
 // Use this when you need to test a specific handler without the full router.
 func NewTestServerWithHandler(t *testing.T, handler http.Handler) *TestServer {

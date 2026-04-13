@@ -11,20 +11,11 @@ import (
 func TestPasskeyRegisterBegin(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// Signup to get a session
-	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
-		"email":    "passkey@example.com",
-		"password": "SecurePassword123",
-		"name":     "Passkey User",
-	})
-	if resp.StatusCode != http.StatusCreated {
-		body := readBody(t, resp)
-		t.Fatalf("expected 201 for signup, got %d: %s", resp.StatusCode, body)
-	}
-	resp.Body.Close()
+	// Signup + verify email (passkey registration requires verified email)
+	ts.SignupAndVerify("passkey@example.com", "SecurePassword123", "Passkey User")
 
 	// POST /passkey/register/begin (authenticated)
-	resp = ts.PostJSON("/api/v1/auth/passkey/register/begin", nil)
+	resp := ts.PostJSON("/api/v1/auth/passkey/register/begin", nil)
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)
 		t.Fatalf("expected 200 for register/begin, got %d: %s", resp.StatusCode, body)
@@ -117,19 +108,11 @@ func TestPasskeyRegisterBeginRequiresAuth(t *testing.T) {
 func TestPasskeyCredentialCRUD(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// Signup to get a session
-	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
-		"email":    "passkey-crud@example.com",
-		"password": "SecurePassword123",
-	})
-	if resp.StatusCode != http.StatusCreated {
-		body := readBody(t, resp)
-		t.Fatalf("expected 201 for signup, got %d: %s", resp.StatusCode, body)
-	}
-	resp.Body.Close()
+	// Signup + verify email (passkey management requires verified email)
+	ts.SignupAndVerify("passkey-crud@example.com", "SecurePassword123", "")
 
 	// List credentials (should be empty)
-	resp = ts.Get("/api/v1/auth/passkey/credentials")
+	resp := ts.Get("/api/v1/auth/passkey/credentials")
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)
 		t.Fatalf("expected 200 for credentials list, got %d: %s", resp.StatusCode, body)
