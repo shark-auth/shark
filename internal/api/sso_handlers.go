@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -149,7 +150,8 @@ func (h *SSOHandlers) SAMLMetadata(w http.ResponseWriter, r *http.Request) {
 
 	metadata, err := h.manager.GenerateSPMetadata(r.Context(), connID)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		log.Printf("ERROR: SAML metadata generation failed for %s: %v", connID, err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Failed to generate SAML metadata"})
 		return
 	}
 
@@ -168,7 +170,8 @@ func (h *SSOHandlers) SAMLACS(w http.ResponseWriter, r *http.Request) {
 
 	user, session, err := h.manager.HandleSAMLACS(r.Context(), connID, r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		log.Printf("ERROR: SAML ACS failed for connection %s: %v", connID, err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SSO authentication failed"})
 		return
 	}
 
@@ -190,7 +193,8 @@ func (h *SSOHandlers) OIDCAuth(w http.ResponseWriter, r *http.Request) {
 
 	redirectURL, state, err := h.manager.BeginOIDCAuth(r.Context(), connID)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		log.Printf("ERROR: OIDC auth begin failed for connection %s: %v", connID, err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Failed to initiate SSO authentication"})
 		return
 	}
 
@@ -250,7 +254,8 @@ func (h *SSOHandlers) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, session, err := h.manager.HandleOIDCCallback(r.Context(), connID, code, state, r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		log.Printf("ERROR: OIDC callback failed for connection %s: %v", connID, err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SSO authentication failed"})
 		return
 	}
 
@@ -272,7 +277,8 @@ func (h *SSOHandlers) SSOAutoRoute(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := h.manager.RouteByEmail(r.Context(), email)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		log.Printf("ERROR: SSO auto-route failed for email %s: %v", email, err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "No SSO connection found for this email domain"})
 		return
 	}
 

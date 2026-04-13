@@ -22,13 +22,17 @@ type Google struct {
 
 // NewGoogle creates a Google OAuth provider from config.
 func NewGoogle(c config.GoogleConfig, baseURL string) *Google {
+	scopes := []string{"openid", "email", "profile"}
+	if len(c.Scopes) > 0 {
+		scopes = c.Scopes
+	}
 	return &Google{
 		cfg: oauth2.Config{
 			ClientID:     c.ClientID,
 			ClientSecret: c.ClientSecret,
 			Endpoint:     google.Endpoint,
 			RedirectURL:  baseURL + "/api/v1/auth/oauth/google/callback",
-			Scopes:       []string{"openid", "email", "profile"},
+			Scopes:       scopes,
 		},
 	}
 }

@@ -1,0 +1,230 @@
+package api
+
+import (
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	"github.com/sharkauth/sharkauth/internal/storage"
+)
+
+// adminUserResponse is the admin view of a user (includes metadata).
+type adminUserResponse struct {
+	ID            string  `json:"id"`
+	Email         string  `json:"email"`
+	EmailVerified bool    `json:"emailVerified"`
+	Name          *string `json:"name,omitempty"`
+	AvatarURL     *string `json:"avatarUrl,omitempty"`
+	MFAEnabled    bool    `json:"mfaEnabled"`
+	Metadata      string  `json:"metadata"`
+	CreatedAt     string  `json:"createdAt"`
+	UpdatedAt     string  `json:"updatedAt"`
+}
+
+func adminUserToResponse(u *storage.User) adminUserResponse {
+	return adminUserResponse{
+		ID:            u.ID,
+		Email:         u.Email,
+		EmailVerified: u.EmailVerified,
+		Name:          u.Name,
+		AvatarURL:     u.AvatarURL,
+		MFAEnabled:    u.MFAEnabled,
+		Metadata:      u.Metadata,
+		CreatedAt:     u.CreatedAt,
+		UpdatedAt:     u.UpdatedAt,
+	}
+}
+
+// handleListUsers handles GET /api/v1/users
+func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	search := r.URL.Query().Get("search")
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	users, err := s.Store.ListUsers(r.Context(), storage.ListUsersOpts{
+		Limit:  limit,
+		Offset: offset,
+		Search: search,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	resp := make([]adminUserResponse, len(users))
+	for i, u := range users {
+		resp[i] = adminUserToResponse(u)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleGetUser handles GET /api/v1/users/{id}
+func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	user, err := s.Store.GetUserByID(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "User not found",
+		})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, adminUserToResponse(user))
+}
+
+// handleDeleteUser handles DELETE /api/v1/users/{id}
+func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	// Verify user exists
+	_, err := s.Store.GetUserByID(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "User not found",
+		})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	// DeleteUser cascades via ON DELETE CASCADE in the schema
+	if err := s.Store.DeleteUser(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "User deleted",
+	})
+}
+
+// updateUserRequest is the request body for PATCH /api/v1/users/{id}
+type updateUserRequest struct {
+	Email         *string `json:"email,omitempty"`
+	Name          *string `json:"name,omitempty"`
+	EmailVerified *bool   `json:"email_verified,omitempty"`
+	Metadata      *string `json:"metadata,omitempty"`
+}
+
+// handleUpdateUser handles PATCH /api/v1/users/{id}
+func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var req updateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "Invalid JSON body",
+		})
+		return
+	}
+
+	user, err := s.Store.GetUserByID(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "User not found",
+		})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	if req.Email != nil {
+		user.Email = *req.Email
+	}
+	if req.Name != nil {
+		user.Name = req.Name
+	}
+	if req.EmailVerified != nil {
+		user.EmailVerified = *req.EmailVerified
+	}
+	if req.Metadata != nil {
+		user.Metadata = *req.Metadata
+	}
+	user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+
+	if err := s.Store.UpdateUser(r.Context(), user); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, adminUserToResponse(user))
+}
+
+// handleDeleteMe handles DELETE /api/v1/auth/me (user self-deletion)
+func (s *Server) handleDeleteMe(w http.ResponseWriter, r *http.Request) {
+	userID := mw.GetUserID(r.Context())
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error":   "unauthorized",
+			"message": "No valid session",
+		})
+		return
+	}
+
+	// Verify user exists
+	_, err := s.Store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error":   "unauthorized",
+			"message": "User not found",
+		})
+		return
+	}
+
+	// Delete the user (cascades via ON DELETE CASCADE)
+	if err := s.Store.DeleteUser(r.Context(), userID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	// Clear session cookie
+	s.SessionManager.ClearSessionCookie(w)
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Account deleted",
+	})
+}

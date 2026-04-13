@@ -125,11 +125,15 @@ sharkauth ships everything you need to replace a managed auth provider:
 | feature | implementation |
 |---------|---------------|
 | password hashing | Argon2id (64MB memory, 3 iterations, 2 threads) |
+| password complexity | uppercase + lowercase + digit + common password rejection |
 | session encryption | AES-256 + HMAC-SHA256 via gorilla/securecookie |
+| field encryption | AES-256-GCM for MFA secrets and SSO credentials at rest |
 | API key storage | SHA-256 hash, key shown once at creation |
 | MFA recovery codes | bcrypt cost 10, single-use |
 | magic link tokens | SHA-256 hash of crypto/rand token |
 | passkeys | FIDO2/WebAuthn with stored public keys |
+| security headers | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy |
+| account lockout | 5 failed attempts = 15-minute lockout per email |
 
 ### timing attack prevention
 
@@ -176,6 +180,14 @@ POST   /auth/signup                          # create account
 POST   /auth/login                           # password login
 POST   /auth/logout                          # destroy session
 GET    /auth/me                              # current user (requires session + MFA)
+DELETE /auth/me                              # delete own account (GDPR self-deletion)
+```
+
+### email verification
+
+```
+POST   /auth/email/verify/send              # send verification email (authed)
+GET    /auth/email/verify?token=...          # verify email with token
 ```
 
 ### password management
@@ -256,6 +268,10 @@ DELETE /roles/{id}/permissions/{pid}         # detach permission
 POST   /permissions                          # create permission
 GET    /permissions                          # list permissions
 
+GET    /users                                # list users (search, pagination)
+GET    /users/{id}                           # get user details
+PATCH  /users/{id}                           # update user (email, name, metadata)
+DELETE /users/{id}                           # delete user (cascades)
 POST   /users/{id}/roles                     # assign role to user
 DELETE /users/{id}/roles/{rid}               # remove role from user
 GET    /users/{id}/roles                     # list user's roles
@@ -289,7 +305,7 @@ query params: `limit`, `cursor`, `action`, `actor_id`, `target_id`, `status`, `i
 ### health
 
 ```
-GET    /healthz                              # {"status": "ok"}
+GET    /healthz                              # {"status": "ok"} (pings DB for readiness)
 ```
 
 ---
@@ -370,16 +386,16 @@ SHARKAUTH_SECRET=<your-32-byte-secret>
 ```yaml
 server:
   port: 8080
-  secret: "${SHARKAUTH_SECRET}"            # 32+ bytes, encrypts sessions
+  secret: "${SHARKAUTH_SECRET}"            # REQUIRED: 32+ chars, encrypts sessions + field encryption
   base_url: "https://auth.example.com"     # determines Secure cookie flag
-  cors_origins: []                         # empty = same-origin only
+  cors_origins: []                         # empty = same-origin only (see CORS section below)
 
 storage:
   path: "./data/sharkauth.db"
 
 auth:
   session_lifetime: "30d"
-  password_min_length: 8
+  password_min_length: 8                   # also enforces uppercase + lowercase + digit
 
 passkeys:
   rp_name: "MyApp"
@@ -409,12 +425,15 @@ mfa:
   recovery_codes: 10
 
 social:
+  redirect_url: ""                         # post-OAuth redirect to frontend (empty = return JSON)
   google:
     client_id: "${GOOGLE_CLIENT_ID}"
     client_secret: "${GOOGLE_CLIENT_SECRET}"
+    scopes: []                             # empty = defaults (openid, email, profile)
   github:
     client_id: "${GITHUB_CLIENT_ID}"
     client_secret: "${GITHUB_CLIENT_SECRET}"
+    scopes: []                             # empty = defaults (user:email)
   apple:
     client_id: "${APPLE_CLIENT_ID}"
     team_id: "${APPLE_TEAM_ID}"
@@ -423,6 +442,7 @@ social:
   discord:
     client_id: "${DISCORD_CLIENT_ID}"
     client_secret: "${DISCORD_CLIENT_SECRET}"
+    scopes: []                             # empty = defaults (identify, email)
 
 sso:
   saml:
@@ -441,6 +461,46 @@ audit:
 # On first `shark serve`, an admin key (scope: *) is generated and printed to stdout.
 # Use: Authorization: Bearer sk_live_...
 ```
+
+### CORS
+
+by default (`cors_origins: []`), sharkauth only allows same-origin requests. the embedded admin dashboard at `/admin` works without CORS since it's served from the same binary.
+
+**when to configure CORS:**
+
+- your frontend app runs on a different origin (e.g., `https://app.example.com` calling `https://auth.example.com/api/v1/`)
+- you're developing locally with a frontend dev server on a different port
+
+```yaml
+# development: allow your frontend dev server
+server:
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+
+# production: allow your frontend domain(s)
+server:
+  cors_origins:
+    - "https://app.example.com"
+    - "https://www.example.com"
+
+# NOT recommended for production:
+server:
+  cors_origins:
+    - "*"    # allows any origin — only use for public APIs
+```
+
+**what's allowed:**
+- methods: `GET, POST, PUT, PATCH, DELETE, OPTIONS`
+- headers: `Content-Type, Authorization, X-Admin-Key`
+- credentials: `true` (cookies are always sent)
+- preflight cache: `86400s` (24 hours)
+
+**important:** if your frontend needs to read the `shark_session` cookie (it shouldn't — the cookie is HttpOnly), you need the exact origin in `cors_origins`, not `*`. wildcard CORS does not allow credentials.
+
+### secret rotation
+
+see [SECRETS.md](SECRETS.md) for the full rotation procedure for `server.secret` and admin API keys.
 
 ---
 
@@ -576,7 +636,8 @@ Client                    SharkAuth              Provider
 | `invalid_request` | malformed input |
 | `invalid_email` | email doesn't pass validation |
 | `email_taken` | account already exists |
-| `weak_password` | password too short |
+| `weak_password` | password fails complexity requirements |
+| `account_locked` | too many failed login attempts (429) |
 | `unauthorized` | no valid session or API key |
 | `forbidden` | valid auth, insufficient permissions |
 | `mfa_required` | MFA verification needed |
@@ -630,10 +691,11 @@ zero runtime dependencies beyond the binary itself.
 ```
 request
   -> RequestID          # unique ID per request
-  -> RealIP             # extract client IP from X-Forwarded-For
+  -> RealIP             # extract client IP from X-Forwarded-For / X-Real-IP
   -> Logger             # HTTP request/response logging
   -> Recoverer          # panic recovery
-  -> RateLimit          # 100 req/s per IP (token bucket)
+  -> SecurityHeaders    # OWASP headers (CSP, HSTS, X-Frame-Options, etc.)
+  -> RateLimit          # 100 req/s per IP (token bucket, uses real client IP)
   -> CORS               # if cors_origins configured
   -> [route matched]
   -> RequireSession     # validate shark_session cookie

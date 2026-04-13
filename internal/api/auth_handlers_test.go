@@ -14,7 +14,7 @@ func TestSignupLoginLogoutFlow(t *testing.T) {
 	// 1. Signup -> 201, session cookie set
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "test@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 		"name":     "Test User",
 	})
 	if resp.StatusCode != http.StatusCreated {
@@ -64,7 +64,7 @@ func TestSignupLoginLogoutFlow(t *testing.T) {
 	// 5. POST /login -> 200, new session cookie
 	resp = ts.PostJSON("/api/v1/auth/login", map[string]string{
 		"email":    "test@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 	})
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)
@@ -87,7 +87,7 @@ func TestSignupDuplicateEmail(t *testing.T) {
 	// Signup -> 201
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "dupe@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 	})
 	if resp.StatusCode != http.StatusCreated {
 		body := readBody(t, resp)
@@ -98,7 +98,7 @@ func TestSignupDuplicateEmail(t *testing.T) {
 	// Signup same email -> 409
 	resp = ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "dupe@example.com",
-		"password": "anotherpassword123",
+		"password": "AnotherPassword123",
 	})
 	if resp.StatusCode != http.StatusConflict {
 		body := readBody(t, resp)
@@ -113,7 +113,7 @@ func TestLoginWrongPassword(t *testing.T) {
 	// Signup -> 201
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "wrongpw@example.com",
-		"password": "correctpassword123",
+		"password": "CorrectPassword123",
 	})
 	if resp.StatusCode != http.StatusCreated {
 		body := readBody(t, resp)
@@ -127,7 +127,7 @@ func TestLoginWrongPassword(t *testing.T) {
 	// Login wrong password -> 401
 	resp = ts.PostJSON("/api/v1/auth/login", map[string]string{
 		"email":    "wrongpw@example.com",
-		"password": "wrongpassword",
+		"password": "WrongPassword1",
 	})
 	if resp.StatusCode != http.StatusUnauthorized {
 		body := readBody(t, resp)
@@ -142,7 +142,7 @@ func TestLoginNonexistentEmail(t *testing.T) {
 	// Login unknown email -> 401 (same error as wrong password)
 	resp := ts.PostJSON("/api/v1/auth/login", map[string]string{
 		"email":    "nobody@example.com",
-		"password": "somepassword123",
+		"password": "SomePassword123",
 	})
 	if resp.StatusCode != http.StatusUnauthorized {
 		body := readBody(t, resp)
@@ -162,7 +162,7 @@ func TestSessionRotation(t *testing.T) {
 	// Signup (get session1)
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "rotation@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 	})
 	if resp.StatusCode != http.StatusCreated {
 		body := readBody(t, resp)
@@ -184,7 +184,7 @@ func TestSessionRotation(t *testing.T) {
 	// Login (get session2)
 	resp = ts.PostJSON("/api/v1/auth/login", map[string]string{
 		"email":    "rotation@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 	})
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)

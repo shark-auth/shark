@@ -28,7 +28,7 @@ func createTestUser(t *testing.T, ts *testutil.TestServer) string {
 	t.Helper()
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "mfa-test@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 		"name":     "MFA Test User",
 	})
 	if resp.StatusCode != 201 {

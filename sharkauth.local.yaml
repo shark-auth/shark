@@ -40,12 +40,15 @@ mfa:
   recovery_codes: 10
 
 social:
+  redirect_url: ""                         # post-OAuth redirect (empty = JSON response)
   google:
     client_id: ""
     client_secret: ""
+    scopes: []                             # defaults: openid, email, profile
   github:
     client_id: ""
     client_secret: ""
+    scopes: []                             # defaults: user:email
   apple:
     client_id: ""
     team_id: ""
@@ -54,6 +57,7 @@ social:
   discord:
     client_id: ""
     client_secret: ""
+    scopes: []                             # defaults: identify, email
 
 sso:
   saml:

@@ -95,15 +95,15 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate password
+	// Validate password complexity
 	minLen := s.Config.Auth.PasswordMinLength
 	if minLen == 0 {
 		minLen = 8
 	}
-	if len(req.Password) < minLen {
+	if reason := auth.ValidatePasswordComplexity(req.Password, minLen); reason != "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error":   "weak_password",
-			"message": "Password must be at least 8 characters",
+			"message": reason,
 		})
 		return
 	}
@@ -187,9 +187,19 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 
+	// Check account lockout
+	if s.LockoutManager.IsLocked(req.Email) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{
+			"error":   "account_locked",
+			"message": "Too many failed attempts. Please try again later.",
+		})
+		return
+	}
+
 	// Find user by email (don't leak whether the email exists)
 	user, err := s.Store.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
+		s.LockoutManager.RecordFailure(req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
@@ -199,6 +209,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// User must have a password
 	if user.PasswordHash == nil {
+		s.LockoutManager.RecordFailure(req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
@@ -209,12 +220,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Verify password
 	match, err := auth.VerifyPassword(req.Password, *user.PasswordHash)
 	if err != nil || !match {
+		s.LockoutManager.RecordFailure(req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
 		})
 		return
 	}
+
+	// Clear lockout on successful login
+	s.LockoutManager.RecordSuccess(req.Email)
 
 	// If password needs rehash (e.g. bcrypt from Auth0 migration), rehash to argon2id
 	if auth.NeedsRehash(*user.PasswordHash) {
@@ -354,10 +369,10 @@ func (s *Server) handlePasswordReset(w http.ResponseWriter, r *http.Request) {
 	if minLen == 0 {
 		minLen = 8
 	}
-	if len(req.Password) < minLen {
+	if reason := auth.ValidatePasswordComplexity(req.Password, minLen); reason != "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error":   "weak_password",
-			"message": "Password must be at least 8 characters",
+			"message": reason,
 		})
 		return
 	}
@@ -429,10 +444,10 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	if minLen == 0 {
 		minLen = 8
 	}
-	if len(req.NewPassword) < minLen {
+	if reason := auth.ValidatePasswordComplexity(req.NewPassword, minLen); reason != "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error":   "weak_password",
-			"message": "Password must be at least 8 characters",
+			"message": reason,
 		})
 		return
 	}

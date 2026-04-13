@@ -30,6 +30,8 @@ type Server struct {
 	RBAC             *rbac.RBACManager
 	AuditLogger      *audit.Logger
 	RateLimiter      *auth.TokenBucket
+	LockoutManager   *auth.LockoutManager
+	FieldEncryptor   *auth.FieldEncryptor
 	SSOHandlers      *SSOHandlers
 	magicLinkRL      *magicLinkRateLimiter
 }
@@ -49,12 +51,21 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	sessionLifetime := cfg.Auth.SessionLifetimeDuration()
 	sm := auth.NewSessionManager(store, cfg.Server.Secret, sessionLifetime, cfg.Server.BaseURL)
 
+	// Initialize field-level encryption
+	fe, err := auth.NewFieldEncryptor(cfg.Server.Secret)
+	if err != nil {
+		// This should not happen since we validate secret length on startup
+		panic("failed to initialize field encryption: " + err.Error())
+	}
+
 	s := &Server{
 		Store:          store,
 		Config:         cfg,
 		SessionManager: sm,
 		magicLinkRL:    newMagicLinkRateLimiter(60 * time.Second),
 		RateLimiter:    auth.NewTokenBucket(),
+		LockoutManager: auth.NewLockoutManager(5, 15*time.Minute),
+		FieldEncryptor: fe,
 	}
 
 	// Apply options
@@ -91,6 +102,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(mw.SecurityHeaders())
 	r.Use(mw.RateLimit(100, 100)) // 100 req/s burst, 100 tokens
 
 	// CORS (must be before route handlers)
@@ -112,7 +124,17 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Use(mw.RequireSessionFunc(sm))
 				r.Use(mw.RequireMFA)
 				r.Get("/me", s.handleMe)
+				r.Delete("/me", s.handleDeleteMe)
 			})
+			// Email verification
+			r.Route("/email", func(r chi.Router) {
+				r.Group(func(r chi.Router) {
+					r.Use(mw.RequireSessionFunc(sm))
+					r.Post("/verify/send", s.handleEmailVerifySend)
+				})
+				r.Get("/verify", s.handleEmailVerify)
+			})
+
 			// OAuth
 			r.Route("/oauth", func(r chi.Router) {
 				r.Get("/{provider}", s.handleOAuthStart)
@@ -209,9 +231,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		// Users (admin)
 		r.Route("/users", func(r chi.Router) {
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
-			r.Get("/", notImplemented)
-			r.Get("/{id}", notImplemented)
-			r.Delete("/{id}", notImplemented)
+			r.Get("/", s.handleListUsers)
+			r.Get("/{id}", s.handleGetUser)
+			r.Delete("/{id}", s.handleDeleteUser)
+			r.Patch("/{id}", s.handleUpdateUser)
 			r.Post("/{id}/roles", s.handleAssignRole)
 			r.Delete("/{id}/roles/{rid}", s.handleRemoveRole)
 			r.Get("/{id}/roles", s.handleListUserRoles)
@@ -277,6 +300,14 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	// Ping the database to verify readiness
+	if err := s.Store.DB().PingContext(r.Context()); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"status": "unhealthy", "error": "database unreachable"})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})

@@ -107,22 +107,25 @@ type MFAConfig struct {
 
 // SocialConfig holds OAuth provider settings.
 type SocialConfig struct {
-	Google  GoogleConfig  `koanf:"google"`
-	GitHub  GitHubConfig  `koanf:"github"`
-	Apple   AppleConfig   `koanf:"apple"`
-	Discord DiscordConfig `koanf:"discord"`
+	RedirectURL string        `koanf:"redirect_url"` // Post-OAuth redirect to frontend
+	Google      GoogleConfig  `koanf:"google"`
+	GitHub      GitHubConfig  `koanf:"github"`
+	Apple       AppleConfig   `koanf:"apple"`
+	Discord     DiscordConfig `koanf:"discord"`
 }
 
 // GoogleConfig holds Google OAuth settings.
 type GoogleConfig struct {
-	ClientID     string `koanf:"client_id"`
-	ClientSecret string `koanf:"client_secret"`
+	ClientID     string   `koanf:"client_id"`
+	ClientSecret string   `koanf:"client_secret"`
+	Scopes       []string `koanf:"scopes"` // Optional: override default scopes
 }
 
 // GitHubConfig holds GitHub OAuth settings.
 type GitHubConfig struct {
-	ClientID     string `koanf:"client_id"`
-	ClientSecret string `koanf:"client_secret"`
+	ClientID     string   `koanf:"client_id"`
+	ClientSecret string   `koanf:"client_secret"`
+	Scopes       []string `koanf:"scopes"` // Optional: override default scopes
 }
 
 // AppleConfig holds Apple OAuth settings.
@@ -135,8 +138,9 @@ type AppleConfig struct {
 
 // DiscordConfig holds Discord OAuth settings.
 type DiscordConfig struct {
-	ClientID     string `koanf:"client_id"`
-	ClientSecret string `koanf:"client_secret"`
+	ClientID     string   `koanf:"client_id"`
+	ClientSecret string   `koanf:"client_secret"`
+	Scopes       []string `koanf:"scopes"` // Optional: override default scopes
 }
 
 // SSOConfig holds SSO settings.

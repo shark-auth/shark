@@ -75,8 +75,16 @@ func (s *Server) handleMFAEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store the secret on the user (not yet verified)
-	user.MFASecret = &secret
+	// Encrypt and store the secret on the user (not yet verified)
+	encSecret, err := s.FieldEncryptor.Encrypt(secret)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+	user.MFASecret = &encSecret
 	user.MFAVerified = false
 	user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	if err := s.Store.UpdateUser(r.Context(), user); err != nil {
@@ -140,8 +148,18 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Decrypt MFA secret for validation
+	decSecret, err := s.FieldEncryptor.Decrypt(*user.MFASecret)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
 	mfaMgr := auth.NewMFAManager(s.Store, s.Config.MFA)
-	if !mfaMgr.ValidateTOTP(*user.MFASecret, req.Code) {
+	if !mfaMgr.ValidateTOTP(decSecret, req.Code) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_code",
 			"message": "Invalid TOTP code",
@@ -226,8 +244,18 @@ func (s *Server) handleMFAChallenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Decrypt MFA secret for validation
+	decSecret, err := s.FieldEncryptor.Decrypt(*user.MFASecret)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
 	mfaMgr := auth.NewMFAManager(s.Store, s.Config.MFA)
-	if !mfaMgr.ValidateTOTP(*user.MFASecret, req.Code) {
+	if !mfaMgr.ValidateTOTP(decSecret, req.Code) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_code",
 			"message": "Invalid TOTP code",
@@ -356,8 +384,18 @@ func (s *Server) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Decrypt MFA secret for validation
+	decSecret, err := s.FieldEncryptor.Decrypt(*user.MFASecret)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
 	mfaMgr := auth.NewMFAManager(s.Store, s.Config.MFA)
-	if !mfaMgr.ValidateTOTP(*user.MFASecret, req.Code) {
+	if !mfaMgr.ValidateTOTP(decSecret, req.Code) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_code",
 			"message": "Invalid TOTP code",

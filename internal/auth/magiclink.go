@@ -211,6 +211,96 @@ func (m *MagicLinkManager) VerifyPasswordResetToken(ctx context.Context, rawToke
 	return token.Email, nil
 }
 
+// SendEmailVerification generates a verification token and sends a verification email.
+func (m *MagicLinkManager) SendEmailVerification(ctx context.Context, emailAddr string) error {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return fmt.Errorf("generating random token: %w", err)
+	}
+
+	rawToken := base64.RawURLEncoding.EncodeToString(tokenBytes)
+	hash := sha256.Sum256([]byte(rawToken))
+	tokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
+
+	now := time.Now().UTC()
+	lifetime := 24 * time.Hour
+
+	id, _ := gonanoid.New()
+	token := &storage.MagicLinkToken{
+		ID:        "evt_" + id,
+		Email:     emailAddr,
+		TokenHash: tokenHash,
+		Used:      false,
+		ExpiresAt: now.Add(lifetime).Format(time.RFC3339),
+		CreatedAt: now.Format(time.RFC3339),
+	}
+
+	if err := m.store.CreateMagicLinkToken(ctx, token); err != nil {
+		return fmt.Errorf("storing email verification token: %w", err)
+	}
+
+	baseURL := strings.TrimRight(m.cfg.Server.BaseURL, "/")
+	verifyURL := fmt.Sprintf("%s/api/v1/auth/email/verify?token=%s", baseURL, rawToken)
+
+	appName := "SharkAuth"
+	if m.cfg.SMTP.FromName != "" {
+		appName = m.cfg.SMTP.FromName
+	}
+
+	htmlBody, err := email.RenderVerifyEmail(email.VerifyEmailData{
+		AppName:       appName,
+		VerifyURL:     verifyURL,
+		ExpiryMinutes: int(lifetime.Minutes()),
+	})
+	if err != nil {
+		return fmt.Errorf("rendering verification email: %w", err)
+	}
+
+	msg := &email.Message{
+		To:      emailAddr,
+		Subject: fmt.Sprintf("Verify your %s email", appName),
+		HTML:    htmlBody,
+	}
+
+	if err := m.email.Send(msg); err != nil {
+		return fmt.Errorf("sending verification email: %w", err)
+	}
+
+	return nil
+}
+
+// VerifyEmailToken verifies a raw token and returns the associated email.
+func (m *MagicLinkManager) VerifyEmailToken(ctx context.Context, rawToken string) (string, error) {
+	hash := sha256.Sum256([]byte(rawToken))
+	tokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
+
+	token, err := m.store.GetMagicLinkTokenByHash(ctx, tokenHash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrMagicLinkNotFound
+		}
+		return "", fmt.Errorf("looking up verification token: %w", err)
+	}
+
+	if token.Used {
+		return "", ErrMagicLinkUsed
+	}
+
+	expiresAt, err := time.Parse(time.RFC3339, token.ExpiresAt)
+	if err != nil {
+		return "", fmt.Errorf("parsing token expiry: %w", err)
+	}
+	if time.Now().UTC().After(expiresAt) {
+		return "", ErrMagicLinkExpired
+	}
+
+	if err := m.store.MarkMagicLinkTokenUsed(ctx, token.ID); err != nil {
+		return "", fmt.Errorf("marking verification token used: %w", err)
+	}
+
+	return token.Email, nil
+}
+
 // VerifyMagicLink verifies a raw token, creates or finds the user, creates a session, and returns both.
 func (m *MagicLinkManager) VerifyMagicLink(ctx context.Context, rawToken string) (*storage.User, *storage.Session, error) {
 	// Hash the provided token

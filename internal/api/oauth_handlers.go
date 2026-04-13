@@ -122,9 +122,11 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
-	// If there's a configured frontend redirect, send them there
-	_ = user // user available for future use (e.g., redirect with user info)
-
+	// Redirect to frontend if configured, otherwise return JSON
+	if redirectURL := s.Config.Social.RedirectURL; redirectURL != "" {
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
 	writeJSON(w, http.StatusOK, userToResponse(user))
 }
 

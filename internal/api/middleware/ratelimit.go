@@ -110,7 +110,12 @@ func RateLimit(maxTokens, refillRate float64) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Use the real client IP set by chi's RealIP middleware (X-Real-IP / X-Forwarded-For),
+			// falling back to RemoteAddr for direct connections.
 			ip := r.RemoteAddr
+			if realIP := r.Header.Get("X-Real-Ip"); realIP != "" {
+				ip = realIP
+			}
 
 			if !limiter.allow(ip) {
 				w.Header().Set("Content-Type", "application/json")

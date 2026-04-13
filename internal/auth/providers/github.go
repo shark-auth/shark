@@ -27,13 +27,17 @@ type GitHub struct {
 
 // NewGitHub creates a GitHub OAuth provider from config.
 func NewGitHub(c config.GitHubConfig, baseURL string) *GitHub {
+	scopes := []string{"user:email"}
+	if len(c.Scopes) > 0 {
+		scopes = c.Scopes
+	}
 	return &GitHub{
 		cfg: oauth2.Config{
 			ClientID:     c.ClientID,
 			ClientSecret: c.ClientSecret,
 			Endpoint:     githubEndpoint,
 			RedirectURL:  baseURL + "/api/v1/auth/oauth/github/callback",
-			Scopes:       []string{"user:email"},
+			Scopes:       scopes,
 		},
 	}
 }

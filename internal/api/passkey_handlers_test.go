@@ -14,7 +14,7 @@ func TestPasskeyRegisterBegin(t *testing.T) {
 	// Signup to get a session
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "passkey@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 		"name":     "Passkey User",
 	})
 	if resp.StatusCode != http.StatusCreated {
@@ -120,7 +120,7 @@ func TestPasskeyCredentialCRUD(t *testing.T) {
 	// Signup to get a session
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "passkey-crud@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 	})
 	if resp.StatusCode != http.StatusCreated {
 		body := readBody(t, resp)

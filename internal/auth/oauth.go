@@ -101,6 +101,12 @@ func (m *OAuthManager) HandleCallback(ctx context.Context, providerName, code, i
 		if err != nil {
 			return nil, nil, fmt.Errorf("getting linked user: %w", err)
 		}
+		// Update avatar if provider has one and user doesn't (or it changed)
+		if info.AvatarURL != "" && (user.AvatarURL == nil || *user.AvatarURL != info.AvatarURL) {
+			user.AvatarURL = &info.AvatarURL
+			user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+			_ = m.store.UpdateUser(ctx, user)
+		}
 		sess, err := m.sessions.CreateSession(ctx, user.ID, ip, userAgent, "oauth:"+providerName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("creating session: %w", err)
@@ -133,6 +139,11 @@ func (m *OAuthManager) HandleCallback(ctx context.Context, providerName, code, i
 		}
 	} else if err != nil {
 		return nil, nil, fmt.Errorf("looking up user by email: %w", err)
+	} else if info.AvatarURL != "" && (user.AvatarURL == nil || *user.AvatarURL == "") {
+		// Existing user, first OAuth link — set avatar if missing
+		user.AvatarURL = &info.AvatarURL
+		user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		_ = m.store.UpdateUser(ctx, user)
 	}
 
 	// Link OAuth account to this user

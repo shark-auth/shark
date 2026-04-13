@@ -17,7 +17,7 @@ func TestMFAEnrollChallengeFlow(t *testing.T) {
 	// 1. Signup
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "mfa-flow@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 		"name":     "MFA Flow User",
 	})
 	if resp.StatusCode != http.StatusCreated {
@@ -81,7 +81,7 @@ func TestMFAEnrollChallengeFlow(t *testing.T) {
 	// 5. Login — should get mfa_required
 	resp = ts.PostJSON("/api/v1/auth/login", map[string]string{
 		"email":    "mfa-flow@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 	})
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)
@@ -143,7 +143,7 @@ func TestMFARecoveryCodeFlow(t *testing.T) {
 	// Signup
 	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
 		"email":    "mfa-recovery@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 	})
 	if resp.StatusCode != http.StatusCreated {
 		body := readBody(t, resp)
@@ -181,7 +181,7 @@ func TestMFARecoveryCodeFlow(t *testing.T) {
 	// Login — mfa_required
 	resp = ts.PostJSON("/api/v1/auth/login", map[string]string{
 		"email":    "mfa-recovery@example.com",
-		"password": "securepassword123",
+		"password": "SecurePassword123",
 	})
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)

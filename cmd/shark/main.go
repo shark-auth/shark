@@ -35,6 +35,11 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	// Validate server secret (must be at least 32 bytes for AES-256)
+	if len(cfg.Server.Secret) < 32 {
+		log.Fatalf("server.secret must be at least 32 characters (got %d). Generate one with: openssl rand -hex 32", len(cfg.Server.Secret))
+	}
+
 	// Ensure data directory exists
 	dataDir := filepath.Dir(cfg.Storage.Path)
 	if dataDir != "" && dataDir != "." {

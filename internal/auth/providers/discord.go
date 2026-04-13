@@ -26,13 +26,17 @@ type Discord struct {
 
 // NewDiscord creates a Discord OAuth provider from config.
 func NewDiscord(c config.DiscordConfig, baseURL string) *Discord {
+	scopes := []string{"identify", "email"}
+	if len(c.Scopes) > 0 {
+		scopes = c.Scopes
+	}
 	return &Discord{
 		cfg: oauth2.Config{
 			ClientID:     c.ClientID,
 			ClientSecret: c.ClientSecret,
 			Endpoint:     discordEndpoint,
 			RedirectURL:  baseURL + "/api/v1/auth/oauth/discord/callback",
-			Scopes:       []string{"identify", "email"},
+			Scopes:       scopes,
 		},
 	}
 }
