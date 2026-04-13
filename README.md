@@ -1,6 +1,6 @@
 # sharkauth
 
-### a self-hosted authentication platform that replaces Auth0
+### a lightweight modern self-hosted authentication platform with no bullshit.  
 
 [![version](https://img.shields.io/badge/version-v0.1.0-red?style=for-the-badge&logoColor=white)](https://github.com/sharkauth/sharkauth/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
