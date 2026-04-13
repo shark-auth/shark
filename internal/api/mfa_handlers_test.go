@@ -14,20 +14,11 @@ import (
 func TestMFAEnrollChallengeFlow(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// 1. Signup
-	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
-		"email":    "mfa-flow@example.com",
-		"password": "SecurePassword123",
-		"name":     "MFA Flow User",
-	})
-	if resp.StatusCode != http.StatusCreated {
-		body := readBody(t, resp)
-		t.Fatalf("signup: expected 201, got %d: %s", resp.StatusCode, body)
-	}
-	resp.Body.Close()
+	// 1. Signup + verify email (MFA enroll requires verified email)
+	ts.SignupAndVerify("mfa-flow@example.com", "SecurePassword123", "MFA Flow User")
 
 	// 2. Enroll in MFA
-	resp = ts.PostJSON("/api/v1/auth/mfa/enroll", nil)
+	resp := ts.PostJSON("/api/v1/auth/mfa/enroll", nil)
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)
 		t.Fatalf("enroll: expected 200, got %d: %s", resp.StatusCode, body)
@@ -140,19 +131,11 @@ func TestMFAEnrollChallengeFlow(t *testing.T) {
 func TestMFARecoveryCodeFlow(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// Signup
-	resp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
-		"email":    "mfa-recovery@example.com",
-		"password": "SecurePassword123",
-	})
-	if resp.StatusCode != http.StatusCreated {
-		body := readBody(t, resp)
-		t.Fatalf("signup: expected 201, got %d: %s", resp.StatusCode, body)
-	}
-	resp.Body.Close()
+	// Signup + verify email (MFA enroll requires verified email)
+	ts.SignupAndVerify("mfa-recovery@example.com", "SecurePassword123", "")
 
 	// Enroll
-	resp = ts.PostJSON("/api/v1/auth/mfa/enroll", nil)
+	resp := ts.PostJSON("/api/v1/auth/mfa/enroll", nil)
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)
 		t.Fatalf("enroll: expected 200, got %d: %s", resp.StatusCode, body)
