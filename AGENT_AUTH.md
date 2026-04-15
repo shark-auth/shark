@@ -649,4 +649,159 @@ Agent auth is the natural upsell. Free tier: 5 agents. Pro: 100 agents. Business
 
 ---
 
+## Token Vault (Managed Third-Party OAuth)
+
+Auth0's biggest agent differentiator — and the reason they charge a 50% add-on. Shark builds it on top of existing OAuth client infrastructure (social login already does the same flow).
+
+### What It Does
+
+Shark manages OAuth tokens for third-party APIs on behalf of agents and users. The agent never handles raw third-party credentials — it asks Shark "give me a token for Alice's Google Calendar" and Shark handles the entire lifecycle: OAuth flow, token storage, refresh, and delivery.
+
+Without a Token Vault, every agent developer must:
+1. Build their own OAuth flow for each third-party API
+2. Store tokens securely (encrypted at rest, rotation, etc.)
+3. Handle refresh token rotation per provider
+4. Handle token expiry mid-operation
+5. Deal with provider-specific OAuth quirks
+
+### Schema
+
+```sql
+CREATE TABLE vault_providers (
+    id              TEXT PRIMARY KEY,         -- vp_xxxx
+    name            TEXT NOT NULL,            -- "google_calendar", "slack", "github"
+    display_name    TEXT NOT NULL,            -- "Google Calendar"
+    auth_url        TEXT NOT NULL,
+    token_url       TEXT NOT NULL,
+    client_id       TEXT NOT NULL,
+    client_secret_enc BLOB NOT NULL,          -- AES-256-GCM encrypted
+    scopes          TEXT NOT NULL DEFAULT '[]', -- JSON: default scopes to request
+    icon_url        TEXT,
+    active          INTEGER NOT NULL DEFAULT 1,
+    created_at      TIMESTAMP NOT NULL,
+    updated_at      TIMESTAMP NOT NULL
+);
+
+CREATE TABLE vault_connections (
+    id              TEXT PRIMARY KEY,         -- vc_xxxx
+    provider_id     TEXT NOT NULL REFERENCES vault_providers(id),
+    user_id         TEXT NOT NULL REFERENCES users(id),
+    access_token_enc  BLOB NOT NULL,          -- AES-256-GCM encrypted
+    refresh_token_enc BLOB,                   -- AES-256-GCM encrypted (may be NULL)
+    token_type      TEXT NOT NULL DEFAULT 'Bearer',
+    scopes          TEXT NOT NULL DEFAULT '[]', -- JSON: granted scopes
+    expires_at      TIMESTAMP,
+    metadata        TEXT DEFAULT '{}',         -- provider-specific (e.g., Google workspace ID)
+    created_at      TIMESTAMP NOT NULL,
+    updated_at      TIMESTAMP NOT NULL,
+    UNIQUE(provider_id, user_id)
+);
+CREATE INDEX idx_vault_connections_user ON vault_connections(user_id);
+```
+
+### How It Works
+
+**Setup (admin):**
+1. Admin registers a provider: `POST /api/v1/vault/providers` with OAuth client credentials
+2. Shark stores the provider config (client_id, client_secret encrypted, scopes, endpoints)
+
+**User connects:**
+1. Agent (or app) redirects user: `GET /api/v1/vault/connect/{provider}?redirect_uri=...`
+2. Shark runs standard OAuth flow with the third-party (authorize → callback → exchange code)
+3. Shark stores the access + refresh token encrypted in `vault_connections`
+4. User is redirected back to the app
+
+**Agent requests token:**
+1. Agent calls: `GET /api/v1/vault/{provider}/token` (with agent's OAuth access token, which identifies the user via delegation)
+2. Shark checks: does this user have a connection to this provider?
+3. If token is expired → Shark auto-refreshes using the stored refresh token
+4. Returns a fresh, short-lived access token to the agent
+5. Agent uses the token to call the third-party API directly
+
+**The agent never sees the refresh token. The agent never stores credentials. Shark handles everything.**
+
+### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/vault/providers` | Register a third-party OAuth provider (admin) |
+| `GET /api/v1/vault/providers` | List available providers |
+| `PATCH /api/v1/vault/providers/{id}` | Update provider config |
+| `DELETE /api/v1/vault/providers/{id}` | Remove provider |
+| `GET /api/v1/vault/connect/{provider}` | Start OAuth flow to connect user to provider |
+| `GET /api/v1/vault/callback/{provider}` | OAuth callback (stores tokens) |
+| `GET /api/v1/vault/{provider}/token` | Get fresh access token for current user+provider |
+| `GET /api/v1/vault/connections` | List user's connected providers |
+| `DELETE /api/v1/vault/connections/{id}` | Disconnect (revoke + delete tokens) |
+
+### Why This Is Not Massive
+
+Shark already has:
+- OAuth client infrastructure for social login (Google, GitHub, Apple, Discord)
+- AES-256-GCM field encryption (`internal/auth/fieldcrypt.go`)
+- Token exchange patterns in the OAuth provider code
+- The same authorize → callback → store flow
+
+The Token Vault is the same pattern with two differences:
+1. Instead of creating a Shark session on callback, store the third-party token
+2. Add an endpoint to retrieve/refresh stored tokens on demand
+
+The new code is: ~2 tables, ~6 endpoints, ~400 LOC of handler logic, reusing existing OAuth client + encryption infrastructure.
+
+### Pre-Built Provider Templates
+
+Ship with templates for the most common agent integrations:
+- Google (Calendar, Drive, Gmail, Sheets)
+- Slack
+- GitHub
+- Microsoft (Outlook, OneDrive, Teams)
+- Notion
+- Linear
+- Jira
+
+Each template pre-fills: auth_url, token_url, default scopes, icon. Admin just adds their client_id + client_secret.
+
+### Cloud Pricing Tier
+
+| Tier | Connected Providers |
+|------|-------------------|
+| Free | 3 providers |
+| Pro | 20 providers |
+| Business | Unlimited |
+| Self-hosted | Unlimited (always) |
+
+### Audit Events
+
+- `vault.provider.created` / `vault.provider.updated` / `vault.provider.deleted`
+- `vault.connected` — user connected to a provider
+- `vault.disconnected` — user disconnected
+- `vault.token.retrieved` — agent requested a token (log agent_id, provider, user_id)
+- `vault.token.refreshed` — Shark auto-refreshed an expired token
+- `vault.token.failed` — refresh failed (revoked by user at provider, expired refresh token)
+
+---
+
+## Configurable Session Mode (Cookie vs JWT)
+
+Since the JWT infrastructure (signing keys, JWKS, verification) is built for agent auth, expose it for human sessions too.
+
+```yaml
+auth:
+  session_mode: "cookie"       # cookie (default) | jwt
+  jwt:
+    access_lifetime: "15m"
+    refresh_lifetime: "7d"
+    signing_algorithm: "ES256"  # ES256 | RS256
+```
+
+**`cookie` mode (default):** Current behavior. Server-side sessions, encrypted cookies, 5KB SDK. Best for monoliths, SSR apps, simple setups.
+
+**`jwt` mode:** Stateless JWT access tokens + refresh tokens. JWKS endpoint for verification. Best for microservices, edge validation, polyglot backends where multiple services verify auth without calling Shark.
+
+Both modes share the same signing key infrastructure, JWKS endpoint, and user model. The SDK auto-detects which mode the server runs and adjusts (cookie mode uses `credentials: 'include'`, JWT mode uses `Authorization: Bearer`).
+
+This kills a common objection: "I need JWTs for my architecture, so Shark won't work." Now it works for both.
+
+---
+
 *This spec should be reviewed after Organizations (#50) ships, as org-scoped agent permissions depend on the org model.*
