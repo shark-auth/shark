@@ -70,6 +70,22 @@ type Store interface {
 	MarkOrganizationInvitationAccepted(ctx context.Context, id string, acceptedAt string) error
 	ListOrganizationInvitationsByOrgID(ctx context.Context, orgID string) ([]*OrganizationInvitation, error)
 
+	// Webhooks
+	CreateWebhook(ctx context.Context, w *Webhook) error
+	GetWebhookByID(ctx context.Context, id string) (*Webhook, error)
+	ListWebhooks(ctx context.Context) ([]*Webhook, error)
+	ListEnabledWebhooksByEvent(ctx context.Context, event string) ([]*Webhook, error)
+	UpdateWebhook(ctx context.Context, w *Webhook) error
+	DeleteWebhook(ctx context.Context, id string) error
+
+	// WebhookDeliveries
+	CreateWebhookDelivery(ctx context.Context, d *WebhookDelivery) error
+	UpdateWebhookDelivery(ctx context.Context, d *WebhookDelivery) error
+	GetWebhookDeliveryByID(ctx context.Context, id string) (*WebhookDelivery, error)
+	ListWebhookDeliveriesByWebhookID(ctx context.Context, webhookID string, limit int, cursor string) ([]*WebhookDelivery, error)
+	ListPendingWebhookDeliveries(ctx context.Context, now time.Time, limit int) ([]*WebhookDelivery, error)
+	DeleteWebhookDeliveriesBefore(ctx context.Context, before time.Time) (int64, error)
+
 	// OAuthAccounts
 	CreateOAuthAccount(ctx context.Context, acct *OAuthAccount) error
 	GetOAuthAccountByProviderID(ctx context.Context, provider, providerID string) (*OAuthAccount, error)
@@ -365,6 +381,54 @@ type OrganizationInvitation struct {
 	AcceptedAt     *string `json:"accepted_at,omitempty"`
 	ExpiresAt      string  `json:"expires_at"`
 	CreatedAt      string  `json:"created_at"`
+}
+
+// Webhook delivery status constants.
+const (
+	WebhookStatusPending   = "pending"
+	WebhookStatusDelivered = "delivered"
+	WebhookStatusRetrying  = "retrying"
+	WebhookStatusFailed    = "failed"
+)
+
+// Webhook event names. Ship minimal set for real dev integration —
+// expand alongside SDK in Phase 5.
+const (
+	WebhookEventUserCreated        = "user.created"
+	WebhookEventUserDeleted        = "user.deleted"
+	WebhookEventSessionRevoked     = "session.revoked"
+	WebhookEventOrgCreated         = "organization.created"
+	WebhookEventOrgMemberAdded     = "organization.member_added"
+)
+
+// Webhook is an admin-registered outbound event endpoint.
+type Webhook struct {
+	ID          string `json:"id"`
+	URL         string `json:"url"`
+	Secret      string `json:"-"`       // HMAC signing secret, never returned on the wire
+	Events      string `json:"events"`  // JSON array of event names
+	Enabled     bool   `json:"enabled"`
+	Description string `json:"description,omitempty"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// WebhookDelivery is one attempt at delivering an event to a webhook URL.
+type WebhookDelivery struct {
+	ID              string  `json:"id"`
+	WebhookID       string  `json:"webhook_id"`
+	Event           string  `json:"event"`
+	Payload         string  `json:"payload"`
+	SignatureHeader string  `json:"signature_header,omitempty"`
+	Status          string  `json:"status"`
+	StatusCode      *int    `json:"status_code,omitempty"`
+	ResponseBody    string  `json:"response_body,omitempty"`
+	Error           string  `json:"error,omitempty"`
+	Attempt         int     `json:"attempt"`
+	NextRetryAt     *string `json:"next_retry_at,omitempty"`
+	DeliveredAt     *string `json:"delivered_at,omitempty"`
+	CreatedAt       string  `json:"created_at"`
+	UpdatedAt       string  `json:"updated_at"`
 }
 
 // DevEmail represents a single captured email in dev mode.
