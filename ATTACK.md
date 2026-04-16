@@ -21,10 +21,11 @@ Phase 2 — Make it usable (3-4 days)
 - Admin stats endpoint (#44)
 - Session management endpoints (#45)  
 
-
 Now someone can install, run, and manage Shark from the terminal without reading
 YAML docs.
 
+
+- Done
 Phase 3 — JWT + OAuth 2.1 infrastructure (5-7 days)
 
 - Configurable session mode — cookie vs JWT (#67)
