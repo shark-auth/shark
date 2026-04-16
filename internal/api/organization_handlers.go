@@ -378,7 +378,7 @@ func (s *Server) handleCreateOrgInvitation(w http.ResponseWriter, r *http.Reques
 	// because the invitation exists and the admin can resend via a future
 	// endpoint. Log it.
 	if s.MagicLinkManager != nil {
-		go s.sendOrgInvitationEmail(inv, org, actor, rawToken)
+		go s.sendOrgInvitationEmail(inv, org, actor, rawToken) //#nosec G118 -- fire-and-forget invitation email; bounded via WithTimeout inside the callee
 	}
 
 	s.auditOrg(r.Context(), actor, "organization.invitation.create", orgID, ipOf(r), uaOf(r))
@@ -507,7 +507,12 @@ func (s *Server) refuseIfLastOwner(ctx context.Context, orgID string) error {
 }
 
 func (s *Server) sendOrgInvitationEmail(inv *storage.OrganizationInvitation, org *storage.Organization, inviterID, rawToken string) {
-	inviter, _ := s.Store.GetUserByID(context.Background(), inviterID)
+	// Detached from the request context (fire-and-forget email send), bounded
+	// to 15s so the goroutine can't leak on shutdown or slow SMTP.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	inviter, _ := s.Store.GetUserByID(ctx, inviterID)
 	acceptURL := fmt.Sprintf("%s/organizations/invitations/%s/accept",
 		strings.TrimRight(s.Config.Server.BaseURL, "/"), rawToken)
 	html, err := email.RenderOrganizationInvitation(email.OrganizationInvitationData{

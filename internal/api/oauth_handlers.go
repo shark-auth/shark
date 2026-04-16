@@ -43,12 +43,15 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	state := hex.EncodeToString(stateBytes)
 
-	// Store state in a short-lived cookie
+	// Store state in a short-lived cookie. Secure mirrors the session cookie:
+	// set whenever base_url is https so MITM on plain HTTP can't read state.
+	//#nosec G124 -- Secure is dynamic (tied to base_url scheme); hardcoding true breaks local http dev
 	http.SetCookie(w, &http.Cookie{
 		Name:     oauthStateCookieName,
 		Value:    state,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   s.SessionManager.SecureCookies(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(oauthStateTTL.Seconds()),
 	})
@@ -90,12 +93,15 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Clear the state cookie
+	// Clear the state cookie (mirror the Secure flag from the set path so the
+	// browser recognizes it as the same cookie on cleanup).
+	//#nosec G124 -- Secure is dynamic (tied to base_url scheme); hardcoding true breaks local http dev
 	http.SetCookie(w, &http.Cookie{
 		Name:     oauthStateCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   s.SessionManager.SecureCookies(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

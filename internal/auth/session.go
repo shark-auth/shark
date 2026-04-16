@@ -136,6 +136,7 @@ func (sm *SessionManager) SetSessionCookie(w http.ResponseWriter, sessionID stri
 		return
 	}
 
+	//#nosec G124 -- Secure is dynamic (tied to base_url scheme); hardcoding true breaks local http dev
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    encoded,
@@ -162,13 +163,19 @@ func (sm *SessionManager) GetSessionFromRequest(r *http.Request) (string, error)
 	return sessionID, nil
 }
 
+// SecureCookies reports whether session cookies get the Secure flag.
+// Derived from the base_url scheme at startup.
+func (sm *SessionManager) SecureCookies() bool { return sm.secure }
+
 // ClearSessionCookie removes the session cookie.
 func (sm *SessionManager) ClearSessionCookie(w http.ResponseWriter) {
+	//#nosec G124 -- cleanup cookie mirrors the Secure flag used on set
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   sm.secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

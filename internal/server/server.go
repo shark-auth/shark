@@ -109,7 +109,10 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	dataDir := filepath.Dir(cfg.Storage.Path)
 	if dataDir != "" && dataDir != "." {
-		if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		// 0o700 (owner rwx only) — the dir holds sharkauth.db + WAL/SHM which
+		// contain session material, field-encrypted OAuth tokens, etc. World
+		// or group read is never appropriate.
+		if err := os.MkdirAll(dataDir, 0o700); err != nil {
 			return nil, fmt.Errorf("create data dir %q: %w", dataDir, err)
 		}
 	}

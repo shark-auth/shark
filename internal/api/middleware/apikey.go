@@ -118,11 +118,16 @@ func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, requiredS
 				return
 			}
 
-			// 8. Update last_used_at (fire-and-forget)
-			go func() {
+			// 8. Update last_used_at (fire-and-forget, bounded).
+			// Intentionally detached from r.Context(): this must complete even
+			// if the caller's connection dropped mid-request. Bounded to 5s so
+			// the goroutine can't leak on shutdown.
+			go func() { //#nosec G118 -- fire-and-forget last-used update; decoupled from request by design, bounded via WithTimeout
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
 				now := time.Now().UTC().Format(time.RFC3339)
 				apiKey.LastUsedAt = &now
-				_ = store.UpdateAPIKey(context.Background(), apiKey)
+				_ = store.UpdateAPIKey(ctx, apiKey)
 			}()
 
 			// 9. Set context
