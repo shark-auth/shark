@@ -160,3 +160,57 @@ Shark Auth incorporates many other features out of the box requiring their respe
 - **MFA:** endpoints at `/api/v1/auth/mfa/...`
 - **SSO & SAML:** endpoints at `/api/v1/sso/ connections` and callbacks
 - **Magic Links:** endpoints at `/api/v1/auth/magic-link/...`
+
+---
+
+## Session Management (Phase 2)
+
+**Self-service** (session cookie auth):
+
+- `GET /api/v1/auth/sessions` — list the caller's own sessions (the request session is flagged `current: true`)
+- `DELETE /api/v1/auth/sessions/{id}` — revoke one of the caller's sessions; foreign IDs return 404
+
+**Admin** (`Authorization: Bearer sk_live_*` with admin scope):
+
+- `GET /api/v1/admin/sessions` — all active sessions with joined `user_email`. Keyset cursor pagination on `(created_at DESC, id DESC)`. Filters: `user_id`, `auth_method`, `mfa_passed`, `limit`, `cursor`.
+- `DELETE /api/v1/admin/sessions/{id}` — revoke any session
+- `GET /api/v1/users/{id}/sessions` — per-user session list
+- `DELETE /api/v1/users/{id}/sessions` — revoke every session for a user; emits one `session.revoke` audit entry per session
+
+---
+
+## Admin Stats (Phase 2)
+
+Admin scope (`Authorization: Bearer sk_live_*`):
+
+- `GET /api/v1/admin/stats` — counts: users, active sessions, MFA adoption, failed logins (24h), active/expiring API keys, SSO totals. Always sub-10ms against indexed columns.
+- `GET /api/v1/admin/stats/trends?days=N` — zero-filled signups-by-day and auth-method session breakdown. Split from `/admin/stats` so polling the overview never blocks on heavy GROUP BYs.
+
+---
+
+## Dev Mode (Phase 2)
+
+Enabled with `shark serve --dev`. Ephemeral `./dev.db`, relaxed CORS, auto-generated secret, and the dev inbox:
+
+- `GET /api/v1/admin/dev/emails` — list captured outbound emails
+- `GET /api/v1/admin/dev/emails/{id}` — full HTML/text of a captured email
+- `DELETE /api/v1/admin/dev/emails` — clear the inbox (204)
+
+These routes are unmounted entirely when the server runs without `--dev`, so production surface is unchanged.
+
+---
+
+## CLI
+
+Phase 2 ships cobra subcommands:
+
+```bash
+shark init                       # interactive 3-question setup — writes sharkauth.yaml
+shark serve                      # start the server (reads sharkauth.yaml)
+shark serve --dev                # dev mode (ephemeral secret, dev.db, dev inbox)
+shark serve --dev --reset        # wipe dev.db before starting
+shark health --url http://...    # probe /healthz
+shark version                    # print version (ldflags or build-info)
+```
+
+`shark init` requires an interactive terminal — call the binary directly or set `--out` / `--force` to script it.

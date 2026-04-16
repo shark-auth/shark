@@ -529,6 +529,177 @@ All fields are optional.
 
 ---
 
+## Sessions - Self-Service
+
+**Auth:** Session cookie.
+
+### GET `/auth/sessions`
+
+List the caller's own active and expired sessions. The session backing the current request is flagged with `current: true`.
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "sess_abc",
+      "user_id": "usr_123",
+      "ip": "203.0.113.10",
+      "user_agent": "Mozilla/5.0",
+      "mfa_passed": true,
+      "auth_method": "password",
+      "expires_at": "2026-05-16T00:00:00Z",
+      "created_at": "2026-04-16T00:00:00Z",
+      "current": true
+    }
+  ]
+}
+```
+
+### DELETE `/auth/sessions/{id}`
+
+Revoke one of the caller's sessions. Foreign session IDs return `404` (no existence oracle). Revoking the current session also clears the cookie on the next request.
+
+**Response (200):** `{ "message": "Session revoked" }`
+
+---
+
+## Admin - Stats
+
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
+
+### GET `/admin/stats`
+
+Overview counts. Always bounded, indexed — safe to poll.
+
+**Response (200):**
+```json
+{
+  "users": { "total": 12, "created_last_7d": 3 },
+  "sessions": { "active": 5 },
+  "mfa": { "enabled": 4, "adoption_pct": 33.33 },
+  "failed_logins_24h": 1,
+  "api_keys": { "active": 2, "expiring_7d": 0 },
+  "sso_connections": { "total": 1, "enabled": 1 }
+}
+```
+
+### GET `/admin/stats/trends`
+
+Heavier charts data. Split from `/admin/stats` so the overview stays instant.
+
+**Query params:** `days` (default 30, max 90).
+
+**Response (200):**
+```json
+{
+  "days": 30,
+  "signups_by_day": [
+    { "date": "2026-03-18", "count": 0 },
+    { "date": "2026-03-19", "count": 1 }
+  ],
+  "auth_methods": [
+    { "auth_method": "password", "count": 40 },
+    { "auth_method": "google", "count": 15 }
+  ]
+}
+```
+
+`signups_by_day` is zero-filled across the requested window so the frontend chart can plot without gap logic.
+
+---
+
+## Admin - Sessions
+
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
+
+### GET `/admin/sessions`
+
+List all active sessions with the user email joined. Uses keyset cursor pagination on `(created_at DESC, id DESC)` for stable iteration under concurrent writes.
+
+**Query params:**
+- `limit` — page size (default 50, max 200)
+- `cursor` — opaque string; pass the previous response's `next_cursor` verbatim
+- `user_id` — filter by user
+- `auth_method` — filter by method (`password`, `google`, `github`, `passkey`, `magic_link`, `sso`, ...)
+- `mfa_passed` — `true` / `false`
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "sess_abc",
+      "user_id": "usr_123",
+      "user_email": "alice@example.com",
+      "ip": "203.0.113.10",
+      "user_agent": "Mozilla/5.0",
+      "mfa_passed": true,
+      "auth_method": "password",
+      "expires_at": "...",
+      "created_at": "..."
+    }
+  ],
+  "next_cursor": "2026-04-16T00:00:00Z|sess_abc"
+}
+```
+
+`next_cursor` is omitted when the page is not full (no more rows). To iterate the full set, follow cursors until it's absent.
+
+### DELETE `/admin/sessions/{id}`
+
+Revoke any session. Emits a `session.revoke` audit entry with `actor_type=admin`.
+
+### GET `/users/{id}/sessions`
+
+List a single user's sessions (admin scope).
+
+### DELETE `/users/{id}/sessions`
+
+Revoke every session for the given user. Returns the number revoked. Emits one granular `session.revoke` audit entry per deleted session so compliance review can see exactly which device tokens were invalidated.
+
+**Response (200):** `{ "message": "Sessions revoked", "count": 3 }`
+
+---
+
+## Admin - Dev Inbox
+
+**Available only when the server is started with `shark serve --dev`.** These routes are unmounted entirely in production.
+
+**Auth:** `Authorization: Bearer sk_live_*` (admin scope) required.
+
+### GET `/admin/dev/emails`
+
+List captured outbound emails.
+
+**Query params:** `limit` (default 100, max 500).
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "de_...",
+      "to": "user@example.com",
+      "subject": "Your magic link",
+      "html": "<html>...</html>",
+      "text": "...",
+      "created_at": "..."
+    }
+  ]
+}
+```
+
+### GET `/admin/dev/emails/{id}`
+
+Full payload of a single captured email.
+
+### DELETE `/admin/dev/emails`
+
+Clear the dev inbox. Returns `204 No Content`.
+
+---
+
 ## Rate Limiting
 
 - **Global:** 100 requests/second with burst tolerance

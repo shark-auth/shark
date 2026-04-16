@@ -308,6 +308,55 @@ query params: `limit`, `cursor`, `action`, `actor_id`, `target_id`, `status`, `i
 GET    /healthz                              # {"status": "ok"} (pings DB for readiness)
 ```
 
+### sessions (self-service, session cookie)
+
+```
+GET    /auth/sessions                        # list own sessions (flags current: true)
+DELETE /auth/sessions/{id}                   # revoke one of your own sessions
+```
+
+### admin stats (admin — requires `Authorization: Bearer sk_live_...`)
+
+```
+GET    /admin/stats                          # users, sessions, MFA, failed logins, keys, SSO
+GET    /admin/stats/trends?days=30           # signups_by_day (zero-filled), auth_methods
+```
+
+### admin sessions (admin)
+
+```
+GET    /admin/sessions                       # all active, keyset cursor pagination
+  query: limit, cursor, user_id, auth_method, mfa_passed
+DELETE /admin/sessions/{id}                  # revoke any session
+GET    /users/{id}/sessions                  # per-user list
+DELETE /users/{id}/sessions                  # revoke all for a user (granular audit)
+```
+
+### dev inbox (admin, only when started with `--dev`)
+
+```
+GET    /admin/dev/emails                     # list captured outbound emails
+GET    /admin/dev/emails/{id}                # full HTML/text
+DELETE /admin/dev/emails                     # clear (204)
+```
+
+---
+
+## CLI
+
+```bash
+shark init                          # interactive setup — writes sharkauth.yaml
+shark serve                         # run the server (reads sharkauth.yaml)
+shark serve --dev                   # dev mode: ./dev.db, auto secret, dev inbox, relaxed CORS
+shark serve --dev --reset           # wipe ./dev.db before starting
+shark health --url http://localhost:8080   # probe /healthz
+shark version                       # print version (ldflags or module build-info)
+```
+
+`shark init` asks three questions (base URL, admin email, email provider) and writes a ready-to-run `sharkauth.yaml`. Requires an interactive terminal. On first `shark serve`, the admin API key is generated and printed to stdout — save it, it is not shown again.
+
+`shark serve --dev` needs **no** config at all. A 32-byte secret is generated each run, emails are captured in the dev inbox instead of being sent, and `/admin/dev/*` endpoints are mounted.
+
 ---
 
 ## data model
@@ -325,6 +374,7 @@ GET    /healthz                              # {"status": "ok"} (pings DB for re
 | `perm_` | permission |
 | `key_` | API key |
 | `aud_` | audit log |
+| `de_` | dev inbox email (dev mode only) |
 | `sk_live_` | API key (client-facing) |
 
 ### schema
@@ -368,7 +418,8 @@ SQLite pragmas: `journal_mode=WAL`, `foreign_keys=ON`
 sharkauth loads config from YAML with environment variable interpolation (`${VAR_NAME}`).
 
 ```bash
-./shark serve --config sharkauth.yaml    # default: sharkauth.yaml
+shark serve --config sharkauth.yaml      # default: sharkauth.yaml
+shark serve --dev                        # skip YAML entirely, use ephemeral dev defaults
 ```
 
 ### environment overrides
