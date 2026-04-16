@@ -2,7 +2,7 @@ package audit
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -74,9 +74,9 @@ func (l *Logger) StartCleanup(ctx context.Context, retention time.Duration, inte
 				cutoff := time.Now().UTC().Add(-retention)
 				deleted, err := l.store.DeleteAuditLogsBefore(ctx, cutoff)
 				if err != nil {
-					log.Printf("audit cleanup error: %v", err)
+					slog.Error("audit cleanup error", "error", err)
 				} else if deleted > 0 {
-					log.Printf("audit cleanup: deleted %d old entries", deleted)
+					slog.Info("audit cleanup", "deleted", deleted)
 				}
 			}
 		}

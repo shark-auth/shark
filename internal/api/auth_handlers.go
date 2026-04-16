@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -341,7 +341,7 @@ func (s *Server) handlePasswordResetSend(w http.ResponseWriter, r *http.Request)
 
 	// Send password reset email (always return 200 to avoid leaking info about email existence)
 	if err := s.MagicLinkManager.SendPasswordReset(r.Context(), req.Email); err != nil {
-		log.Printf("ERROR: failed to send password reset email to %s: %v", req.Email, err)
+		slog.Error("failed to send password reset email", "email", req.Email, "error", err)
 	}
 
 	writeJSON(w, http.StatusOK, successMsg)

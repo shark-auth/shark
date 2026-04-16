@@ -22,44 +22,44 @@ type OIDCState struct {
 }
 
 // BeginOIDCAuth constructs the OIDC authorization URL for the given connection.
-// It returns the redirect URL and a state token that must be verified in the callback.
-func (s *SSOManager) BeginOIDCAuth(ctx context.Context, connectionID string) (redirectURL string, state string, err error) {
+// It returns the redirect URL, a state token, and a nonce that must be verified in the callback.
+func (s *SSOManager) BeginOIDCAuth(ctx context.Context, connectionID string) (redirectURL, state, nonce string, err error) {
 	conn, err := s.GetConnection(ctx, connectionID)
 	if err != nil {
-		return "", "", fmt.Errorf("get connection: %w", err)
+		return "", "", "", fmt.Errorf("get connection: %w", err)
 	}
 	if conn.Type != "oidc" {
-		return "", "", fmt.Errorf("connection %q is not OIDC (type=%s)", connectionID, conn.Type)
+		return "", "", "", fmt.Errorf("connection %q is not OIDC (type=%s)", connectionID, conn.Type)
 	}
 	if !conn.Enabled {
-		return "", "", fmt.Errorf("connection %q is disabled", connectionID)
+		return "", "", "", fmt.Errorf("connection %q is disabled", connectionID)
 	}
 
 	provider, err := oidc.NewProvider(ctx, derefStr(conn.OIDCIssuer))
 	if err != nil {
-		return "", "", fmt.Errorf("oidc discovery for issuer %q: %w", derefStr(conn.OIDCIssuer), err)
+		return "", "", "", fmt.Errorf("oidc discovery for issuer %q: %w", derefStr(conn.OIDCIssuer), err)
 	}
 
 	oauth2Cfg := s.oidcOAuth2Config(conn, provider)
 
 	stateToken, err := randomToken(16)
 	if err != nil {
-		return "", "", fmt.Errorf("generate state: %w", err)
+		return "", "", "", fmt.Errorf("generate state: %w", err)
 	}
 
-	nonce, err := randomToken(16)
+	nonceToken, err := randomToken(16)
 	if err != nil {
-		return "", "", fmt.Errorf("generate nonce: %w", err)
+		return "", "", "", fmt.Errorf("generate nonce: %w", err)
 	}
 
-	url := oauth2Cfg.AuthCodeURL(stateToken, oidc.Nonce(nonce))
+	url := oauth2Cfg.AuthCodeURL(stateToken, oidc.Nonce(nonceToken))
 
-	return url, stateToken, nil
+	return url, stateToken, nonceToken, nil
 }
 
-// HandleOIDCCallback exchanges the authorization code, verifies the ID token,
-// creates/links the user, and creates a session.
-func (s *SSOManager) HandleOIDCCallback(ctx context.Context, connectionID, code, state string, r *http.Request) (*storage.User, *storage.Session, error) {
+// HandleOIDCCallback exchanges the authorization code, verifies the ID token
+// (including nonce validation), creates/links the user, and creates a session.
+func (s *SSOManager) HandleOIDCCallback(ctx context.Context, connectionID, code, state, expectedNonce string, r *http.Request) (*storage.User, *storage.Session, error) {
 	conn, err := s.GetConnection(ctx, connectionID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get connection: %w", err)
@@ -91,6 +91,11 @@ func (s *SSOManager) HandleOIDCCallback(ctx context.Context, connectionID, code,
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		return nil, nil, fmt.Errorf("verify id_token: %w", err)
+	}
+
+	// Validate nonce to prevent replay attacks
+	if idToken.Nonce != expectedNonce {
+		return nil, nil, fmt.Errorf("id_token nonce mismatch")
 	}
 
 	// Extract claims

@@ -113,6 +113,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(mw.MaxBodySize(1 << 20)) // 1 MB request body limit
 	r.Use(mw.SecurityHeaders())
 	r.Use(mw.RateLimit(100, 100)) // 100 req/s burst, 100 tokens
 

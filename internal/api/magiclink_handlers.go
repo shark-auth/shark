@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -105,7 +105,7 @@ func (s *Server) handleMagicLinkSend(w http.ResponseWriter, r *http.Request) {
 	// Send magic link (always return success to avoid leaking info about email existence)
 	if s.MagicLinkManager != nil {
 		if err := s.MagicLinkManager.SendMagicLink(r.Context(), req.Email); err != nil {
-			log.Printf("ERROR: failed to send magic link email to %s: %v", req.Email, err)
+			slog.Error("failed to send magic link email", "email", req.Email, "error", err)
 		}
 	}
 

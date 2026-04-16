@@ -5,7 +5,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -32,45 +32,52 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	// Validate server secret (must be at least 32 bytes for AES-256)
 	if len(cfg.Server.Secret) < 32 {
-		log.Fatalf("server.secret must be at least 32 characters (got %d). Generate one with: openssl rand -hex 32", len(cfg.Server.Secret))
+		slog.Error("server.secret must be at least 32 characters", "length", len(cfg.Server.Secret))
+		os.Exit(1)
 	}
 
 	// Ensure data directory exists
 	dataDir := filepath.Dir(cfg.Storage.Path)
 	if dataDir != "" && dataDir != "." {
 		if err := os.MkdirAll(dataDir, 0755); err != nil {
-			log.Fatalf("Failed to create data directory %s: %v", dataDir, err)
+			slog.Error("failed to create data directory", "path", dataDir, "error", err)
+			os.Exit(1)
 		}
 	}
 
 	// Open SQLite database
 	store, err := storage.NewSQLiteStore(cfg.Storage.Path)
 	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
+		slog.Error("failed to open database", "error", err)
+		os.Exit(1)
 	}
 	defer store.Close()
 
 	// Run migrations
-	log.Println("Running database migrations...")
+	slog.Info("running database migrations")
 	if err := storage.RunMigrations(store.DB(), migrationsFS, "migrations"); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
-	log.Println("Migrations complete")
+	slog.Info("migrations complete")
 
 	// Bootstrap admin API key on first run
 	adminCount, err := store.CountActiveAPIKeysByScope(context.Background(), "*")
 	if err != nil {
-		log.Fatalf("Failed to check admin keys: %v", err)
+		slog.Error("failed to check admin keys", "error", err)
+		os.Exit(1)
 	}
 	if adminCount == 0 {
 		fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
 		if err != nil {
-			log.Fatalf("Failed to generate admin key: %v", err)
+			slog.Error("failed to generate admin key", "error", err)
+			os.Exit(1)
 		}
 		id, _ := gonanoid.New()
 		now := time.Now().UTC().Format(time.RFC3339)
@@ -85,7 +92,8 @@ func main() {
 			CreatedAt: now,
 		}
 		if err := store.CreateAPIKey(context.Background(), adminKey); err != nil {
-			log.Fatalf("Failed to create admin key: %v", err)
+			slog.Error("failed to create admin key", "error", err)
+			os.Exit(1)
 		}
 		fmt.Println()
 		fmt.Println("  ADMIN API KEY (shown once — save it now)")
@@ -100,10 +108,10 @@ func main() {
 	// Use Resend HTTP API when host is smtp.resend.com (SMTP ports blocked on most PaaS)
 	var emailSender email.Sender
 	if cfg.SMTP.Host == "smtp.resend.com" {
-		log.Println("Using Resend HTTP API for email delivery")
+		slog.Info("using Resend HTTP API for email delivery")
 		emailSender = email.NewResendSender(cfg.SMTP)
 	} else {
-		log.Println("Using SMTP for email delivery")
+		slog.Info("using SMTP for email delivery")
 		emailSender = email.NewSMTPSender(cfg.SMTP)
 	}
 
@@ -122,11 +130,12 @@ func main() {
 
 	// Start server in background
 	go func() {
-		log.Printf("SharkAuth starting on %s", addr)
-		log.Printf("Admin dashboard: http://localhost:%d/admin", cfg.Server.Port)
-		log.Printf("Health check: http://localhost:%d/healthz", cfg.Server.Port)
+		slog.Info("SharkAuth starting", "addr", addr)
+		slog.Info("admin dashboard", "url", fmt.Sprintf("http://localhost:%d/admin", cfg.Server.Port))
+		slog.Info("health check", "url", fmt.Sprintf("http://localhost:%d/healthz", cfg.Server.Port))
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -135,14 +144,15 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	slog.Info("shutting down server")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := httpServer.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		slog.Error("server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 }

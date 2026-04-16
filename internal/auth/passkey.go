@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -447,14 +447,13 @@ func (pm *PasskeyManager) loadWebAuthnCredentials(ctx context.Context, userID st
 func (pm *PasskeyManager) updateCredentialAfterLogin(ctx context.Context, cred *webauthn.Credential) {
 	storedCred, err := pm.store.GetPasskeyByCredentialID(ctx, cred.ID)
 	if err != nil {
-		log.Printf("warning: could not find credential to update sign count: %v", err)
+		slog.Warn("could not find credential to update sign count", "error", err)
 		return
 	}
 
 	newCount := int(cred.Authenticator.SignCount)
 	if newCount <= storedCred.SignCount && (newCount != 0 || storedCred.SignCount != 0) {
-		log.Printf("warning: passkey sign count did not increase for credential %s (stored=%d, received=%d) - possible cloned authenticator or synced passkey",
-			storedCred.ID, storedCred.SignCount, newCount)
+		slog.Warn("passkey sign count did not increase", "credential_id", storedCred.ID, "stored", storedCred.SignCount, "received", newCount)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -463,7 +462,7 @@ func (pm *PasskeyManager) updateCredentialAfterLogin(ctx context.Context, cred *
 	storedCred.BackedUp = cred.Flags.BackupState
 
 	if err := pm.store.UpdatePasskeyCredential(ctx, storedCred); err != nil {
-		log.Printf("warning: could not update passkey credential after login: %v", err)
+		slog.Warn("could not update passkey credential after login", "error", err)
 	}
 }
 

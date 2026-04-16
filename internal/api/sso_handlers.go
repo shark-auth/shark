@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -13,9 +13,10 @@ import (
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
-// ssoStateEntry holds an OIDC state with an expiry time.
+// ssoStateEntry holds an OIDC state and nonce with an expiry time.
 type ssoStateEntry struct {
 	connectionID string
+	nonce        string
 	expiresAt    time.Time
 }
 
@@ -150,7 +151,7 @@ func (h *SSOHandlers) SAMLMetadata(w http.ResponseWriter, r *http.Request) {
 
 	metadata, err := h.manager.GenerateSPMetadata(r.Context(), connID)
 	if err != nil {
-		log.Printf("ERROR: SAML metadata generation failed for %s: %v", connID, err)
+		slog.Error("SAML metadata generation failed", "connection_id", connID, "error", err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Failed to generate SAML metadata"})
 		return
 	}
@@ -170,7 +171,7 @@ func (h *SSOHandlers) SAMLACS(w http.ResponseWriter, r *http.Request) {
 
 	user, session, err := h.manager.HandleSAMLACS(r.Context(), connID, r)
 	if err != nil {
-		log.Printf("ERROR: SAML ACS failed for connection %s: %v", connID, err)
+		slog.Error("SAML ACS failed", "connection_id", connID, "error", err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SSO authentication failed"})
 		return
 	}
@@ -191,17 +192,18 @@ func (h *SSOHandlers) OIDCAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirectURL, state, err := h.manager.BeginOIDCAuth(r.Context(), connID)
+	redirectURL, state, nonce, err := h.manager.BeginOIDCAuth(r.Context(), connID)
 	if err != nil {
-		log.Printf("ERROR: OIDC auth begin failed for connection %s: %v", connID, err)
+		slog.Error("OIDC auth begin failed", "connection_id", connID, "error", err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Failed to initiate SSO authentication"})
 		return
 	}
 
-	// Store state -> connectionID mapping for callback verification
+	// Store state -> connectionID + nonce mapping for callback verification
 	h.mu.Lock()
 	h.stateStore[state] = &ssoStateEntry{
 		connectionID: connID,
+		nonce:        nonce,
 		expiresAt:    time.Now().Add(10 * time.Minute),
 	}
 	h.mu.Unlock()
@@ -252,9 +254,9 @@ func (h *SSOHandlers) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, session, err := h.manager.HandleOIDCCallback(r.Context(), connID, code, state, r)
+	user, session, err := h.manager.HandleOIDCCallback(r.Context(), connID, code, state, entry.nonce, r)
 	if err != nil {
-		log.Printf("ERROR: OIDC callback failed for connection %s: %v", connID, err)
+		slog.Error("OIDC callback failed", "connection_id", connID, "error", err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SSO authentication failed"})
 		return
 	}
@@ -277,7 +279,7 @@ func (h *SSOHandlers) SSOAutoRoute(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := h.manager.RouteByEmail(r.Context(), email)
 	if err != nil {
-		log.Printf("ERROR: SSO auto-route failed for email %s: %v", email, err)
+		slog.Error("SSO auto-route failed", "email", email, "error", err)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "No SSO connection found for this email domain"})
 		return
 	}

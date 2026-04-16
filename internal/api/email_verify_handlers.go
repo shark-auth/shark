@@ -3,7 +3,7 @@ package api
 import (
 	"database/sql"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -47,7 +47,7 @@ func (s *Server) handleEmailVerifySend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.MagicLinkManager.SendEmailVerification(r.Context(), user.Email); err != nil {
-		log.Printf("ERROR: failed to send verification email to %s: %v", user.Email, err)
+		slog.Error("failed to send verification email", "email", user.Email, "error", err)
 	}
 
 	// Always return success to avoid timing attacks

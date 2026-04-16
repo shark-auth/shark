@@ -28,6 +28,7 @@ type mockOIDCProvider struct {
 	server     *httptest.Server
 	privateKey *rsa.PrivateKey
 	keyID      string
+	lastNonce  string // captured from authorize request for inclusion in ID token
 }
 
 func newMockOIDCProvider(t *testing.T) *mockOIDCProvider {
@@ -88,7 +89,8 @@ func (m *mockOIDCProvider) jwksHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (m *mockOIDCProvider) authorizeHandler(w http.ResponseWriter, r *http.Request) {
-	// In real flow, IdP would show login page. For tests, we just return info.
+	// Capture nonce so the token endpoint can include it in the ID token
+	m.lastNonce = r.URL.Query().Get("nonce")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"state":        r.URL.Query().Get("state"),
@@ -97,6 +99,7 @@ func (m *mockOIDCProvider) authorizeHandler(w http.ResponseWriter, r *http.Reque
 }
 
 // tokenHandler simulates the OIDC token endpoint that exchanges an auth code for tokens.
+// It reads the nonce from the stored lastNonce field to include it in the ID token.
 func (m *mockOIDCProvider) tokenHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
@@ -133,6 +136,7 @@ func (m *mockOIDCProvider) tokenHandler(w http.ResponseWriter, r *http.Request) 
 	extraClaims := map[string]interface{}{
 		"email": "sso-user@corp.com",
 		"name":  "SSO User",
+		"nonce": m.lastNonce,
 	}
 
 	rawToken, err := jwt.Signed(signer).Claims(claims).Claims(extraClaims).Serialize()
@@ -297,7 +301,7 @@ func TestOIDCFlow(t *testing.T) {
 	}
 
 	// Step 1: Begin OIDC auth
-	redirectURL, state, err := mgr.BeginOIDCAuth(ctx, conn.ID)
+	redirectURL, state, nonce, err := mgr.BeginOIDCAuth(ctx, conn.ID)
 	if err != nil {
 		t.Fatalf("begin oidc auth: %v", err)
 	}
@@ -307,14 +311,20 @@ func TestOIDCFlow(t *testing.T) {
 	if state == "" {
 		t.Fatal("state should not be empty")
 	}
+	if nonce == "" {
+		t.Fatal("nonce should not be empty")
+	}
 
 	// The redirect URL should point to the mock provider's authorize endpoint
 	t.Logf("redirect URL: %s", redirectURL)
 
+	// Set the nonce on the mock provider so the token endpoint includes it in the ID token
+	idp.lastNonce = nonce
+
 	// Step 2: Handle callback (simulate code exchange)
-	// The mock provider's token endpoint returns a valid ID token
+	// The mock provider's token endpoint returns a valid ID token with the nonce
 	mockReq := httptest.NewRequest("GET", "/callback?code=mock-auth-code&state="+state, nil)
-	user, session, err := mgr.HandleOIDCCallback(ctx, conn.ID, "mock-auth-code", state, mockReq)
+	user, session, err := mgr.HandleOIDCCallback(ctx, conn.ID, "mock-auth-code", state, nonce, mockReq)
 	if err != nil {
 		t.Fatalf("handle oidc callback: %v", err)
 	}
@@ -343,7 +353,7 @@ func TestOIDCFlow(t *testing.T) {
 	}
 
 	// Step 3: Verify SSO identity was created and repeat login links to same user
-	user2, session2, err := mgr.HandleOIDCCallback(ctx, conn.ID, "mock-auth-code", state, mockReq)
+	user2, session2, err := mgr.HandleOIDCCallback(ctx, conn.ID, "mock-auth-code", state, nonce, mockReq)
 	if err != nil {
 		t.Fatalf("second callback: %v", err)
 	}
@@ -369,7 +379,7 @@ func TestOIDCFlow_InvalidConnectionType(t *testing.T) {
 		t.Fatalf("create connection: %v", err)
 	}
 
-	_, _, err := mgr.BeginOIDCAuth(ctx, conn.ID)
+	_, _, _, err := mgr.BeginOIDCAuth(ctx, conn.ID)
 	if err == nil {
 		t.Fatal("expected error when using OIDC flow with SAML connection")
 	}
@@ -403,7 +413,7 @@ func TestOIDCFlow_DisabledConnection(t *testing.T) {
 		t.Fatalf("update connection: %v", err)
 	}
 
-	_, _, err := mgr.BeginOIDCAuth(ctx, conn.ID)
+	_, _, _, err := mgr.BeginOIDCAuth(ctx, conn.ID)
 	if err == nil {
 		t.Fatal("expected error for disabled connection")
 	}
