@@ -233,6 +233,21 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			})
 		})
 
+		// Organizations (user-facing — session cookie auth, per-handler role gates)
+		r.Route("/organizations", func(r chi.Router) {
+			r.Use(mw.RequireSessionFunc(sm))
+			r.Post("/", s.handleCreateOrganization)
+			r.Get("/", s.handleListMyOrganizations)
+			r.Get("/{id}", s.handleGetOrganization)
+			r.Patch("/{id}", s.handleUpdateOrganization)
+			r.Delete("/{id}", s.handleDeleteOrganization)
+			r.Get("/{id}/members", s.handleListOrganizationMembers)
+			r.Patch("/{id}/members/{uid}", s.handleUpdateOrganizationMemberRole)
+			r.Delete("/{id}/members/{uid}", s.handleRemoveOrganizationMember)
+			r.Post("/{id}/invitations", s.handleCreateOrgInvitation)
+			r.Post("/invitations/{token}/accept", s.handleAcceptOrgInvitation)
+		})
+
 		// Roles (admin)
 		r.Route("/roles", func(r chi.Router) {
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))

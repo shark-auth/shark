@@ -23,6 +23,14 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("opening sqlite: %w", err)
 	}
 
+	// `:memory:` gives each sql connection its own private DB. Capping the pool
+	// at 1 means everything the app does lands in the same in-memory instance.
+	// Tests and concurrent goroutines (async email, webhook dispatcher) depend
+	// on this. File-backed DBs stay on the default unlimited pool.
+	if dsn == ":memory:" {
+		db.SetMaxOpenConns(1)
+	}
+
 	// Verify connection
 	if err := db.Ping(); err != nil {
 		db.Close()

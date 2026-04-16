@@ -63,3 +63,22 @@ func RenderVerifyEmail(data VerifyEmailData) (string, error) {
 	}
 	return buf.String(), nil
 }
+
+// OrganizationInvitationData holds template data for an invitation email.
+type OrganizationInvitationData struct {
+	AppName       string
+	OrgName       string
+	Role          string
+	AcceptURL     string
+	InviterEmail  string
+	ExpiryHours   int
+}
+
+// RenderOrganizationInvitation renders the invitation email template.
+func RenderOrganizationInvitation(data OrganizationInvitationData) (string, error) {
+	var buf bytes.Buffer
+	if err := templates.ExecuteTemplate(&buf, "organization_invitation.html", data); err != nil {
+		return "", fmt.Errorf("rendering organization invitation template: %w", err)
+	}
+	return buf.String(), nil
+}

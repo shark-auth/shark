@@ -42,6 +42,12 @@ func NewMagicLinkManager(store storage.Store, emailSender email.Sender, sessions
 	}
 }
 
+// Sender exposes the email sender so other managers (e.g. org invitations)
+// can reuse the wired provider instead of taking it as a second dep.
+func (m *MagicLinkManager) Sender() email.Sender {
+	return m.email
+}
+
 // SendMagicLink generates a random token, stores its SHA-256 hash, and sends a magic link email.
 // Always returns nil to avoid leaking whether the email address exists.
 func (m *MagicLinkManager) SendMagicLink(ctx context.Context, emailAddr string) error {
