@@ -231,7 +231,7 @@ Events emitted (phase 2): `user.created`, `user.deleted`, `session.revoked`, `or
 Phase 2 ships cobra subcommands:
 
 ```bash
-shark init                       # interactive 3-question setup — writes sharkauth.yaml
+shark init                       # interactive 1-question setup (base URL); email → shark.email testing tier
 shark serve                      # start the server (reads sharkauth.yaml)
 shark serve --dev                # dev mode (ephemeral secret, dev.db, dev inbox)
 shark serve --dev --reset        # wipe dev.db before starting

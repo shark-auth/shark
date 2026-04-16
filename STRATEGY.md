@@ -230,7 +230,7 @@ EXPANSION
 
 ## DX Improvements (Non-Negotiable)
 
-1. **The 10-Second Start.** `shark init && shark serve` must produce a working auth system with a dashboard you can click through. Not "read this YAML file" — interactive init that asks 3 questions and generates everything.
+1. **The 10-Second Start.** `shark init && shark serve` must produce a working auth system with a dashboard you can click through. Not "read this YAML file" — interactive init that asks **one** question (base URL), defaults email to the shark.email testing tier, and generates everything else. Zero extra config to boot end-to-end.
 
 2. **The 2-Minute Integration.** `npm i @sharkauth/js` + copy-paste a code snippet from the dashboard -> working auth in any frontend. Dashboard generates framework-specific code snippets (React, Svelte, Vue, vanilla JS).
 

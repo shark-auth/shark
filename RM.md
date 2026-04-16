@@ -63,7 +63,9 @@ docker run -p 8080:8080 -v shark-data:/data ghcr.io/shark-auth/shark
 shark init
 ```
 
-Generates `sharkauth.yaml` and prints your admin API key. Three questions, done.
+Generates `sharkauth.yaml` and prints your admin API key. **One question** (base URL), done. Email defaults to the shark.email testing tier so the server boots end-to-end with zero extra setup.
+
+> shark.email is **testing-only** (rate-limited, sender locked to `noreply@shark.email`, no SLA). Switch to your own provider before any user-facing flow: `shark email setup`, edit `email:` in `sharkauth.yaml`, or use Settings → Email in the dashboard.
 
 ### Run
 
