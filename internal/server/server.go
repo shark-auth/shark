@@ -20,6 +20,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/sharkauth/sharkauth/internal/webhook"
 )
 
 // Options controls how Run assembles the server. Fields not set receive defaults.
@@ -48,14 +49,18 @@ type Options struct {
 // Bootstrap builds all components (config, store, migrations, admin key, API server)
 // without binding to the network. Returned shutdown closes the store.
 type Bootstrap struct {
-	Config   *config.Config
-	Store    *storage.SQLiteStore
-	API      *api.Server
-	AdminKey string // populated only when a new admin key was generated
+	Config     *config.Config
+	Store      *storage.SQLiteStore
+	API        *api.Server
+	Dispatcher *webhook.Dispatcher
+	AdminKey   string // populated only when a new admin key was generated
 }
 
 // Close releases resources.
 func (b *Bootstrap) Close() error {
+	if b.Dispatcher != nil {
+		b.Dispatcher.Stop()
+	}
 	if b.Store != nil {
 		return b.Store.Close()
 	}
@@ -125,13 +130,23 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		}
 	}
 
-	apiSrv := api.NewServer(store, cfg, api.WithEmailSender(sender))
+	dispatcher := webhook.New(store)
+	dispatcher.Start(ctx)
+	// Prune delivery log beyond retention window (default 90d if unset).
+	retention := 90 * 24 * time.Hour
+	dispatcher.StartRetention(ctx, retention, time.Hour)
+
+	apiSrv := api.NewServer(store, cfg,
+		api.WithEmailSender(sender),
+		api.WithWebhookDispatcher(dispatcher),
+	)
 
 	return &Bootstrap{
-		Config:   cfg,
-		Store:    store,
-		API:      apiSrv,
-		AdminKey: adminKey,
+		Config:     cfg,
+		Store:      store,
+		API:        apiSrv,
+		Dispatcher: dispatcher,
+		AdminKey:   adminKey,
 	}, nil
 }
 

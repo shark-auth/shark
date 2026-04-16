@@ -15,6 +15,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/sso"
 	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/sharkauth/sharkauth/internal/webhook"
 
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
 )
@@ -32,9 +33,10 @@ type Server struct {
 	AuditLogger      *audit.Logger
 	RateLimiter      *auth.TokenBucket
 	LockoutManager   *auth.LockoutManager
-	FieldEncryptor   *auth.FieldEncryptor
-	SSOHandlers      *SSOHandlers
-	magicLinkRL      *magicLinkRateLimiter
+	FieldEncryptor    *auth.FieldEncryptor
+	SSOHandlers       *SSOHandlers
+	WebhookDispatcher *webhook.Dispatcher
+	magicLinkRL       *magicLinkRateLimiter
 }
 
 // ServerOption configures optional dependencies for the Server.
@@ -44,6 +46,14 @@ type ServerOption func(*Server)
 func WithEmailSender(sender email.Sender) ServerOption {
 	return func(s *Server) {
 		s.MagicLinkManager = auth.NewMagicLinkManager(s.Store, sender, s.SessionManager, s.Config)
+	}
+}
+
+// WithWebhookDispatcher wires an already-started dispatcher so emission sites
+// can fan out events. Passed from server.Build after it calls Start().
+func WithWebhookDispatcher(d *webhook.Dispatcher) ServerOption {
+	return func(s *Server) {
+		s.WebhookDispatcher = d
 	}
 }
 
@@ -333,6 +343,18 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/auth0", notImplemented)
 			r.Get("/{id}", notImplemented)
+		})
+
+		// Webhooks (admin)
+		r.Route("/webhooks", func(r chi.Router) {
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
+			r.Post("/", s.handleCreateWebhook)
+			r.Get("/", s.handleListWebhooks)
+			r.Get("/{id}", s.handleGetWebhook)
+			r.Patch("/{id}", s.handleUpdateWebhook)
+			r.Delete("/{id}", s.handleDeleteWebhook)
+			r.Post("/{id}/test", s.handleTestWebhook)
+			r.Get("/{id}/deliveries", s.handleListDeliveries)
 		})
 
 		// Admin (stats + sessions + dev-mode inbox)
