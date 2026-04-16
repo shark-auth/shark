@@ -1,7 +1,8 @@
-# Binary
-shark.exe
-shark
-sharkauth.exe
+# Binary (built binaries in repo root only — don't shadow cmd/shark/ source tree)
+/shark.exe
+/shark
+/sharkauth.exe
+/sharkauth
 sharkauth_old.yaml
 gosec_results.json
 config.json

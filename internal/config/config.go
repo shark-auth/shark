@@ -35,6 +35,10 @@ type ServerConfig struct {
 	Secret      string   `koanf:"secret"`
 	BaseURL     string   `koanf:"base_url"`
 	CORSOrigins []string `koanf:"cors_origins"`
+
+	// DevMode is set at runtime via `shark serve --dev`. It enables the dev
+	// inbox routes and relaxed defaults. Never loaded from YAML.
+	DevMode bool `koanf:"-"`
 }
 
 // StorageConfig holds database settings.
