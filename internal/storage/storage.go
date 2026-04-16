@@ -27,6 +27,25 @@ type Store interface {
 	DeleteSession(ctx context.Context, id string) error
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
 	UpdateSessionMFAPassed(ctx context.Context, id string, mfaPassed bool) error
+	ListActiveSessions(ctx context.Context, opts ListSessionsOpts) ([]*SessionWithUser, error)
+	DeleteSessionsByUserID(ctx context.Context, userID string) ([]string, error)
+
+	// Stats / metrics
+	CountUsers(ctx context.Context) (int, error)
+	CountUsersCreatedSince(ctx context.Context, since time.Time) (int, error)
+	CountActiveSessions(ctx context.Context) (int, error)
+	CountMFAEnabled(ctx context.Context) (int, error)
+	CountFailedLoginsSince(ctx context.Context, since time.Time) (int, error)
+	CountExpiringAPIKeys(ctx context.Context, within time.Duration) (int, error)
+	CountSSOConnections(ctx context.Context, enabledOnly bool) (int, error)
+	GroupSessionsByAuthMethodSince(ctx context.Context, since time.Time) ([]MethodCount, error)
+	GroupUsersCreatedByDay(ctx context.Context, days int) ([]DayCount, error)
+
+	// DevEmails (dev-mode inbox)
+	CreateDevEmail(ctx context.Context, e *DevEmail) error
+	ListDevEmails(ctx context.Context, limit int) ([]*DevEmail, error)
+	GetDevEmail(ctx context.Context, id string) (*DevEmail, error)
+	DeleteAllDevEmails(ctx context.Context) error
 
 	// OAuthAccounts
 	CreateOAuthAccount(ctx context.Context, acct *OAuthAccount) error
@@ -276,6 +295,35 @@ type Migration struct {
 	CompletedAt   *string `json:"completed_at,omitempty"`
 }
 
+// DevEmail represents a single captured email in dev mode.
+type DevEmail struct {
+	ID        string `json:"id"`
+	To        string `json:"to"`
+	Subject   string `json:"subject"`
+	HTML      string `json:"html"`
+	Text      string `json:"text"`
+	CreatedAt string `json:"created_at"`
+}
+
+// SessionWithUser joins a session row with the minimal user columns needed
+// by the admin sessions list (avoids N+1 lookups in the handler).
+type SessionWithUser struct {
+	Session
+	UserEmail string `json:"user_email"`
+}
+
+// MethodCount is a row of GROUP BY auth_method, COUNT(*).
+type MethodCount struct {
+	AuthMethod string `json:"auth_method"`
+	Count      int    `json:"count"`
+}
+
+// DayCount is a row of GROUP BY DATE(created_at), COUNT(*).
+type DayCount struct {
+	Date  string `json:"date"` // YYYY-MM-DD
+	Count int    `json:"count"`
+}
+
 // --- Query types ---
 
 // ListUsersOpts configures user list queries.
@@ -283,6 +331,23 @@ type ListUsersOpts struct {
 	Limit  int
 	Offset int
 	Search string // optional email/name search
+}
+
+// ListSessionsOpts configures admin session list queries with cursor pagination.
+//
+// Pagination contract:
+//   - Results are ordered by (created_at DESC, id DESC) for stable iteration.
+//   - Cursor is the last item's created_at + "|" + id ("keyset" pagination).
+//   - An empty cursor means "first page".
+//   - NextCursor is returned alongside results by the handler.
+//
+// Filter semantics: all filters AND together; empty string = no filter.
+type ListSessionsOpts struct {
+	UserID     string // exact match
+	AuthMethod string // exact match: password | google | github | passkey | magic_link | sso
+	MFAPassed  *bool  // nil = no filter
+	Limit      int    // default 50, max 200
+	Cursor     string // "created_at|id" keyset cursor
 }
 
 // AuditLogQuery configures audit log queries with cursor-based pagination.

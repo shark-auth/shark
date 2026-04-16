@@ -1045,6 +1045,291 @@ func (s *SQLiteStore) UpdateMigration(ctx context.Context, m *Migration) error {
 	return err
 }
 
+// --- Stats / metrics ---
+
+func (s *SQLiteStore) CountUsers(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
+	return n, err
+}
+
+func (s *SQLiteStore) CountUsersCreatedSince(ctx context.Context, since time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users WHERE created_at >= ?`,
+		since.UTC().Format(time.RFC3339),
+	).Scan(&n)
+	return n, err
+}
+
+func (s *SQLiteStore) CountActiveSessions(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sessions WHERE expires_at > ?`,
+		time.Now().UTC().Format(time.RFC3339),
+	).Scan(&n)
+	return n, err
+}
+
+func (s *SQLiteStore) CountMFAEnabled(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE mfa_enabled = 1`).Scan(&n)
+	return n, err
+}
+
+func (s *SQLiteStore) CountFailedLoginsSince(ctx context.Context, since time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM audit_logs WHERE action = 'login' AND status = 'failure' AND created_at >= ?`,
+		since.UTC().Format(time.RFC3339),
+	).Scan(&n)
+	return n, err
+}
+
+// CountExpiringAPIKeys counts active (not revoked) keys that expire within the given window.
+// Keys with NULL expires_at (never expire) are excluded.
+func (s *SQLiteStore) CountExpiringAPIKeys(ctx context.Context, within time.Duration) (int, error) {
+	now := time.Now().UTC()
+	cutoff := now.Add(within).Format(time.RFC3339)
+	nowStr := now.Format(time.RFC3339)
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM api_keys
+		 WHERE revoked_at IS NULL
+		   AND expires_at IS NOT NULL
+		   AND expires_at > ?
+		   AND expires_at <= ?`,
+		nowStr, cutoff,
+	).Scan(&n)
+	return n, err
+}
+
+func (s *SQLiteStore) CountSSOConnections(ctx context.Context, enabledOnly bool) (int, error) {
+	q := `SELECT COUNT(*) FROM sso_connections`
+	if enabledOnly {
+		q += ` WHERE enabled = 1`
+	}
+	var n int
+	err := s.db.QueryRowContext(ctx, q).Scan(&n)
+	return n, err
+}
+
+func (s *SQLiteStore) GroupSessionsByAuthMethodSince(ctx context.Context, since time.Time) ([]MethodCount, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT auth_method, COUNT(*) FROM sessions
+		 WHERE created_at >= ?
+		 GROUP BY auth_method ORDER BY COUNT(*) DESC`,
+		since.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MethodCount
+	for rows.Next() {
+		var mc MethodCount
+		if err := rows.Scan(&mc.AuthMethod, &mc.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, mc)
+	}
+	return out, rows.Err()
+}
+
+// GroupUsersCreatedByDay returns a per-day signup count for the last N days.
+// Days with zero signups are OMITTED; callers are responsible for filling gaps
+// (makes the query index-friendly at any scale).
+func (s *SQLiteStore) GroupUsersCreatedByDay(ctx context.Context, days int) ([]DayCount, error) {
+	if days <= 0 {
+		days = 30
+	}
+	since := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT substr(created_at, 1, 10) AS day, COUNT(*) FROM users
+		 WHERE created_at >= ?
+		 GROUP BY day ORDER BY day ASC`,
+		since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []DayCount
+	for rows.Next() {
+		var d DayCount
+		if err := rows.Scan(&d.Date, &d.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// --- Admin session listing ---
+
+// ListActiveSessions returns active sessions joined with user email, filtered + cursor-paginated.
+// Keyset cursor format: "<created_at>|<id>". Uses (created_at DESC, id DESC) for stable order.
+func (s *SQLiteStore) ListActiveSessions(ctx context.Context, opts ListSessionsOpts) ([]*SessionWithUser, error) {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	var (
+		where []string
+		args  []interface{}
+	)
+	where = append(where, `s.expires_at > ?`)
+	args = append(args, time.Now().UTC().Format(time.RFC3339))
+
+	if opts.UserID != "" {
+		where = append(where, `s.user_id = ?`)
+		args = append(args, opts.UserID)
+	}
+	if opts.AuthMethod != "" {
+		where = append(where, `s.auth_method = ?`)
+		args = append(args, opts.AuthMethod)
+	}
+	if opts.MFAPassed != nil {
+		where = append(where, `s.mfa_passed = ?`)
+		args = append(args, boolToInt(*opts.MFAPassed))
+	}
+
+	if opts.Cursor != "" {
+		parts := strings.SplitN(opts.Cursor, "|", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid cursor")
+		}
+		// Keyset: items strictly after the cursor tuple (created_at, id) DESC.
+		// Equivalent to: created_at < cursor_created OR (= AND id < cursor_id).
+		where = append(where, `(s.created_at < ? OR (s.created_at = ? AND s.id < ?))`)
+		args = append(args, parts[0], parts[0], parts[1])
+	}
+
+	q := `SELECT s.id, s.user_id, s.ip, s.user_agent, s.mfa_passed, s.auth_method, s.expires_at, s.created_at,
+	             COALESCE(u.email, '')
+	      FROM sessions s
+	      LEFT JOIN users u ON u.id = s.user_id
+	      WHERE ` + strings.Join(where, " AND ") + `
+	      ORDER BY s.created_at DESC, s.id DESC
+	      LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*SessionWithUser
+	for rows.Next() {
+		var sw SessionWithUser
+		var mfa int
+		if err := rows.Scan(&sw.ID, &sw.UserID, &sw.IP, &sw.UserAgent, &mfa,
+			&sw.AuthMethod, &sw.ExpiresAt, &sw.CreatedAt, &sw.UserEmail); err != nil {
+			return nil, err
+		}
+		sw.MFAPassed = mfa != 0
+		out = append(out, &sw)
+	}
+	return out, rows.Err()
+}
+
+// DeleteSessionsByUserID deletes every session for a user and returns the IDs
+// of the deleted sessions so the caller can emit one audit entry per session.
+func (s *SQLiteStore) DeleteSessionsByUserID(ctx context.Context, userID string) ([]string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM sessions WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// --- Dev inbox ---
+
+func (s *SQLiteStore) CreateDevEmail(ctx context.Context, e *DevEmail) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO dev_emails (id, to_addr, subject, html, text, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		e.ID, e.To, e.Subject, e.HTML, e.Text, e.CreatedAt,
+	)
+	return err
+}
+
+func (s *SQLiteStore) ListDevEmails(ctx context.Context, limit int) ([]*DevEmail, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, to_addr, subject, html, text, created_at
+		 FROM dev_emails ORDER BY created_at DESC, id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*DevEmail
+	for rows.Next() {
+		var e DevEmail
+		if err := rows.Scan(&e.ID, &e.To, &e.Subject, &e.HTML, &e.Text, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &e)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) GetDevEmail(ctx context.Context, id string) (*DevEmail, error) {
+	var e DevEmail
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, to_addr, subject, html, text, created_at FROM dev_emails WHERE id = ?`,
+		id,
+	).Scan(&e.ID, &e.To, &e.Subject, &e.HTML, &e.Text, &e.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+func (s *SQLiteStore) DeleteAllDevEmails(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM dev_emails`)
+	return err
+}
+
 // --- Helpers ---
 
 func boolToInt(b bool) int {
