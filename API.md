@@ -700,6 +700,137 @@ Clear the dev inbox. Returns `204 No Content`.
 
 ---
 
+## Organizations
+
+B2B multi-tenancy. **Auth:** session cookie. Per-handler role gates (`owner` / `admin` / `member`).
+
+### POST `/organizations`
+
+Create an organization. The caller is enrolled as `owner`.
+
+**Request:**
+```json
+{ "name": "Acme Corp", "slug": "acme", "metadata": "{\"plan\":\"free\"}" }
+```
+
+Slug: 3–64 chars, lowercase `a-z0-9-`, no leading/trailing hyphen.
+
+**Response (201):** organization object.
+
+### GET `/organizations`
+
+List orgs the caller belongs to.
+
+### GET `/organizations/{id}`
+
+Get one org. Non-members receive `404` (no existence oracle).
+
+### PATCH `/organizations/{id}`
+
+Admin+. Update `name` and/or `metadata`. Slug is immutable.
+
+### DELETE `/organizations/{id}`
+
+Owner only. Cascade-deletes members + invitations.
+
+### GET `/organizations/{id}/members`
+
+Member list with joined user email/name.
+
+### PATCH `/organizations/{id}/members/{uid}`
+
+Admin+. Change member role. Demoting the last owner returns `409 last_owner`.
+
+```json
+{ "role": "admin" }
+```
+
+### DELETE `/organizations/{id}/members/{uid}`
+
+Admin+. Same last-owner guard applies.
+
+### POST `/organizations/{id}/invitations`
+
+Admin+. Sends an email containing a one-shot accept link. The token is stored as SHA-256 hash only — DB leaks cannot produce valid links.
+
+```json
+{ "email": "new@example.com", "role": "member" }
+```
+
+**Response (201):** `{ id, email, role, expires_at, created_at }`. Expires in 72h.
+
+### POST `/organizations/invitations/{token}/accept`
+
+Requires a session whose email **exactly matches** the invitation. Idempotent. Consumes the token — second accept returns `409 invitation_used`.
+
+---
+
+## Webhooks
+
+Outbound event delivery. HMAC-SHA256 signed, durable, auto-retry.
+
+**Auth:** admin Bearer key.
+
+### Event catalog (phase 2)
+
+| Event | Emitted when | Payload |
+|-------|--------------|---------|
+| `user.created` | POST /auth/signup | safe user object (no password hash, no MFA secret) |
+| `user.deleted` | DELETE /users/{id} or /auth/me | `{ id }` |
+| `session.revoked` | self or admin session revoke (granular per session on bulk) | `{ session_id, user_id, revoked_by }` |
+| `organization.created` | POST /organizations | `{ id, name, slug, created_by }` |
+| `organization.member_added` | Invitation accepted | `{ organization_id, user_id, role, via }` |
+
+### POST `/webhooks`
+
+```json
+{
+  "url": "https://your-app.example.com/shark/webhook",
+  "events": ["user.created", "session.revoked"],
+  "description": "production"
+}
+```
+
+**Response (201):** webhook object **plus** the signing secret (prefix `whsec_`). Secret is returned **once**. Store it; `GET` never includes it again.
+
+### GET `/webhooks` / `GET /webhooks/{id}` / `PATCH /webhooks/{id}` / `DELETE /webhooks/{id}`
+
+Standard CRUD. `PATCH` accepts any subset of `url`, `events`, `enabled`, `description`.
+
+### POST `/webhooks/{id}/test`
+
+Queues a synthetic `webhook.test` delivery. Returns `{ delivery_id }`. Use this to validate network reach + signing before enabling a real integration.
+
+### GET `/webhooks/{id}/deliveries`
+
+Delivery log, keyset cursor pagination.
+
+**Query params:** `limit` (default 50, max 200), `cursor`.
+
+### Delivery contract
+
+Every delivery POSTs a JSON envelope:
+
+```json
+{ "event": "user.created", "created_at": "2026-04-16T12:00:00Z", "data": { /* event payload */ } }
+```
+
+Headers:
+- `X-Shark-Event: user.created`
+- `X-Shark-Delivery: whd_...`
+- `X-Shark-Signature: t=<unix_ts>,v1=<hex>`
+
+Verify signature:
+```
+hmac_sha256(secret, fmt.Sprintf("%d.%s", t, rawBody)) == v1
+```
+
+### Retry policy
+
+5 attempts, backoff `1m, 5m, 30m, 2h, 12h` (~14h40m). 2xx = delivered. Past budget → `status=failed`. Retention: 90d (configurable).
+
+---
+
 ## Rate Limiting
 
 - **Global:** 100 requests/second with burst tolerance

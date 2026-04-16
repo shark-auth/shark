@@ -340,6 +340,37 @@ GET    /admin/dev/emails/{id}                # full HTML/text
 DELETE /admin/dev/emails                     # clear (204)
 ```
 
+### organizations (session cookie; per-handler role gates)
+
+```
+POST   /organizations                        # creator becomes owner
+GET    /organizations                        # caller's orgs
+GET    /organizations/{id}                   # 404 for non-members
+PATCH  /organizations/{id}                   # admin+
+DELETE /organizations/{id}                   # owner only
+GET    /organizations/{id}/members
+PATCH  /organizations/{id}/members/{uid}     # admin+, last-owner guard
+DELETE /organizations/{id}/members/{uid}     # admin+, last-owner guard
+POST   /organizations/{id}/invitations       # email, SHA-256 hashed token
+POST   /organizations/invitations/{token}/accept
+```
+
+### webhooks (admin; HMAC-SHA256 signed, 5-attempt retry over ~14h)
+
+```
+POST   /webhooks                             # returns secret ONCE
+GET    /webhooks
+GET    /webhooks/{id}
+PATCH  /webhooks/{id}
+DELETE /webhooks/{id}
+POST   /webhooks/{id}/test                   # synthetic webhook.test event
+GET    /webhooks/{id}/deliveries             # keyset cursor pagination
+```
+
+events: `user.created`, `user.deleted`, `session.revoked`, `organization.created`, `organization.member_added`
+
+signature: `X-Shark-Signature: t=<unix>,v1=<hex(hmac_sha256(secret, t.body))>`
+
 ---
 
 ## CLI
@@ -375,7 +406,12 @@ shark version                       # print version (ldflags or module build-inf
 | `key_` | API key |
 | `aud_` | audit log |
 | `de_` | dev inbox email (dev mode only) |
+| `org_` | organization |
+| `inv_` | organization invitation |
+| `wh_` | webhook |
+| `whd_` | webhook delivery |
 | `sk_live_` | API key (client-facing) |
+| `whsec_` | webhook signing secret (client-facing) |
 
 ### schema
 
@@ -421,6 +457,25 @@ sharkauth loads config from YAML with environment variable interpolation (`${VAR
 shark serve --config sharkauth.yaml      # default: sharkauth.yaml
 shark serve --dev                        # skip YAML entirely, use ephemeral dev defaults
 ```
+
+### minimum config — 3 variables
+
+Phase 2 reduces the required YAML to 3 values; everything else has sensible defaults:
+
+```yaml
+server:
+  secret: "${SHARKAUTH_SECRET}"        # 32+ bytes, required
+  base_url: "https://auth.example.com" # required
+
+email:
+  provider: "resend"                   # shark | resend | smtp | dev
+  api_key: "${RESEND_API_KEY}"         # required (or SMTP credentials if provider=smtp)
+  from: "no-reply@example.com"
+```
+
+Startup validates these in production mode. `shark serve --dev` bypasses (generates a secret, uses the dev inbox).
+
+The legacy `smtp:` block still works as a deprecated alias — existing deployments don't need to migrate immediately.
 
 ### environment overrides
 

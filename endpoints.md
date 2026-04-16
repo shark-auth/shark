@@ -200,6 +200,32 @@ These routes are unmounted entirely when the server runs without `--dev`, so pro
 
 ---
 
+## Organizations (Phase 2)
+
+Session-cookie auth. Per-handler role gates (`owner` / `admin` / `member`):
+
+- `POST /api/v1/organizations` — create; caller becomes `owner`.
+- `GET /api/v1/organizations` — list caller's orgs.
+- `GET /api/v1/organizations/{id}` — non-members get 404.
+- `PATCH /api/v1/organizations/{id}` — admin+; update name/metadata.
+- `DELETE /api/v1/organizations/{id}` — owner only.
+- `GET /api/v1/organizations/{id}/members` — joined user email/name.
+- `PATCH /api/v1/organizations/{id}/members/{uid}` — admin+; last-owner guard.
+- `DELETE /api/v1/organizations/{id}/members/{uid}` — admin+; last-owner guard.
+- `POST /api/v1/organizations/{id}/invitations` — admin+; sends email, SHA-256 hashed token.
+- `POST /api/v1/organizations/invitations/{token}/accept` — session email must match invitation.
+
+## Webhooks (Phase 2)
+
+Admin Bearer. Durable delivery with exponential retry (5 attempts over ~14h), HMAC-SHA256 `X-Shark-Signature` (Stripe-style `t=,v1=`).
+
+- `POST /api/v1/webhooks` — secret returned **once** on creation.
+- `GET /api/v1/webhooks` / `GET /{id}` / `PATCH /{id}` / `DELETE /{id}`
+- `POST /api/v1/webhooks/{id}/test` — synthetic `webhook.test` event.
+- `GET /api/v1/webhooks/{id}/deliveries` — keyset cursor pagination.
+
+Events emitted (phase 2): `user.created`, `user.deleted`, `session.revoked`, `organization.created`, `organization.member_added`.
+
 ## CLI
 
 Phase 2 ships cobra subcommands:
