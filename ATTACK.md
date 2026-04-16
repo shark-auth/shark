@@ -8,15 +8,16 @@ Phase 1 — Harden the foundation (2-3 days)
 - Makefile + CI (#47)
 - Tests across major components (#65) — start here, keep adding throughout
 
-Ship this and you have a secure, testable, CI-gated codebase. Everything after  
- builds on solid ground.
+Done
 
 Phase 2 — Make it usable (3-4 days)
 
+- Organizations (#50) — the #1 feature gap vs every competitor
+- Webhooks (#51) — required for any real integration
 - CLI subcommands (#53) — shark init && shark serve is the first thing anyone
-  does
+- Make sure that the config -yaml is settable with only 3 minimum vars as we mentioned on some of the .mds
 - Dev mode with email capture (#48) — removes SMTP friction for every developer
-  trying Shark
+  trying Shark and scaffolding of shark.email
 - Admin stats endpoint (#44)
 - Session management endpoints (#45)  
 
@@ -24,16 +25,25 @@ Phase 2 — Make it usable (3-4 days)
 Now someone can install, run, and manage Shark from the terminal without reading
 YAML docs.
 
-Phase 3 — Dashboard (7-10 days)
+Phase 3 — JWT + OAuth 2.1 infrastructure (5-7 days)
+
+- Configurable session mode — cookie vs JWT (#67)
+- JWKS endpoint, signing key management, key rotation
+- This is the foundation that Agent Auth, OIDC Provider, and edge auth all share
+
+Build this once, everything after uses it.
+
+Phase 4 — Dashboard (7-10 days)
 
 - Svelte admin dashboard (existing DASHBOARD.md spec)
+- nextjs/react dashboard mimiccking svelte but for cloud *do not code this here, just keep a note*
 - Depends on: stats endpoint, session endpoints from Phase 2  
 
 
 This is what turns Shark from an API into a product. The HN demo GIF comes from
 this.
 
-Phase 4 — SDK (5-7 days)
+Phase 5 — SDK (5-7 days)
 
 - TypeScript SDK (#54)
 - React/Svelte/Vue wrappers  
@@ -42,24 +52,10 @@ Phase 4 — SDK (5-7 days)
 Now developers can actually integrate. Without this, Shark is unusable for most
 people.
 
-Phase 5 — B2B unlock (7-10 days)
-
-- Organizations (#50) — the #1 feature gap vs every competitor
-- Webhooks (#51) — required for any real integration  
 
 
-This is what converts "interesting OSS project" into "I can build my SaaS on  
- this."
 
-Phase 6 — JWT + OAuth 2.1 infrastructure (5-7 days)
-
-- Configurable session mode — cookie vs JWT (#67)
-- JWKS endpoint, signing key management, key rotation
-- This is the foundation that Agent Auth, OIDC Provider, and edge auth all share
-
-Build this once, everything after uses it.
-
-Phase 7 — Agent Auth (10-14 days)
+Phase 6 — Agent Auth (10-14 days)
 
 - Full OAuth 2.1 server (#57) — client credentials, auth code + PKCE, device
   flow, token exchange, DCR
@@ -76,7 +72,7 @@ Phase 9 — Polish & enterprise (7-10 days)
 
 - Impersonation (#59)
 - Compliance toolkit (#61)
-- Email provider presets (#52) + shark.email relay (#56)
+- Email provider presets (#52) + shark.email relay (#56) (overlap with Phase 2)
 - docs_url in error responses (#49)
 - Migration tools — Auth0 (#55), Clerk (#63), Supabase (#64)
 - Pre-built UI components + dashboard editor (#68)  
