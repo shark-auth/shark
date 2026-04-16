@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -24,8 +25,17 @@ var serveCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
+		configPath := serveConfigPath
+		if serveDev {
+			// In dev mode a missing config is expected — don't force the user
+			// to run `shark init` first. Only load the YAML if it exists.
+			if _, err := os.Stat(configPath); err != nil {
+				configPath = ""
+			}
+		}
+
 		opts := server.Options{
-			ConfigPath:    serveConfigPath,
+			ConfigPath:    configPath,
 			MigrationsFS:  migrationsFS,
 			MigrationsDir: "migrations",
 		}

@@ -10,26 +10,27 @@ import (
 )
 
 // applyDevMode mutates Options to run the server in developer mode:
-// ephemeral SQLite file, auto-generated 32-byte secret when missing,
-// dev inbox email sender, dev routes enabled.
+// resettable dev.db beside the working dir, auto-generated 32-byte secret,
+// dev inbox email capture (wired in server.Build), relaxed defaults.
 func applyDevMode(opts *server.Options, reset bool) error {
 	opts.DevMode = true
 
-	// Point at a resettable dev.db alongside the working directory.
 	if reset {
-		if err := os.Remove("./dev.db"); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("reset dev.db: %w", err)
+		for _, suffix := range []string{"", "-wal", "-shm"} {
+			p := "./dev.db" + suffix
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("reset %s: %w", p, err)
+			}
 		}
 	}
 
-	// Auto-generate a secret so `shark serve --dev` works without any config.
 	secret, err := randomHex(32)
 	if err != nil {
 		return fmt.Errorf("generate dev secret: %w", err)
 	}
 	opts.SecretOverride = secret
+	opts.StoragePathOverride = "./dev.db"
 
-	// Email sender injection is wired in W8 once DevInboxSender exists.
 	return nil
 }
 

@@ -24,11 +24,11 @@ import (
 
 // Options controls how Run assembles the server. Fields not set receive defaults.
 type Options struct {
-	ConfigPath   string
+	ConfigPath    string
 	MigrationsFS  embed.FS
 	MigrationsDir string
 
-	// DevMode enables ephemeral developer ergonomics: in-inbox email capture,
+	// DevMode enables ephemeral developer ergonomics: in-db email capture,
 	// relaxed CORS, auto-generated secret if missing, and the /admin/dev/* routes.
 	DevMode bool
 
@@ -36,8 +36,12 @@ type Options struct {
 	// Used by --dev to auto-generate a 32-byte secret.
 	SecretOverride string
 
+	// StoragePathOverride, when non-empty, replaces cfg.Storage.Path. Used by
+	// --dev to point at ./dev.db regardless of the YAML config.
+	StoragePathOverride string
+
 	// EmailSenderOverride, when non-nil, replaces the sender chosen from cfg.SMTP.
-	// Used by --dev to inject DevInboxSender.
+	// Used by tests to inject MemoryEmailSender.
 	EmailSenderOverride email.Sender
 }
 
@@ -75,6 +79,17 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	cfg.Server.DevMode = opts.DevMode
 
+	if opts.StoragePathOverride != "" {
+		cfg.Storage.Path = opts.StoragePathOverride
+	}
+	if opts.DevMode {
+		// Wide-open CORS is the standard dev ergonomic — never runs in prod
+		// because --dev is only set via the CLI flag, not YAML.
+		if len(cfg.Server.CORSOrigins) == 0 {
+			cfg.Server.CORSOrigins = []string{"*"}
+		}
+	}
+
 	dataDir := filepath.Dir(cfg.Storage.Path)
 	if dataDir != "" && dataDir != "." {
 		if err := os.MkdirAll(dataDir, 0o755); err != nil {
@@ -102,7 +117,12 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	sender := opts.EmailSenderOverride
 	if sender == nil {
-		sender = chooseEmailSender(cfg)
+		if opts.DevMode {
+			slog.Info("dev mode: using in-db dev inbox for email capture")
+			sender = email.NewDevInboxSender(store)
+		} else {
+			sender = chooseEmailSender(cfg)
+		}
 	}
 
 	apiSrv := api.NewServer(store, cfg, api.WithEmailSender(sender))
