@@ -61,7 +61,7 @@ func TestRenderYAMLContainsAnswers(t *testing.T) {
 	for _, want := range []string{
 		"https://auth.example.com",
 		"admin@example.com",
-		"smtp.resend.com",
+		`provider: "resend"`,
 		`secret: "a` + strings.Repeat("b", 63) + `"`,
 	} {
 		if !strings.Contains(out, want) {
@@ -73,10 +73,21 @@ func TestRenderYAMLContainsAnswers(t *testing.T) {
 func TestRenderYAMLNoSMTP(t *testing.T) {
 	a := initAnswers{BaseURL: "http://localhost:8080", AdminEmail: "x@y.z", SMTPProvider: "none"}
 	out := renderYAML(a, strings.Repeat("x", 64))
-	if strings.Contains(out, "smtp.resend.com") {
-		t.Error("none provider should not emit resend SMTP block")
+	if strings.Contains(out, `provider: "resend"`) {
+		t.Error("none provider should not emit resend email block")
 	}
-	if !strings.Contains(out, "run with --dev") {
-		t.Error("none provider should hint at --dev")
+	if !strings.Contains(out, "shark serve --dev") {
+		t.Error("none provider should hint at `shark serve --dev`")
+	}
+}
+
+func TestRenderYAMLIsShort(t *testing.T) {
+	// Phase 2 constraint (ATTACK.md): config-yaml settable with only 3 minimum
+	// vars. Generated file stays under 20 lines so new users aren't intimidated.
+	a := initAnswers{BaseURL: "http://localhost:8080", AdminEmail: "x@y.z", SMTPProvider: "resend"}
+	out := renderYAML(a, strings.Repeat("x", 64))
+	lines := strings.Count(out, "\n")
+	if lines > 20 {
+		t.Errorf("generated YAML is %d lines; phase 2 requires minimal (≤20) config", lines)
 	}
 }

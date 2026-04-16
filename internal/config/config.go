@@ -22,11 +22,39 @@ type Config struct {
 	MagicLink     MagicLinkConfig     `koanf:"magic_link"`
 	PasswordReset PasswordResetConfig `koanf:"password_reset"`
 	SMTP          SMTPConfig          `koanf:"smtp"`
+	Email         EmailConfig         `koanf:"email"`
 	MFA       MFAConfig       `koanf:"mfa"`
 	Social    SocialConfig    `koanf:"social"`
 	SSO       SSOConfig       `koanf:"sso"`
 	APIKeys   APIKeysConfig   `koanf:"api_keys"`
 	Audit     AuditConfig     `koanf:"audit"`
+}
+
+// EmailProvider enum. `dev` is auto-selected by --dev when unset.
+const (
+	EmailProviderShark  = "shark"
+	EmailProviderResend = "resend"
+	EmailProviderSMTP   = "smtp"
+	EmailProviderDev    = "dev"
+)
+
+// EmailConfig holds provider-agnostic email settings. Introduced in phase 2;
+// coexists with the legacy SMTPConfig which is kept as a deprecated alias so
+// existing deployments don't break.
+//
+// Resolve() fills in the provider (and copies legacy smtp.* if email.* is empty)
+// and is called once during Load.
+type EmailConfig struct {
+	Provider string `koanf:"provider"` // shark | resend | smtp | dev
+	APIKey   string `koanf:"api_key"`
+	From     string `koanf:"from"`
+	FromName string `koanf:"from_name"`
+
+	// SMTP-only fields (only read when Provider=="smtp").
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -270,7 +298,50 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
+	cfg.Email.Resolve(&cfg.SMTP)
+
 	return &cfg, nil
+}
+
+// Resolve fills in missing email fields from the legacy smtp: block so existing
+// deployments keep working without changes. Picks a provider when absent:
+//   - smtp.host == "smtp.resend.com" -> provider=resend
+//   - smtp.host set                  -> provider=smtp
+//   - everything else                -> left empty (startup validator refuses)
+//
+// Callers can then switch on cfg.Email.Provider.
+func (e *EmailConfig) Resolve(legacy *SMTPConfig) {
+	if e.Provider == "" {
+		switch {
+		case legacy != nil && legacy.Host == "smtp.resend.com":
+			e.Provider = EmailProviderResend
+			if e.APIKey == "" {
+				e.APIKey = legacy.Password
+			}
+		case legacy != nil && legacy.Host != "":
+			e.Provider = EmailProviderSMTP
+			if e.Host == "" {
+				e.Host = legacy.Host
+			}
+			if e.Port == 0 {
+				e.Port = legacy.Port
+			}
+			if e.Username == "" {
+				e.Username = legacy.Username
+			}
+			if e.Password == "" {
+				e.Password = legacy.Password
+			}
+		}
+	}
+	if legacy != nil {
+		if e.From == "" {
+			e.From = legacy.From
+		}
+		if e.FromName == "" {
+			e.FromName = legacy.FromName
+		}
+	}
 }
 
 // parseDuration parses a duration string that supports "d" suffix for days,

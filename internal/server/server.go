@@ -84,6 +84,18 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	cfg.Server.DevMode = opts.DevMode
 
+	// Phase 2: enforce the 3 minimum YAML vars in production. --dev bypasses
+	// because it generates its own secret, uses dev.db, and captures email
+	// via the dev inbox.
+	if !opts.DevMode {
+		if cfg.Server.BaseURL == "" {
+			return nil, fmt.Errorf("server.base_url is required (phase 2 minimum config)")
+		}
+		if cfg.Email.Provider == "" && cfg.SMTP.Host == "" {
+			return nil, fmt.Errorf("email is not configured: set email.provider + email.api_key, or legacy smtp.*, or run with --dev")
+		}
+	}
+
 	if opts.StoragePathOverride != "" {
 		cfg.Storage.Path = opts.StoragePathOverride
 	}
@@ -231,13 +243,47 @@ func bootstrapAdminKey(ctx context.Context, store *storage.SQLiteStore) (string,
 	return fullKey, nil
 }
 
+// chooseEmailSender dispatches on cfg.Email.Provider. The legacy smtp: block is
+// still read by config.Load via EmailConfig.Resolve() so existing deployments
+// don't need to edit their YAML.
 func chooseEmailSender(cfg *config.Config) email.Sender {
-	if cfg.SMTP.Host == "smtp.resend.com" {
+	switch cfg.Email.Provider {
+	case config.EmailProviderResend:
 		slog.Info("using Resend HTTP API for email delivery")
-		return email.NewResendSender(cfg.SMTP)
+		resendCfg := cfg.SMTP
+		resendCfg.Host = "smtp.resend.com"
+		if cfg.Email.APIKey != "" {
+			resendCfg.Password = cfg.Email.APIKey
+		}
+		if cfg.Email.From != "" {
+			resendCfg.From = cfg.Email.From
+		}
+		if cfg.Email.FromName != "" {
+			resendCfg.FromName = cfg.Email.FromName
+		}
+		return email.NewResendSender(resendCfg)
+	case config.EmailProviderShark:
+		slog.Info("using shark.email relay (scaffolding — not yet live)")
+		return email.NewSharkEmailSender(cfg.Email.APIKey, cfg.Email.From, cfg.Email.FromName)
+	case config.EmailProviderSMTP:
+		slog.Info("using SMTP for email delivery")
+		smtpCfg := cfg.SMTP
+		if cfg.Email.Host != "" {
+			smtpCfg.Host = cfg.Email.Host
+			smtpCfg.Port = cfg.Email.Port
+			smtpCfg.Username = cfg.Email.Username
+			smtpCfg.Password = cfg.Email.Password
+			smtpCfg.From = cfg.Email.From
+			smtpCfg.FromName = cfg.Email.FromName
+		}
+		return email.NewSMTPSender(smtpCfg)
+	default:
+		slog.Warn("no email provider configured — using legacy SMTP dispatch", "host", cfg.SMTP.Host)
+		if cfg.SMTP.Host == "smtp.resend.com" {
+			return email.NewResendSender(cfg.SMTP)
+		}
+		return email.NewSMTPSender(cfg.SMTP)
 	}
-	slog.Info("using SMTP for email delivery")
-	return email.NewSMTPSender(cfg.SMTP)
 }
 
 func printAdminKey(key string) {
