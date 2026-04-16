@@ -100,6 +100,9 @@ func (s *Server) handleRevokeMySession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditSessionRevoke(r.Context(), "user", userID, userID, sessID, ipOf(r), uaOf(r))
+	s.emit(r.Context(), storage.WebhookEventSessionRevoked, map[string]string{
+		"session_id": sessID, "user_id": userID, "revoked_by": "user",
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Session revoked"})
 }
@@ -180,6 +183,9 @@ func (s *Server) handleAdminDeleteSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.auditSessionRevoke(r.Context(), "admin", actor, sess.UserID, sessID, ipOf(r), uaOf(r))
+	s.emit(r.Context(), storage.WebhookEventSessionRevoked, map[string]string{
+		"session_id": sessID, "user_id": sess.UserID, "revoked_by": "admin",
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Session revoked"})
 }
@@ -220,11 +226,15 @@ func (s *Server) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Granular audit: one entry per revoked session so compliance review can
-	// reconstruct exactly which device tokens were invalidated.
+	// Granular audit + emission: one entry per revoked session so compliance
+	// review and downstream consumers can reconstruct exactly which device
+	// tokens were invalidated.
 	ip, ua := ipOf(r), uaOf(r)
 	for _, id := range ids {
 		s.auditSessionRevoke(r.Context(), "admin", actor, userID, id, ip, ua)
+		s.emit(r.Context(), storage.WebhookEventSessionRevoked, map[string]string{
+			"session_id": id, "user_id": userID, "revoked_by": "admin",
+		})
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{

@@ -96,6 +96,9 @@ func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 	}
 
 	s.auditOrg(r.Context(), userID, "organization.create", org.ID, ipOf(r), uaOf(r))
+	s.emit(r.Context(), storage.WebhookEventOrgCreated, map[string]any{
+		"id": org.ID, "name": org.Name, "slug": org.Slug, "created_by": userID,
+	})
 
 	writeJSON(w, http.StatusCreated, orgToResponse(org))
 }
@@ -442,6 +445,12 @@ func (s *Server) handleAcceptOrgInvitation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.auditOrg(r.Context(), userID, "organization.invitation.accept", inv.OrganizationID, ipOf(r), uaOf(r))
+	s.emit(r.Context(), storage.WebhookEventOrgMemberAdded, map[string]any{
+		"organization_id": inv.OrganizationID,
+		"user_id":         userID,
+		"role":            inv.Role,
+		"via":             "invitation",
+	})
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Invitation accepted", "organization_id": inv.OrganizationID})
 }
 

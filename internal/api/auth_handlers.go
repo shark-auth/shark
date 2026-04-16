@@ -172,6 +172,8 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
+	s.emit(r.Context(), storage.WebhookEventUserCreated, userPublic(user))
+
 	writeJSON(w, http.StatusCreated, userToResponse(user))
 }
 

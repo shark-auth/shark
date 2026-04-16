@@ -124,6 +124,8 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.emit(r.Context(), storage.WebhookEventUserDeleted, map[string]string{"id": id})
+
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "User deleted",
 	})
@@ -220,6 +222,8 @@ func (s *Server) handleDeleteMe(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	s.emit(r.Context(), storage.WebhookEventUserDeleted, map[string]string{"id": userID})
 
 	// Clear session cookie
 	s.SessionManager.ClearSessionCookie(w)

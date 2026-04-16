@@ -161,6 +161,40 @@ func TestWebhookDeliveriesListPaginated(t *testing.T) {
 	}
 }
 
+// TestSignupEmitsUserCreatedWebhook verifies the emission hook in the signup
+// handler fans out to a registered webhook.
+func TestSignupEmitsUserCreatedWebhook(t *testing.T) {
+	var hit atomic.Int32
+	var capturedEvent atomic.Value // string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedEvent.Store(r.Header.Get("X-Shark-Event"))
+		hit.Add(1)
+		w.WriteHeader(http.StatusOK)
+	})
+	ts := testServerWithDispatcher(t, handler)
+
+	createResp := ts.PostJSONWithAdminKey("/api/v1/webhooks", map[string]any{
+		"url":    os.Getenv("SHARK_TEST_UPSTREAM"),
+		"events": []string{"user.created"},
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create webhook: %d", createResp.StatusCode)
+	}
+
+	signupResp := ts.PostJSON("/api/v1/auth/signup", map[string]string{
+		"email": "webhooked@x.io", "password": "Hunter2Hunter2",
+	})
+	signupResp.Body.Close()
+	if signupResp.StatusCode != http.StatusCreated {
+		t.Fatalf("signup: %d", signupResp.StatusCode)
+	}
+
+	waitForAPI(t, func() bool { return hit.Load() >= 1 })
+	if got := capturedEvent.Load().(string); got != "user.created" {
+		t.Errorf("X-Shark-Event: %q", got)
+	}
+}
+
 // waitForAPI polls for up to 3s.
 func waitForAPI(t *testing.T, cond func() bool) {
 	t.Helper()
