@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestAskQuestionsDefaults(t *testing.T) {
-	stdin := strings.NewReader("\n\n\n") // accept all defaults
+func TestAskQuestionsDefault(t *testing.T) {
+	stdin := strings.NewReader("\n") // accept default
 	var out bytes.Buffer
 	a, err := askQuestions(stdin, &out)
 	if err != nil {
@@ -16,16 +16,10 @@ func TestAskQuestionsDefaults(t *testing.T) {
 	if a.BaseURL != "http://localhost:8080" {
 		t.Errorf("BaseURL default: got %q", a.BaseURL)
 	}
-	if a.AdminEmail != "" {
-		t.Errorf("AdminEmail default: got %q", a.AdminEmail)
-	}
-	if a.SMTPProvider != "resend" {
-		t.Errorf("SMTPProvider default: got %q", a.SMTPProvider)
-	}
 }
 
 func TestAskQuestionsCustom(t *testing.T) {
-	stdin := strings.NewReader("https://auth.example.com\nadmin@example.com\nnone\n")
+	stdin := strings.NewReader("https://auth.example.com\n")
 	var out bytes.Buffer
 	a, err := askQuestions(stdin, &out)
 	if err != nil {
@@ -34,34 +28,14 @@ func TestAskQuestionsCustom(t *testing.T) {
 	if a.BaseURL != "https://auth.example.com" {
 		t.Errorf("BaseURL: got %q", a.BaseURL)
 	}
-	if a.AdminEmail != "admin@example.com" {
-		t.Errorf("AdminEmail: got %q", a.AdminEmail)
-	}
-	if a.SMTPProvider != "none" {
-		t.Errorf("SMTPProvider: got %q", a.SMTPProvider)
-	}
 }
 
-func TestAskQuestionsInvalidProvider(t *testing.T) {
-	stdin := strings.NewReader("\n\nmailgun\n")
-	var out bytes.Buffer
-	_, err := askQuestions(stdin, &out)
-	if err == nil {
-		t.Fatal("expected error for invalid provider")
-	}
-}
-
-func TestRenderYAMLContainsAnswers(t *testing.T) {
-	a := initAnswers{
-		BaseURL:      "https://auth.example.com",
-		AdminEmail:   "admin@example.com",
-		SMTPProvider: "resend",
-	}
+func TestRenderYAMLContainsRequiredVars(t *testing.T) {
+	a := initAnswers{BaseURL: "https://auth.example.com"}
 	out := renderYAML(a, "a"+strings.Repeat("b", 63))
 	for _, want := range []string{
 		"https://auth.example.com",
-		"admin@example.com",
-		`provider: "resend"`,
+		`provider: "shark"`,
 		`secret: "a` + strings.Repeat("b", 63) + `"`,
 	} {
 		if !strings.Contains(out, want) {
@@ -70,24 +44,46 @@ func TestRenderYAMLContainsAnswers(t *testing.T) {
 	}
 }
 
-func TestRenderYAMLNoSMTP(t *testing.T) {
-	a := initAnswers{BaseURL: "http://localhost:8080", AdminEmail: "x@y.z", SMTPProvider: "none"}
+func TestRenderYAMLHasTestingNotice(t *testing.T) {
+	// The generated file must point operators at how to switch from the
+	// shark.email testing tier to a production provider.
+	a := initAnswers{BaseURL: "http://localhost:8080"}
 	out := renderYAML(a, strings.Repeat("x", 64))
-	if strings.Contains(out, `provider: "resend"`) {
-		t.Error("none provider should not emit resend email block")
-	}
-	if !strings.Contains(out, "shark serve --dev") {
-		t.Error("none provider should hint at `shark serve --dev`")
+	for _, want := range []string{
+		"shark email setup",
+		"Settings → Email",
+		"sharkauth.com/docs",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered YAML missing switch-provider hint %q", want)
+		}
 	}
 }
 
 func TestRenderYAMLIsShort(t *testing.T) {
-	// Phase 2 constraint (ATTACK.md): config-yaml settable with only 3 minimum
-	// vars. Generated file stays under 20 lines so new users aren't intimidated.
-	a := initAnswers{BaseURL: "http://localhost:8080", AdminEmail: "x@y.z", SMTPProvider: "resend"}
+	// Phase 2 constraint: minimal config. Generated file stays under 20 lines.
+	a := initAnswers{BaseURL: "http://localhost:8080"}
 	out := renderYAML(a, strings.Repeat("x", 64))
 	lines := strings.Count(out, "\n")
 	if lines > 20 {
-		t.Errorf("generated YAML is %d lines; phase 2 requires minimal (≤20) config", lines)
+		t.Errorf("generated YAML is %d lines; phase 2 requires minimal (≤20)", lines)
+	}
+}
+
+func TestPostInitNoticeMentionsAllThreeSwitchPaths(t *testing.T) {
+	var out bytes.Buffer
+	printPostInitNotice(&out)
+	body := out.String()
+	for _, want := range []string{
+		"shark.email",
+		"testing",
+		"sharkauth.yaml",
+		"shark email setup",
+		"admin dashboard",
+		"sharkauth.com/docs",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("post-init notice missing %q", want)
+		}
 	}
 }
