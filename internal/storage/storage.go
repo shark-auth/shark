@@ -47,6 +47,29 @@ type Store interface {
 	GetDevEmail(ctx context.Context, id string) (*DevEmail, error)
 	DeleteAllDevEmails(ctx context.Context) error
 
+	// Organizations
+	CreateOrganization(ctx context.Context, o *Organization) error
+	GetOrganizationByID(ctx context.Context, id string) (*Organization, error)
+	GetOrganizationBySlug(ctx context.Context, slug string) (*Organization, error)
+	UpdateOrganization(ctx context.Context, o *Organization) error
+	DeleteOrganization(ctx context.Context, id string) error
+	ListOrganizationsByUserID(ctx context.Context, userID string) ([]*Organization, error)
+
+	// Organization members
+	CreateOrganizationMember(ctx context.Context, m *OrganizationMember) error
+	GetOrganizationMember(ctx context.Context, orgID, userID string) (*OrganizationMember, error)
+	UpdateOrganizationMemberRole(ctx context.Context, orgID, userID, role string) error
+	DeleteOrganizationMember(ctx context.Context, orgID, userID string) error
+	ListOrganizationMembers(ctx context.Context, orgID string) ([]*OrganizationMemberWithUser, error)
+	CountOrganizationMembers(ctx context.Context, orgID string) (int, error)
+	CountOrganizationsByRole(ctx context.Context, userID, role string) (int, error)
+
+	// Organization invitations
+	CreateOrganizationInvitation(ctx context.Context, inv *OrganizationInvitation) error
+	GetOrganizationInvitationByTokenHash(ctx context.Context, tokenHash string) (*OrganizationInvitation, error)
+	MarkOrganizationInvitationAccepted(ctx context.Context, id string, acceptedAt string) error
+	ListOrganizationInvitationsByOrgID(ctx context.Context, orgID string) ([]*OrganizationInvitation, error)
+
 	// OAuthAccounts
 	CreateOAuthAccount(ctx context.Context, acct *OAuthAccount) error
 	GetOAuthAccountByProviderID(ctx context.Context, provider, providerID string) (*OAuthAccount, error)
@@ -293,6 +316,55 @@ type Migration struct {
 	Errors        string  `json:"errors"`
 	CreatedAt     string  `json:"created_at"`
 	CompletedAt   *string `json:"completed_at,omitempty"`
+}
+
+// Organization roles. Canonical list lives here so both storage and API code
+// reference the same constants; CHECK constraint in SQL enforces the same set.
+const (
+	OrgRoleOwner  = "owner"
+	OrgRoleAdmin  = "admin"
+	OrgRoleMember = "member"
+)
+
+// Organization represents a tenant/team. Multi-tenancy unit for B2B use.
+type Organization struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	Metadata  string `json:"metadata"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// OrganizationMember is the (org, user) membership row with a role.
+type OrganizationMember struct {
+	OrganizationID string `json:"organization_id"`
+	UserID         string `json:"user_id"`
+	Role           string `json:"role"`
+	JoinedAt       string `json:"joined_at"`
+}
+
+// OrganizationMemberWithUser is the member row plus joined user email/name
+// so handlers can avoid N+1 lookups when rendering the member list.
+type OrganizationMemberWithUser struct {
+	OrganizationMember
+	UserEmail string `json:"user_email"`
+	UserName  string `json:"user_name,omitempty"`
+}
+
+// OrganizationInvitation is a pending invite. The token is never stored in
+// plaintext — only its SHA-256 hash — so a DB leak can't hand attackers
+// valid invitation links.
+type OrganizationInvitation struct {
+	ID             string  `json:"id"`
+	OrganizationID string  `json:"organization_id"`
+	Email          string  `json:"email"`
+	Role           string  `json:"role"`
+	TokenHash      string  `json:"-"`
+	InvitedBy      *string `json:"invited_by,omitempty"`
+	AcceptedAt     *string `json:"accepted_at,omitempty"`
+	ExpiresAt      string  `json:"expires_at"`
+	CreatedAt      string  `json:"created_at"`
 }
 
 // DevEmail represents a single captured email in dev mode.
