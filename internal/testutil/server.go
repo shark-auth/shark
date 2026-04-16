@@ -16,6 +16,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/api"
 	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
@@ -244,6 +245,51 @@ func (ts *TestServer) SignupAndVerify(email, password, name string) string {
 	}
 
 	return userID
+}
+
+// NewTestServerDev is identical to NewTestServer but enables DevMode and wires
+// DevInboxSender so the /admin/dev/* routes are mounted and email flows are
+// captured to the dev_emails table.
+func NewTestServerDev(t *testing.T) *TestServer {
+	t.Helper()
+
+	store := NewTestDB(t)
+	cfg := TestConfig()
+	cfg.Server.DevMode = true
+
+	dev := email.NewDevInboxSender(store)
+	srv := api.NewServer(store, cfg, api.WithEmailSender(dev))
+
+	ts := httptest.NewServer(srv.Router)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
+	if err != nil {
+		t.Fatalf("generating admin key: %v", err)
+	}
+	id, _ := gonanoid.New()
+	now := time.Now().UTC().Format(time.RFC3339)
+	adminKey := &storage.APIKey{
+		ID: "key_" + id, Name: "test-admin", KeyHash: keyHash,
+		KeyPrefix: keyPrefix, KeySuffix: keySuffix,
+		Scopes: `["*"]`, RateLimit: 100000, CreatedAt: now,
+	}
+	if err := store.CreateAPIKey(context.Background(), adminKey); err != nil {
+		t.Fatalf("creating test admin key: %v", err)
+	}
+
+	t.Cleanup(func() { ts.Close() })
+
+	return &TestServer{
+		Server: ts, Client: client, Store: store, Config: cfg, T: t,
+		APIServer: srv, AdminKey: fullKey,
+	}
 }
 
 // NewTestServerWithHandler creates a test HTTP server with the given handler.

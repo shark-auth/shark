@@ -224,6 +224,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 			// SSO auto-route
 			r.Get("/sso", s.SSOHandlers.SSOAutoRoute)
+
+			// Self-service session management
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireSessionFunc(sm))
+				r.Get("/sessions", s.handleListMySessions)
+				r.Delete("/sessions/{id}", s.handleRevokeMySession)
+			})
 		})
 
 		// Roles (admin)
@@ -263,6 +270,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{id}/roles", s.handleListUserRoles)
 			r.Get("/{id}/permissions", s.handleListUserPermissions)
 			r.Get("/{id}/audit-logs", s.handleUserAuditLogs)
+			r.Get("/{id}/sessions", s.handleListUserSessions)
+			r.Delete("/{id}/sessions", s.handleRevokeUserSessions)
 		})
 
 		// SSO connections (admin + public endpoints)
@@ -309,6 +318,21 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/auth0", notImplemented)
 			r.Get("/{id}", notImplemented)
+		})
+
+		// Admin (stats + sessions + dev-mode inbox)
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
+			r.Get("/stats", s.handleAdminStats)
+			r.Get("/stats/trends", s.handleAdminStatsTrends)
+			r.Get("/sessions", s.handleAdminListSessions)
+			r.Delete("/sessions/{id}", s.handleAdminDeleteSession)
+
+			if cfg.Server.DevMode {
+				r.Get("/dev/emails", s.handleListDevEmails)
+				r.Get("/dev/emails/{id}", s.handleGetDevEmail)
+				r.Delete("/dev/emails", s.handleDeleteAllDevEmails)
+			}
 		})
 	})
 
