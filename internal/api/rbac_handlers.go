@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,22 @@ import (
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
+
+// auditRBAC logs a global (non-org) RBAC event.
+func (s *Server) auditRBAC(ctx context.Context, action, targetType, targetID, ip, ua string) {
+	if s.AuditLogger == nil {
+		return
+	}
+	_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
+		ActorType:  "service",
+		Action:     action,
+		TargetType: targetType,
+		TargetID:   targetID,
+		IP:         ip,
+		UserAgent:  ua,
+		Status:     "success",
+	})
+}
 
 // --- Request/Response types ---
 
@@ -139,6 +156,7 @@ func (s *Server) handleCreateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.auditRBAC(r.Context(), "rbac.role.create", "role", role.ID, ipOf(r), uaOf(r))
 	writeJSON(w, http.StatusCreated, roleToResponse(role))
 }
 
@@ -407,6 +425,7 @@ func (s *Server) handleAttachPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.auditRBAC(r.Context(), "rbac.permission.attach", "role", roleID, ipOf(r), uaOf(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -422,6 +441,7 @@ func (s *Server) handleDetachPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.auditRBAC(r.Context(), "rbac.permission.detach", "role", roleID, ipOf(r), uaOf(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -486,6 +506,7 @@ func (s *Server) handleAssignRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.auditRBAC(r.Context(), "rbac.role.assign", "user", userID, ipOf(r), uaOf(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -501,6 +522,7 @@ func (s *Server) handleRemoveRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.auditRBAC(r.Context(), "rbac.role.revoke", "user", userID, ipOf(r), uaOf(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 

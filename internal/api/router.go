@@ -13,7 +13,7 @@ import (
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/rbac"
+	rbacpkg "github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/sso"
 	"github.com/sharkauth/sharkauth/internal/storage"
 	"github.com/sharkauth/sharkauth/internal/webhook"
@@ -31,7 +31,7 @@ type Server struct {
 	OAuthManager     *auth.OAuthManager
 	MagicLinkManager *auth.MagicLinkManager
 	JWTManager       *jwtpkg.Manager
-	RBAC             *rbac.RBACManager
+	RBAC             *rbacpkg.RBACManager
 	AuditLogger      *audit.Logger
 	RateLimiter      *auth.TokenBucket
 	LockoutManager   *auth.LockoutManager
@@ -106,7 +106,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	s.initOAuthManager()
 
 	// Initialize RBAC manager
-	s.RBAC = rbac.NewRBACManager(store)
+	s.RBAC = rbacpkg.NewRBACManager(store)
 
 	// Initialize Audit logger
 	s.AuditLogger = audit.NewLogger(store)
@@ -262,19 +262,34 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			})
 		})
 
-		// Organizations (user-facing — session cookie auth, per-handler role gates)
+		// Organizations (user-facing — session cookie auth)
 		r.Route("/organizations", func(r chi.Router) {
 			r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 			r.Post("/", s.handleCreateOrganization)
 			r.Get("/", s.handleListMyOrganizations)
-			r.Get("/{id}", s.handleGetOrganization)
-			r.Patch("/{id}", s.handleUpdateOrganization)
-			r.Delete("/{id}", s.handleDeleteOrganization)
-			r.Get("/{id}/members", s.handleListOrganizationMembers)
-			r.Patch("/{id}/members/{uid}", s.handleUpdateOrganizationMemberRole)
-			r.Delete("/{id}/members/{uid}", s.handleRemoveOrganizationMember)
-			r.Post("/{id}/invitations", s.handleCreateOrgInvitation)
 			r.Post("/invitations/{token}/accept", s.handleAcceptOrgInvitation)
+
+			// Per-org routes — all under {id} for backward compatibility.
+			// RequireOrgPermission reads {id} as fallback when {org_id} is absent.
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", s.handleGetOrganization)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "org", "update")).Patch("/", s.handleUpdateOrganization)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "org", "delete")).Delete("/", s.handleDeleteOrganization)
+				r.Get("/members", s.handleListOrganizationMembers)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "members", "update_role")).Patch("/members/{uid}", s.handleUpdateOrganizationMemberRole)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "members", "remove")).Delete("/members/{uid}", s.handleRemoveOrganizationMember)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "members", "invite")).Post("/invitations", s.handleCreateOrgInvitation)
+
+				// Org RBAC management routes (org ID comes from parent {id} param).
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "roles", "read")).Get("/roles", s.handleListOrgRoles)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "roles", "create")).Post("/roles", s.handleCreateOrgRole)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "roles", "read")).Get("/roles/{role_id}", s.handleGetOrgRole)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "roles", "create")).Patch("/roles/{role_id}", s.handleUpdateOrgRole)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "roles", "create")).Delete("/roles/{role_id}", s.handleDeleteOrgRole)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "roles", "assign")).Post("/members/{user_id}/roles/{role_id}", s.handleGrantOrgRole)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "roles", "revoke")).Delete("/members/{user_id}/roles/{role_id}", s.handleRevokeOrgRole)
+				r.With(rbacpkg.RequireOrgPermission(s.RBAC, "members", "read")).Get("/members/{user_id}/permissions", s.handleGetEffectiveOrgPerms)
+			})
 		})
 
 		// Roles (admin)

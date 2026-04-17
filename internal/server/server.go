@@ -20,6 +20,7 @@ import (
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/storage"
 	"github.com/sharkauth/sharkauth/internal/webhook"
 )
@@ -129,6 +130,15 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 	slog.Info("migrations complete")
+
+	// Seed global default roles (admin + member with wildcard perm). Idempotent.
+	seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer seedCancel()
+	rbacMgr := rbac.NewRBACManager(store)
+	if err := rbacMgr.SeedDefaultRoles(seedCtx); err != nil {
+		slog.Warn("rbac: failed to seed default roles", "error", err)
+		// Non-fatal: server continues; roles will be missing until next boot fixes it.
+	}
 
 	adminKey, err := bootstrapAdminKey(ctx, store)
 	if err != nil {

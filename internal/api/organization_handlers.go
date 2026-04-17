@@ -95,6 +95,20 @@ func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Seed 3 builtin org roles and grant the owner role to the creator.
+	// On failure: compensate by deleting the org (user can retry).
+	if s.RBAC != nil {
+		if err := s.RBAC.SeedOrgRoles(r.Context(), org.ID); err != nil {
+			_ = s.Store.DeleteOrganization(r.Context(), org.ID)
+			internal(w, err)
+			return
+		}
+		ownerRole, err := s.Store.GetOrgRoleByName(r.Context(), org.ID, "owner")
+		if err == nil {
+			_ = s.RBAC.GrantOrgRole(r.Context(), org.ID, userID, ownerRole.ID, userID)
+		}
+	}
+
 	s.auditOrg(r.Context(), userID, "organization.create", org.ID, ipOf(r), uaOf(r))
 	s.emit(r.Context(), storage.WebhookEventOrgCreated, map[string]any{
 		"id": org.ID, "name": org.Name, "slug": org.Slug, "created_by": userID,
@@ -151,10 +165,6 @@ type updateOrgRequest struct {
 
 func (s *Server) handleUpdateOrganization(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
-	userID := mw.GetUserID(r.Context())
-	if !s.requireOrgRole(w, r.Context(), orgID, userID, storage.OrgRoleAdmin, storage.OrgRoleOwner) {
-		return
-	}
 	var req updateOrgRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -185,9 +195,6 @@ func (s *Server) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
 	userID := mw.GetUserID(r.Context())
-	if !s.requireOrgRole(w, r.Context(), orgID, userID, storage.OrgRoleOwner) {
-		return
-	}
 	if err := s.Store.DeleteOrganization(r.Context(), orgID); err != nil {
 		internal(w, err)
 		return
@@ -236,9 +243,6 @@ func (s *Server) handleUpdateOrganizationMemberRole(w http.ResponseWriter, r *ht
 	orgID := chi.URLParam(r, "id")
 	targetUserID := chi.URLParam(r, "uid")
 	actor := mw.GetUserID(r.Context())
-	if !s.requireOrgRole(w, r.Context(), orgID, actor, storage.OrgRoleAdmin, storage.OrgRoleOwner) {
-		return
-	}
 
 	var req updateMemberRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -266,20 +270,31 @@ func (s *Server) handleUpdateOrganizationMemberRole(w http.ResponseWriter, r *ht
 			return
 		}
 	}
+	oldRole := target.Role
 	if err := s.Store.UpdateOrganizationMemberRole(r.Context(), orgID, targetUserID, req.Role); err != nil {
 		internal(w, err)
 		return
 	}
+
+	// Sync org RBAC role assignments (best-effort — do not revert the membership change on failure).
+	if s.RBAC != nil && oldRole != req.Role {
+		if oldOrgRole, err := s.Store.GetOrgRoleByName(r.Context(), orgID, oldRole); err == nil {
+			_ = s.RBAC.RevokeOrgRole(r.Context(), orgID, targetUserID, oldOrgRole.ID)
+		}
+		if newOrgRole, err := s.Store.GetOrgRoleByName(r.Context(), orgID, req.Role); err == nil {
+			_ = s.RBAC.GrantOrgRole(r.Context(), orgID, targetUserID, newOrgRole.ID, actor)
+		}
+	}
+
+	// Audit: role change within organization member.
+	s.auditOrg(r.Context(), actor, "org.member.role_update", orgID, ipOf(r), uaOf(r))
+
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Role updated"})
 }
 
 func (s *Server) handleRemoveOrganizationMember(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
 	targetUserID := chi.URLParam(r, "uid")
-	actor := mw.GetUserID(r.Context())
-	if !s.requireOrgRole(w, r.Context(), orgID, actor, storage.OrgRoleAdmin, storage.OrgRoleOwner) {
-		return
-	}
 
 	target, err := s.Store.GetOrganizationMember(r.Context(), orgID, targetUserID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -324,9 +339,6 @@ type inviteResponse struct {
 func (s *Server) handleCreateOrgInvitation(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
 	actor := mw.GetUserID(r.Context())
-	if !s.requireOrgRole(w, r.Context(), orgID, actor, storage.OrgRoleAdmin, storage.OrgRoleOwner) {
-		return
-	}
 
 	var req inviteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -455,31 +467,6 @@ func (s *Server) handleAcceptOrgInvitation(w http.ResponseWriter, r *http.Reques
 }
 
 // --- Helpers ---
-
-// requireOrgRole returns true if the user has one of the allowed roles in the
-// org. Writes an error response and returns false otherwise.
-func (s *Server) requireOrgRole(w http.ResponseWriter, ctx context.Context, orgID, userID string, allowed ...string) bool {
-	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, errPayload("unauthorized", "No valid session"))
-		return false
-	}
-	m, err := s.Store.GetOrganizationMember(ctx, orgID, userID)
-	if errors.Is(err, sql.ErrNoRows) {
-		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
-		return false
-	}
-	if err != nil {
-		internal(w, err)
-		return false
-	}
-	for _, r := range allowed {
-		if m.Role == r {
-			return true
-		}
-	}
-	writeJSON(w, http.StatusForbidden, errPayload("forbidden", "Insufficient role"))
-	return false
-}
 
 func (s *Server) isOrgMember(ctx context.Context, orgID, userID string) bool {
 	if userID == "" {
