@@ -31,8 +31,8 @@ YAML docs.
 
 Phase 3 — JWT + OAuth 2.1 infrastructure (5-7 days)
 - RBAC on orgs.
+- JWT auth system.
 - Configurable session mode — cookie vs JWT (#67)
-- JWKS endpoint, signing key management, key rotation
 - This is the foundation that Agent Auth, OIDC Provider, and edge auth all share
 
 Build this once, everything after uses it.
