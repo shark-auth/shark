@@ -34,4 +34,5 @@ func init() {
 	root.AddCommand(initCmd)
 	root.AddCommand(healthCmd)
 	root.AddCommand(versionCmd)
+	root.AddCommand(keysCmd)
 }

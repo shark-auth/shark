@@ -74,11 +74,46 @@ type StorageConfig struct {
 	Path string `koanf:"path"`
 }
 
+// JWTRevocationConfig holds JWT revocation settings.
+type JWTRevocationConfig struct {
+	CheckPerRequest bool `koanf:"check_per_request"`
+}
+
+// JWTConfig holds JWT issuance and validation settings.
+// Duration fields are stored as strings and parsed via accessor methods,
+// following the same pattern as SessionLifetime.
+type JWTConfig struct {
+	Enabled         bool                `koanf:"enabled"`
+	Mode            string              `koanf:"mode"`
+	Issuer          string              `koanf:"issuer"`
+	Audience        string              `koanf:"audience"`
+	AccessTokenTTL  string              `koanf:"access_token_ttl"`
+	RefreshTokenTTL string              `koanf:"refresh_token_ttl"`
+	ClockSkew       string              `koanf:"clock_skew"`
+	Revocation      JWTRevocationConfig `koanf:"revocation"`
+}
+
+// AccessTokenTTLDuration parses the access token TTL string into a time.Duration.
+func (j *JWTConfig) AccessTokenTTLDuration() time.Duration {
+	return parseDuration(j.AccessTokenTTL, 15*time.Minute)
+}
+
+// RefreshTokenTTLDuration parses the refresh token TTL string into a time.Duration.
+func (j *JWTConfig) RefreshTokenTTLDuration() time.Duration {
+	return parseDuration(j.RefreshTokenTTL, 30*24*time.Hour)
+}
+
+// ClockSkewDuration parses the clock skew string into a time.Duration.
+func (j *JWTConfig) ClockSkewDuration() time.Duration {
+	return parseDuration(j.ClockSkew, 30*time.Second)
+}
+
 // AuthConfig holds authentication settings.
 type AuthConfig struct {
-	SessionLifetime   string        `koanf:"session_lifetime"`
-	PasswordMinLength int           `koanf:"password_min_length"`
+	SessionLifetime   string         `koanf:"session_lifetime"`
+	PasswordMinLength int            `koanf:"password_min_length"`
 	Argon2id          Argon2idConfig `koanf:"argon2id"`
+	JWT               JWTConfig      `koanf:"jwt"`
 }
 
 // Argon2idConfig holds Argon2id password hashing parameters.
@@ -263,6 +298,14 @@ func Load(path string) (*Config, error) {
 		"api_keys.key_max_lifetime":   "365d",
 		"audit.retention":         "0",
 		"audit.cleanup_interval":  "1h",
+		// JWT defaults
+		"auth.jwt.enabled":                   true,
+		"auth.jwt.mode":                      "session",
+		"auth.jwt.audience":                  "shark",
+		"auth.jwt.access_token_ttl":          "15m",
+		"auth.jwt.refresh_token_ttl":         "30d",
+		"auth.jwt.clock_skew":                "30s",
+		"auth.jwt.revocation.check_per_request": false,
 	}
 	for key, val := range defaults {
 		if err := k.Set(key, val); err != nil {
