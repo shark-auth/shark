@@ -27,6 +27,10 @@ var (
 	ErrRevoked          = errors.New("jwt: token revoked")
 	ErrUnknownKid       = errors.New("jwt: unknown kid")
 	ErrAlgMismatch      = errors.New("jwt: algorithm mismatch")
+	// ErrRefreshToken is returned when a refresh token is presented where an
+	// access/session token is required. Callers (e.g. middleware) can detect this
+	// specific error to return an actionable error_description to the client (§2.3).
+	ErrRefreshToken = errors.New("jwt: refresh token cannot be used as access credential")
 )
 
 // Claims is the combined registered + custom claim set.
@@ -62,6 +66,12 @@ func (m *Manager) issuer() string {
 		return m.cfg.Issuer
 	}
 	return m.base
+}
+
+// SetCheckPerRequest enables or disables the per-request revocation check at
+// runtime. Useful in tests and for dynamic config reloads.
+func (m *Manager) SetCheckPerRequest(enabled bool) {
+	m.cfg.Revocation.CheckPerRequest = enabled
 }
 
 // EnsureActiveKey generates and stores an RSA keypair if none exists.
@@ -337,6 +347,11 @@ func (m *Manager) validateInternal(ctx context.Context, tokenStr string, allowRe
 	}
 
 	// Token type enforcement.
+	if claims.TokenType == "refresh" && !allowRefresh {
+		// Return a specific sentinel so the middleware can report an actionable
+		// error_description rather than a generic "invalid_token" (§2.3).
+		return nil, ErrRefreshToken
+	}
 	allowed := map[string]bool{"session": true, "access": true, "refresh": allowRefresh}
 	if !allowed[claims.TokenType] {
 		return nil, fmt.Errorf("invalid token_type %q", claims.TokenType)

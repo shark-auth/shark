@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -88,11 +89,18 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(ht
 				}
 				claims, err := jwtMgr.Validate(r.Context(), token)
 				if err != nil {
+					// Refresh token used as bearer credential — return actionable error (§2.3).
+					if errors.Is(err, jwtpkg.ErrRefreshToken) {
+						w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token",error_description="refresh token cannot be used as access credential"`)
+						http.Error(w, `{"error":"unauthorized","message":"refresh token cannot be used as access credential"}`, http.StatusUnauthorized)
+						return
+					}
 					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
 					http.Error(w, `{"error":"unauthorized","message":"Invalid token"}`, http.StatusUnauthorized)
 					return
 				}
-				// Reject refresh tokens used as access credentials (§2.3)
+				// Secondary check: belt-and-suspenders guard for any token_type not in {session, access}.
+				// In practice ErrRefreshToken above catches the refresh case before reaching here.
 				if claims.TokenType == "refresh" {
 					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token",error_description="refresh token cannot be used as access credential"`)
 					http.Error(w, `{"error":"unauthorized","message":"refresh token cannot be used as access credential"}`, http.StatusUnauthorized)
