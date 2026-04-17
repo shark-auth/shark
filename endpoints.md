@@ -240,3 +240,96 @@ shark version                    # print version (ldflags or build-info)
 ```
 
 `shark init` requires an interactive terminal — call the binary directly or set `--out` / `--force` to script it.
+
+---
+
+## JWT Authentication (Phase 3)
+
+Login responses (`POST /api/v1/auth/login`) now include JWT credentials alongside the `shark_session` cookie, when `auth.jwt.enabled: true`:
+
+- **session mode** (default): response includes `"token": "<JWT>"` — a long-lived session JWT valid for the session lifetime (default 30d). Use as `Authorization: Bearer <token>`.
+- **access_refresh mode**: response includes `"access_token": "<JWT>"` and `"refresh_token": "<JWT>"`. Access token defaults to 15m TTL; refresh token defaults to 30d TTL and is one-time-use.
+
+Bearer tokens are accepted on all authenticated endpoints (anything protected by `RequireSessionFunc`). When both a `Authorization: Bearer` header and a `shark_session` cookie are present, Bearer wins with no fallthrough on failure (RFC 6750). Refresh tokens are **rejected** as bearer credentials with an explicit `error_description`.
+
+---
+
+## Token Endpoints (Phase 3)
+
+### JWKS (public)
+
+- **Endpoint:** `GET /.well-known/jwks.json`
+- **Auth:** none — fully public
+- **Description:** RFC 7517 JWK Set. Returns all active and recently-retired signing keys. Retired keys remain in the set for `2 × access_token_ttl` to keep in-flight tokens verifiable. `Cache-Control: public, max-age=300`.
+
+### User token revocation
+
+- **Endpoint:** `POST /api/v1/auth/revoke`
+- **Auth:** session cookie or Bearer JWT
+- **Request body:** `{"token": "<JWT>"}` — optional; omit to revoke the JWT currently in context
+- **Response:** 200 OK `{"message": "Token revoked"}`
+
+### Admin JTI revocation
+
+- **Endpoint:** `POST /api/v1/admin/auth/revoke-jti`
+- **Auth:** admin Bearer key (`sk_live_*`)
+- **Request body:** `{"jti": "<jti>", "expires_at": "<RFC3339 timestamp>"}`
+- **Response:** 200 OK `{"message": "JTI revoked"}`
+
+---
+
+## Organization RBAC (Phase 3)
+
+All routes under `/api/v1/organizations/{id}/`. Require session auth (cookie or Bearer). Permission gates are enforced via `RequireOrgPermission` middleware; `{id}` is the org ID.
+
+```
+GET    /organizations/{id}/roles                          # list org roles (roles:read)
+POST   /organizations/{id}/roles                          # create custom role (roles:create)
+GET    /organizations/{id}/roles/{role_id}                # get one role (roles:read)
+PATCH  /organizations/{id}/roles/{role_id}                # update role (roles:create)
+DELETE /organizations/{id}/roles/{role_id}                # delete role (roles:create)
+POST   /organizations/{id}/members/{user_id}/roles/{role_id}    # grant role to member (roles:assign)
+DELETE /organizations/{id}/members/{user_id}/roles/{role_id}    # revoke role from member (roles:revoke)
+GET    /organizations/{id}/members/{user_id}/permissions  # effective permissions for member (members:read)
+```
+
+Default built-in roles (`owner`, `admin`, `member`) are seeded idempotently on first org creation via `SeedOrgRoles`.
+
+---
+
+## Applications (Phase 3)
+
+Admin key required (`Authorization: Bearer sk_live_*`). Routes under `/api/v1/admin/apps/`.
+
+```
+POST   /api/v1/admin/apps/              # create application; returns client_secret ONCE
+GET    /api/v1/admin/apps/              # list applications (limit, offset)
+GET    /api/v1/admin/apps/{id}          # get application by ID
+PATCH  /api/v1/admin/apps/{id}          # update name, callback/logout/origin URLs, metadata
+DELETE /api/v1/admin/apps/{id}          # delete application
+POST   /api/v1/admin/apps/{id}/rotate-secret  # rotate client_secret; new secret returned ONCE
+```
+
+A **default application** is auto-seeded on first `shark serve`. It consumes `social.redirect_url` and `magic_link.redirect_url` from config to populate its `allowed_callback_urls`. The default app enforces redirect URI validation for magic-link verify and OAuth callbacks. `client_id` uses the `shark_app_` prefix; `id` uses the `app_` prefix.
+
+---
+
+## CLI (Phase 3)
+
+Added to the Phase 2 CLI commands:
+
+```bash
+# Application management
+shark app create --name "My App" [--callback URL] [--logout URL] [--origin URL]
+shark app list
+shark app show <id>
+shark app update <id> [--name ...] [--callback URL] [--logout URL] [--origin URL]
+shark app rotate-secret <id>
+shark app delete <id>
+
+# JWT key management
+shark keys generate-jwt              # generate initial RS256 keypair (fails if active key exists)
+shark keys generate-jwt --rotate     # retire active key(s) and generate a new one
+```
+
+`shark app create` prints `client_id` and `client_secret` once on creation — save the secret, it is not retrievable after. `shark keys generate-jwt` is optional at startup; `shark serve` calls `EnsureActiveKey` automatically.

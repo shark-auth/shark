@@ -37,6 +37,8 @@ Phase 3 — JWT + OAuth 2.1 infrastructure (5-7 days)
 
 Build this once, everything after uses it.
 
+Done.
+
 ### Redirect URI allowlist (Shark Cloud blocker)
 
 Today: `server.base_url` is single string. Used for magic-link/email-verify URLs,

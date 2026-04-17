@@ -382,6 +382,18 @@ shark serve --dev                   # dev mode: ./dev.db, auto secret, dev inbox
 shark serve --dev --reset           # wipe ./dev.db before starting
 shark health --url http://localhost:8080   # probe /healthz
 shark version                       # print version (ldflags or module build-info)
+
+# Application management (Phase 3)
+shark app create --name "My App" [--callback URL] [--logout URL] [--origin URL]
+shark app list                      # list all registered applications
+shark app show <id>                 # show application details
+shark app update <id> [--name ...] [--callback URL] [--logout URL] [--origin URL]
+shark app rotate-secret <id>        # rotate client_secret (new secret shown once)
+shark app delete <id>               # delete application
+
+# JWT key management (Phase 3)
+shark keys generate-jwt             # generate initial RS256 keypair
+shark keys generate-jwt --rotate    # retire active key(s) and generate a new one
 ```
 
 `shark init` asks one question (base URL — defaults to `http://localhost:8080`) and writes a ready-to-run `sharkauth.yaml`. The 32-byte `secret` is auto-generated and email defaults to the **shark.email testing tier** so the server boots end-to-end with zero extra setup. Requires an interactive terminal. On first `shark serve`, the admin API key is generated and printed to stdout — save it, it is not shown again.
@@ -414,6 +426,9 @@ shark version                       # print version (ldflags or module build-inf
 | `whd_` | webhook delivery |
 | `sk_live_` | API key (client-facing) |
 | `whsec_` | webhook signing secret (client-facing) |
+| `app_` | application |
+| `shark_app_` | application client ID (client-facing) |
+| `orgrole_` | org role |
 
 ### schema
 
@@ -574,6 +589,34 @@ audit:
 # On first `shark serve`, an admin key (scope: *) is generated and printed to stdout.
 # Use: Authorization: Bearer sk_live_...
 ```
+
+### JWT configuration
+
+Phase 3 ships RS256 JWT issuance. Enabled by default; mode defaults to `session`.
+
+```yaml
+auth:
+  jwt:
+    enabled: true
+    mode: "session"              # "session" = one long-lived JWT per login
+                                 # "access_refresh" = short-lived access + refresh pair
+    # issuer: ""                 # defaults to server.base_url
+    access_token_ttl: "15m"      # ignored in session mode
+    refresh_token_ttl: "30d"
+    clock_skew: "30s"
+    revocation:
+      check_per_request: false   # true = every Bearer request hits the DB; adds latency
+```
+
+`issuer` auto-derives from `server.base_url` when unset. `audience` defaults to `"shark"`.
+
+Login responses include `token` (session mode) or `access_token` + `refresh_token` (access_refresh mode) alongside the existing `shark_session` cookie. Bearer is accepted on all authenticated endpoints.
+
+`GET /.well-known/jwks.json` is exposed publicly (no auth) for resource servers and edge validators. A signing keypair is auto-generated on first `shark serve`; rotate with `shark keys generate-jwt --rotate`.
+
+> **Deprecation:** `social.redirect_url` and `magic_link.redirect_url` are read at startup to populate the default application's `allowed_callback_urls`. They still work but will be removed in Phase 6. Prefer `shark app update` or the admin API to manage redirect allowlists going forward.
+
+---
 
 ### CORS
 
