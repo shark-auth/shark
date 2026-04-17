@@ -6,6 +6,17 @@ import (
 	"time"
 )
 
+// OrgRole represents an org-scoped RBAC role (parallel to the global roles table).
+type OrgRole struct {
+	ID             string
+	OrganizationID string
+	Name           string
+	Description    string
+	IsBuiltin      bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 // Store defines the interface for all database operations.
 // Wave 3 agents implement features against this interface.
 type Store interface {
@@ -169,6 +180,43 @@ type Store interface {
 	GetMigrationByID(ctx context.Context, id string) (*Migration, error)
 	ListMigrations(ctx context.Context) ([]*Migration, error)
 	UpdateMigration(ctx context.Context, m *Migration) error
+
+	// Org RBAC — parallel tables, global RBAC untouched.
+	CreateOrgRole(ctx context.Context, orgID, id, name, description string, isBuiltin bool) error
+	GetOrgRoleByID(ctx context.Context, roleID string) (*OrgRole, error)
+	GetOrgRolesByOrgID(ctx context.Context, orgID string) ([]*OrgRole, error)
+	GetOrgRolesByUserID(ctx context.Context, userID, orgID string) ([]*OrgRole, error)
+	GetOrgRoleByName(ctx context.Context, orgID, name string) (*OrgRole, error)
+	UpdateOrgRole(ctx context.Context, roleID, name, description string) error
+	DeleteOrgRole(ctx context.Context, roleID string) error
+	AttachOrgPermission(ctx context.Context, orgRoleID, action, resource string) error
+	DetachOrgPermission(ctx context.Context, orgRoleID, action, resource string) error
+	GetOrgRolePermissions(ctx context.Context, orgRoleID string) ([]Permission, error)
+	GrantOrgRole(ctx context.Context, orgID, userID, orgRoleID, grantedBy string) error
+	RevokeOrgRole(ctx context.Context, orgID, userID, orgRoleID string) error
+	GetOrgUserRoles(ctx context.Context, userID, orgID string) ([]*OrgRole, error)
+
+	// JWT signing keys
+	InsertSigningKey(ctx context.Context, key *SigningKey) error
+	GetActiveSigningKey(ctx context.Context) (*SigningKey, error)
+	GetSigningKeyByKID(ctx context.Context, kid string) (*SigningKey, error)
+	RotateSigningKeys(ctx context.Context, newKey *SigningKey) error
+	ListJWKSCandidates(ctx context.Context, activeOnly bool, retiredCutoff time.Time) ([]*SigningKey, error)
+
+	// Revoked JTIs
+	InsertRevokedJTI(ctx context.Context, jti string, expiresAt time.Time) error
+	IsRevokedJTI(ctx context.Context, jti string) (bool, error)
+	PruneExpiredRevokedJTI(ctx context.Context) error
+
+	// Applications
+	CreateApplication(ctx context.Context, app *Application) error
+	GetApplicationByID(ctx context.Context, id string) (*Application, error)
+	GetApplicationByClientID(ctx context.Context, clientID string) (*Application, error)
+	GetDefaultApplication(ctx context.Context) (*Application, error)
+	ListApplications(ctx context.Context, limit, offset int) ([]*Application, error)
+	UpdateApplication(ctx context.Context, app *Application) error
+	RotateApplicationSecret(ctx context.Context, id, newHash, newPrefix string) error
+	DeleteApplication(ctx context.Context, id string) error
 }
 
 // --- Entity types ---
@@ -497,4 +545,35 @@ type AuditLogQuery struct {
 	To       string // end of date range (RFC3339)
 	Limit    int    // page size (default 50, max 200)
 	Cursor   string // cursor-based pagination (ID of last item)
+}
+
+// SigningKey represents a JWT signing keypair stored in the database.
+// PrivateKeyPEM is AES-GCM encrypted at rest; PublicKeyPEM is plaintext.
+type SigningKey struct {
+	ID            int64   `json:"id"`
+	KID           string  `json:"kid"`
+	Algorithm     string  `json:"algorithm"`
+	PublicKeyPEM  string  `json:"-"`
+	PrivateKeyPEM string  `json:"-"` // encrypted
+	CreatedAt     string  `json:"created_at"`
+	RotatedAt     *string `json:"rotated_at,omitempty"`
+	Status        string  `json:"status"` // "active" | "retired"
+}
+
+// Application represents a registered OAuth 2.x / OIDC client application.
+// JSON columns (AllowedCallbackURLs, AllowedLogoutURLs, AllowedOrigins, Metadata)
+// are serialized/deserialized in the storage layer; callers use native Go types.
+type Application struct {
+	ID                  string         `json:"id"`           // app_<nanoid>
+	Name                string         `json:"name"`
+	ClientID            string         `json:"client_id"`    // shark_app_<nanoid>
+	ClientSecretHash    string         `json:"-"`            // SHA-256 hex, never exposed
+	ClientSecretPrefix  string         `json:"client_secret_prefix"` // first 8 chars (UX only)
+	AllowedCallbackURLs []string       `json:"allowed_callback_urls"`
+	AllowedLogoutURLs   []string       `json:"allowed_logout_urls"`
+	AllowedOrigins      []string       `json:"allowed_origins"`
+	IsDefault           bool           `json:"is_default"`
+	Metadata            map[string]any `json:"metadata"`
+	CreatedAt           time.Time      `json:"created_at"`
+	UpdatedAt           time.Time      `json:"updated_at"`
 }
