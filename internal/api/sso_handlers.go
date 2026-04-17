@@ -23,6 +23,7 @@ type ssoStateEntry struct {
 // SSOHandlers provides HTTP handlers for SSO endpoints.
 type SSOHandlers struct {
 	manager    *sso.SSOManager
+	server     *Server // for JWT issuance; may be nil before router init
 	mu         sync.Mutex
 	stateStore map[string]*ssoStateEntry
 }
@@ -176,10 +177,25 @@ func (h *SSOHandlers) SAMLACS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"user":    user,
 		"session": session,
-	})
+	}
+	if h.server != nil && h.server.JWTManager != nil && h.server.Config.Auth.JWT.Enabled {
+		if h.server.Config.Auth.JWT.Mode == "access_refresh" {
+			access, refresh, jwtErr := h.server.JWTManager.IssueAccessRefreshPair(r.Context(), user, session.ID, session.MFAPassed)
+			if jwtErr == nil {
+				resp["access_token"] = access
+				resp["refresh_token"] = refresh
+			}
+		} else {
+			token, jwtErr := h.server.JWTManager.IssueSessionJWT(r.Context(), user, session.ID, session.MFAPassed)
+			if jwtErr == nil {
+				resp["token"] = token
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // --- OIDC endpoints (public) ---
@@ -261,10 +277,25 @@ func (h *SSOHandlers) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"user":    user,
 		"session": session,
-	})
+	}
+	if h.server != nil && h.server.JWTManager != nil && h.server.Config.Auth.JWT.Enabled {
+		if h.server.Config.Auth.JWT.Mode == "access_refresh" {
+			access, refresh, jwtErr := h.server.JWTManager.IssueAccessRefreshPair(r.Context(), user, session.ID, session.MFAPassed)
+			if jwtErr == nil {
+				resp["access_token"] = access
+				resp["refresh_token"] = refresh
+			}
+		} else {
+			token, jwtErr := h.server.JWTManager.IssueSessionJWT(r.Context(), user, session.ID, session.MFAPassed)
+			if jwtErr == nil {
+				resp["token"] = token
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // --- Auto-route (public) ---

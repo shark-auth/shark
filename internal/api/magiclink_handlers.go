@@ -164,13 +164,31 @@ func (s *Server) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
-	// Redirect to the configured redirect URL
+	// Redirect to the configured redirect URL — JWT is additive but not embedded in redirect.
 	redirectURL := s.Config.MagicLink.RedirectURL
 	if redirectURL != "" {
 		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return
 	}
 
-	// Fallback: return JSON with user info
-	writeJSON(w, http.StatusOK, userToResponse(user))
+	// Issue JWT alongside cookie if enabled (§1.4). Magic links set mfaPassed=true.
+	resp := map[string]interface{}{}
+	for k, v := range userResponseMap(userToResponse(user)) {
+		resp[k] = v
+	}
+	if s.JWTManager != nil && s.Config.Auth.JWT.Enabled {
+		if s.Config.Auth.JWT.Mode == "access_refresh" {
+			access, refresh, err := s.JWTManager.IssueAccessRefreshPair(r.Context(), user, sess.ID, true)
+			if err == nil {
+				resp["access_token"] = access
+				resp["refresh_token"] = refresh
+			}
+		} else {
+			token, err := s.JWTManager.IssueSessionJWT(r.Context(), user, sess.ID, true)
+			if err == nil {
+				resp["token"] = token
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

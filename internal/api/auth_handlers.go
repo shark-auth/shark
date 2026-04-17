@@ -270,14 +270,42 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, userToResponse(user))
+	// Issue JWT alongside cookie if enabled (§1.4).
+	resp := map[string]interface{}{}
+	for k, v := range userResponseMap(userToResponse(user)) {
+		resp[k] = v
+	}
+	if s.JWTManager != nil && s.Config.Auth.JWT.Enabled {
+		if s.Config.Auth.JWT.Mode == "access_refresh" {
+			access, refresh, err := s.JWTManager.IssueAccessRefreshPair(r.Context(), user, sess.ID, mfaPassed)
+			if err == nil {
+				resp["access_token"] = access
+				resp["refresh_token"] = refresh
+			}
+		} else {
+			token, err := s.JWTManager.IssueSessionJWT(r.Context(), user, sess.ID, mfaPassed)
+			if err == nil {
+				resp["token"] = token
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	// Get session from cookie
+	ctx := r.Context()
+
+	// If the request used a JWT, revoke its JTI.
+	if mw.GetAuthMethod(ctx) == "jwt" {
+		if claims := mw.GetClaims(ctx); claims != nil && s.JWTManager != nil {
+			_ = s.JWTManager.RevokeJTI(ctx, claims.ID, claims.ExpiresAt.Time)
+		}
+	}
+
+	// Delete the session (cookie path).
 	sessionID, err := s.SessionManager.GetSessionFromRequest(r)
 	if err == nil && sessionID != "" {
-		_ = s.Store.DeleteSession(r.Context(), sessionID)
+		_ = s.Store.DeleteSession(ctx, sessionID)
 	}
 
 	s.SessionManager.ClearSessionCookie(w)
@@ -511,5 +539,20 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	json.NewEncoder(w).Encode(data) //nolint:errcheck
+}
+
+// userResponseMap converts a userResponse to a map[string]interface{} so JWT
+// fields can be merged before writing the final response.
+func userResponseMap(u userResponse) map[string]interface{} {
+	return map[string]interface{}{
+		"id":            u.ID,
+		"email":         u.Email,
+		"emailVerified": u.EmailVerified,
+		"name":          u.Name,
+		"avatarUrl":     u.AvatarURL,
+		"mfaEnabled":    u.MFAEnabled,
+		"createdAt":     u.CreatedAt,
+		"updatedAt":     u.UpdatedAt,
+	}
 }

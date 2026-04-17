@@ -26,6 +26,17 @@ func TestConfig() *config.Config {
 				SaltLength:  16,
 				KeyLength:   32,
 			},
+			JWT: config.JWTConfig{
+				Enabled:         true,
+				Mode:            "session",
+				Audience:        "shark",
+				AccessTokenTTL:  "15m",
+				RefreshTokenTTL: "30d",
+				ClockSkew:       "30s",
+				Revocation: config.JWTRevocationConfig{
+					CheckPerRequest: false,
+				},
+			},
 		},
 		Passkeys: config.PasskeyConfig{
 			RPName:           "SharkAuth Test",

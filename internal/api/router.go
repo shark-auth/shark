@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sharkauth/sharkauth/internal/audit"
 	"github.com/sharkauth/sharkauth/internal/auth"
+	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/rbac"
@@ -29,6 +30,7 @@ type Server struct {
 	PasskeyManager   *auth.PasskeyManager
 	OAuthManager     *auth.OAuthManager
 	MagicLinkManager *auth.MagicLinkManager
+	JWTManager       *jwtpkg.Manager
 	RBAC             *rbac.RBACManager
 	AuditLogger      *audit.Logger
 	RateLimiter      *auth.TokenBucket
@@ -54,6 +56,13 @@ func WithEmailSender(sender email.Sender) ServerOption {
 func WithWebhookDispatcher(d *webhook.Dispatcher) ServerOption {
 	return func(s *Server) {
 		s.WebhookDispatcher = d
+	}
+}
+
+// WithJWTManager wires a JWT Manager for Bearer token issuance and validation.
+func WithJWTManager(jm *jwtpkg.Manager) ServerOption {
+	return func(s *Server) {
+		s.JWTManager = jm
 	}
 }
 
@@ -105,6 +114,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	// Initialize SSO manager + handlers
 	ssoManager := sso.NewSSOManager(store, sm, cfg)
 	s.SSOHandlers = NewSSOHandlers(ssoManager)
+	s.SSOHandlers.server = s
 
 	// Email verification lookup for middleware
 	isEmailVerified := func(ctx context.Context, userID string) (bool, error) {
@@ -135,6 +145,9 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	// Health check
 	r.Get("/healthz", s.handleHealthz)
 
+	// JWKS endpoint (RFC 7517) — public, no auth, top-level
+	r.Get("/.well-known/jwks.json", s.HandleJWKS)
+
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Auth routes (public)
@@ -144,13 +157,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/logout", s.handleLogout)
 			// GET /me: allowed without email verification (so frontend can check status)
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 				r.Use(mw.RequireMFA)
 				r.Get("/me", s.handleMe)
 			})
 			// DELETE /me: requires verified email
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 				r.Use(mw.RequireMFA)
 				r.Use(requireVerified)
 				r.Delete("/me", s.handleDeleteMe)
@@ -158,7 +171,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// Email verification
 			r.Route("/email", func(r chi.Router) {
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 					r.Post("/verify/send", s.handleEmailVerifySend)
 				})
 				r.Get("/verify", s.handleEmailVerify)
@@ -174,7 +187,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Route("/passkey", func(r chi.Router) {
 				// Registration requires auth + verified email
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 					r.Use(requireVerified)
 					r.Post("/register/begin", s.handlePasskeyRegisterBegin)
 					r.Post("/register/finish", s.handlePasskeyRegisterFinish)
@@ -184,7 +197,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Post("/login/finish", s.handlePasskeyLoginFinish)
 				// Credential management requires auth + verified email
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 					r.Use(requireVerified)
 					r.Get("/credentials", s.handlePasskeyCredentialsList)
 					r.Delete("/credentials/{id}", s.handlePasskeyCredentialDelete)
@@ -205,7 +218,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Post("/reset", s.handlePasswordReset)
 				// Authenticated: change password (requires verified email)
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 					r.Use(mw.RequireMFA)
 					r.Use(requireVerified)
 					r.Post("/change", s.handleChangePassword)
@@ -216,13 +229,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Route("/mfa", func(r chi.Router) {
 				// Challenge and recovery: require session only (login flow, no email check)
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 					r.Post("/challenge", s.handleMFAChallenge)
 					r.Post("/recovery", s.handleMFARecovery)
 				})
 				// Enroll, verify, disable, recovery-codes: require full session + verified email
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 					r.Use(mw.RequireMFA)
 					r.Use(requireVerified)
 					r.Post("/enroll", s.handleMFAEnroll)
@@ -237,15 +250,21 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 			// Self-service session management
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 				r.Get("/sessions", s.handleListMySessions)
 				r.Delete("/sessions/{id}", s.handleRevokeMySession)
+			})
+
+			// JWT self-revoke (session-auth, cookie OR JWT)
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Post("/revoke", s.handleUserRevoke)
 			})
 		})
 
 		// Organizations (user-facing — session cookie auth, per-handler role gates)
 		r.Route("/organizations", func(r chi.Router) {
-			r.Use(mw.RequireSessionFunc(sm))
+			r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
 			r.Post("/", s.handleCreateOrganization)
 			r.Get("/", s.handleListMyOrganizations)
 			r.Get("/{id}", s.handleGetOrganization)
@@ -355,6 +374,12 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Delete("/{id}", s.handleDeleteWebhook)
 			r.Post("/{id}/test", s.handleTestWebhook)
 			r.Get("/{id}/deliveries", s.handleListDeliveries)
+		})
+
+		// Admin JWT JTI revocation
+		r.Group(func(r chi.Router) {
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
+			r.Post("/admin/auth/revoke-jti", s.handleAdminRevokeJTI)
 		})
 
 		// Admin (stats + sessions + dev-mode inbox)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/api"
 	"github.com/sharkauth/sharkauth/internal/auth"
+	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/storage"
@@ -151,9 +152,19 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	retention := 90 * 24 * time.Hour
 	dispatcher.StartRetention(ctx, retention, time.Hour)
 
+	// Instantiate JWT manager and ensure an active signing key exists.
+	jwtMgr := jwtpkg.NewManager(&cfg.Auth.JWT, store, cfg.Server.BaseURL, cfg.Server.Secret)
+	ensureCtx, ensureCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer ensureCancel()
+	if err := jwtMgr.EnsureActiveKey(ensureCtx); err != nil {
+		slog.Warn("jwt: failed to ensure active signing key", "error", err)
+		// Non-fatal: server runs without JWT if key provisioning fails.
+	}
+
 	apiSrv := api.NewServer(store, cfg,
 		api.WithEmailSender(sender),
 		api.WithWebhookDispatcher(dispatcher),
+		api.WithJWTManager(jwtMgr),
 	)
 
 	return &Bootstrap{

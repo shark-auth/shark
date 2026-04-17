@@ -15,6 +15,7 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/api"
 	"github.com/sharkauth/sharkauth/internal/auth"
+	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/storage"
@@ -33,16 +34,29 @@ type TestServer struct {
 	AdminKey    string // Full admin API key (sk_live_...) for Bearer auth
 }
 
+// newTestJWTManager creates and provisions a JWT manager backed by the given store.
+// Generates an ephemeral signing key so JWT-dependent code works in tests.
+func newTestJWTManager(t *testing.T, store storage.Store, cfg *config.Config) *jwtpkg.Manager {
+	t.Helper()
+	jm := jwtpkg.NewManager(&cfg.Auth.JWT, store, cfg.Server.BaseURL, cfg.Server.Secret)
+	if err := jm.EnsureActiveKey(context.Background()); err != nil {
+		t.Fatalf("testutil: JWT EnsureActiveKey: %v", err)
+	}
+	return jm
+}
+
 // NewTestServer creates a test HTTP server with all routes mounted.
 // The server is automatically closed when the test completes.
 // An admin API key with "*" scope is automatically created for test use.
+// A JWT manager with an ephemeral signing key is auto-provisioned.
 func NewTestServer(t *testing.T) *TestServer {
 	t.Helper()
 
 	store := NewTestDB(t)
 	cfg := TestConfig()
 	emailSender := NewMemoryEmailSender()
-	srv := api.NewServer(store, cfg, api.WithEmailSender(emailSender))
+	jm := newTestJWTManager(t, store, cfg)
+	srv := api.NewServer(store, cfg, api.WithEmailSender(emailSender), api.WithJWTManager(jm))
 
 	ts := httptest.NewServer(srv.Router)
 
@@ -258,7 +272,8 @@ func NewTestServerDev(t *testing.T) *TestServer {
 	cfg.Server.DevMode = true
 
 	dev := email.NewDevInboxSender(store)
-	srv := api.NewServer(store, cfg, api.WithEmailSender(dev))
+	jm := newTestJWTManager(t, store, cfg)
+	srv := api.NewServer(store, cfg, api.WithEmailSender(dev), api.WithJWTManager(jm))
 
 	ts := httptest.NewServer(srv.Router)
 	jar, _ := cookiejar.New(nil)
@@ -441,6 +456,50 @@ func (ts *TestServer) PatchJSONWithAdminKey(path string, body interface{}) *http
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+ts.AdminKey)
+
+	resp, err := ts.Client.Do(req)
+	if err != nil {
+		ts.T.Fatalf("sending request: %v", err)
+	}
+	return resp
+}
+
+// GetWithBearer sends a GET request with an arbitrary Bearer token.
+func (ts *TestServer) GetWithBearer(path, token string) *http.Response {
+	ts.T.Helper()
+
+	req, err := http.NewRequest("GET", ts.URL(path), nil)
+	if err != nil {
+		ts.T.Fatalf("creating request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := ts.Client.Do(req)
+	if err != nil {
+		ts.T.Fatalf("sending request: %v", err)
+	}
+	return resp
+}
+
+// PostJSONWithBearer sends a POST request with a JSON body and an arbitrary Bearer token.
+func (ts *TestServer) PostJSONWithBearer(path string, body interface{}, token string) *http.Response {
+	ts.T.Helper()
+
+	var bodyReader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			ts.T.Fatalf("marshaling request body: %v", err)
+		}
+		bodyReader = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequest("POST", ts.URL(path), bodyReader)
+	if err != nil {
+		ts.T.Fatalf("creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := ts.Client.Do(req)
 	if err != nil {
