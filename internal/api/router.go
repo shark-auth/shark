@@ -391,6 +391,17 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{id}/deliveries", s.handleListDeliveries)
 		})
 
+		// Applications (admin)
+		r.Route("/admin/apps", func(r chi.Router) {
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
+			r.Post("/", s.handleCreateApp)
+			r.Get("/", s.handleListApps)
+			r.Get("/{id}", s.handleGetApp)
+			r.Patch("/{id}", s.handleUpdateApp)
+			r.Delete("/{id}", s.handleDeleteApp)
+			r.Post("/{id}/rotate-secret", s.handleRotateAppSecret)
+		})
+
 		// Admin JWT JTI revocation
 		r.Group(func(r chi.Router) {
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))

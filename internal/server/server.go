@@ -171,6 +171,13 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		// Non-fatal: server runs without JWT if key provisioning fails.
 	}
 
+	seedCtx2, seedCancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+	defer seedCancel2()
+	if err := seedDefaultApplication(seedCtx2, store, cfg); err != nil {
+		store.Close()
+		return nil, fmt.Errorf("seed default application: %w", err)
+	}
+
 	apiSrv := api.NewServer(store, cfg,
 		api.WithEmailSender(sender),
 		api.WithWebhookDispatcher(dispatcher),

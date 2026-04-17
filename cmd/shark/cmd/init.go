@@ -24,7 +24,8 @@ var initCmd = &cobra.Command{
 	Short: "Interactive setup — writes sharkauth.yaml",
 	Long: `shark init asks one question (base URL) and writes a ready-to-run
 sharkauth.yaml. Email defaults to the shark.email testing tier so the server
-boots end-to-end with zero extra config — switch providers before going live.`,
+boots end-to-end with zero extra config — switch providers before going live.
+A default OAuth application is auto-created on first boot — use ` + "`shark app create`" + ` to register additional relying parties.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
 			return errors.New("shark init requires an interactive terminal; run `shark init` directly or copy sharkauth.local.yaml as a template")

@@ -1,7 +1,9 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sharkauth/sharkauth/internal/auth"
+	"github.com/sharkauth/sharkauth/internal/auth/redirect"
 )
 
 // Re-export magic link errors for convenience.
@@ -165,10 +168,37 @@ func (s *Server) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
 	// Redirect to the configured redirect URL — JWT is additive but not embedded in redirect.
-	redirectURL := s.Config.MagicLink.RedirectURL
-	if redirectURL != "" {
-		http.Redirect(w, r, redirectURL, http.StatusFound)
-		return
+	// Validate redirect_uri against the default application's allowlist (OAuth 2.1 §3.1.2).
+	{
+		requestedRedirect := r.URL.Query().Get("redirect_uri")
+		if requestedRedirect == "" {
+			requestedRedirect = s.Config.MagicLink.RedirectURL
+		}
+		if requestedRedirect != "" {
+			defaultApp, appErr := s.Store.GetDefaultApplication(r.Context())
+			if appErr != nil {
+				if errors.Is(appErr, sql.ErrNoRows) {
+					writeJSON(w, http.StatusInternalServerError, map[string]string{
+						"error":   "server_error",
+						"message": "Default application not configured",
+					})
+					return
+				}
+				writeJSON(w, http.StatusInternalServerError, map[string]string{
+					"error":   "server_error",
+					"message": "Could not load application config",
+				})
+				return
+			}
+			if verr := redirect.Validate(&redirect.Application{
+				AllowedCallbackURLs: defaultApp.AllowedCallbackURLs,
+			}, redirect.KindCallback, requestedRedirect); verr != nil {
+				http.Error(w, "redirect_uri not allowed: "+verr.Error(), http.StatusBadRequest)
+				return
+			}
+			http.Redirect(w, r, requestedRedirect, http.StatusFound)
+			return
+		}
 	}
 
 	// Issue JWT alongside cookie if enabled (§1.4). Magic links set mfaPassed=true.

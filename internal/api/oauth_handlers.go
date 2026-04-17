@@ -3,7 +3,9 @@ package api
 import (
 	"crypto/rand"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/auth/providers"
+	"github.com/sharkauth/sharkauth/internal/auth/redirect"
 )
 
 const (
@@ -129,9 +132,38 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
 	// Redirect to frontend if configured — JWT is additive but not embedded in redirect URL.
-	if redirectURL := s.Config.Social.RedirectURL; redirectURL != "" {
-		http.Redirect(w, r, redirectURL, http.StatusFound)
-		return
+	// Validate redirect_uri against the default application's allowlist (OAuth 2.1 §3.1.2).
+	{
+		requestedRedirect := r.URL.Query().Get("redirect_uri")
+		if requestedRedirect == "" {
+			requestedRedirect = s.Config.Social.RedirectURL
+		}
+		if requestedRedirect != "" {
+			defaultApp, appErr := s.Store.GetDefaultApplication(r.Context())
+			if appErr != nil {
+				if errors.Is(appErr, sql.ErrNoRows) {
+					// No default app — server misconfiguration, not client error.
+					writeJSON(w, http.StatusInternalServerError, map[string]string{
+						"error":   "server_error",
+						"message": "Default application not configured",
+					})
+					return
+				}
+				writeJSON(w, http.StatusInternalServerError, map[string]string{
+					"error":   "server_error",
+					"message": "Could not load application config",
+				})
+				return
+			}
+			if verr := redirect.Validate(&redirect.Application{
+				AllowedCallbackURLs: defaultApp.AllowedCallbackURLs,
+			}, redirect.KindCallback, requestedRedirect); verr != nil {
+				http.Error(w, "redirect_uri not allowed: "+verr.Error(), http.StatusBadRequest)
+				return
+			}
+			http.Redirect(w, r, requestedRedirect, http.StatusFound)
+			return
+		}
 	}
 
 	// Issue JWT alongside cookie if enabled (§1.4).

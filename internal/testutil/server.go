@@ -3,6 +3,9 @@ package testutil
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -34,6 +37,74 @@ type TestServer struct {
 	AdminKey    string // Full admin API key (sk_live_...) for Bearer auth
 }
 
+// seedTestDefaultApp inserts a default application into the store if one doesn't exist.
+// Seeds the MagicLink.RedirectURL and Social.RedirectURL from config into the allowlist
+// so redirect-validation tests pass the same way they will in production.
+func seedTestDefaultApp(t *testing.T, store storage.Store, cfg *config.Config) {
+	t.Helper()
+	ctx := context.Background()
+
+	// Idempotent: if already seeded, skip.
+	if _, err := store.GetDefaultApplication(ctx); err == nil {
+		return
+	}
+
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatalf("seedTestDefaultApp: rand: %v", err)
+	}
+	// Simple hex secret for test purposes.
+	secret := hex.EncodeToString(b)
+	h := sha256.Sum256([]byte(secret))
+	secretHash := hex.EncodeToString(h[:])
+	secretPrefix := secret
+	if len(secretPrefix) > 8 {
+		secretPrefix = secretPrefix[:8]
+	}
+
+	nid, _ := gonanoid.New(21)
+	appNid, _ := gonanoid.New()
+	now := time.Now().UTC()
+
+	var callbacks []string
+	if cfg.Social.RedirectURL != "" {
+		callbacks = append(callbacks, cfg.Social.RedirectURL)
+	}
+	if cfg.MagicLink.RedirectURL != "" {
+		dup := false
+		for _, u := range callbacks {
+			if u == cfg.MagicLink.RedirectURL {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			callbacks = append(callbacks, cfg.MagicLink.RedirectURL)
+		}
+	}
+	if callbacks == nil {
+		callbacks = []string{}
+	}
+
+	app := &storage.Application{
+		ID:                  "app_" + appNid,
+		Name:                "Default Application",
+		ClientID:            "shark_app_" + nid,
+		ClientSecretHash:    secretHash,
+		ClientSecretPrefix:  secretPrefix,
+		AllowedCallbackURLs: callbacks,
+		AllowedLogoutURLs:   []string{},
+		AllowedOrigins:      []string{},
+		IsDefault:           true,
+		Metadata:            map[string]any{},
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+	if err := store.CreateApplication(ctx, app); err != nil {
+		t.Fatalf("seedTestDefaultApp: create: %v", err)
+	}
+}
+
 // newTestJWTManager creates and provisions a JWT manager backed by the given store.
 // Generates an ephemeral signing key so JWT-dependent code works in tests.
 func newTestJWTManager(t *testing.T, store storage.Store, cfg *config.Config) *jwtpkg.Manager {
@@ -54,6 +125,7 @@ func NewTestServer(t *testing.T) *TestServer {
 
 	store := NewTestDB(t)
 	cfg := TestConfig()
+	seedTestDefaultApp(t, store, cfg)
 	emailSender := NewMemoryEmailSender()
 	jm := newTestJWTManager(t, store, cfg)
 	srv := api.NewServer(store, cfg, api.WithEmailSender(emailSender), api.WithJWTManager(jm))
@@ -270,6 +342,7 @@ func NewTestServerDev(t *testing.T) *TestServer {
 	store := NewTestDB(t)
 	cfg := TestConfig()
 	cfg.Server.DevMode = true
+	seedTestDefaultApp(t, store, cfg)
 
 	dev := email.NewDevInboxSender(store)
 	jm := newTestJWTManager(t, store, cfg)

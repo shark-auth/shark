@@ -143,7 +143,9 @@ type PasskeyConfig struct {
 // MagicLinkConfig holds magic link settings.
 type MagicLinkConfig struct {
 	TokenLifetime string `koanf:"token_lifetime"`
-	RedirectURL   string `koanf:"redirect_url"`
+	// Deprecated: migrated to default application's allowed_callback_urls on first boot.
+	// Removal target: Phase 6 (/oauth/authorize landing).
+	RedirectURL string `koanf:"redirect_url"`
 }
 
 // TokenLifetimeDuration parses the token lifetime string into a time.Duration.
@@ -174,6 +176,8 @@ type MFAConfig struct {
 
 // SocialConfig holds OAuth provider settings.
 type SocialConfig struct {
+	// Deprecated: migrated to default application's allowed_callback_urls on first boot.
+	// Removal target: Phase 6 (/oauth/authorize landing).
 	RedirectURL string        `koanf:"redirect_url"` // Post-OAuth redirect to frontend
 	Google      GoogleConfig  `koanf:"google"`
 	GitHub      GitHubConfig  `koanf:"github"`
