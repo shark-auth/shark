@@ -174,7 +174,25 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 
 	s.emit(r.Context(), storage.WebhookEventUserCreated, userPublic(user))
 
-	writeJSON(w, http.StatusCreated, userToResponse(user))
+	resp := map[string]interface{}{}
+	for k, v := range userResponseMap(userToResponse(user)) {
+		resp[k] = v
+	}
+	if s.JWTManager != nil && s.Config.Auth.JWT.Enabled {
+		if s.Config.Auth.JWT.Mode == "access_refresh" {
+			access, refresh, err := s.JWTManager.IssueAccessRefreshPair(r.Context(), user, sess.ID, true)
+			if err == nil {
+				resp["access_token"] = access
+				resp["refresh_token"] = refresh
+			}
+		} else {
+			token, err := s.JWTManager.IssueSessionJWT(r.Context(), user, sess.ID, true)
+			if err == nil {
+				resp["token"] = token
+			}
+		}
+	}
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {

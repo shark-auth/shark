@@ -45,6 +45,13 @@ sdk/dist/
 coverage.out
 *.test
 cookies.txt
+server.log
+*.log
+resp.json
+cj*.txt
+sharkauth.yaml
+smoke.sh
+debug_admin.sh
 
 # Docker
 .docker/
