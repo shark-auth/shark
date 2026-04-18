@@ -248,6 +248,15 @@ function TopBar({ page, setTweaksOpen }) {
         <Icon.Sparkle width={13} height={13}/>
       </button>
 
+      <button
+        className="btn ghost sm"
+        title="Sign out"
+        onClick={() => { sessionStorage.removeItem('shark_admin_key'); window.location.reload(); }}
+        style={{ color: 'var(--fg-dim)', fontSize: 11 }}
+      >
+        Sign out
+      </button>
+
       <Avatar name="You" email="admin@shark" size={26}/>
     </header>
   );

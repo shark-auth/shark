@@ -46,6 +46,7 @@
 
   <script type="text/babel" src="components/shared.jsx"></script>
   <script type="text/babel" src="components/mock.jsx"></script>
+  <script type="text/babel" src="components/login.jsx"></script>
   <script type="text/babel" src="components/layout.jsx"></script>
   <script type="text/babel" src="components/overview.jsx"></script>
   <script type="text/babel" src="components/users.jsx"></script>
@@ -78,10 +79,15 @@
     }
 
     function App() {
+      const [apiKey, setApiKey] = React.useState(() => sessionStorage.getItem('shark_admin_key') || '');
       const [page, setPage] = React.useState(() => localStorage.getItem('page') || 'overview');
       const [tweaks, setTweak] = useTweaks();
       const [tweaksOpen, setTweaksOpen] = React.useState(false);
       const [editMode, setEditMode] = React.useState(false);
+
+      if (!apiKey) {
+        return <Login onLogin={(k) => setApiKey(k)} />;
+      }
 
       React.useEffect(() => { localStorage.setItem('page', page); }, [page]);
 
