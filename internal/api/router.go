@@ -438,19 +438,19 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.DB().PingContext(r.Context()); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{"status": "unhealthy", "error": "database unreachable"})
+		json.NewEncoder(w).Encode(map[string]string{"status": "unhealthy", "error": "database unreachable"}) //#nosec G104 -- write to ResponseWriter; no actionable recovery
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"}) //#nosec G104 -- write to ResponseWriter; no actionable recovery
 }
 
 func notImplemented(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotImplemented)
-	json.NewEncoder(w).Encode(map[string]string{
+	json.NewEncoder(w).Encode(map[string]string{ //#nosec G104 -- write to ResponseWriter; no actionable recovery
 		"error":   "not_implemented",
 		"message": "This endpoint is not yet implemented",
 	})

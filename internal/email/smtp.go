@@ -89,7 +89,7 @@ func (s *SMTPSender) Send(msg *Message) error {
 
 	client, err := smtp.NewClient(conn, s.host)
 	if err != nil {
-		conn.Close()
+		conn.Close() //#nosec G104 -- cleanup after client build failure; primary error returned
 		return fmt.Errorf("creating SMTP client: %w", err)
 	}
 	defer client.Close()

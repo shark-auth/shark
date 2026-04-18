@@ -289,7 +289,7 @@ func (s *Server) handleExportAuditLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", "attachment; filename=audit-logs-export.json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]interface{}{ //#nosec G104 -- write to ResponseWriter; no actionable recovery
 		"exported_at": time.Now().UTC().Format(time.RFC3339),
 		"from":        req.From,
 		"to":          req.To,

@@ -21,12 +21,12 @@ func NewTestDB(t *testing.T) *storage.SQLiteStore {
 	}
 
 	if err := storage.RunMigrations(store.DB(), testMigrationsFS, "migrations"); err != nil {
-		store.Close()
+		store.Close() //#nosec G104 -- cleanup after failed migration; test is already failing
 		t.Fatalf("running migrations: %v", err)
 	}
 
 	t.Cleanup(func() {
-		store.Close()
+		store.Close() //#nosec G104 -- test-cleanup close; nothing actionable on error
 	})
 
 	return store

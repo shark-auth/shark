@@ -58,7 +58,7 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		return false, err
 	}
 
-	keyLength := uint32(len(hash))
+	keyLength := uint32(len(hash)) //#nosec G115 -- hash is a fixed-size argon2id output (≤64 bytes), always fits in uint32
 	otherHash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
 
 	if subtle.ConstantTimeCompare(hash, otherHash) == 1 {

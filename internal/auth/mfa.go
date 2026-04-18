@@ -158,7 +158,7 @@ func (m *MFAManager) VerifyRecoveryCode(ctx context.Context, userID, code string
 func generateRandomCode(length int) string {
 	alphabetLen := byte(len(recoveryCodeAlphabet))
 	// Find the largest multiple of alphabetLen that fits in a byte
-	maxValid := byte(256 - (256 % int(alphabetLen))) // 252 for alphabetLen=36
+	maxValid := byte(256 - (256 % int(alphabetLen))) //#nosec G115 -- alphabetLen=36; (256 - 256%36) == 252 fits in byte
 	result := make([]byte, length)
 	buf := make([]byte, 1)
 	for i := 0; i < length; {

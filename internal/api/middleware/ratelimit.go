@@ -121,7 +121,7 @@ func RateLimit(maxTokens, refillRate float64) func(http.Handler) http.Handler {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "1")
 				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte(`{"error":"rate_limited","message":"Too many requests"}`))
+				w.Write([]byte(`{"error":"rate_limited","message":"Too many requests"}`)) //#nosec G104 -- write to ResponseWriter; no actionable recovery
 				return
 			}
 

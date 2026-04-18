@@ -184,7 +184,7 @@ func RequireEmailVerifiedFunc(isVerified func(ctx context.Context, userID string
 			if !verified {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(`{"error":"email_verification_required","message":"Please verify your email address before continuing"}`)) //nolint:errcheck
+				w.Write([]byte(`{"error":"email_verification_required","message":"Please verify your email address before continuing"}`)) //#nosec G104 -- write to ResponseWriter; no actionable recovery //nolint:errcheck
 				return
 			}
 

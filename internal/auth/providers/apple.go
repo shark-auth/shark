@@ -16,6 +16,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/config"
 )
 
+//#nosec G101 -- public OAuth 2.0 endpoint URLs, not credentials
 var appleEndpoint = oauth2.Endpoint{
 	AuthURL:  "https://appleid.apple.com/auth/authorize",
 	TokenURL: "https://appleid.apple.com/auth/token",

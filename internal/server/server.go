@@ -126,7 +126,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	slog.Info("running database migrations")
 	if err := storage.RunMigrations(store.DB(), opts.MigrationsFS, opts.MigrationsDir); err != nil {
-		store.Close()
+		store.Close() //#nosec G104 -- cleanup after migration failure; primary error returned
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 	slog.Info("migrations complete")
@@ -142,7 +142,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	adminKey, err := bootstrapAdminKey(ctx, store)
 	if err != nil {
-		store.Close()
+		store.Close() //#nosec G104 -- cleanup after bootstrap failure; primary error returned
 		return nil, fmt.Errorf("bootstrap admin key: %w", err)
 	}
 
@@ -174,7 +174,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	seedCtx2, seedCancel2 := context.WithTimeout(context.Background(), 10*time.Second)
 	defer seedCancel2()
 	if err := seedDefaultApplication(seedCtx2, store, cfg); err != nil {
-		store.Close()
+		store.Close() //#nosec G104 -- cleanup after seed failure; primary error returned
 		return nil, fmt.Errorf("seed default application: %w", err)
 	}
 

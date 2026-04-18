@@ -12,6 +12,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/config"
 )
 
+//#nosec G101 -- public OAuth 2.0 endpoint URLs, not credentials
 var discordEndpoint = oauth2.Endpoint{
 	AuthURL:  "https://discord.com/api/oauth2/authorize",
 	TokenURL: "https://discord.com/api/oauth2/token",

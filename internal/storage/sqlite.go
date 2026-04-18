@@ -33,17 +33,17 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 
 	// Verify connection
 	if err := db.Ping(); err != nil {
-		db.Close()
+		db.Close() //#nosec G104 -- cleanup after open failure; primary error is returned below
 		return nil, fmt.Errorf("pinging sqlite: %w", err)
 	}
 
 	// Set pragmas via exec (modernc.org/sqlite doesn't support DSN pragmas)
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
+		db.Close() //#nosec G104 -- cleanup after pragma failure; primary error is returned below
 		return nil, fmt.Errorf("setting WAL mode: %w", err)
 	}
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		db.Close()
+		db.Close() //#nosec G104 -- cleanup after pragma failure; primary error is returned below
 		return nil, fmt.Errorf("enabling foreign keys: %w", err)
 	}
 
@@ -969,7 +969,7 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 
 	query := "SELECT id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at FROM audit_logs"
 	if len(conditions) > 0 {
-		query += " WHERE " + strings.Join(conditions, " AND ")
+		query += " WHERE " + strings.Join(conditions, " AND ") //#nosec G202 -- conditions are compile-time constant predicates; user values pass through ? placeholders in args
 	}
 	query += " ORDER BY created_at DESC LIMIT ?"
 	args = append(args, opts.Limit)
@@ -1219,6 +1219,7 @@ func (s *SQLiteStore) ListActiveSessions(ctx context.Context, opts ListSessionsO
 		args = append(args, parts[0], parts[0], parts[1])
 	}
 
+	//#nosec G202 -- WHERE clauses are compile-time constant predicates; user values pass through ? placeholders in args
 	q := `SELECT s.id, s.user_id, s.ip, s.user_agent, s.mfa_passed, s.auth_method, s.expires_at, s.created_at,
 	             COALESCE(u.email, '')
 	      FROM sessions s
@@ -1265,12 +1266,12 @@ func (s *SQLiteStore) DeleteSessionsByUserID(ctx context.Context, userID string)
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
+			rows.Close() //#nosec G104 -- cleanup after scan failure; primary error returned
 			return nil, err
 		}
 		ids = append(ids, id)
 	}
-	rows.Close()
+	rows.Close() //#nosec G104 -- idempotent close after successful iteration
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}

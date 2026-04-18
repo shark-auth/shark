@@ -557,7 +557,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data) //nolint:errcheck
+	json.NewEncoder(w).Encode(data) //#nosec G104 -- write to ResponseWriter; no actionable recovery //nolint:errcheck
 }
 
 // userResponseMap converts a userResponse to a map[string]interface{} so JWT

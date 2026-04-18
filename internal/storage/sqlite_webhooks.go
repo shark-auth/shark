@@ -158,6 +158,7 @@ func (s *SQLiteStore) ListWebhookDeliveriesByWebhookID(ctx context.Context, webh
 		args = append(args, parts[0], parts[0], parts[1])
 	}
 
+	//#nosec G202 -- WHERE clauses are compile-time constant predicates; user values pass through ? placeholders in args
 	q := `SELECT id, webhook_id, event, payload, signature_header, status, status_code,
 	             response_body, error, attempt, next_retry_at, delivered_at, created_at, updated_at
 	      FROM webhook_deliveries

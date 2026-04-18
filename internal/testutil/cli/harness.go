@@ -42,7 +42,7 @@ func Start(t *testing.T) *Harness {
 		t.Fatalf("pick port: %v", err)
 	}
 	port := lis.Addr().(*net.TCPAddr).Port
-	lis.Close() // we only needed the allocated port number
+	lis.Close() //#nosec G104 -- we only needed the allocated port number
 
 	tmpDir := t.TempDir()
 	dbPath := tmpDir + "/shark.db"
@@ -78,8 +78,8 @@ func Start(t *testing.T) *Harness {
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	if err := waitForHealth(baseURL, 3*time.Second); err != nil {
-		httpSrv.Close()
-		b.Close()
+		httpSrv.Close() //#nosec G104 -- test teardown after health-check failure
+		b.Close()       //#nosec G104 -- test teardown after health-check failure
 		t.Fatalf("waiting for /healthz: %v", err)
 	}
 
@@ -131,7 +131,7 @@ func (h *Harness) AdminRequest(method, path string) *http.Request {
 // Do runs the request through the default client.
 func (h *Harness) Do(req *http.Request) *http.Response {
 	h.t.Helper()
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //#nosec G107,G704 -- test harness issues localhost requests against its own ephemeral server
 	if err != nil {
 		h.t.Fatalf("http do: %v", err)
 	}
@@ -141,9 +141,10 @@ func (h *Harness) Do(req *http.Request) *http.Response {
 func waitForHealth(baseURL string, deadline time.Duration) error {
 	end := time.Now().Add(deadline)
 	for time.Now().Before(end) {
-		resp, err := http.Get(baseURL + "/healthz")
+		resp, err := http.Get(baseURL + "/healthz") //#nosec G107 -- localhost URL built from ephemeral-port the harness just allocated
 		if err == nil {
-			resp.Body.Close()
+			resp.Body.Close() //#nosec G104 -- test harness; body is discarded
+
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
