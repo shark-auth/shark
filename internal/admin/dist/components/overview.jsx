@@ -1,15 +1,184 @@
 // Overview page — metrics, attention panel, activity, auth breakdown
 
 function Overview() {
-  const s = MOCK.stats, t = MOCK.trends;
+  // --- Real API calls ---
+  const { data: statsRaw, loading: statsLoading } = useAPI('/admin/stats');
+  const { data: trendsRaw } = useAPI('/admin/stats/trends?days=14');
+  const { data: healthRaw } = useAPI('/admin/health');
+  const { data: activityRaw, refresh: refreshActivity } = useAPI('/audit-logs?limit=20&per_page=20');
+
+  // 10-second polling for activity feed
+  React.useEffect(() => {
+    const id = setInterval(refreshActivity, 10000);
+    return () => clearInterval(id);
+  }, [refreshActivity]);
+
+  // --- Map /admin/stats to metric cards ---
+  // API shape: { users:{total,created_last_7d}, sessions:{active}, mfa:{enabled,total},
+  //              failed_logins_24h, api_keys:{active,expiring_7d}, sso_connections:{total,enabled} }
+  function mapStats(s) {
+    if (!s) return null;
+    return {
+      users: {
+        total: s.users?.total ?? 0,
+        delta7d: s.users?.created_last_7d ?? 0,
+      },
+      sessions: {
+        active: s.sessions?.active ?? 0,
+      },
+      mfa: {
+        pct: s.mfa?.total > 0 ? (s.mfa.enabled / s.mfa.total) : 0,
+        enabled: s.mfa?.enabled ?? 0,
+        total: s.mfa?.total ?? 0,
+      },
+      failedLogins24h: {
+        count: s.failed_logins_24h ?? 0,
+        deltaPct: 0, // not provided by API
+      },
+      apiKeys: {
+        count: s.api_keys?.active ?? 0,
+        expiring: s.api_keys?.expiring_7d ?? 0,
+      },
+      // No agent-specific endpoint yet — fall back to MOCK
+      agents: MOCK.stats.agents,
+    };
+  }
+
+  // --- Map /admin/stats/trends to sparkline arrays ---
+  // API shape: { signups:[{date,count},...], auth_methods:{password,oauth,passkey,magic_link} }
+  function mapTrends(t) {
+    const signupCounts = Array.isArray(t?.signups)
+      ? t.signups.map(p => p.count)
+      : null;
+    return {
+      users:    signupCounts || MOCK.trends.users,
+      sessions: MOCK.trends.sessions, // not in API
+      mfa:      MOCK.trends.mfa,       // not in API
+      failed:   MOCK.trends.failed,    // not in API
+      keys:     MOCK.trends.keys,      // not in API
+      agents:   MOCK.trends.agents,    // not in API
+    };
+  }
+
+  // --- Map auth_methods fractions to donut segments ---
+  // auth_methods values are fractions (0–1); scale to integer counts proportionally
+  // Uses a nominal total of 10000 so relative sizes are preserved
+  const AUTH_COLORS = {
+    password:   '#e4e4e4',
+    oauth:      '#888',
+    passkey:    '#555',
+    magic_link: '#3a3a3a',
+  };
+  const AUTH_LABELS = {
+    password:   'Password',
+    oauth:      'OAuth',
+    passkey:    'Passkey',
+    magic_link: 'Magic link',
+  };
+
+  function mapAuthBreakdown(t) {
+    const am = t?.auth_methods;
+    if (!am) return null;
+    const total = 10000;
+    return Object.entries(am).map(([key, frac]) => ({
+      label: AUTH_LABELS[key] || key,
+      value: Math.round(frac * total),
+      color: AUTH_COLORS[key] || '#aaa',
+    })).filter(x => x.value > 0);
+  }
+
+  // --- Map /admin/health ---
+  // Expected shape (best-effort): { version, uptime_seconds, db:{size_mb,status},
+  //   migrations:{current}, jwt:{mode,algorithm,active_keys},
+  //   smtp:{host,tier,sent_today,daily_limit}, oauth_providers:N, sso_connections:N }
+  function mapHealth(h) {
+    if (!h) return null;
+    const uptimeSec = h.uptime_seconds ?? null;
+    function formatUptime(s) {
+      if (s == null) return '—';
+      const d = Math.floor(s / 86400);
+      const hh = Math.floor((s % 86400) / 3600).toString().padStart(2, '0');
+      const mm = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+      return `${d}d ${hh}:${mm}`;
+    }
+    return [
+      { k: 'Version',         v: h.version ?? '—',                       sub: h.version_age ?? 'up-to-date' },
+      { k: 'Uptime',          v: formatUptime(uptimeSec),                 sub: 'since last restart' },
+      { k: 'Database',        v: h.db?.size_mb != null ? `${h.db.size_mb} MB` : '—',  sub: `${h.db?.driver ?? 'postgres'} · ${h.db?.status ?? 'healthy'}` },
+      { k: 'Migrations',      v: h.migrations?.current ?? '—',           sub: 'cursor up-to-date' },
+      { k: 'JWT mode',        v: h.jwt?.mode ?? '—',                     sub: `${h.jwt?.algorithm ?? ''} · ${h.jwt?.active_keys ?? '?'} keys active` },
+      { k: 'SMTP',            v: h.smtp?.host ?? '—',                    sub: h.smtp?.tier != null ? `${h.smtp.tier} tier · ${h.smtp.sent_today ?? 0}/${h.smtp.daily_limit ?? '?'}` : '' },
+      { k: 'OAuth providers', v: h.oauth_providers != null ? String(h.oauth_providers) : '—', sub: h.oauth_providers_names ?? '' },
+      { k: 'SSO connections', v: h.sso_connections != null ? String(h.sso_connections) : '—', sub: h.sso_connections_names ?? '' },
+    ];
+  }
+
+  // --- Map audit log entries to activity row format ---
+  // API shape (audit log): [{ id, created_at, event_type|action, actor_type, actor_id,
+  //                           actor_email, target_id, metadata, ip }]
+  function mapActivity(raw) {
+    if (!Array.isArray(raw?.items || raw)) return null;
+    const items = raw?.items || raw;
+    return items.map(e => {
+      // actor display
+      const actorType = e.actor_type || 'system';
+      const actorName = e.actor_email || e.actor_id || e.actor || 'system';
+      // action
+      const action = e.event_type || e.action || '—';
+      // meta: pull from metadata object if present
+      let meta = '—';
+      if (e.metadata) {
+        if (typeof e.metadata === 'string') meta = e.metadata;
+        else {
+          const pairs = Object.entries(e.metadata)
+            .slice(0, 2)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' · ');
+          if (pairs) meta = pairs;
+        }
+      }
+      // target
+      const name = actorName.length > 24 ? actorName.slice(0, 24) : actorName;
+      // timestamp — prefer created_at ISO string, fall back to t
+      const t = e.created_at ? new Date(e.created_at).getTime() : (e.t || Date.now());
+      return { t, actor: actorType, name, action, meta, target: e.target_id || '—' };
+    });
+  }
+
+  // Resolve data with fallbacks
+  const stats    = mapStats(statsRaw);
+  const trends   = mapTrends(trendsRaw);
+  const authData = mapAuthBreakdown(trendsRaw) || MOCK.authBreakdown;
+  const health   = mapHealth(healthRaw);
+  const activity = mapActivity(activityRaw) || MOCK.activity;
+
+  // Use real stats if available, otherwise fall through to MOCK
+  const s = stats || MOCK.stats;
+  const t = trends;
+
   const metrics = [
-    { k: 'Users', v: s.users.total.toLocaleString(), sub: `+${s.users.delta7d} last 7d`, trend: t.users },
-    { k: 'Active sessions', v: s.sessions.active.toLocaleString(), sub: '3.2k web · 712 api', trend: t.sessions },
-    { k: 'MFA adoption', v: Math.round(s.mfa.pct * 100) + '%', sub: `${s.mfa.enabled.toLocaleString()} of ${s.mfa.total.toLocaleString()}`, trend: t.mfa },
-    { k: 'Failed logins 24h', v: s.failedLogins24h.count, sub: `${Math.round(s.failedLogins24h.deltaPct * 100)}% vs prev`, trend: t.failed, good: true },
-    { k: 'API keys active', v: s.apiKeys.count, sub: `${s.apiKeys.expiring} expiring · 7d`, trend: t.keys, warn: true },
-    { k: 'Agents active', v: s.agents.count, sub: `${s.agents.tokensLive.toLocaleString()} tokens live`, trend: t.agents, agent: true },
+    { k: 'Users',            v: s.users.total.toLocaleString(),                       sub: `+${s.users.delta7d} last 7d`,                                    trend: t.users },
+    { k: 'Active sessions',  v: s.sessions.active.toLocaleString(),                   sub: '—',                                                               trend: t.sessions },
+    { k: 'MFA adoption',     v: Math.round(s.mfa.pct * 100) + '%',                   sub: `${s.mfa.enabled.toLocaleString()} of ${s.mfa.total.toLocaleString()}`, trend: t.mfa },
+    { k: 'Failed logins 24h',v: s.failedLogins24h.count,                              sub: `${Math.round(s.failedLogins24h.deltaPct * 100)}% vs prev`,       trend: t.failed, good: true },
+    { k: 'API keys active',  v: s.apiKeys.count,                                      sub: `${s.apiKeys.expiring} expiring · 7d`,                             trend: t.keys, warn: true },
+    { k: 'Agents active',    v: s.agents.count,                                       sub: `${s.agents.tokensLive.toLocaleString()} tokens live`,             trend: t.agents, agent: true },
   ];
+
+  // Skeleton helpers
+  function SkeletonBox({ w, h, style }) {
+    return <div style={{ width: w || '100%', height: h || 14, background: 'var(--surface-3)', borderRadius: 4, ...style }}/>;
+  }
+
+  // Activity timestamp — use live relative time if available, else MOCK helper
+  function relTime(t) {
+    const diff = Math.floor((Date.now() - t) / 1000);
+    if (diff < 0) return 'soon';
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, padding: 16, height: '100%', overflow: 'auto' }}>
@@ -17,20 +186,30 @@ function Overview() {
       <div className="col" style={{ gap: 16, minWidth: 0 }}>
         {/* Metric strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
-          {metrics.map((m, i) => (
-            <div key={i} className="card" style={{ padding: 12, minWidth: 0, cursor: 'pointer' }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)' }}>{m.k}</span>
-                {m.agent && <span className="chip agent" style={{ height: 14, fontSize: 9, padding: '0 4px' }}>new</span>}
-                {m.warn && <Icon.Warn width={11} height={11} style={{ color: 'var(--warn)' }}/>}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
-              <div style={{ fontSize: 10.5, color: 'var(--fg-dim)', marginTop: 1 }}>{m.sub}</div>
-              <div style={{ marginTop: 8, marginLeft: -4, marginRight: -4 }}>
-                <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>
-              </div>
-            </div>
-          ))}
+          {statsLoading
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="card" style={{ padding: 12, minWidth: 0 }}>
+                  <SkeletonBox h={10} w="60%" style={{ marginBottom: 6 }}/>
+                  <SkeletonBox h={24} w="80%" style={{ marginBottom: 4 }}/>
+                  <SkeletonBox h={10} w="70%"/>
+                  <SkeletonBox h={22} style={{ marginTop: 10 }}/>
+                </div>
+              ))
+            : metrics.map((m, i) => (
+                <div key={i} className="card" style={{ padding: 12, minWidth: 0, cursor: 'pointer' }}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)' }}>{m.k}</span>
+                    {m.agent && <span className="chip agent" style={{ height: 14, fontSize: 9, padding: '0 4px' }}>new</span>}
+                    {m.warn && <Icon.Warn width={11} height={11} style={{ color: 'var(--warn)' }}/>}
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--fg-dim)', marginTop: 1 }}>{m.sub}</div>
+                  <div style={{ marginTop: 8, marginLeft: -4, marginRight: -4 }}>
+                    <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>
+                  </div>
+                </div>
+              ))
+          }
         </div>
 
         {/* Auth breakdown + activity */}
@@ -38,13 +217,15 @@ function Overview() {
           <div className="card">
             <div className="card-header">
               Auth method · 30d
-              <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>12,847 sessions</span>
+              <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>
+                {authData.reduce((a, x) => a + x.value, 0).toLocaleString()} sessions
+              </span>
             </div>
             <div className="card-body" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <Donut segments={MOCK.authBreakdown} size={100} thickness={16}/>
+              <Donut segments={authData} size={100} thickness={16}/>
               <div className="col" style={{ flex: 1, gap: 5 }}>
-                {MOCK.authBreakdown.map((b, i) => {
-                  const total = MOCK.authBreakdown.reduce((a, x) => a + x.value, 0);
+                {authData.map((b, i) => {
+                  const total = authData.reduce((a, x) => a + x.value, 0);
                   const pct = (b.value / total * 100).toFixed(0);
                   return (
                     <div key={i} className="row" style={{ fontSize: 11.5, gap: 8 }}>
@@ -72,19 +253,30 @@ function Overview() {
             <div style={{ overflow: 'hidden' }}>
               <table className="tbl" style={{ fontSize: 12 }}>
                 <tbody>
-                  {MOCK.activity.slice(0, 9).map((a, i) => (
-                    <tr key={i}>
-                      <td style={{ width: 60, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>{MOCK.relativeTime(a.t)}</td>
-                      <td style={{ width: 90 }}>
-                        <span className={"chip" + (a.actor === 'agent' ? ' agent' : a.actor === 'system' ? '' : a.actor === 'admin' ? ' warn' : '')} style={{ height: 16, fontSize: 9.5, padding: '0 5px' }}>{a.actor}</span>
-                      </td>
-                      <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="mono">
-                        {a.name}
-                      </td>
-                      <td className="mono" style={{ color: 'var(--fg)', fontSize: 11.5 }}>{a.action}</td>
-                      <td className="mono" style={{ color: 'var(--fg-dim)', fontSize: 11, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.meta}</td>
-                    </tr>
-                  ))}
+                  {!activityRaw
+                    ? Array.from({ length: 9 }).map((_, i) => (
+                        <tr key={i}>
+                          <td style={{ width: 60 }}><SkeletonBox h={10} w={40}/></td>
+                          <td style={{ width: 90 }}><SkeletonBox h={14} w={60}/></td>
+                          <td><SkeletonBox h={10} w={100}/></td>
+                          <td><SkeletonBox h={10} w={120}/></td>
+                          <td><SkeletonBox h={10} w={160}/></td>
+                        </tr>
+                      ))
+                    : activity.slice(0, 9).map((a, i) => (
+                        <tr key={i}>
+                          <td style={{ width: 60, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>{relTime(a.t)}</td>
+                          <td style={{ width: 90 }}>
+                            <span className={"chip" + (a.actor === 'agent' ? ' agent' : a.actor === 'system' ? '' : a.actor === 'admin' ? ' warn' : '')} style={{ height: 16, fontSize: 9.5, padding: '0 5px' }}>{a.actor}</span>
+                          </td>
+                          <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="mono">
+                            {a.name}
+                          </td>
+                          <td className="mono" style={{ color: 'var(--fg)', fontSize: 11.5 }}>{a.action}</td>
+                          <td className="mono" style={{ color: 'var(--fg-dim)', fontSize: 11, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.meta}</td>
+                        </tr>
+                      ))
+                  }
                 </tbody>
               </table>
             </div>
@@ -95,7 +287,7 @@ function Overview() {
           </div>
         </div>
 
-        {/* Agent activity highlights (standout) */}
+        {/* Agent activity highlights — compact list (no nested cards) */}
         <div className="card">
           <div className="card-header">
             <span>Agent activity · 24h</span>
@@ -104,29 +296,28 @@ function Overview() {
               <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>1,284 live tokens · 8 agents</span>
             </div>
           </div>
-          <div className="card-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-            {MOCK.agents.slice(0, 4).map(a => (
+          <div style={{ padding: '4px 0' }}>
+            {MOCK.agents.slice(0, 4).map((a, i) => (
               <div key={a.id} style={{
-                padding: 10,
-                border: '1px solid var(--hairline)',
-                borderRadius: 5,
-                background: 'var(--surface-2)',
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '8px 14px',
+                borderBottom: i < 3 ? '1px solid var(--hairline)' : 'none',
               }}>
-                <div className="row" style={{ gap: 8, marginBottom: 6 }}>
-                  <Avatar name={a.name} agent size={22}/>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: 12 }}>{a.name}</div>
-                    <div className="mono faint" style={{ fontSize: 10 }}>{MOCK.relativeTime(a.lastUsed)}</div>
+                <Avatar name={a.name} agent size={22}/>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontWeight: 500, fontSize: 12 }}>{a.name}</span>
+                    {a.dpop && <span className="chip" style={{ height: 14, fontSize: 9, padding: '0 4px' }} title="DPoP bound">DPoP</span>}
+                    <span className="mono faint" style={{ fontSize: 10 }}>{MOCK.relativeTime(a.lastUsed)}</span>
                   </div>
-                  {a.dpop && <span className="chip" style={{ height: 15, fontSize: 9, padding: '0 4px' }} title="DPoP bound">DPoP</span>}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 2, alignItems: 'center' }}>
+                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--fg)' }}>{a.tokensActive}</span>
+                    <span className="faint" style={{ fontSize: 10 }}>tokens</span>
+                    <span className="faint" style={{ fontSize: 10 }}>·</span>
+                    <span className="mono faint" style={{ fontSize: 10 }}>{a.scopes.length} scopes</span>
+                  </div>
                 </div>
-                <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-                  <span className="mono" style={{ fontSize: 10, color: 'var(--fg)' }}>{a.tokensActive}</span>
-                  <span className="faint" style={{ fontSize: 10 }}>tokens</span>
-                  <span className="faint" style={{ fontSize: 10 }}>·</span>
-                  <span className="mono faint" style={{ fontSize: 10 }}>{a.scopes.length} scopes</span>
-                </div>
-                <div style={{ marginTop: 8, marginLeft: -4 }}>
+                <div style={{ width: 80, flexShrink: 0 }}>
                   <Sparkline data={[12,18,14,22,28,24,31,29,42,38,45,52,48,a.tokensActive/10]} height={16} color="var(--agent)"/>
                 </div>
               </div>
@@ -138,16 +329,16 @@ function Overview() {
         <div className="card">
           <div className="card-header">System health</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
-            {[
-              { k: 'Version', v: 'v0.8.2', sub: '2 days old · up-to-date' },
-              { k: 'Uptime', v: '18d 04:22', sub: 'since last restart' },
-              { k: 'Database', v: '142 MB', sub: 'postgres · healthy' },
-              { k: 'Migrations', v: '0047', sub: 'cursor up-to-date' },
-              { k: 'JWT mode', v: 'jwt', sub: 'ES256 · 2 keys active' },
-              { k: 'SMTP', v: 'shark.email', sub: 'testing tier · 280/500' },
-              { k: 'OAuth providers', v: '4', sub: 'google · github · apple · discord' },
-              { k: 'SSO connections', v: '2', sub: 'stride.io · apex.dev' },
-            ].map((x, i) => (
+            {(health || [
+              { k: 'Version',         v: 'v0.8.2',      sub: '2 days old · up-to-date' },
+              { k: 'Uptime',          v: '18d 04:22',   sub: 'since last restart' },
+              { k: 'Database',        v: '142 MB',      sub: 'postgres · healthy' },
+              { k: 'Migrations',      v: '0047',        sub: 'cursor up-to-date' },
+              { k: 'JWT mode',        v: 'jwt',         sub: 'ES256 · 2 keys active' },
+              { k: 'SMTP',            v: 'shark.email', sub: 'testing tier · 280/500' },
+              { k: 'OAuth providers', v: '4',           sub: 'google · github · apple · discord' },
+              { k: 'SSO connections', v: '2',           sub: 'stride.io · apex.dev' },
+            ]).map((x, i) => (
               <div key={i} style={{
                 padding: '12px 14px',
                 borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none',
