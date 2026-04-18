@@ -9,13 +9,21 @@ function Applications() {
   const [rotateModal, setRotateModal] = React.useState(null);
   const [createOpen, setCreateOpen] = React.useState(false);
 
-  const apps = MOCK.applications;
+  const { data: appsRaw, loading, refresh } = useAPI('/admin/apps');
+  const apps = appsRaw?.applications || [];
+
   const filtered = apps.filter(a => {
-    if (filter === 'first' && a.type !== 'first-party') return false;
-    if (filter === 'third' && a.type !== 'third-party') return false;
-    if (query && !(a.name.toLowerCase().includes(query.toLowerCase()) || a.clientId.includes(query))) return false;
+    if (query && !(a.name.toLowerCase().includes(query.toLowerCase()) || a.client_id.includes(query))) return false;
     return true;
   });
+
+  // Keep selected in sync after refresh
+  React.useEffect(() => {
+    if (selected) {
+      const fresh = apps.find(a => a.id === selected.id);
+      if (fresh) setSelected(fresh);
+    }
+  }, [apps]);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 560px' : '1fr', height: '100%', overflow: 'hidden' }}>
@@ -26,7 +34,7 @@ function Applications() {
             <div style={{ flex: 1 }}>
               <h1 style={{ fontSize: 18, margin: 0, fontWeight: 600 }}>Applications</h1>
               <p className="faint" style={{ margin: '2px 0 0', fontSize: 11.5 }}>
-                OAuth/OIDC clients · {apps.length} registered · {apps.reduce((a,b)=>a+b.tokensIssued24h,0).toLocaleString()} tokens/24h
+                OAuth/OIDC clients · {apps.length} registered
               </p>
             </div>
             <button className="btn ghost"><Icon.Explorer width={11} height={11}/> Discovery</button>
@@ -47,99 +55,78 @@ function Applications() {
               value={query} onChange={e => setQuery(e.target.value)}
               style={{ flex: 1, background: 'transparent', border: 0, outline: 'none', color: 'var(--fg)', fontSize: 12 }}/>
           </div>
-          <div className="seg" style={{height:28, display:'inline-flex', border:'1px solid var(--hairline-strong)', borderRadius:3, overflow:'hidden'}}>
-            {[['all','All'],['first','First-party'],['third','Third-party']].map(([v,l]) => (
-              <button key={v} onClick={() => setFilter(v)}
-                style={{padding:'0 10px', height:28, fontSize:11, background: filter===v ? '#fafafa':'var(--surface-2)', color: filter===v ? '#000':'var(--fg-muted)', borderRight:'1px solid var(--hairline)'}}>
-                {l}
-              </button>
-            ))}
-          </div>
           <div style={{flex:1}}/>
           <span className="faint mono" style={{fontSize:11}}>{filtered.length} / {apps.length}</span>
         </div>
 
         {/* Table */}
         <div style={{ flex: 1, overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr>
-                <th style={{...appThStyle, width: 28}}/>
-                <th style={appThStyle}>Name</th>
-                <th style={appThStyle}>Client ID</th>
-                <th style={appThStyle}>Type</th>
-                <th style={appThStyle}>Redirects</th>
-                <th style={appThStyle}>Grants</th>
-                <th style={{...appThStyle, textAlign:'right'}}>Tokens / 24h</th>
-                <th style={appThStyle}>Last used</th>
-                <th style={appThStyle}>Secret rotated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(a => (
-                <tr key={a.id}
-                  onClick={() => { setSelected(a); setTab('config'); }}
-                  style={{
-                    cursor:'pointer',
-                    background: selected?.id === a.id ? 'var(--surface-2)' : 'transparent',
-                  }}>
-                  <td style={appTdStyle}>
-                    <div style={{
-                      width:22, height:22, borderRadius: 4, background: 'var(--surface-3)',
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                      fontSize: 10, fontWeight: 600, color: 'var(--fg)', border:'1px solid var(--hairline-strong)',
-                    }}>{a.name[0]}</div>
-                  </td>
-                  <td style={appTdStyle}>
-                    <div style={{fontWeight: 500}}>{a.name}</div>
-                    <div className="faint" style={{fontSize: 10.5, marginTop: 1}}>{a.owner}</div>
-                  </td>
-                  <td style={appTdStyle}>
-                    <span className="mono faint" style={{fontSize: 10.5}}>{a.clientId}</span>
-                  </td>
-                  <td style={appTdStyle}>
-                    <span className="chip" style={{height:16, fontSize:9.5}}>
-                      {a.type === 'first-party' ? '1st-party' : '3rd-party'}
-                    </span>
-                  </td>
-                  <td style={appTdStyle}>
-                    <span className="mono faint" style={{fontSize: 10.5}}>
-                      {a.redirects.length} URI{a.redirects.length !== 1 && 's'}
-                    </span>
-                  </td>
-                  <td style={appTdStyle}>
-                    <div className="row" style={{gap:3, flexWrap:'wrap'}}>
-                      {a.grants.slice(0,2).map(g => (
-                        <span key={g} className="chip mono" style={{height:15, fontSize:9, padding:'0 4px'}}>{g.replace('authorization_','ac_').replace('client_','cl_').replace('refresh_','rt')}</span>
-                      ))}
-                      {a.grants.length > 2 && <span className="faint" style={{fontSize:10}}>+{a.grants.length-2}</span>}
-                    </div>
-                  </td>
-                  <td style={{...appTdStyle, textAlign:'right'}}>
-                    <span className="mono" style={{fontSize: 11.5}}>{a.tokensIssued24h.toLocaleString()}</span>
-                  </td>
-                  <td style={appTdStyle}>
-                    <span className="mono faint" style={{fontSize: 10.5}}>{MOCK.relativeTime(a.lastUsed)}</span>
-                  </td>
-                  <td style={appTdStyle}>
-                    <span className="row" style={{gap:5}}>
-                      <span className="mono faint" style={{fontSize: 10.5}}>{MOCK.relativeTime(a.secretRotated)}</span>
-                      {a.warn && <span className="dot warn" title={a.warn}/>}
-                    </span>
-                  </td>
+          {loading ? (
+            <div className="faint" style={{padding: 20, fontSize: 12}}>Loading applications…</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th style={{...appThStyle, width: 28}}/>
+                  <th style={appThStyle}>Name</th>
+                  <th style={appThStyle}>Client ID</th>
+                  <th style={appThStyle}>Redirects</th>
+                  <th style={appThStyle}>CORS Origins</th>
+                  <th style={appThStyle}>Created</th>
+                  <th style={appThStyle}>Updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map(a => (
+                  <tr key={a.id}
+                    onClick={() => { setSelected(a); setTab('config'); }}
+                    style={{
+                      cursor:'pointer',
+                      background: selected?.id === a.id ? 'var(--surface-2)' : 'transparent',
+                    }}>
+                    <td style={appTdStyle}>
+                      <div style={{
+                        width:22, height:22, borderRadius: 4, background: 'var(--surface-3)',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        fontSize: 10, fontWeight: 600, color: 'var(--fg)', border:'1px solid var(--hairline-strong)',
+                      }}>{a.name[0]}</div>
+                    </td>
+                    <td style={appTdStyle}>
+                      <div style={{fontWeight: 500}}>{a.name}</div>
+                    </td>
+                    <td style={appTdStyle}>
+                      <span className="mono faint" style={{fontSize: 10.5}}>{a.client_id}</span>
+                    </td>
+                    <td style={appTdStyle}>
+                      <span className="mono faint" style={{fontSize: 10.5}}>
+                        {(a.redirect_uris || []).length} URI{(a.redirect_uris || []).length !== 1 && 's'}
+                      </span>
+                    </td>
+                    <td style={appTdStyle}>
+                      <span className="mono faint" style={{fontSize: 10.5}}>
+                        {(a.cors_origins || []).length} origin{(a.cors_origins || []).length !== 1 && 's'}
+                      </span>
+                    </td>
+                    <td style={appTdStyle}>
+                      <span className="mono faint" style={{fontSize: 10.5}}>{relativeTime(a.created_at)}</span>
+                    </td>
+                    <td style={appTdStyle}>
+                      <span className="mono faint" style={{fontSize: 10.5}}>{relativeTime(a.updated_at)}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* CLI parity footer */}
         <div className="row" style={{ padding: '8px 20px', borderTop: '1px solid var(--hairline)', fontSize: 10.5, gap: 10 }}>
           <Icon.Debug width={11} height={11} style={{opacity:0.5}}/>
           <span className="faint">CLI parity:</span>
-          <span className="mono faint">shark apps list --type={filter === 'all' ? '*' : filter}</span>
+          <span className="mono faint">shark apps list</span>
           <div style={{flex:1}}/>
-          <span className="faint mono">POST /v1/oauth/clients</span>
+          <span className="faint mono">POST /admin/apps</span>
         </div>
       </div>
 
@@ -149,16 +136,72 @@ function Applications() {
           tab={tab} setTab={setTab}
           onClose={() => setSelected(null)}
           onRotate={() => setRotateModal(selected)}
+          onDelete={async () => {
+            await API.del('/admin/apps/' + selected.id);
+            setSelected(null);
+            refresh();
+          }}
+          onUpdate={async (updates) => {
+            const updated = await API.patch('/admin/apps/' + selected.id, updates);
+            refresh();
+            return updated;
+          }}
         />
       )}
 
-      {rotateModal && <RotateSecretModal app={rotateModal} onClose={() => setRotateModal(null)}/>}
-      {createOpen && <CreateAppSlideOver onClose={() => setCreateOpen(false)}/>}
+      {rotateModal && (
+        <RotateSecretModal
+          app={rotateModal}
+          onClose={() => setRotateModal(null)}
+          onRotate={async () => {
+            const result = await API.post('/admin/apps/' + rotateModal.id + '/rotate-secret');
+            refresh();
+            return result;
+          }}
+        />
+      )}
+      {createOpen && (
+        <CreateAppSlideOver
+          onClose={() => setCreateOpen(false)}
+          onCreate={async (payload) => {
+            const result = await API.post('/admin/apps', payload);
+            refresh();
+            return result;
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function AppDetail({ app, tab, setTab, onClose, onRotate }) {
+// Format ISO timestamp or epoch ms to relative string
+function relativeTime(val) {
+  if (!val) return '—';
+  const ms = typeof val === 'string' ? new Date(val).getTime() : val;
+  const diff = Date.now() - ms;
+  if (diff < 0) return 'just now';
+  if (diff < 60e3) return Math.floor(diff / 1e3) + 's ago';
+  if (diff < 3600e3) return Math.floor(diff / 60e3) + 'm ago';
+  if (diff < 86400e3) return Math.floor(diff / 3600e3) + 'h ago';
+  return Math.floor(diff / 86400e3) + 'd ago';
+}
+
+function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) {
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState(null);
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete "${app.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete();
+    } catch (e) {
+      setDeleteError(e.message);
+      setDeleting(false);
+    }
+  };
+
   return (
     <aside style={{
       borderLeft: '1px solid var(--hairline)', background: 'var(--surface-0)',
@@ -175,8 +218,8 @@ function AppDetail({ app, tab, setTab, onClose, onRotate }) {
           <div style={{flex:1, minWidth:0}}>
             <div style={{fontWeight: 500, fontSize: 14}}>{app.name}</div>
             <div className="row" style={{gap: 6, fontSize: 10.5, marginTop: 2}}>
-              <span className="mono faint">{app.clientId}</span>
-              <CopyField value={app.clientId} truncate={24}/>
+              <span className="mono faint">{app.client_id}</span>
+              <CopyField value={app.client_id} truncate={24}/>
             </div>
           </div>
           <button className="btn ghost icon sm" onClick={onClose}><Icon.X width={11} height={11}/></button>
@@ -185,12 +228,15 @@ function AppDetail({ app, tab, setTab, onClose, onRotate }) {
         <div className="row" style={{ gap: 6, marginTop: 10 }}>
           <button className="btn ghost sm">Test sign-in</button>
           <button className="btn ghost sm" onClick={onRotate}>Rotate secret</button>
-          <button className="btn ghost sm">Disable</button>
+          <button className="btn danger sm" onClick={handleDelete} disabled={deleting}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
           <div style={{flex:1}}/>
           <span className="chip" style={{height:18, fontSize:10}}>
             <span className="dot success"/>active
           </span>
         </div>
+        {deleteError && <div style={{color:'var(--danger)', fontSize: 11, marginTop: 6}}>{deleteError}</div>}
       </div>
 
       {/* Tabs */}
@@ -212,7 +258,7 @@ function AppDetail({ app, tab, setTab, onClose, onRotate }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {tab === 'config' && <AppConfig app={app}/>}
+        {tab === 'config' && <AppConfig app={app} onUpdate={onUpdate}/>}
         {tab === 'preview' && <ConsentPreview app={app}/>}
         {tab === 'tokens' && <AppTokens app={app}/>}
         {tab === 'events' && <AppEvents app={app}/>}
@@ -221,75 +267,107 @@ function AppDetail({ app, tab, setTab, onClose, onRotate }) {
   );
 }
 
-function AppConfig({ app }) {
+function AppConfig({ app, onUpdate }) {
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState(null);
+  const [saveOk, setSaveOk] = React.useState(false);
+  const [redirectInput, setRedirectInput] = React.useState('');
+  const [corsInput, setCorsInput] = React.useState('');
+
+  const redirectUris = app.redirect_uris || [];
+  const corsOrigins = app.cors_origins || [];
+
+  const save = async (updates) => {
+    setSaving(true);
+    setSaveError(null);
+    setSaveOk(false);
+    try {
+      await onUpdate(updates);
+      setSaveOk(true);
+      setTimeout(() => setSaveOk(false), 2000);
+    } catch (e) {
+      setSaveError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeRedirect = (uri) => {
+    save({ redirect_uris: redirectUris.filter(u => u !== uri) });
+  };
+
+  const addRedirect = () => {
+    const val = redirectInput.trim();
+    if (!val) return;
+    save({ redirect_uris: [...redirectUris, val] });
+    setRedirectInput('');
+  };
+
+  const addCors = () => {
+    const val = corsInput.trim();
+    if (!val) return;
+    save({ cors_origins: [...corsOrigins, val] });
+    setCorsInput('');
+  };
+
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <Section label="Redirect URIs" count={app.redirects.length}>
+      {saveError && <div style={{color:'var(--danger)', fontSize: 11, padding: '6px 8px', background:'var(--surface-1)', borderRadius: 3}}>{saveError}</div>}
+      {saveOk && <div style={{color:'var(--success)', fontSize: 11}}>Saved.</div>}
+
+      <Section label="Redirect URIs" count={redirectUris.length}>
         <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>
-          {app.redirects.map((uri, i) => (
-            <div key={i} className="row" style={{ padding: '7px 10px', gap: 8, borderBottom: i < app.redirects.length - 1 ? '1px solid var(--hairline)' : 0 }}>
+          {redirectUris.map((uri, i) => (
+            <div key={i} className="row" style={{ padding: '7px 10px', gap: 8, borderBottom: i < redirectUris.length - 1 ? '1px solid var(--hairline)' : 0 }}>
               <span className="mono" style={{ fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{uri}</span>
               {uri.includes('localhost') && <span className="chip" style={{height:15, fontSize:9}}>dev</span>}
               {uri.includes('*') && <span className="chip warn" style={{height:15, fontSize:9}}>wildcard</span>}
-              <button className="btn ghost icon sm"><Icon.X width={10} height={10}/></button>
+              <button className="btn ghost icon sm" onClick={() => removeRedirect(uri)} disabled={saving}><Icon.X width={10} height={10}/></button>
             </div>
           ))}
         </div>
-        <button className="btn ghost sm" style={{marginTop: 6}}><Icon.Plus width={10} height={10}/> Add URI</button>
+        <div className="row" style={{gap: 6, marginTop: 6}}>
+          <input
+            placeholder="https://…"
+            value={redirectInput}
+            onChange={e => setRedirectInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addRedirect()}
+            style={{flex:1, fontSize:11, padding:'4px 7px', border:'1px solid var(--hairline)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
+          />
+          <button className="btn ghost sm" onClick={addRedirect} disabled={saving || !redirectInput.trim()}><Icon.Plus width={10} height={10}/> Add</button>
+        </div>
       </Section>
 
-      <Section label="Post-logout redirects">
-        {app.logoutUris.length ? (
+      <Section label="Allowed origins (CORS)" count={corsOrigins.length}>
+        {corsOrigins.length ? (
           <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>
-            {app.logoutUris.map((u, i) => (
-              <div key={i} style={{ padding: '7px 10px', borderBottom: i < app.logoutUris.length-1 ? '1px solid var(--hairline)' : 0 }}>
-                <span className="mono" style={{fontSize: 11}}>{u}</span>
-              </div>
-            ))}
-          </div>
-        ) : <div className="faint" style={{fontSize: 11.5, padding: '6px 0'}}>No logout URIs configured.</div>}
-      </Section>
-
-      <Section label="Allowed origins (CORS)" count={app.origins.length}>
-        {app.origins.length ? (
-          <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>
-            {app.origins.map((o, i) => (
-              <div key={i} className="row" style={{ padding: '6px 10px', borderBottom: i < app.origins.length-1 ? '1px solid var(--hairline)' : 0 }}>
+            {corsOrigins.map((o, i) => (
+              <div key={i} className="row" style={{ padding: '6px 10px', borderBottom: i < corsOrigins.length-1 ? '1px solid var(--hairline)' : 0 }}>
                 <span className="mono" style={{fontSize: 11, flex: 1}}>{o}</span>
               </div>
             ))}
           </div>
         ) : <div className="faint" style={{fontSize: 11.5, padding: '6px 0'}}>No origins — Authorization Code flow only.</div>}
-      </Section>
-
-      <Section label="Grants & security">
-        <div style={{display:'grid', gridTemplateColumns:'auto 1fr', gap:'8px 14px', fontSize: 11.5}}>
-          <span className="faint">Grants</span>
-          <div className="row" style={{gap: 4, flexWrap:'wrap'}}>
-            {app.grants.map(g => <span key={g} className="chip mono" style={{height:17, fontSize:10}}>{g}</span>)}
-          </div>
-          <span className="faint">PKCE</span>
-          <span><span className={"chip " + (app.pkce === 'required' ? 'success' : '')} style={{height:17,fontSize:10}}>{app.pkce}</span></span>
-          <span className="faint">Token endpoint auth</span>
-          <span className="mono">{app.type === 'first-party' ? 'client_secret_post' : 'client_secret_basic'}</span>
-          <span className="faint">Secret rotated</span>
-          <span>
-            <span className="mono">{MOCK.relativeTime(app.secretRotated)}</span>
-            {app.warn && <span className="chip warn" style={{height:16,fontSize:9.5,marginLeft:6}}>{app.warn}</span>}
-          </span>
+        <div className="row" style={{gap: 6, marginTop: 6}}>
+          <input
+            placeholder="https://…"
+            value={corsInput}
+            onChange={e => setCorsInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addCors()}
+            style={{flex:1, fontSize:11, padding:'4px 7px', border:'1px solid var(--hairline)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
+          />
+          <button className="btn ghost sm" onClick={addCors} disabled={saving || !corsInput.trim()}><Icon.Plus width={10} height={10}/> Add</button>
         </div>
       </Section>
 
-      <Section label="Signing & tokens">
+      <Section label="Metadata">
         <div style={{display:'grid', gridTemplateColumns:'auto 1fr', gap:'8px 14px', fontSize: 11.5}}>
-          <span className="faint">ID token signing</span>
-          <span className="mono">RS256</span>
-          <span className="faint">Access token TTL</span>
-          <span className="mono">1h</span>
-          <span className="faint">Refresh token TTL</span>
-          <span className="mono">30d · rotate on use</span>
-          <span className="faint">Current signing kid</span>
-          <span className="mono">2026-04-b</span>
+          <span className="faint">App ID</span>
+          <span className="mono">{app.id}</span>
+          <span className="faint">Created</span>
+          <span className="mono">{relativeTime(app.created_at)}</span>
+          <span className="faint">Last updated</span>
+          <span className="mono">{relativeTime(app.updated_at)}</span>
         </div>
       </Section>
     </div>
@@ -302,6 +380,7 @@ function ConsentPreview({ app }) {
     { scope: 'profile', desc: 'Read your name and profile picture' },
     { scope: 'email', desc: 'Read your primary email address' },
   ];
+  const redirectUris = app.redirect_uris || [];
   return (
     <div style={{ padding: 16 }}>
       <div className="faint" style={{fontSize: 11, marginBottom: 10}}>
@@ -344,11 +423,11 @@ function ConsentPreview({ app }) {
         </div>
 
         <div style={{textAlign:'center', fontSize: 10, color:'#999', marginTop: 14, borderTop:'1px solid #eee', paddingTop: 10}}>
-          Redirects to <span style={{fontFamily:'var(--font-mono)'}}>{app.redirects[0]}</span>
+          Redirects to <span style={{fontFamily:'var(--font-mono)'}}>{redirectUris[0] || '(no redirect URIs)'}</span>
         </div>
       </div>
 
-      <div className="faint" style={{fontSize: 11, marginTop: 14, padding: 10, background: 'var(--surface-1)', borderLeft: '2px solid var(--accent, var(--fg-dim))', borderRadius: 2}}>
+      <div className="faint" style={{fontSize: 11, marginTop: 14, padding: 10, background: 'var(--surface-1)', borderRadius: 2}}>
         <b style={{color:'var(--fg)'}}>Tip:</b> consent is skipped on subsequent grants unless new scopes are requested. Test with <span className="mono">?prompt=consent</span>.
       </div>
     </div>
@@ -356,55 +435,56 @@ function ConsentPreview({ app }) {
 }
 
 function AppTokens({ app }) {
-  const rows = [
-    { jti: '8f9a2b', user: 'amelia@nimbus.sh', issued: Date.now() - 120e3, exp: Date.now() + 40*60e3, scope: 'openid profile email' },
-    { jti: '3c1d4e', user: 'priya.nair@stride.io', issued: Date.now() - 8*60e3, exp: Date.now() + 52*60e3, scope: 'openid profile' },
-    { jti: '7b2a9f', user: 'tomas@orbit.so', issued: Date.now() - 22*60e3, exp: Date.now() + 38*60e3, scope: 'openid profile email' },
-    { jti: '9e4f3a', user: 'kenji@hexcel.co', issued: Date.now() - 44*60e3, exp: Date.now() + 16*60e3, scope: 'openid' },
-  ];
   return (
     <div style={{padding: 16}}>
-      <div className="faint" style={{fontSize: 11, marginBottom: 10}}>
-        {app.tokensIssued24h.toLocaleString()} tokens issued in last 24h. Active: <span className="mono">{rows.length * 52}</span>.
+      <div className="faint" style={{fontSize: 11.5, padding: '20px 0', textAlign:'center'}}>
+        Token listing not yet available via API.
       </div>
-      <table style={{width:'100%', borderCollapse:'collapse', fontSize: 11}}>
-        <thead><tr>
-          <th style={appThStyle}>JTI</th><th style={appThStyle}>User</th><th style={appThStyle}>Issued</th><th style={appThStyle}>Expires</th>
-        </tr></thead>
-        <tbody>
-          {rows.map(r => (
-            <tr key={r.jti}>
-              <td style={appTdStyle}><span className="mono">{r.jti}</span></td>
-              <td style={appTdStyle}>{r.user}</td>
-              <td style={appTdStyle}><span className="mono faint">{MOCK.relativeTime(r.issued)}</span></td>
-              <td style={appTdStyle}><span className="mono faint">{MOCK.relativeTime(r.exp)}</span></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
 
 function AppEvents({ app }) {
-  const events = MOCK.audit.filter(e => e.action.startsWith('app.') || e.action.startsWith('oauth.')).slice(0, 10);
+  const { data, loading } = useAPI('/admin/audit?limit=20');
+  const events = (data?.events || []).filter(e => e.action && (e.action.startsWith('app.') || e.action.startsWith('oauth.'))).slice(0, 10);
   return (
     <div style={{padding: 16}}>
-      {events.map(e => (
+      {loading ? (
+        <div className="faint" style={{fontSize: 11}}>Loading…</div>
+      ) : events.length === 0 ? (
+        <div className="faint" style={{fontSize: 11}}>No app or OAuth events found.</div>
+      ) : events.map(e => (
         <div key={e.id} className="row" style={{padding: '7px 0', borderBottom: '1px solid var(--hairline)', gap: 8, fontSize: 11.5}}>
           <SevDot sev={e.severity}/>
           <span className="mono" style={{flex: 1}}>{e.action}</span>
           <span className="faint">{e.actor}</span>
-          <span className="faint mono" style={{fontSize: 10}}>{MOCK.relativeTime(e.t)}</span>
+          <span className="faint mono" style={{fontSize: 10}}>{relativeTime(e.t || e.created_at)}</span>
         </div>
       ))}
     </div>
   );
 }
 
-function RotateSecretModal({ app, onClose }) {
+function RotateSecretModal({ app, onClose, onRotate }) {
   const [stage, setStage] = React.useState('confirm'); // confirm → reveal
-  const newSecret = 'sk_live_8f92aB_' + Math.random().toString(36).slice(2, 14) + 'Wq9rTn';
+  const [newSecret, setNewSecret] = React.useState(null);
+  const [rotating, setRotating] = React.useState(false);
+  const [error, setError] = React.useState(null);
+
+  const doRotate = async () => {
+    setRotating(true);
+    setError(null);
+    try {
+      const result = await onRotate();
+      setNewSecret(result?.client_secret || result?.secret || '(see server logs)');
+      setStage('reveal');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setRotating(false);
+    }
+  };
+
   return (
     <div style={modalBackdrop} onClick={onClose}>
       <div style={{...modalCard, width: 480}} onClick={e => e.stopPropagation()}>
@@ -422,21 +502,22 @@ function RotateSecretModal({ app, onClose }) {
               The new secret will be shown exactly once. Copy it to your secret store immediately.
             </div>
           </div>
+          {error && <div style={{color:'var(--danger)', fontSize: 11, marginTop: 8}}>{error}</div>}
           <div className="row" style={{marginTop: 18, justifyContent:'flex-end', gap: 8}}>
             <button className="btn ghost" onClick={onClose}>Cancel</button>
-            <button className="btn danger" onClick={() => setStage('reveal')}>Rotate now</button>
+            <button className="btn danger" onClick={doRotate} disabled={rotating}>
+              {rotating ? 'Rotating…' : 'Rotate now'}
+            </button>
           </div>
         </> : <>
           <h2 style={{margin:0, fontSize: 15, fontWeight: 600}}>New secret · copy it now</h2>
           <p className="faint" style={{fontSize: 12, marginTop: 6}}>This is the only time you'll see this value.</p>
           <div style={{background:'#000', color:'#fff', padding: 14, borderRadius: 4, marginTop: 14, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak:'break-all', position:'relative'}}>
             {newSecret}
-            <button className="btn ghost sm" style={{position:'absolute', top: 6, right: 6, color:'#fff', borderColor:'rgba(255,255,255,0.2)'}}>
+            <button className="btn ghost sm" style={{position:'absolute', top: 6, right: 6, color:'#fff', borderColor:'rgba(255,255,255,0.2)'}}
+              onClick={() => navigator.clipboard.writeText(newSecret)}>
               <Icon.Copy width={10} height={10}/> Copy
             </button>
-          </div>
-          <div className="faint mono" style={{fontSize: 11, marginTop: 10}}>
-            kid: sec_2026_Q1 · valid from {new Date().toISOString().slice(0,16)}Z · old secret expires in 24h
           </div>
           <div className="row" style={{marginTop: 18, justifyContent:'flex-end', gap: 8}}>
             <button className="btn primary" onClick={onClose}>I've saved it</button>
@@ -447,8 +528,33 @@ function RotateSecretModal({ app, onClose }) {
   );
 }
 
-function CreateAppSlideOver({ onClose }) {
-  const [step, setStep] = React.useState(1);
+function CreateAppSlideOver({ onClose, onCreate }) {
+  const [name, setName] = React.useState('');
+  const [redirectUris, setRedirectUris] = React.useState('');
+  const [corsOrigins, setCorsOrigins] = React.useState('');
+  const [creating, setCreating] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [created, setCreated] = React.useState(null); // holds response with secret
+
+  const handleCreate = async () => {
+    if (!name.trim()) { setError('Name is required.'); return; }
+    setCreating(true);
+    setError(null);
+    try {
+      const payload = {
+        name: name.trim(),
+        redirect_uris: redirectUris.split('\n').map(s => s.trim()).filter(Boolean),
+        cors_origins: corsOrigins.split('\n').map(s => s.trim()).filter(Boolean),
+      };
+      const result = await onCreate(payload);
+      setCreated(result);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div style={modalBackdrop} onClick={onClose}>
       <div style={{
@@ -457,32 +563,83 @@ function CreateAppSlideOver({ onClose }) {
         display:'flex', flexDirection:'column', boxShadow: 'var(--shadow-lg)',
       }} onClick={e => e.stopPropagation()}>
         <div className="row" style={{padding: '14px 16px', borderBottom:'1px solid var(--hairline)'}}>
-          <h2 style={{margin:0, fontSize: 14, fontWeight: 600, flex:1}}>New application · step {step} of 3</h2>
+          <h2 style={{margin:0, fontSize: 14, fontWeight: 600, flex:1}}>
+            {created ? 'Application created' : 'New application'}
+          </h2>
           <button className="btn ghost icon sm" onClick={onClose}><Icon.X width={11} height={11}/></button>
         </div>
+
         <div style={{flex:1, overflowY:'auto', padding: 20}}>
-          {step === 1 && <div>
-            <h3 style={{fontSize: 12.5, margin: '0 0 14px'}}>Pick application type</h3>
-            {[
-              ['Web app', 'Server-side. Uses client_secret. Authorization Code + PKCE.'],
-              ['Single-page app', 'Browser-only. Public client. PKCE required.'],
-              ['Mobile app', 'Native iOS/Android. Custom schemes for redirect.'],
-              ['Service (M2M)', 'No end user. Client credentials grant.'],
-            ].map(([name, desc]) => (
-              <button key={name} style={{display:'block', width:'100%', textAlign:'left', padding: 12, border:'1px solid var(--hairline)', borderRadius: 4, marginBottom: 8, background: 'var(--surface-1)'}}>
-                <div style={{fontWeight: 500, fontSize: 12.5}}>{name}</div>
-                <div className="faint" style={{fontSize: 11, marginTop: 2}}>{desc}</div>
-              </button>
-            ))}
-          </div>}
-          {step > 1 && <div className="faint">Config fields…</div>}
+          {created ? (
+            <div style={{display:'flex', flexDirection:'column', gap: 16}}>
+              <div className="faint" style={{fontSize: 12}}>
+                Application <b style={{color:'var(--fg)'}}>{created.name || name}</b> has been created.
+                {created.client_secret && ' Copy your client secret now — it won\'t be shown again.'}
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'auto 1fr', gap:'8px 14px', fontSize: 11.5}}>
+                <span className="faint">Client ID</span>
+                <span className="mono">{created.client_id || created.id}</span>
+              </div>
+              {created.client_secret && (
+                <div>
+                  <div className="faint" style={{fontSize: 11, marginBottom: 6}}>Client Secret (shown once)</div>
+                  <div style={{background:'#000', color:'#fff', padding: 14, borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak:'break-all', position:'relative'}}>
+                    {created.client_secret}
+                    <button className="btn ghost sm" style={{position:'absolute', top: 6, right: 6, color:'#fff', borderColor:'rgba(255,255,255,0.2)'}}
+                      onClick={() => navigator.clipboard.writeText(created.client_secret)}>
+                      <Icon.Copy width={10} height={10}/> Copy
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{display:'flex', flexDirection:'column', gap: 16}}>
+              <div>
+                <label style={{display:'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4}}>Application name <span style={{color:'var(--danger)'}}>*</span></label>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="My App"
+                  style={{width:'100%', boxSizing:'border-box', fontSize:12, padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
+                />
+              </div>
+              <div>
+                <label style={{display:'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4}}>Redirect URIs <span className="faint">(one per line)</span></label>
+                <textarea
+                  value={redirectUris}
+                  onChange={e => setRedirectUris(e.target.value)}
+                  placeholder={"https://app.example.com/callback\nhttps://localhost:3000/callback"}
+                  rows={4}
+                  style={{width:'100%', boxSizing:'border-box', fontSize:11.5, fontFamily:'var(--font-mono)', padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none', resize:'vertical'}}
+                />
+              </div>
+              <div>
+                <label style={{display:'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4}}>CORS origins <span className="faint">(one per line, optional)</span></label>
+                <textarea
+                  value={corsOrigins}
+                  onChange={e => setCorsOrigins(e.target.value)}
+                  placeholder="https://app.example.com"
+                  rows={3}
+                  style={{width:'100%', boxSizing:'border-box', fontSize:11.5, fontFamily:'var(--font-mono)', padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none', resize:'vertical'}}
+                />
+              </div>
+              {error && <div style={{color:'var(--danger)', fontSize: 11}}>{error}</div>}
+            </div>
+          )}
         </div>
+
         <div className="row" style={{padding: 12, borderTop: '1px solid var(--hairline)', gap: 8, justifyContent: 'flex-end'}}>
-          <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn ghost" onClick={() => setStep(Math.max(1, step - 1))} disabled={step === 1}>Back</button>
-          <button className="btn primary" onClick={() => step < 3 ? setStep(step + 1) : onClose()}>
-            {step < 3 ? 'Next' : 'Create'}
-          </button>
+          {created ? (
+            <button className="btn primary" onClick={onClose}>Done</button>
+          ) : (
+            <>
+              <button className="btn ghost" onClick={onClose}>Cancel</button>
+              <button className="btn primary" onClick={handleCreate} disabled={creating || !name.trim()}>
+                {creating ? 'Creating…' : 'Create application'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -505,5 +662,6 @@ const appThStyle = { textAlign: 'left', padding: '8px 14px', fontSize: 10, fontW
 const appTdStyle = { padding: '9px 14px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'middle' };
 const modalBackdrop = { position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex: 50 };
 const modalCard = { background:'var(--surface-1)', border:'1px solid var(--hairline-bright)', borderRadius: 6, padding: 18 };
+const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: '0 0 8px' };
 
 Object.assign(window, { Applications });
