@@ -264,7 +264,7 @@ func interpolateEnvVars(k *koanf.Koanf) {
 			return match // leave unresolved if env var not set
 		})
 		if replaced != val {
-			k.Set(key, replaced)
+			k.Set(key, replaced) //#nosec G104 -- koanf.Set only errors on invalid keys; key came from k.All() and is known-valid
 		}
 	}
 }
@@ -276,6 +276,7 @@ func Load(path string) (*Config, error) {
 	k := koanf.New(".")
 
 	// Set defaults
+	//#nosec G101 -- default config values (ports, URLs, durations, issuer names), no secrets
 	defaults := map[string]interface{}{
 		"server.port":              8080,
 		"server.base_url":         "http://localhost:8080",

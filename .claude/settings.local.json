@@ -29,7 +29,12 @@
       "Bash(wc -l /home/raul/Desktop/projects/shark/internal/email/*.go)",
       "Bash(wc -l /home/raul/Desktop/projects/shark/internal/auth/providers/*.go)",
       "Bash(go run:*)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(mkdir -p /tmp/sharkdesign)",
+      "Bash(cp /root/.claude/projects/-home-user-shark/ddbe7987-dc9c-4308-8397-7a1fa33e1090/tool-results/webfetch-1776514636781-8ws9nw.bin /tmp/sharkdesign/design.gz)",
+      "Bash(gunzip -f /tmp/sharkdesign/design.gz)",
+      "Read(//tmp/sharkdesign/**)",
+      "Read(//tmp/**)"
     ]
   }
 }

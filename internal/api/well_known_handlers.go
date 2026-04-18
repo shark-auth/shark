@@ -77,7 +77,7 @@ func (s *Server) HandleJWKS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+	json.NewEncoder(w).Encode(map[string]interface{}{ //#nosec G104 -- write to ResponseWriter; client may have disconnected //nolint:errcheck
 		"keys": jwks,
 	})
 }

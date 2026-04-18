@@ -13,6 +13,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/config"
 )
 
+//#nosec G101 -- public OAuth 2.0 endpoint URLs, not credentials
 var githubEndpoint = oauth2.Endpoint{
 	AuthURL:  "https://github.com/login/oauth/authorize",
 	TokenURL: "https://github.com/login/oauth/access_token",

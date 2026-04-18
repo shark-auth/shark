@@ -15,7 +15,7 @@ const (
 	// APIKeyIDKey is the context key for the authenticated API key ID.
 	APIKeyIDKey contextKey = "api_key_id"
 	// APIKeyScopesKey is the context key for the API key's scopes.
-	APIKeyScopesKey contextKey = "api_key_scopes"
+	APIKeyScopesKey contextKey = "api_key_scopes" //#nosec G101 -- context-key identifier string, not a credential
 	// APIKeyNameKey is the context key for the API key's name.
 	APIKeyNameKey contextKey = "api_key_name"
 )
@@ -111,7 +111,7 @@ func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, requiredS
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "60")
 				w.WriteHeader(http.StatusTooManyRequests)
-				json.NewEncoder(w).Encode(map[string]string{
+				json.NewEncoder(w).Encode(map[string]string{ //#nosec G104 -- write to ResponseWriter; no actionable recovery
 					"error":   "rate_limited",
 					"message": "API key rate limit exceeded",
 				})
@@ -145,7 +145,7 @@ func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, requiredS
 func writeJSONError(w http.ResponseWriter, status int, errCode, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{
+	json.NewEncoder(w).Encode(map[string]string{ //#nosec G104 -- write to ResponseWriter; no actionable recovery
 		"error":   errCode,
 		"message": message,
 	})

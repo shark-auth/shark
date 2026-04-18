@@ -152,14 +152,14 @@ func (h *SSOHandlers) SAMLMetadata(w http.ResponseWriter, r *http.Request) {
 
 	metadata, err := h.manager.GenerateSPMetadata(r.Context(), connID)
 	if err != nil {
-		slog.Error("SAML metadata generation failed", "connection_id", connID, "error", err)
+		slog.Error("SAML metadata generation failed", "connection_id", connID, "error", err) //#nosec G706 -- slog escapes values; connID validated above
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Failed to generate SAML metadata"})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
-	w.Write(metadata) //nolint:errcheck
+	w.Write(metadata) //#nosec G104,G705 -- SAML metadata is library-generated XML (crewjam/saml), not user input; write to ResponseWriter //nolint:errcheck
 }
 
 // SAMLACS handles POST /api/v1/sso/saml/{connection_id}/acs
@@ -172,7 +172,7 @@ func (h *SSOHandlers) SAMLACS(w http.ResponseWriter, r *http.Request) {
 
 	user, session, err := h.manager.HandleSAMLACS(r.Context(), connID, r)
 	if err != nil {
-		slog.Error("SAML ACS failed", "connection_id", connID, "error", err)
+		slog.Error("SAML ACS failed", "connection_id", connID, "error", err) //#nosec G706 -- slog escapes values; connID from validated path param
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SSO authentication failed"})
 		return
 	}
@@ -210,7 +210,7 @@ func (h *SSOHandlers) OIDCAuth(w http.ResponseWriter, r *http.Request) {
 
 	redirectURL, state, nonce, err := h.manager.BeginOIDCAuth(r.Context(), connID)
 	if err != nil {
-		slog.Error("OIDC auth begin failed", "connection_id", connID, "error", err)
+		slog.Error("OIDC auth begin failed", "connection_id", connID, "error", err) //#nosec G706 -- slog escapes values; connID from validated path param
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Failed to initiate SSO authentication"})
 		return
 	}
@@ -272,7 +272,7 @@ func (h *SSOHandlers) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, session, err := h.manager.HandleOIDCCallback(r.Context(), connID, code, state, entry.nonce, r)
 	if err != nil {
-		slog.Error("OIDC callback failed", "connection_id", connID, "error", err)
+		slog.Error("OIDC callback failed", "connection_id", connID, "error", err) //#nosec G706 -- slog escapes values; connID from validated path param
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SSO authentication failed"})
 		return
 	}
@@ -310,7 +310,7 @@ func (h *SSOHandlers) SSOAutoRoute(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := h.manager.RouteByEmail(r.Context(), email)
 	if err != nil {
-		slog.Error("SSO auto-route failed", "email", email, "error", err)
+		slog.Error("SSO auto-route failed", "email", email, "error", err) //#nosec G706 -- slog escapes values; email is a query-string input logged intentionally for debugging
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "No SSO connection found for this email domain"})
 		return
 	}

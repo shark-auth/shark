@@ -436,7 +436,7 @@ func (pm *PasskeyManager) loadWebAuthnCredentials(ctx context.Context, userID st
 			},
 			Authenticator: webauthn.Authenticator{
 				AAGUID:    aaguidBytes,
-				SignCount: uint32(sc.SignCount),
+				SignCount: uint32(sc.SignCount), //#nosec G115 -- SignCount originates from webauthn library as uint32 and is stored/read roundtrip-safe
 			},
 		}
 	}
@@ -453,7 +453,7 @@ func (pm *PasskeyManager) updateCredentialAfterLogin(ctx context.Context, cred *
 
 	newCount := int(cred.Authenticator.SignCount)
 	if newCount <= storedCred.SignCount && (newCount != 0 || storedCred.SignCount != 0) {
-		slog.Warn("passkey sign count did not increase", "credential_id", storedCred.ID, "stored", storedCred.SignCount, "received", newCount)
+		slog.Warn("passkey sign count did not increase", "credential_id", storedCred.ID, "stored", storedCred.SignCount, "received", newCount) //#nosec G706 -- slog escapes values; all fields are numeric or internal IDs
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
