@@ -12,7 +12,8 @@
     @keyframes slideIn { from { transform: translateX(12px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    /* Font tweak variants */
+    /* Default is now Manrope/Azeret Mono (set in :root) */
+    body.font-inter { --font-sans: 'Inter', -apple-system, sans-serif; --font-mono: 'JetBrains Mono', monospace; }
     body.font-ibm { --font-sans: 'IBM Plex Sans', -apple-system, sans-serif; --font-mono: 'IBM Plex Mono', monospace; }
     body.font-geist { --font-sans: 'Geist', -apple-system, sans-serif; --font-mono: 'Geist Mono', monospace; }
     body.font-space { --font-sans: 'Space Grotesk', -apple-system, sans-serif; --font-mono: 'JetBrains Mono', monospace; }
@@ -71,7 +72,7 @@
   <script type="text/babel">
     const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
       "sidebarCollapsed": false,
-      "font": "space"
+      "font": "manrope"
     }/*EDITMODE-END*/;
 
     function useTweaks() {
@@ -196,9 +197,9 @@
               <div className="tweak-row">
                 <label>Font</label>
                 <div className="seg">
+                  <button className={tweaks.font === 'manrope' ? 'on' : ''} onClick={() => setTweak('font', 'manrope')}>Manrope</button>
                   <button className={tweaks.font === 'inter' ? 'on' : ''} onClick={() => setTweak('font', 'inter')}>Inter</button>
                   <button className={tweaks.font === 'ibm' ? 'on' : ''} onClick={() => setTweak('font', 'ibm')}>IBM</button>
-                  <button className={tweaks.font === 'geist' ? 'on' : ''} onClick={() => setTweak('font', 'geist')}>Geist</button>
                   <button className={tweaks.font === 'space' ? 'on' : ''} onClick={() => setTweak('font', 'space')}>Space</button>
                 </div>
               </div>
