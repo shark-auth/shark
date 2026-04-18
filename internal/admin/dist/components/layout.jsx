@@ -26,7 +26,7 @@ const NAV = [
     { id: 'webhooks', label: 'Webhooks', icon: 'Webhook' },
     { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', badge: 'dev' },
     { id: 'signing', label: 'Signing Keys', icon: 'Signing' },
-    { id: 'settings', label: 'Settings', icon: 'Settings', disabled: true },
+    { id: 'settings', label: 'Settings', icon: 'Settings' },
   ]},
   { group: 'DEVELOPERS', items: [
     { id: 'explorer', label: 'API Explorer', icon: 'Explorer', disabled: true, ph: 5 },
@@ -189,6 +189,7 @@ function TopBar({ page, setTweaksOpen }) {
     sso: 'SSO Connections',
     auth: 'Authentication',
     signing: 'Signing Keys',
+    settings: 'Settings',
   }[page] || page;
 
   return (
