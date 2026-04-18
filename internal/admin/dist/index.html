@@ -88,13 +88,30 @@
 
     function App() {
       const [apiKey, setApiKey] = React.useState(() => sessionStorage.getItem('shark_admin_key') || '');
-      const [page, setPage] = React.useState(() => localStorage.getItem('page') || 'overview');
+
+      const getPageFromURL = () => {
+        const path = window.location.pathname.replace(/^\/admin\/?/, '').replace(/\/$/, '');
+        return path || 'overview';
+      };
+
+      const [page, setPageState] = React.useState(getPageFromURL);
+
+      const setPage = (p) => {
+        window.history.pushState(null, '', '/admin/' + p);
+        setPageState(p);
+      };
+
+      React.useEffect(() => {
+        const handler = () => setPageState(getPageFromURL());
+        window.addEventListener('popstate', handler);
+        return () => window.removeEventListener('popstate', handler);
+      }, []);
+
       const [tweaks, setTweak] = useTweaks();
       const [tweaksOpen, setTweaksOpen] = React.useState(false);
       const [editMode, setEditMode] = React.useState(false);
 
       // All hooks MUST be above any conditional return (React Rules of Hooks)
-      React.useEffect(() => { localStorage.setItem('page', page); }, [page]);
 
       React.useEffect(() => {
         document.body.className = 'font-' + tweaks.font;
