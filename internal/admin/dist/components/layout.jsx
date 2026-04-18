@@ -23,7 +23,7 @@ const NAV = [
   ]},
   { group: 'OPERATIONS', items: [
     { id: 'audit', label: 'Audit Log', icon: 'Audit' },
-    { id: 'webhooks', label: 'Webhooks', icon: 'Webhook', disabled: true },
+    { id: 'webhooks', label: 'Webhooks', icon: 'Webhook' },
     { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', badge: 'dev' },
     { id: 'signing', label: 'Signing Keys', icon: 'Signing', disabled: true },
     { id: 'settings', label: 'Settings', icon: 'Settings', disabled: true },
@@ -186,6 +186,7 @@ function TopBar({ page, setTweaksOpen }) {
     keys: 'API Keys',
     rbac: 'Roles & Permissions',
     'dev-inbox': 'Dev Inbox',
+    sso: 'SSO Connections',
   }[page] || page;
 
   return (
