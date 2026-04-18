@@ -5,6 +5,22 @@ import { API, useAPI } from './api'
 
 // SSO Connections page — SAML + OIDC enterprise single sign-on
 
+const ssoThStyle = {
+  textAlign: 'left', padding: '8px 14px', fontSize: 10, fontWeight: 500,
+  color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)',
+  background: 'var(--surface-0)', position: 'sticky', top: 0,
+  textTransform: 'uppercase', letterSpacing: '0.05em',
+};
+const ssoTdStyle = { padding: '9px 14px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'middle' };
+const ssoModalBackdrop = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50 };
+const ssoLabelStyle = { display: 'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4 };
+const ssoInputStyle = {
+  width: '100%', boxSizing: 'border-box', fontSize: 12,
+  padding: '6px 9px', border: '1px solid var(--hairline-strong)',
+  borderRadius: 3, background: 'var(--surface-1)',
+  color: 'var(--fg)', outline: 'none',
+};
+
 export function SSO() {
   const [slideOver, setSlideOver] = React.useState(null); // null | { mode: 'create' } | { mode: 'edit', conn: {...} }
   const [deleteTarget, setDeleteTarget] = React.useState(null);
@@ -438,20 +454,4 @@ function ssoRelativeTime(val) {
   if (diff < 86400e3) return Math.floor(diff / 3600e3) + 'h ago';
   return Math.floor(diff / 86400e3) + 'd ago';
 }
-
-const ssoThStyle = {
-  textAlign: 'left', padding: '8px 14px', fontSize: 10, fontWeight: 500,
-  color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)',
-  background: 'var(--surface-0)', position: 'sticky', top: 0,
-  textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const ssoTdStyle = { padding: '9px 14px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'middle' };
-const ssoModalBackdrop = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50 };
-const ssoLabelStyle = { display: 'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4 };
-const ssoInputStyle = {
-  width: '100%', boxSizing: 'border-box', fontSize: 12,
-  padding: '6px 9px', border: '1px solid var(--hairline-strong)',
-  borderRadius: 3, background: 'var(--surface-1)',
-  color: 'var(--fg)', outline: 'none',
-};
 

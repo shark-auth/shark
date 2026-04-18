@@ -5,6 +5,25 @@ import { API } from './api'
 
 // Signing Keys page — JWKS / JWT signing key management
 
+const skThStyle = {
+  textAlign: 'left',
+  padding: '8px 14px',
+  fontSize: 10,
+  fontWeight: 500,
+  color: 'var(--fg-dim)',
+  borderBottom: '1px solid var(--hairline)',
+  background: 'var(--surface-0)',
+  position: 'sticky',
+  top: 0,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+};
+const skTdStyle = {
+  padding: '10px 14px',
+  borderBottom: '1px solid var(--hairline)',
+  verticalAlign: 'middle',
+};
+
 export function SigningKeys() {
   const [keys, setKeys] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -197,23 +216,4 @@ export function SigningKeys() {
     </div>
   );
 }
-
-const skThStyle = {
-  textAlign: 'left',
-  padding: '8px 14px',
-  fontSize: 10,
-  fontWeight: 500,
-  color: 'var(--fg-dim)',
-  borderBottom: '1px solid var(--hairline)',
-  background: 'var(--surface-0)',
-  position: 'sticky',
-  top: 0,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-const skTdStyle = {
-  padding: '10px 14px',
-  borderBottom: '1px solid var(--hairline)',
-  verticalAlign: 'middle',
-};
 

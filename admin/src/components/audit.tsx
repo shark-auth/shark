@@ -6,6 +6,10 @@ import { MOCK } from './mock'
 
 // Audit log page — live-tail event stream w/ filters, event detail, CSV export
 
+const thStyle = { textAlign: 'left', padding: '7px 16px', fontSize: 10.5, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-0)', position: 'sticky', top: 0, textTransform: 'uppercase', letterSpacing: '0.05em' };
+const tdStyle = { padding: '7px 16px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'top' };
+const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: '0 0 8px' };
+
 // Normalize a raw API audit-log entry to the shape the component uses internally:
 //   { id, t, action, actor_type, actor, severity, ip, target, _raw }
 function normalizeEvent(e) {
@@ -459,8 +463,4 @@ function EventDetail({ event, allEvents, onClose }) {
     </aside>
   );
 }
-
-const thStyle = { textAlign: 'left', padding: '7px 16px', fontSize: 10.5, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-0)', position: 'sticky', top: 0, textTransform: 'uppercase', letterSpacing: '0.05em' };
-const tdStyle = { padding: '7px 16px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'top' };
-const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: '0 0 8px' };
 

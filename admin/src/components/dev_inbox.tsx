@@ -5,6 +5,21 @@ import { API, useAPI } from './api'
 
 // Dev Inbox — captures all outgoing mail in dev mode
 
+const thStyle = {
+  textAlign: 'left',
+  padding: '7px 16px',
+  fontSize: 10.5,
+  fontWeight: 500,
+  color: 'var(--fg-dim)',
+  borderBottom: '1px solid var(--hairline)',
+  background: 'var(--surface-0)',
+  position: 'sticky',
+  top: 0,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+};
+const tdStyle = { padding: '7px 16px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'middle' };
+
 export function DevInbox() {
   const { data, loading, error, refresh } = useAPI('/admin/dev/emails');
   const [selected, setSelected] = React.useState(null);
@@ -335,19 +350,4 @@ function EmailDetail({ email, onClose }) {
     </aside>
   );
 }
-
-const thStyle = {
-  textAlign: 'left',
-  padding: '7px 16px',
-  fontSize: 10.5,
-  fontWeight: 500,
-  color: 'var(--fg-dim)',
-  borderBottom: '1px solid var(--hairline)',
-  background: 'var(--surface-0)',
-  position: 'sticky',
-  top: 0,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-const tdStyle = { padding: '7px 16px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'middle' };
 

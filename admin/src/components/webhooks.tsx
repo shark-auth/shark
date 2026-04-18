@@ -38,6 +38,16 @@ const COMMON_EVENTS = [
   'org.deleted',
 ];
 
+const wThStyle = { textAlign:'left', padding:'8px 14px', fontSize:10, fontWeight:500, color:'var(--fg-dim)', borderBottom:'1px solid var(--hairline)', background:'var(--surface-0)', position:'sticky', top:0, textTransform:'uppercase', letterSpacing:'0.05em' };
+const wTdStyle = { padding:'9px 14px', borderBottom:'1px solid var(--hairline)', verticalAlign:'middle' };
+const segStyle = { height:28, display:'inline-flex', border:'1px solid var(--hairline-strong)', borderRadius:3, overflow:'hidden' };
+const segBtn = { padding:'0 10px', height:28, fontSize:11, borderRight:'1px solid var(--hairline)' };
+const labelStyle = { display:'block', fontSize:10.5, textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--fg-dim)', fontWeight:500, marginBottom:5 };
+const inputStyle = { width:'100%', padding:'7px 10px', background:'var(--surface-1)', border:'1px solid var(--hairline-strong)', borderRadius:3, color:'var(--fg)', fontSize:12, outline:'none', boxSizing:'border-box' };
+const modalBackdrop = { position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50 };
+const modalCard = { background:'var(--surface-1)', border:'1px solid var(--hairline-bright)', borderRadius:6, padding:18 };
+const sectionLabelStyle = { fontSize:10, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--fg-dim)', fontWeight:500, marginBottom:6 };
+
 export function Webhooks() {
   const [selected, setSelected] = React.useState(null);
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -748,13 +758,4 @@ function CreateWebhookModal({ onClose, onCreate }) {
   );
 }
 
-const wThStyle = { textAlign:'left', padding:'8px 14px', fontSize:10, fontWeight:500, color:'var(--fg-dim)', borderBottom:'1px solid var(--hairline)', background:'var(--surface-0)', position:'sticky', top:0, textTransform:'uppercase', letterSpacing:'0.05em' };
-const wTdStyle = { padding:'9px 14px', borderBottom:'1px solid var(--hairline)', verticalAlign:'middle' };
-const segStyle = { height:28, display:'inline-flex', border:'1px solid var(--hairline-strong)', borderRadius:3, overflow:'hidden' };
-const segBtn = { padding:'0 10px', height:28, fontSize:11, borderRight:'1px solid var(--hairline)' };
-const labelStyle = { display:'block', fontSize:10.5, textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--fg-dim)', fontWeight:500, marginBottom:5 };
-const inputStyle = { width:'100%', padding:'7px 10px', background:'var(--surface-1)', border:'1px solid var(--hairline-strong)', borderRadius:3, color:'var(--fg)', fontSize:12, outline:'none', boxSizing:'border-box' };
-const modalBackdrop = { position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50 };
-const modalCard = { background:'var(--surface-1)', border:'1px solid var(--hairline-bright)', borderRadius:6, padding:18 };
-const sectionLabelStyle = { fontSize:10, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--fg-dim)', fontWeight:500, marginBottom:6 };
 

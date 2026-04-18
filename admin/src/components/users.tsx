@@ -6,6 +6,12 @@ import { MOCK } from './mock'
 
 // Users page — table + detail slide-over
 
+// Helpers pulled in — declare locals so this file stands alone
+const mins = (n) => Date.now() - n * 60 * 1000;
+const hrs = (n) => Date.now() - n * 60 * 60 * 1000;
+const days = (n) => Date.now() - n * 24 * 60 * 60 * 1000;
+const NOW = Date.now();
+
 export function Users() {
   const [selected, setSelected] = React.useState(null);
   const [query, setQuery] = React.useState('');
@@ -659,10 +665,4 @@ function ActivityTab({ user }) {
     </div>
   );
 }
-
-// Helpers pulled in — declare locals so this file stands alone
-const mins = (n) => Date.now() - n * 60 * 1000;
-const hrs = (n) => Date.now() - n * 60 * 60 * 1000;
-const days = (n) => Date.now() - n * 24 * 60 * 60 * 1000;
-const NOW = Date.now();
 
