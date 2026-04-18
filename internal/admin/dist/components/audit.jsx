@@ -1,7 +1,22 @@
 // Audit log page — live-tail event stream w/ filters, event detail, CSV export
 
+// Normalize a raw API audit-log entry to the shape the component uses internally:
+//   { id, t, action, actor_type, actor, severity, ip, target, _raw }
+function normalizeEvent(e) {
+  const action = e.action || e.event_type || '';
+  const actor = e.actor_email || e.actor_id || '';
+  const target = [e.target_type, e.target_id].filter(Boolean).join('_') || '—';
+  const ip = e.ip_address || null;
+  const t = e.created_at ? new Date(e.created_at).getTime() : Date.now();
+  // Derive severity from status or action name
+  let severity = 'info';
+  if (e.status === 'failure' || e.status === 'error') severity = 'danger';
+  else if (action.includes('failed') || action.includes('denied') || action.includes('deleted')) severity = 'warn';
+  else if (action.includes('disabled') || action.includes('revoked') || action.includes('rotated')) severity = 'warn';
+  return { id: e.id, t, action, actor_type: e.actor_type || 'system', actor, severity, ip, target, _raw: e };
+}
+
 function Audit() {
-  const [events, setEvents] = React.useState(() => MOCK.audit);
   const [liveTail, setLiveTail] = React.useState(false);
   const [selected, setSelected] = React.useState(null);
   const [query, setQuery] = React.useState('');
@@ -12,25 +27,38 @@ function Audit() {
     timeRange: '24h',  // 1h/24h/7d/all
     delegated: false,
   });
-  const [savedView, setSavedView] = React.useState(null);
   const tailRef = React.useRef(null);
 
-  // Live tail: prepend a synthetic event every ~3s
+  const apiPath = React.useMemo(() => {
+    const params = new URLSearchParams();
+    params.set('limit', '100');
+    params.set('per_page', '100');
+    if (filters.actorType) params.set('actor_type', filters.actorType);
+    if (filters.actionPrefix) params.set('action', filters.actionPrefix);
+    if (filters.timeRange !== 'all') {
+      const cutoffs = { '1h': 1, '24h': 24, '7d': 168 };
+      const hours = cutoffs[filters.timeRange];
+      if (hours) {
+        const since = new Date(Date.now() - hours * 3600000);
+        params.set('since', since.toISOString());
+      }
+    }
+    return '/audit-logs?' + params.toString();
+  }, [filters.actorType, filters.actionPrefix, filters.timeRange]);
+
+  const { data, loading, error, refresh } = useAPI(apiPath);
+
+  const events = React.useMemo(() => {
+    const raw = data?.items || data?.audit_logs || data?.data || (Array.isArray(data) ? data : []);
+    return raw.map(normalizeEvent);
+  }, [data]);
+
+  // Live tail: poll every 5s
   React.useEffect(() => {
     if (!liveTail) return;
-    const id = setInterval(() => {
-      const pool = MOCK.audit;
-      const base = pool[Math.floor(Math.random() * pool.length)];
-      const ev = {
-        ...base,
-        id: 'evt_live_' + Math.random().toString(36).slice(2, 10),
-        t: Date.now(),
-        _live: true,
-      };
-      setEvents(prev => [ev, ...prev].slice(0, 500));
-    }, 2400 + Math.random() * 1400);
+    const id = setInterval(refresh, 5000);
     return () => clearInterval(id);
-  }, [liveTail]);
+  }, [liveTail, refresh]);
 
   const filtered = React.useMemo(() => {
     const now = Date.now();
@@ -78,6 +106,22 @@ function Audit() {
 
   const maxBucket = Math.max(1, ...buckets.map(b => b.info + b.warn + b.danger));
 
+  const handleExport = async () => {
+    const key = sessionStorage.getItem('shark_admin_key');
+    const res = await fetch('/api/v1/audit-logs/export', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const savedViews = [
     { id: 'fails', label: 'Failed logins', apply: () => setFilters(f => ({...f, actionPrefix: 'user.login.failed', timeRange: '24h'})) },
     { id: 'secrets', label: 'Secret rotations', apply: () => setFilters(f => ({...f, actionPrefix: 'agent.secret', timeRange: '7d'})) },
@@ -103,7 +147,7 @@ function Audit() {
               <span className={"dot " + (liveTail ? 'warn pulse' : '')} style={{background: liveTail ? undefined : 'var(--fg-faint)'}}/>
               {liveTail ? 'Streaming' : 'Live tail'}
             </button>
-            <button className="btn ghost">
+            <button className="btn ghost" onClick={handleExport}>
               <Icon.Copy width={11} height={11}/> Export CSV
             </button>
             <button className="btn ghost">
@@ -170,7 +214,7 @@ function Audit() {
             opts={[['1h','1h'], ['24h','24h'], ['7d','7d'], ['all','all']]}/>
 
           <Seg value={filters.actorType} onChange={v => setFilters(f => ({...f, actorType: v}))}
-            opts={[[null,'All'], ['user','👤 user'], ['admin','admin'], ['agent','agent'], ['system','system']]}
+            opts={[[null,'All'], ['user','user'], ['admin','admin'], ['agent','agent'], ['system','system']]}
             mono/>
 
           <Seg value={filters.severity} onChange={v => setFilters(f => ({...f, severity: v}))}
@@ -184,6 +228,10 @@ function Audit() {
             delegation chain only
           </button>
         </div>
+
+        {/* Loading / error states */}
+        {loading && <div className="faint" style={{ padding: '8px 20px', fontSize: 11 }}>Loading…</div>}
+        {error && <div style={{ padding: '8px 20px', fontSize: 11, color: 'var(--danger)' }}>Error: {error}</div>}
 
         {/* Table */}
         <div style={{ flex: 1, overflow: 'auto' }}>
@@ -233,7 +281,7 @@ function Audit() {
                     {e.ip && <span className="mono faint" style={{fontSize: 11}}>{e.ip}</span>}
                   </td>
                   <td style={{...tdStyle, textAlign: 'right'}}>
-                    <span className="mono faint" style={{fontSize: 10}}>{e.id.slice(0, 14)}…</span>
+                    <CopyField value={e.id} truncate={14}/>
                   </td>
                 </tr>
               ))}
@@ -256,7 +304,7 @@ function Audit() {
         </div>
       </div>
 
-      {selected && <EventDetail event={selected} onClose={() => setSelected(null)}/>}
+      {selected && <EventDetail event={selected} allEvents={events} onClose={() => setSelected(null)}/>}
     </div>
   );
 }
@@ -284,9 +332,9 @@ function Seg({ value, onChange, opts, mono }) {
   );
 }
 
-function EventDetail({ event, onClose }) {
-  // Synthesize a representative payload
-  const payload = {
+function EventDetail({ event, allEvents, onClose }) {
+  // Use raw API payload if available, otherwise synthesize
+  const payload = event._raw || {
     id: event.id,
     type: event.action,
     timestamp: new Date(event.t).toISOString(),
@@ -315,6 +363,7 @@ function EventDetail({ event, onClose }) {
       diff: { old_kid: 'sec_2025_Q4', new_kid: 'sec_2026_Q1', reason: 'scheduled' },
     } : {}),
   };
+  const relatedEvents = (allEvents || []).filter(e => e.actor === event.actor && e.id !== event.id).slice(0, 5);
 
   return (
     <aside style={{
@@ -332,7 +381,7 @@ function EventDetail({ event, onClose }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 14px', fontSize: 11.5, marginBottom: 18 }}>
           <span className="faint">Event ID</span>
-          <span className="mono">{event.id}</span>
+          <CopyField value={event.id} truncate={0}/>
           <span className="faint">Timestamp</span>
           <span className="mono">{new Date(event.t).toISOString()}</span>
           <span className="faint">Actor</span>
@@ -385,7 +434,9 @@ function EventDetail({ event, onClose }) {
 
         <h4 style={{...sectionLabelStyle, marginTop: 18}}>Related events</h4>
         <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>
-          {MOCK.audit.filter(e => e.actor === event.actor && e.id !== event.id).slice(0, 5).map(e => (
+          {relatedEvents.length === 0
+            ? <div className="faint" style={{ padding: '8px 10px', fontSize: 11 }}>No related events found.</div>
+            : relatedEvents.map(e => (
             <div key={e.id} className="row" style={{ padding: '6px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 11, gap: 8 }}>
               <SevDot sev={e.severity}/>
               <span className="mono" style={{ flex: 1 }}>{e.action}</span>
