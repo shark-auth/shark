@@ -34,6 +34,9 @@ Thumbs.db
 
 # Go
 vendor/
+# ...except the admin dashboard's vendored browser deps (React + Babel).
+# These ship inside the Go binary via go:embed and must be committed.
+!internal/admin/dist/vendor/
 
 # Node (dashboard & SDK)
 node_modules/
