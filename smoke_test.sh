@@ -2,10 +2,10 @@
 # Shark Phase 3 smoke test. See SMOKE_TEST.md.
 set -u
 
-BASE=http://localhost:8080
-DB=sharkauth.db
-YAML=sharkauth.yaml
-BIN=./shark
+BASE="${BASE:-http://localhost:8080}"
+DB="${DB:-sharkauth.db}"
+YAML="${YAML:-sharkauth.yaml}"
+BIN="${BIN:-./shark}"
 PASS=0
 FAIL=0
 FAIL_DETAILS=()
