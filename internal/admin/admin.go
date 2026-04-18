@@ -12,19 +12,12 @@ import (
 //go:embed dist
 var distFS embed.FS
 
-// adminCSP relaxes the strict default CSP from mw.SecurityHeaders() for the
-// admin dashboard route. Scoped narrowly:
-//   - script-src: 'self' for vendored React/Babel + component JSX files;
-//     'unsafe-inline' for the <script type="text/babel"> blocks in index.html;
-//     'unsafe-eval' because Babel-standalone compiles JSX via eval.
-//   - style-src: 'self' plus 'unsafe-inline' (the bundle uses inline styles)
-//     and fonts.googleapis.com for the @font-face stylesheet.
-//   - font-src: 'self' plus fonts.gstatic.com for the actual font binaries.
-//   - img-src: 'self' plus data: for inline avatars.
-//   - connect-src: 'self' — XHR/fetch stays same-origin to the Shark API.
-//   - frame-ancestors: 'none' — preserve clickjacking protection.
+// adminCSP defines the Content-Security-Policy for the admin dashboard route.
+// The dashboard is a Vite-bundled React SPA — no runtime compilation, so
+// 'unsafe-eval' is not needed. 'unsafe-inline' stays for style-src because
+// the bundle uses inline styles extensively.
 const adminCSP = "default-src 'self'; " +
-	"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+	"script-src 'self'; " +
 	"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
 	"font-src 'self' https://fonts.gstatic.com; " +
 	"img-src 'self' data:; " +
@@ -46,9 +39,8 @@ func Handler() http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Override the strict default CSP set by mw.SecurityHeaders() for this
-		// route only. The admin bundle runs React + Babel-standalone client-side
-		// (Babel needs `eval` to compile JSX) and loads Google Fonts. The rest
-		// of the API keeps the strict `default-src 'self'` policy.
+		// route only. The admin dashboard is a Vite-built React SPA that loads
+		// Google Fonts. The rest of the API keeps the strict policy.
 		w.Header().Set("Content-Security-Policy", adminCSP)
 
 		clean := strings.TrimPrefix(r.URL.Path, "/")
