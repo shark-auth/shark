@@ -53,6 +53,7 @@ export function Users() {
           display: 'flex', gap: 8, alignItems: 'center',
           background: 'var(--surface-0)',
         }}>
+          {/* Search input — surface-1 bg, hairline-strong border, 28px height */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
             border: '1px solid var(--hairline-strong)',
@@ -66,7 +67,7 @@ export function Users() {
               placeholder="Search by name, email, or id…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              style={{ flex: 1, fontSize: 12, color: 'var(--fg)' }}
+              style={{ flex: 1, fontSize: 13, color: 'var(--fg)' }}
             />
             <Kbd keys="/"/>
           </div>
@@ -76,24 +77,27 @@ export function Users() {
           <button className="btn"><Icon.Filter width={11} height={11}/>Org<Icon.ChevronDown width={10} height={10} style={{opacity:0.5}}/></button>
           <button className="btn ghost sm" style={{ color: 'var(--fg-dim)' }}>+ Add filter</button>
           <div style={{ flex: 1 }}/>
-          <span className="faint" style={{ fontSize: 11 }}>
+          <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
             {loading ? '…' : `${total.toLocaleString()} total`}
           </span>
           <button className="btn sm">Export</button>
           <button className="btn primary sm"><Icon.Plus width={11} height={11}/>New user</button>
         </div>
 
+        {/* Bulk action bar */}
         {checked.size > 0 && (
           <div style={{
             padding: '6px 16px',
             background: 'var(--surface-2)',
             borderBottom: '1px solid var(--hairline)',
-            display: 'flex', alignItems: 'center', gap: 10, fontSize: 12,
+            display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
           }}>
-            <span>{checked.size} selected</span>
+            <span style={{ fontSize: 13, color: 'var(--fg-muted)', lineHeight: 1.5 }}>{checked.size} selected</span>
             <button className="btn sm">Assign role</button>
             <button className="btn sm">Add to org</button>
             <button className="btn sm">Export CSV</button>
+            {/* Hairline divider before destructive action */}
+            <span style={{ width: 1, height: 16, background: 'var(--hairline-strong)', marginLeft: 4 }}/>
             <button className="btn sm danger">Delete</button>
             <div style={{ flex: 1 }}/>
             <button className="btn ghost sm" onClick={() => setChecked(new Set())}>Clear</button>
@@ -103,31 +107,31 @@ export function Users() {
         {/* Table */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           <table className="tbl">
-            <thead>
+            <thead style={{ background: 'var(--surface-0)' }}>
               <tr>
-                <th style={{ width: 28, paddingLeft: 16, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>
+                <th style={{ width: 28, paddingLeft: 16, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>
                   <span className={"cb" + (users.length > 0 && checked.size === users.length ? ' on' : '')}
                     onClick={() => setChecked(checked.size === users.length ? new Set() : new Set(users.map(x => x.id)))}>
                     {users.length > 0 && checked.size === users.length && <Icon.Check width={10} height={10}/>}
                   </span>
                 </th>
-                <th style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>User</th>
-                <th style={{ width: 90, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>Verified</th>
-                <th style={{ width: 70, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>MFA</th>
-                <th style={{ width: 120, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>Auth</th>
-                <th style={{ width: 140, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>Orgs</th>
-                <th style={{ width: 180, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>Roles</th>
-                <th style={{ width: 100, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>Created <Icon.ArrowDown width={9} height={9} style={{opacity:0.5, verticalAlign:'middle'}}/></th>
-                <th style={{ width: 110, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}>Last active</th>
+                <th style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>User</th>
+                <th style={{ width: 90, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Verified</th>
+                <th style={{ width: 70, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>MFA</th>
+                <th style={{ width: 120, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Auth</th>
+                <th style={{ width: 140, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Orgs</th>
+                <th style={{ width: 180, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Roles</th>
+                <th style={{ width: 100, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Created <Icon.ArrowDown width={9} height={9} style={{opacity:0.5, verticalAlign:'middle'}}/></th>
+                <th style={{ width: 110, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Last active</th>
                 <th style={{ width: 36, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}></th>
               </tr>
             </thead>
             <tbody>
               {loading && users.length === 0 && (
-                <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 12 }}>Loading…</td></tr>
+                <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>Loading…</td></tr>
               )}
               {!loading && users.length === 0 && (
-                <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 12 }}>No users found</td></tr>
+                <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>No users found</td></tr>
               )}
               {users.map(u => {
                 const orgs = u.orgs || [];
@@ -151,8 +155,8 @@ export function Users() {
                       <div className="row" style={{ gap: 8 }}>
                         <Avatar name={u.name || u.email} email={u.email}/>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 500, fontSize: 12.5 }}>{u.name || '—'}</div>
-                          <div className="faint" style={{ fontSize: 11 }}>{u.email}</div>
+                          <div style={{ fontWeight: 500, fontSize: 13 }}>{u.name || '—'}</div>
+                          <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{u.email}</div>
                         </div>
                       </div>
                     </td>
@@ -167,10 +171,10 @@ export function Users() {
                       {u.mfa_enabled || u.mfa ? (
                         <span className="row" style={{ gap: 4, color: 'var(--success)' }}>
                           <Icon.Shield width={12} height={12}/>
-                          <span className="mono" style={{ fontSize: 10.5, color: 'var(--fg-muted)' }}>{u.mfa_method || u.mfa || 'on'}</span>
+                          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{u.mfa_method || u.mfa || 'on'}</span>
                         </span>
                       ) : (
-                        <span className="faint" style={{ fontSize: 11 }}>—</span>
+                        <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>—</span>
                       )}
                     </td>
                     <td>
@@ -182,7 +186,7 @@ export function Users() {
                           const name = typeof o === 'string' ? o : (o.name || o.slug || o.id);
                           return <span key={i} className="chip" style={{ height: 18 }}>{name}</span>;
                         })}
-                        {orgs.length > 2 && <span className="faint" style={{ fontSize: 11 }}>+{orgs.length - 2}</span>}
+                        {orgs.length > 2 && <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>+{orgs.length - 2}</span>}
                       </div>
                     </td>
                     <td>
@@ -191,13 +195,13 @@ export function Users() {
                           const name = typeof r === 'string' ? r : (r.name || r.id);
                           return <span key={i} className="chip" style={{ height: 18 }}>{name}</span>;
                         })}
-                        {roles.length > 2 && <span className="faint" style={{ fontSize: 11 }}>+{roles.length - 2}</span>}
+                        {roles.length > 2 && <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>+{roles.length - 2}</span>}
                       </div>
                     </td>
-                    <td className="mono faint" style={{ fontSize: 11 }}>
+                    <td className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
                       {u.created_at ? MOCK.relativeTime(new Date(u.created_at).getTime()) : (u.created ? MOCK.relativeTime(u.created) : '—')}
                     </td>
-                    <td className="mono" style={{ fontSize: 11, color: (() => {
+                    <td className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: (() => {
                       const ts = u.last_active_at ? new Date(u.last_active_at).getTime() : u.lastActive;
                       return ts && (Date.now() - ts < 60*60*1000) ? 'var(--success)' : 'var(--fg-muted)';
                     })() }}>
@@ -220,21 +224,21 @@ export function Users() {
         <div style={{
           padding: '8px 16px',
           borderTop: '1px solid var(--hairline)',
-          display: 'flex', alignItems: 'center', gap: 8,
+          display: 'flex', alignItems: 'center', gap: 6,
           background: 'var(--surface-0)',
         }}>
           <button
-            className="btn sm"
+            className="btn ghost sm"
             disabled={page <= 1}
             onClick={() => setPage(p => Math.max(1, p - 1))}
-          >Prev</button>
-          <span className="faint" style={{ fontSize: 12 }}>Page {page} of {totalPages}</span>
+          >← Prev</button>
+          <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', padding: '0 6px' }}>Page {page} of {totalPages}</span>
           <button
-            className="btn sm"
+            className="btn ghost sm"
             disabled={page >= totalPages}
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-          >Next</button>
-          <span className="faint" style={{ fontSize: 11, marginLeft: 8 }}>{total.toLocaleString()} total</span>
+          >Next →</button>
+          <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-dim)', marginLeft: 8 }}>{total.toLocaleString()} total</span>
         </div>
       </div>
 
@@ -286,9 +290,10 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
         <div className="row" style={{ gap: 12 }}>
           <Avatar name={user.name || user.email} email={user.email} size={44}/>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{user.name || '—'}</div>
-            <div className="row" style={{ gap: 6, marginTop: 2 }}>
-              <span className="faint" style={{ fontSize: 12 }}>{user.email}</span>
+            {/* 20px for user name in slide-over header */}
+            <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', fontFamily: 'var(--font-display)', lineHeight: 1.2 }}>{user.name || '—'}</div>
+            <div className="row" style={{ gap: 6, marginTop: 4 }}>
+              <span className="faint" style={{ fontSize: 13 }}>{user.email}</span>
               <CopyField value={user.id}/>
             </div>
           </div>
@@ -301,20 +306,22 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — 11px uppercase, active: --fg + bottom border, inactive: --fg-dim */}
       <div style={{
-        display: 'flex', gap: 2,
+        display: 'flex', gap: 0,
         padding: '0 16px',
         borderBottom: '1px solid var(--hairline)',
         background: 'var(--surface-0)',
       }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '10px 10px',
-            fontSize: 12,
-            color: tab === t.id ? 'var(--fg)' : 'var(--fg-muted)',
-            fontWeight: tab === t.id ? 500 : 400,
-            borderBottom: tab === t.id ? '1.5px solid var(--fg)' : '1.5px solid transparent',
+            padding: '9px 10px',
+            fontSize: 11,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: tab === t.id ? 'var(--fg)' : 'var(--fg-dim)',
+            fontWeight: tab === t.id ? 600 : 400,
+            borderBottom: tab === t.id ? '1px solid var(--fg)' : '1px solid transparent',
             marginBottom: -1,
           }}>
             {t.label}
@@ -342,8 +349,8 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
       }}>
         <div className="row" style={{ gap: 8 }}>
           <Icon.Terminal width={12} height={12} style={{ opacity: 0.5 }}/>
-          <span className="faint" style={{ fontSize: 10.5 }}>cli</span>
-          <code className="mono" style={{ flex: 1, color: 'var(--fg-muted)' }}>shark user show {user.id}</code>
+          <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>cli</span>
+          <code className="mono" style={{ flex: 1, color: 'var(--fg-muted)', fontSize: 11 }}>shark user show {user.id}</code>
           <button className="btn ghost icon sm" title="Copy"><Icon.Copy width={11} height={11}/></button>
         </div>
       </div>
@@ -353,10 +360,10 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
 
 function Field({ label, children, hint }) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 4 }}>{label}</div>
+    <div style={{ marginBottom: 0 }}>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 4, lineHeight: 1.5 }}>{label}</div>
       {children}
-      {hint && <div className="faint" style={{ fontSize: 11, marginTop: 3 }}>{hint}</div>}
+      {hint && <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>{hint}</div>}
     </div>
   );
 }
@@ -371,7 +378,7 @@ function Input({ value, ...rest }) {
         background: 'var(--surface-1)',
         border: '1px solid var(--hairline-strong)',
         borderRadius: 4,
-        fontSize: 12.5, color: 'var(--fg)',
+        fontSize: 13, color: 'var(--fg)',
       }}
       {...rest}
     />
@@ -405,41 +412,52 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
 
   return (
     <>
-      <Field label="Name">
-        <Input value={nameVal} onChange={e => setNameVal(e.target.value)}/>
-      </Field>
-      <Field label="Email">
-        <div className="row" style={{ gap: 6 }}>
-          <Input value={emailVal} onChange={e => setEmailVal(e.target.value)}/>
-          {!isVerified && <button className="btn sm" style={{ whiteSpace: 'nowrap' }}>Send verification</button>}
-        </div>
-      </Field>
-      <Field label="User ID"><CopyField value={user.id} truncate={0}/></Field>
-      <Field label="Metadata (json)">
-        <textarea
-          defaultValue={metadata}
-          style={{
-            width: '100%', minHeight: 90,
-            background: 'var(--surface-1)',
-            border: '1px solid var(--hairline-strong)',
-            borderRadius: 4, padding: 8,
-            fontFamily: 'var(--font-mono)', fontSize: 11.5,
-            color: 'var(--fg)', resize: 'vertical',
-          }}
-        />
-      </Field>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+      {/* Identity fields — tight 8px gap */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Field label="Name">
+          <Input value={nameVal} onChange={e => setNameVal(e.target.value)}/>
+        </Field>
+        <Field label="Email">
+          <div className="row" style={{ gap: 6 }}>
+            <Input value={emailVal} onChange={e => setEmailVal(e.target.value)}/>
+            {!isVerified && <button className="btn sm" style={{ whiteSpace: 'nowrap' }}>Send verification</button>}
+          </div>
+        </Field>
+        <Field label="User ID"><CopyField value={user.id} truncate={0}/></Field>
+      </div>
+
+      {/* Metadata — separated section */}
+      <div style={{ marginTop: 24 }}>
+        <Field label="Metadata (json)">
+          <textarea
+            defaultValue={metadata}
+            style={{
+              width: '100%', minHeight: 90,
+              background: 'var(--surface-1)',
+              border: '1px solid var(--hairline-strong)',
+              borderRadius: 4, padding: 8,
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              lineHeight: 1.5,
+              color: 'var(--fg)', resize: 'vertical',
+            }}
+          />
+        </Field>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, marginBottom: 0 }}>
         <button className="btn primary sm" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : 'Save changes'}
         </button>
       </div>
+
+      {/* Danger zone — separated with 24px */}
       <div style={{
-        marginTop: 16, padding: 12,
+        marginTop: 24, padding: 12,
         border: '1px solid color-mix(in oklch, var(--danger) 30%, var(--hairline))',
         borderRadius: 5,
         background: 'color-mix(in oklch, var(--danger) 5%, var(--surface-1))',
       }}>
-        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--danger)', marginBottom: 8, fontWeight: 500 }}>Danger zone</div>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--danger)', marginBottom: 8, fontWeight: 600, lineHeight: 1.5 }}>Danger zone</div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm">Reset password</button>
           <button className="btn sm">Disable MFA</button>
@@ -449,7 +467,7 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
             }
           }}>Delete user</button>
         </div>
-        <div className="faint" style={{ fontSize: 10.5, marginTop: 6 }}>Deleting requires confirmation. Revokes all sessions + agent consents in one transaction.</div>
+        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>Deleting requires confirmation. Revokes all sessions + agent consents in one transaction.</div>
       </div>
     </>
   );
@@ -480,25 +498,25 @@ function SecurityTab({ user }) {
           <div style={{ padding: 10, border: '1px solid var(--hairline-strong)', borderRadius: 5, background: 'var(--surface-1)' }}>
             <div className="row">
               <Icon.Shield width={14} height={14} style={{color:'var(--success)'}}/>
-              <span style={{ fontSize: 12.5, fontWeight: 500 }}>{mfaLabel === 'totp' ? 'TOTP authenticator' : mfaLabel === 'webauthn' ? 'WebAuthn' : mfaLabel}</span>
-              <span className="faint" style={{ fontSize: 11, marginLeft: 'auto' }}>Enrolled</span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{mfaLabel === 'totp' ? 'TOTP authenticator' : mfaLabel === 'webauthn' ? 'WebAuthn' : mfaLabel}</span>
+              <span className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginLeft: 'auto' }}>Enrolled</span>
             </div>
           </div>
-        ) : <span className="faint">Not enrolled</span>}
+        ) : <span className="faint" style={{ fontSize: 13 }}>Not enrolled</span>}
       </Field>
 
-      <div style={{ marginTop: 20 }}>
+      <div style={{ marginTop: 24 }}>
         <Field label="Active sessions" hint={`${Array.isArray(sessions) ? sessions.length : 0} sessions · revoke all on sign-out`}>
-          <div className="col" style={{ gap: 6 }}>
+          <div className="col" style={{ gap: 6, marginTop: 4 }}>
             {Array.isArray(sessions) && sessions.length === 0 && (
-              <span className="faint" style={{ fontSize: 12 }}>No active sessions</span>
+              <span className="faint" style={{ fontSize: 13 }}>No active sessions</span>
             )}
             {Array.isArray(sessions) && sessions.map(s => (
               <div key={s.id} style={{ padding: 10, border: '1px solid var(--hairline-strong)', borderRadius: 5, background: 'var(--surface-1)' }}>
                 <div className="row">
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5 }}>{s.device || s.user_agent || s.id}</div>
-                    <div className="faint mono" style={{ fontSize: 10.5 }}>
+                    <div style={{ fontSize: 13 }}>{s.device || s.user_agent || s.id}</div>
+                    <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>
                       {[s.ip, s.location || s.city, s.created_at ? 'started ' + MOCK.relativeTime(new Date(s.created_at).getTime()) : ''].filter(Boolean).join(' · ')}
                     </div>
                   </div>
@@ -535,7 +553,7 @@ function RolesTab({ user }) {
   return (
     <>
       <Field label="Global roles">
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
           {(Array.isArray(roles) ? roles : []).map((r, i) => {
             const name = typeof r === 'string' ? r : (r.name || r.id);
             const id = typeof r === 'string' ? r : r.id;
@@ -549,23 +567,27 @@ function RolesTab({ user }) {
           <button className="btn sm"><Icon.Plus width={10} height={10}/>Assign role</button>
         </div>
       </Field>
-      <Field label="Effective permissions" hint="Flattened from all roles">
-        <div className="col" style={{ gap: 4 }}>
-          {perms.map(p => (
-            <div key={p} className="row" style={{ padding: '5px 8px', background: 'var(--surface-1)', borderRadius: 3 }}>
-              <Icon.Check width={11} height={11} style={{ color: 'var(--success)' }}/>
-              <span className="mono" style={{ fontSize: 11.5 }}>{p}</span>
-              <span className="faint" style={{ marginLeft: 'auto', fontSize: 10.5 }}>from <span className="mono">admin</span></span>
-            </div>
-          ))}
-        </div>
-      </Field>
-      <Field label="Check permission" hint="Simulate an authorization check for this user">
-        <div className="row" style={{ gap: 6 }}>
-          <Input value="agents:manage" />
-          <button className="btn">Check</button>
-        </div>
-      </Field>
+      <div style={{ marginTop: 24 }}>
+        <Field label="Effective permissions" hint="Flattened from all roles">
+          <div className="col" style={{ gap: 4, marginTop: 4 }}>
+            {perms.map(p => (
+              <div key={p} className="row" style={{ padding: '5px 8px', background: 'var(--surface-1)', borderRadius: 3 }}>
+                <Icon.Check width={11} height={11} style={{ color: 'var(--success)' }}/>
+                <span className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{p}</span>
+                <span className="faint" style={{ marginLeft: 'auto', fontSize: 11, lineHeight: 1.5 }}>from <span className="mono">admin</span></span>
+              </div>
+            ))}
+          </div>
+        </Field>
+      </div>
+      <div style={{ marginTop: 24 }}>
+        <Field label="Check permission" hint="Simulate an authorization check for this user">
+          <div className="row" style={{ gap: 6, marginTop: 4 }}>
+            <Input value="agents:manage" />
+            <button className="btn">Check</button>
+          </div>
+        </Field>
+      </div>
     </>
   );
 }
@@ -580,10 +602,10 @@ function OrgsTab({ user }) {
         return (
           <div key={i} style={{ padding: 10, border: '1px solid var(--hairline-strong)', borderRadius: 5, background: 'var(--surface-1)' }}>
             <div className="row">
-              <div className="avatar" style={{ width: 24, height: 24, fontSize: 10, background: hashColor(name) }}>{name[0]}</div>
+              <div className="avatar" style={{ width: 24, height: 24, fontSize: 11, background: hashColor(name) }}>{name[0]}</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 500 }}>{name}</div>
-                <div className="faint mono" style={{ fontSize: 10.5 }}>member</div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{name}</div>
+                <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>member</div>
               </div>
               <span className="chip">{role}</span>
               <button className="btn ghost sm">Remove</button>
@@ -591,7 +613,7 @@ function OrgsTab({ user }) {
           </div>
         );
       })}
-      {orgs.length === 0 && <span className="faint" style={{ fontSize: 12 }}>Not a member of any orgs</span>}
+      {orgs.length === 0 && <span className="faint" style={{ fontSize: 13 }}>Not a member of any orgs</span>}
       <button className="btn sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}><Icon.Plus width={10} height={10}/>Invite to org</button>
     </div>
   );
@@ -610,7 +632,7 @@ function AgentsConsentsTab({ user }) {
         border: '1px solid var(--hairline)',
         borderRadius: 5,
         background: 'var(--surface-1)',
-        fontSize: 11.5, color: 'var(--fg-muted)',
+        fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
       }}>
         <Icon.Info width={12} height={12} style={{ verticalAlign: 'middle', marginRight: 6, opacity: 0.7 }}/>
         User has granted {consents.length} agents access to their account. Revoking a consent invalidates all tied tokens.
@@ -621,13 +643,13 @@ function AgentsConsentsTab({ user }) {
             <div className="row" style={{ marginBottom: 6 }}>
               <Avatar name={c.agent} agent size={22}/>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 500 }}>{c.agent}</div>
-                <div className="faint mono" style={{ fontSize: 10.5 }}>granted {c.granted} · {c.tokens} live tokens</div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{c.agent}</div>
+                <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>granted {c.granted} · {c.tokens} live tokens</div>
               </div>
               <button className="btn ghost sm danger">Revoke</button>
             </div>
             <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-              {c.scopes.map(s => <span key={s} className="chip mono" style={{ height: 17, fontSize: 10 }}>{s}</span>)}
+              {c.scopes.map(s => <span key={s} className="chip mono" style={{ height: 17, fontSize: 11 }}>{s}</span>)}
             </div>
           </div>
         ))}
@@ -643,11 +665,11 @@ function ActivityTab({ user }) {
   const events = activityData?.events || activityData?.logs || activityData || [];
 
   if (loading) {
-    return <div className="faint" style={{ fontSize: 12, padding: '16px 0' }}>Loading activity…</div>;
+    return <div className="faint" style={{ fontSize: 13, padding: '16px 0' }}>Loading activity…</div>;
   }
 
   if (!Array.isArray(events) || events.length === 0) {
-    return <div className="faint" style={{ fontSize: 12, padding: '16px 0' }}>No activity recorded</div>;
+    return <div className="faint" style={{ fontSize: 13, padding: '16px 0' }}>No activity recorded</div>;
   }
 
   return (
@@ -656,13 +678,12 @@ function ActivityTab({ user }) {
         const ts = e.created_at ? new Date(e.created_at).getTime() : e.t;
         return (
           <div key={i} className="row" style={{ padding: '7px 0', borderBottom: '1px solid var(--hairline)', gap: 10 }}>
-            <span className="mono faint" style={{ fontSize: 10.5, width: 70 }}>{ts ? MOCK.relativeTime(ts) : '—'}</span>
-            <span className="mono" style={{ fontSize: 11.5, width: 180 }}>{e.action || e.event_type || '—'}</span>
-            <span className="mono faint" style={{ fontSize: 11 }}>{e.meta || e.metadata || e.details || ''}</span>
+            <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5, width: 70 }}>{ts ? MOCK.relativeTime(ts) : '—'}</span>
+            <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, width: 180 }}>{e.action || e.event_type || '—'}</span>
+            <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{e.meta || e.metadata || e.details || ''}</span>
           </div>
         );
       })}
     </div>
   );
 }
-
