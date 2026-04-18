@@ -189,7 +189,7 @@ export function Overview() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, padding: 16, height: '100%', overflow: 'auto' }}>
       {/* Main column */}
-      <div className="col" style={{ gap: 16, minWidth: 0 }}>
+      <div className="col" style={{ minWidth: 0 }}>
         {/* Metric strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
           {statsLoading
@@ -204,12 +204,12 @@ export function Overview() {
             : metrics.map((m, i) => (
                 <div key={i} className="card" style={{ padding: 12, minWidth: 0, cursor: 'pointer' }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)' }}>{m.k}</span>
+                    <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', lineHeight: 1.5 }}>{m.k}</span>
                     {m.agent && <span className="chip agent" style={{ height: 14, fontSize: 9, padding: '0 4px' }}>new</span>}
                     {m.warn && <Icon.Warn width={11} height={11} style={{ color: 'var(--warn)' }}/>}
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
-                  <div style={{ fontSize: 10.5, color: 'var(--fg-dim)', marginTop: 1 }}>{m.sub}</div>
+                  <div style={{ fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 1, lineHeight: 1.5 }}>{m.sub}</div>
                   <div style={{ marginTop: 8, marginLeft: -4, marginRight: -4 }}>
                     <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>
                   </div>
@@ -219,11 +219,11 @@ export function Overview() {
         </div>
 
         {/* Auth breakdown + activity */}
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, marginTop: 20 }}>
           <div className="card">
             <div className="card-header">
               Auth method · 30d
-              <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>
+              <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
                 {authData.reduce((a, x) => a + x.value, 0).toLocaleString()} sessions
               </span>
             </div>
@@ -234,7 +234,7 @@ export function Overview() {
                   const total = authData.reduce((a, x) => a + x.value, 0);
                   const pct = (b.value / total * 100).toFixed(0);
                   return (
-                    <div key={i} className="row" style={{ fontSize: 11.5, gap: 8 }}>
+                    <div key={i} className="row" style={{ fontSize: 13, gap: 8 }}>
                       <span style={{ width: 8, height: 8, background: b.color, borderRadius: 2, flexShrink: 0 }}/>
                       <span style={{ flex: 1 }}>{b.label}</span>
                       <span className="mono muted" style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{b.value.toLocaleString()}</span>
@@ -250,14 +250,14 @@ export function Overview() {
             <div className="card-header">
               <span>Recent activity</span>
               <div className="row" style={{ gap: 8 }}>
-                <span className="chip" style={{ height: 18, fontSize: 10 }}>
+                <span className="chip" style={{ height: 18, fontSize: 11 }}>
                   <span className="dot success pulse"/>live
                 </span>
-                <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>updated just now</span>
+                <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>updated just now</span>
               </div>
             </div>
             <div style={{ overflow: 'hidden' }}>
-              <table className="tbl" style={{ fontSize: 12 }}>
+              <table className="tbl" style={{ fontSize: 13 }}>
                 <tbody>
                   {!activityRaw
                     ? Array.from({ length: 9 }).map((_, i) => (
@@ -271,15 +271,15 @@ export function Overview() {
                       ))
                     : activity.slice(0, 9).map((a, i) => (
                         <tr key={i}>
-                          <td style={{ width: 60, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>{relTime(a.t)}</td>
+                          <td style={{ width: 60, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5 }}>{relTime(a.t)}</td>
                           <td style={{ width: 90 }}>
-                            <span className={"chip" + (a.actor === 'agent' ? ' agent' : a.actor === 'system' ? '' : a.actor === 'admin' ? ' warn' : '')} style={{ height: 16, fontSize: 9.5, padding: '0 5px' }}>{a.actor}</span>
+                            <span className={"chip" + (a.actor === 'agent' ? ' agent' : a.actor === 'system' ? '' : a.actor === 'admin' ? ' warn' : '')} style={{ height: 16, fontSize: 9, padding: '0 5px' }}>{a.actor}</span>
                           </td>
                           <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="mono">
                             {a.name}
                           </td>
-                          <td className="mono" style={{ color: 'var(--fg)', fontSize: 11.5 }}>{a.action}</td>
-                          <td className="mono" style={{ color: 'var(--fg-dim)', fontSize: 11, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.meta}</td>
+                          <td className="mono" style={{ color: 'var(--fg)', fontSize: 13 }}>{a.action}</td>
+                          <td className="mono" style={{ color: 'var(--fg-muted)', fontSize: 11, lineHeight: 1.5, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.meta}</td>
                         </tr>
                       ))
                   }
@@ -294,12 +294,12 @@ export function Overview() {
         </div>
 
         {/* Agent activity highlights — compact list (no nested cards) */}
-        <div className="card">
+        <div className="card" style={{ marginTop: 16 }}>
           <div className="card-header">
             <span>Agent activity · 24h</span>
             <div className="row" style={{ gap: 8 }}>
-              <span className="chip agent" style={{ height: 18, fontSize: 10 }}>phase 6</span>
-              <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>1,284 live tokens · 8 agents</span>
+              <span className="chip agent" style={{ height: 18, fontSize: 11 }}>phase 6</span>
+              <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>1,284 live tokens · 8 agents</span>
             </div>
           </div>
           <div style={{ padding: '4px 0' }}>
@@ -312,15 +312,15 @@ export function Overview() {
                 <Avatar name={a.name} agent size={22}/>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontWeight: 500, fontSize: 12 }}>{a.name}</span>
+                    <span style={{ fontWeight: 500, fontSize: 13 }}>{a.name}</span>
                     {a.dpop && <span className="chip" style={{ height: 14, fontSize: 9, padding: '0 4px' }} title="DPoP bound">DPoP</span>}
-                    <span className="mono faint" style={{ fontSize: 10 }}>{MOCK.relativeTime(a.lastUsed)}</span>
+                    <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{MOCK.relativeTime(a.lastUsed)}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 2, alignItems: 'center' }}>
-                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--fg)' }}>{a.tokensActive}</span>
-                    <span className="faint" style={{ fontSize: 10 }}>tokens</span>
-                    <span className="faint" style={{ fontSize: 10 }}>·</span>
-                    <span className="mono faint" style={{ fontSize: 10 }}>{a.scopes.length} scopes</span>
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--fg)', lineHeight: 1.5 }}>{a.tokensActive}</span>
+                    <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>tokens</span>
+                    <span className="faint" style={{ fontSize: 11 }}>·</span>
+                    <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{a.scopes.length} scopes</span>
                   </div>
                 </div>
                 <div style={{ width: 80, flexShrink: 0 }}>
@@ -332,7 +332,7 @@ export function Overview() {
         </div>
 
         {/* System health */}
-        <div className="card">
+        <div className="card" style={{ marginTop: 16 }}>
           <div className="card-header">System health</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
             {(health || [
@@ -350,9 +350,9 @@ export function Overview() {
                 borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none',
                 borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none',
               }}>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)' }}>{x.k}</div>
-                <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-mono)' }}>{x.v}</div>
-                <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 2 }}>{x.sub}</div>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', lineHeight: 1.5 }}>{x.k}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-mono)', color: 'var(--fg)' }}>{x.v}</div>
+                <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2, lineHeight: 1.5 }}>{x.sub}</div>
               </div>
             ))}
           </div>
@@ -380,9 +380,9 @@ function AttentionPanel() {
       </div>
       <div>
         {items.length === 0 && (
-          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-dim)' }}>
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-muted)' }}>
             <Icon.Check width={20} height={20} style={{ color: 'var(--success)', marginBottom: 6 }}/>
-            <div style={{ fontSize: 12 }}>All clear. Nothing needs your attention.</div>
+            <div style={{ fontSize: 13 }}>All clear. Nothing needs your attention.</div>
           </div>
         )}
         {items.map(item => (
@@ -405,8 +405,8 @@ function AttentionPanel() {
               {item.kind === 'anomaly' && <Icon.Warn width={12} height={12}/>}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 500, lineHeight: 1.35 }}>{item.title}</div>
-              <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 3, lineHeight: 1.4 }}>{item.sub}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.4 }}>{item.title}</div>
+              <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 3, lineHeight: 1.5 }}>{item.sub}</div>
               <div className="row" style={{ marginTop: 8, gap: 6 }}>
                 <button className="btn sm" style={{ height: 22, fontSize: 11 }}>{item.action}</button>
                 <button onClick={() => setDismissed(new Set([...dismissed, item.id]))}
@@ -416,7 +416,7 @@ function AttentionPanel() {
           </div>
         ))}
       </div>
-      <div style={{ padding: '10px 12px', fontSize: 11, color: 'var(--fg-dim)', display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ padding: '10px 12px', fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.5, display: 'flex', justifyContent: 'space-between' }}>
         <span>Auto-triaged 4 low-severity items</span>
         <button className="btn ghost sm" style={{ height: 20, padding: 0, fontSize: 11 }}>Show</button>
       </div>
