@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&family=Azeret+Mono:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css"/>
   <style>
     @keyframes slideIn { from { transform: translateX(12px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -66,6 +66,7 @@
   <script type="text/babel" src="components/authentication.jsx"></script>
   <script type="text/babel" src="components/signing_keys.jsx"></script>
   <script type="text/babel" src="components/settings.jsx"></script>
+  <script type="text/babel" src="components/empty_shell.jsx"></script>
 
   <script type="text/babel">
     const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -158,6 +159,12 @@
         auth: Authentication,
         signing: SigningKeys,
         settings: Settings,
+        consents: Consents,
+        tokens: Tokens,
+        vault: Vault,
+        explorer: APIExplorer,
+        debug: SessionDebugger,
+        schemas: EventSchemas,
       }[page] || Overview;
 
       return (

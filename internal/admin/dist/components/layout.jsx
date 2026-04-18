@@ -9,9 +9,9 @@ const NAV = [
   ]},
   { group: 'AGENTS', items: [
     { id: 'agents', label: 'Agents', icon: 'Agent', badge: 'new' },
-    { id: 'consents', label: 'Consents', icon: 'Consent', disabled: true },
-    { id: 'tokens', label: 'Tokens', icon: 'Token', disabled: true, badge: '1.2k' },
-    { id: 'vault', label: 'Vault', icon: 'Vault', disabled: true },
+    { id: 'consents', label: 'Consents', icon: 'Consent' },
+    { id: 'tokens', label: 'Tokens', icon: 'Token', badge: '1.2k' },
+    { id: 'vault', label: 'Vault', icon: 'Vault' },
     { id: 'device-flow', label: 'Device Flow', icon: 'Device', badge: '4', live: true },
   ]},
   { group: 'ACCESS', items: [
@@ -29,9 +29,9 @@ const NAV = [
     { id: 'settings', label: 'Settings', icon: 'Settings' },
   ]},
   { group: 'DEVELOPERS', items: [
-    { id: 'explorer', label: 'API Explorer', icon: 'Explorer', disabled: true, ph: 5 },
-    { id: 'debug', label: 'Session Debugger', icon: 'Debug', disabled: true, ph: 5 },
-    { id: 'schemas', label: 'Event Schemas', icon: 'Schema', disabled: true, ph: 5 },
+    { id: 'explorer', label: 'API Explorer', icon: 'Explorer', ph: 5 },
+    { id: 'debug', label: 'Session Debugger', icon: 'Debug', ph: 5 },
+    { id: 'schemas', label: 'Event Schemas', icon: 'Schema', ph: 5 },
   ]},
 ];
 
@@ -190,6 +190,12 @@ function TopBar({ page, setTweaksOpen }) {
     auth: 'Authentication',
     signing: 'Signing Keys',
     settings: 'Settings',
+    consents: 'Consents',
+    tokens: 'Tokens',
+    vault: 'Vault',
+    explorer: 'API Explorer',
+    debug: 'Session Debugger',
+    schemas: 'Event Schemas',
   }[page] || page;
 
   return (
