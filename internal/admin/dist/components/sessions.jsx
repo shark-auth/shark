@@ -1,35 +1,121 @@
 // Sessions — live header strip + geo view + table + detail slideover
 
+// Local relative time helper — mirrors MOCK.relativeTime but standalone
+function relTime(t) {
+  if (!t) return '—';
+  const NOW = Date.now();
+  const diff = Math.floor((NOW - t) / 1000);
+  if (diff < 0) {
+    const n = Math.abs(diff);
+    if (n < 60) return `in ${n}s`;
+    if (n < 3600) return `in ${Math.floor(n/60)}m`;
+    if (n < 86400) return `in ${Math.floor(n/3600)}h`;
+    return `in ${Math.floor(n/86400)}d`;
+  }
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
+// Normalize a raw API session object to the shape the UI expects.
+// Handles both real API field names and mock field names gracefully.
+function normalizeSession(s) {
+  if (!s) return s;
+  // Already normalized (has .user and .ip as expected by UI)
+  const email = s.user_email || s.email || s.user || '';
+  const ip = s.ip_address || s.ip || '';
+  const authMethod = s.auth_method || s.method || '';
+  const mfaRaw = s.mfa_verified != null ? s.mfa_verified : (s.mfa_passed != null ? s.mfa_passed : s.mfa);
+  // mfa: keep as string type name if present, coerce bool true → 'verified', false → null
+  const mfa = mfaRaw === true ? 'verified' : (mfaRaw === false ? null : mfaRaw || null);
+  // timestamps: API returns ISO strings, mock returns ms epoch numbers
+  const toMs = (v) => {
+    if (!v) return 0;
+    if (typeof v === 'number') return v;
+    return new Date(v).getTime();
+  };
+  return {
+    ...s,
+    user: email,
+    name: s.name || s.user_name || email.split('@')[0] || '—',
+    ip,
+    method: authMethod,
+    mfa,
+    dev: s.user_agent || s.dev || '—',
+    created: toMs(s.created_at || s.created),
+    last: toMs(s.last_seen_at || s.last_activity_at || s.last || s.updated_at),
+    expires: toMs(s.expires_at || s.expires),
+    city: s.city || '',
+    country: s.country || '',
+    region: s.region || '',
+    lat: s.lat || 0,
+    lng: s.lng || 0,
+    client: s.client || s.client_type || 'web',
+    risk: s.risk || s.risk_level || 'low',
+    blocked: s.blocked || s.is_blocked || false,
+    suspicious: s.suspicious || s.suspicious_reason || null,
+    current: s.current || s.is_current || false,
+  };
+}
+
 function Sessions() {
   const [selected, setSelected] = React.useState(null);
   const [query, setQuery] = React.useState('');
   const [clientFilter, setClientFilter] = React.useState('all');
   const [riskFilter, setRiskFilter] = React.useState('all');
   const [view, setView] = React.useState('table'); // table | geo
-  const [live, setLive] = React.useState(true);
+  const [liveTail, setLiveTail] = React.useState(true);
   const [pulse, setPulse] = React.useState(0);
+
+  const { data: sessionsRaw, loading, refresh } = useAPI('/admin/sessions');
+  const sessions = (sessionsRaw?.sessions || []).map(normalizeSession);
+
+  // Live polling: refresh every 5s when liveTail is on
+  React.useEffect(() => {
+    if (!liveTail) return;
+    const id = setInterval(refresh, 5000);
+    return () => clearInterval(id);
+  }, [liveTail, refresh]);
 
   // tick to drive the "live" animation
   React.useEffect(() => {
-    if (!live) return;
+    if (!liveTail) return;
     const iv = setInterval(() => setPulse(p => p + 1), 2200);
     return () => clearInterval(iv);
-  }, [live]);
+  }, [liveTail]);
 
-  const all = MOCK.sessions;
+  const handleRevoke = async (sessionId) => {
+    await API.del('/admin/sessions/' + sessionId);
+    refresh();
+  };
+
+  const all = sessions;
   const filtered = all.filter(s => {
-    if (query && !(s.user.toLowerCase().includes(query.toLowerCase()) || s.ip.includes(query) || s.city.toLowerCase().includes(query.toLowerCase()))) return false;
+    const userStr = (s.user || '').toLowerCase();
+    const ipStr = s.ip || '';
+    const cityStr = (s.city || '').toLowerCase();
+    if (query && !(userStr.includes(query.toLowerCase()) || ipStr.includes(query) || cityStr.includes(query.toLowerCase()))) return false;
     if (clientFilter !== 'all' && s.client !== clientFilter) return false;
     if (riskFilter !== 'all' && s.risk !== riskFilter) return false;
     return true;
   });
 
   const totalActive = all.length;
+  // Aggregate stats from real sessions
+  const byAuthMethod = {};
+  all.forEach(s => { byAuthMethod[s.method] = (byAuthMethod[s.method] || 0) + 1; });
+  const mfaCount = all.filter(s => s.mfa).length;
+  const mfaRate = totalActive > 0 ? Math.round((mfaCount / totalActive) * 100) : 0;
   const suspicious = all.filter(s => s.risk === 'high' || s.suspicious || s.blocked).length;
   const clientCounts = { web: 0, mobile: 0, api: 0, agent: 0 };
   all.forEach(s => { if (clientCounts[s.client] != null) clientCounts[s.client]++; });
   const regionCounts = {};
-  all.forEach(s => { regionCounts[s.region] = (regionCounts[s.region] || 0) + 1; });
+  all.forEach(s => { if (s.region) regionCounts[s.region] = (regionCounts[s.region] || 0) + 1; });
+
+  if (loading && all.length === 0) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--fg-muted)', fontSize: 13 }}>Loading sessions…</div>;
+  }
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -40,9 +126,11 @@ function Sessions() {
           suspicious={suspicious}
           clientCounts={clientCounts}
           regionCounts={regionCounts}
+          mfaRate={mfaRate}
+          byAuthMethod={byAuthMethod}
           pulse={pulse}
-          live={live}
-          setLive={setLive}
+          live={liveTail}
+          setLive={setLiveTail}
         />
 
         {/* Toolbar */}
@@ -117,18 +205,18 @@ function Sessions() {
         </div>
       </div>
 
-      {selected && <SessionSlideover session={selected} onClose={() => setSelected(null)}/>}
+      {selected && <SessionSlideover session={selected} onClose={() => setSelected(null)} onRevoke={handleRevoke}/>}
     </div>
   );
 }
 
 /* ---------------- LIVE STRIP ---------------- */
 
-function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, pulse, live, setLive }) {
+function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRate, byAuthMethod, pulse, live, setLive }) {
   return (
     <div style={{
       borderBottom: '1px solid var(--hairline)',
-      background: 'linear-gradient(180deg, #0b0b0b 0%, var(--surface-0) 100%)',
+      background: 'var(--surface-1)',
       padding: '14px 16px 10px',
       display: 'grid',
       gridTemplateColumns: '240px 1fr 1fr 1fr',
@@ -146,7 +234,7 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, pulse,
           <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: live ? 'var(--success)' : 'var(--fg-dim)', fontWeight: 500 }}>
             {live ? 'Live' : 'Paused'}
           </span>
-          <span className="faint mono" style={{ fontSize: 10 }}>· {live ? `+${MOCK.sessionTrends.newLastHour}/h` : ''}</span>
+          <span className="faint mono" style={{ fontSize: 10 }}>· {live ? 'polling' : ''}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
           <span className="mono" style={{ fontSize: 34, fontWeight: 500, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
@@ -183,18 +271,31 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, pulse,
         />
       </div>
 
-      {/* Sign-ins 24h */}
+      {/* Auth methods */}
       <div style={{ padding: '0 16px', borderRight: '1px solid var(--hairline)' }}>
-        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--fg-dim)', marginBottom: 4 }}>
-          Sign-ins · 24h
+        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--fg-dim)', marginBottom: 8 }}>
+          By auth method
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
-          <span className="mono" style={{ fontSize: 18, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
-            {MOCK.sessionTrends.signIns24h.reduce((a,b) => a+b, 0).toLocaleString()}
-          </span>
-          <span className="faint" style={{ fontSize: 10.5 }}>last 24h · {MOCK.sessionTrends.revoked24h} revoked</span>
+        <div className="col" style={{ gap: 3 }}>
+          {Object.entries(byAuthMethod || {})
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([method, count]) => {
+              const pct = totalActive > 0 ? count / totalActive : 0;
+              return (
+                <div key={method} className="row" style={{ gap: 8, fontSize: 10.5 }}>
+                  <span className="mono" style={{ width: 72, color: 'var(--fg-muted)' }}>{method || '—'}</span>
+                  <div style={{ flex: 1, height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct*100}%`, height: '100%', background: 'var(--fg)' }}/>
+                  </div>
+                  <span className="mono" style={{ width: 18, textAlign: 'right' }}>{count}</span>
+                </div>
+              );
+            })}
+          {totalActive > 0 && (
+            <div className="faint" style={{ fontSize: 10, marginTop: 4 }}>MFA enrolled: {mfaRate}%</div>
+          )}
         </div>
-        <Sparkline data={MOCK.sessionTrends.signIns24h} height={36}/>
       </div>
 
       {/* Regions */}
@@ -330,9 +431,9 @@ function SessionsTable({ sessions, selected, setSelected, pulse }) {
               <td>
                 <RiskChip risk={s.risk} suspicious={s.suspicious} blocked={s.blocked}/>
               </td>
-              <td className="mono faint" style={{ fontSize: 11 }}>{MOCK.relativeTime(s.created)}</td>
+              <td className="mono faint" style={{ fontSize: 11 }}>{relTime(s.created)}</td>
               <td className="mono" style={{ fontSize: 11, color: veryRecent ? 'var(--success)' : recent ? 'var(--fg)' : 'var(--fg-muted)' }}>
-                {veryRecent ? <span className="row" style={{gap:4}}><span className="dot success pulse"/>now</span> : MOCK.relativeTime(s.last)}
+                {veryRecent ? <span className="row" style={{gap:4}}><span className="dot success pulse"/>now</span> : relTime(s.last)}
               </td>
               <td onClick={e => e.stopPropagation()}>
                 <button className="btn ghost icon sm"><Icon.More width={12} height={12}/></button>
@@ -407,7 +508,7 @@ function GeoView({ sessions, selected, setSelected, pulse }) {
                     <div className="faint mono" style={{ fontSize: 10.5 }}>{s.city} · {s.ip}</div>
                   </div>
                   <span className={'chip' + (s.client === 'agent' ? ' agent' : '')} style={{ height: 17, fontSize: 10 }}>{s.client}</span>
-                  <span className="mono faint" style={{ fontSize: 10.5, width: 60, textAlign: 'right' }}>{MOCK.relativeTime(s.last)}</span>
+                  <span className="mono faint" style={{ fontSize: 10.5, width: 60, textAlign: 'right' }}>{relTime(s.last)}</span>
                 </div>
               );
             })}
@@ -441,7 +542,7 @@ function AbstractMap({ sessions, pulse, setSelected }) {
   return (
     <div style={{
       border: '1px solid var(--hairline)',
-      background: 'radial-gradient(ellipse at center, #0d0d0d 0%, #050505 100%)',
+      background: 'var(--surface-1)',
       borderRadius: 6, overflow: 'hidden', position: 'relative',
     }}>
       <div style={{
@@ -535,8 +636,19 @@ function AbstractMap({ sessions, pulse, setSelected }) {
 
 /* ---------------- DETAIL SLIDEOVER ---------------- */
 
-function SessionSlideover({ session, onClose }) {
+function SessionSlideover({ session, onClose, onRevoke }) {
   const [tab, setTab] = React.useState('overview');
+  const [revoking, setRevoking] = React.useState(false);
+
+  const handleRevoke = async () => {
+    setRevoking(true);
+    try {
+      await onRevoke(session.id);
+      onClose();
+    } finally {
+      setRevoking(false);
+    }
+  };
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'claims', label: 'Token claims' },
@@ -557,7 +669,7 @@ function SessionSlideover({ session, onClose }) {
           <button className="btn ghost sm" onClick={onClose}><Icon.X width={12} height={12}/>Close</button>
           <div className="row" style={{ gap: 4 }}>
             <button className="btn ghost sm">Replay</button>
-            <button className="btn ghost sm danger">Revoke</button>
+            <button className="btn ghost sm danger" onClick={handleRevoke} disabled={revoking}>{revoking ? 'Revoking…' : 'Revoke'}</button>
             <button className="btn ghost icon sm"><Icon.More width={12} height={12}/></button>
           </div>
         </div>
@@ -649,9 +761,9 @@ function SessionOverviewTab({ s }) {
       <SessionField label="IP address" mono>{s.ip}</SessionField>
       <SessionField label="Location">{s.city}{s.country && s.country !== '—' && `, ${s.country}`} <span className="faint mono" style={{ fontSize: 10.5, marginLeft: 6 }}>{s.region}</span></SessionField>
       <SessionField label="Auth method">{s.method}{s.mfa && <span className="faint" style={{ marginLeft: 6 }}>+ {s.mfa}</span>}</SessionField>
-      <SessionField label="Started" mono>{MOCK.relativeTime(s.created)}</SessionField>
-      <SessionField label="Last seen" mono>{MOCK.relativeTime(s.last)}</SessionField>
-      <SessionField label="Expires" mono>{MOCK.relativeTime(s.expires)}</SessionField>
+      <SessionField label="Started" mono>{relTime(s.created)}</SessionField>
+      <SessionField label="Last seen" mono>{relTime(s.last)}</SessionField>
+      <SessionField label="Expires" mono>{relTime(s.expires)}</SessionField>
       <SessionField label="Risk score">
         <div className="row" style={{ gap: 8 }}>
           <RiskChip risk={s.risk} suspicious={s.suspicious} blocked={s.blocked}/>
@@ -687,7 +799,7 @@ function SessionOverviewTab({ s }) {
 function SessionClaimsTab({ s }) {
   const claims = {
     iss: 'https://auth.shark.sh',
-    sub: s.user.startsWith('unknown') ? '—' : 'usr_' + s.id.slice(-8),
+    sub: (s.user || '').startsWith('unknown') || !s.user ? '—' : (s.user_id ? s.user_id : 'usr_' + s.id.slice(-8)),
     aud: ['https://api.nimbus.sh'],
     iat: Math.floor(s.created / 1000),
     exp: Math.floor(Math.abs(s.expires) / 1000),
@@ -722,7 +834,7 @@ function SessionEventsTab({ s }) {
     <div className="col" style={{ gap: 0 }}>
       {events.map((e, i) => (
         <div key={i} className="row" style={{ padding: '7px 0', borderBottom: '1px solid var(--hairline)', gap: 10 }}>
-          <span className="mono faint" style={{ fontSize: 10.5, width: 70 }}>{MOCK.relativeTime(e.t)}</span>
+          <span className="mono faint" style={{ fontSize: 10.5, width: 70 }}>{relTime(e.t)}</span>
           <span className="mono" style={{ fontSize: 11.5, width: 160 }}>{e.action}</span>
           <span className="mono faint" style={{ fontSize: 11 }}>{e.meta}</span>
         </div>
