@@ -18,13 +18,13 @@ const NAV = [
     { id: 'apps', label: 'Applications', icon: 'App' },
     { id: 'auth', label: 'Authentication', icon: 'Lock', disabled: true },
     { id: 'sso', label: 'SSO', icon: 'SSO', disabled: true },
-    { id: 'rbac', label: 'Roles & Permissions', icon: 'Shield', disabled: true },
+    { id: 'rbac', label: 'Roles & Permissions', icon: 'Shield' },
     { id: 'keys', label: 'API Keys', icon: 'Key' },
   ]},
   { group: 'OPERATIONS', items: [
     { id: 'audit', label: 'Audit Log', icon: 'Audit' },
     { id: 'webhooks', label: 'Webhooks', icon: 'Webhook', disabled: true },
-    { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', disabled: true },
+    { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', badge: 'dev' },
     { id: 'signing', label: 'Signing Keys', icon: 'Signing', disabled: true },
     { id: 'settings', label: 'Settings', icon: 'Settings', disabled: true },
   ]},
@@ -184,6 +184,7 @@ function TopBar({ page, setTweaksOpen }) {
     audit: 'Audit Log',
     apps: 'Applications',
     keys: 'API Keys',
+    rbac: 'Roles & Permissions',
   }[page] || page;
 
   return (

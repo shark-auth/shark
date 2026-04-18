@@ -58,6 +58,10 @@
   <script type="text/babel" src="components/audit.jsx"></script>
   <script type="text/babel" src="components/applications.jsx"></script>
   <script type="text/babel" src="components/api_keys.jsx"></script>
+  <script type="text/babel" src="components/webhooks.jsx"></script>
+  <script type="text/babel" src="components/rbac.jsx"></script>
+  <script type="text/babel" src="components/dev_inbox.jsx"></script>
+  <script type="text/babel" src="components/sso.jsx"></script>
 
   <script type="text/babel">
     const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -126,6 +130,9 @@
         audit: Audit,
         apps: Applications,
         keys: ApiKeys,
+        rbac: RBAC,
+        'dev-inbox': DevInbox,
+        sso: SSO,
       }[page] || Overview;
 
       return (
