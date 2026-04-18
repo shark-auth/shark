@@ -17,7 +17,7 @@ const NAV = [
   { group: 'ACCESS', items: [
     { id: 'apps', label: 'Applications', icon: 'App' },
     { id: 'auth', label: 'Authentication', icon: 'Lock', disabled: true },
-    { id: 'sso', label: 'SSO', icon: 'SSO', disabled: true },
+    { id: 'sso', label: 'SSO', icon: 'SSO' },
     { id: 'rbac', label: 'Roles & Permissions', icon: 'Shield' },
     { id: 'keys', label: 'API Keys', icon: 'Key' },
   ]},
@@ -185,6 +185,7 @@ function TopBar({ page, setTweaksOpen }) {
     apps: 'Applications',
     keys: 'API Keys',
     rbac: 'Roles & Permissions',
+    'dev-inbox': 'Dev Inbox',
   }[page] || page;
 
   return (
