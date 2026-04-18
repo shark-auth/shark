@@ -17,7 +17,7 @@ const API = {
     const res = await fetch(`/api/v1${path}`, opts);
     if (res.status === 401) {
       sessionStorage.removeItem('shark_admin_key');
-      window.location.reload();
+      window.dispatchEvent(new Event('shark-auth-expired'));
       throw new Error('Session expired');
     }
     if (!res.ok) {

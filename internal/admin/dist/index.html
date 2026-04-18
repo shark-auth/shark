@@ -86,15 +86,19 @@
       const [tweaksOpen, setTweaksOpen] = React.useState(false);
       const [editMode, setEditMode] = React.useState(false);
 
-      if (!apiKey) {
-        return <Login onLogin={(k) => setApiKey(k)} />;
-      }
-
+      // All hooks MUST be above any conditional return (React Rules of Hooks)
       React.useEffect(() => { localStorage.setItem('page', page); }, [page]);
 
       React.useEffect(() => {
         document.body.className = 'font-' + tweaks.font;
       }, [tweaks.font]);
+
+      // Listen for auth expiry from API wrapper (no reload race)
+      React.useEffect(() => {
+        const handler = () => setApiKey('');
+        window.addEventListener('shark-auth-expired', handler);
+        return () => window.removeEventListener('shark-auth-expired', handler);
+      }, []);
 
       // Edit mode protocol
       React.useEffect(() => {
@@ -106,6 +110,11 @@
         try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch {}
         return () => window.removeEventListener('message', handler);
       }, []);
+
+      // Auth gate — after all hooks
+      if (!apiKey) {
+        return <Login onLogin={(k) => setApiKey(k)} />;
+      }
 
       const Page = {
         overview: Overview,
