@@ -35,11 +35,6 @@ jobs:
       - name: Smoke test
         run: ./smoke_test.sh
 
-      - name: govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
-
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
@@ -48,10 +43,20 @@ jobs:
         continue-on-error: true
 
       - name: Upload gosec SARIF
-        if: always()
+        if: hashFiles('gosec.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gosec.sarif
 
       - name: Run gosec (blocking)
         run: gosec -quiet ./...
+
+      # govulncheck runs last and is advisory-only. Vulnerability databases
+      # are rolling and a new CVE on any transitive dep shouldn't block a
+      # merge to main; findings show up in the job log and annotations so
+      # they stay visible.
+      - name: govulncheck (advisory)
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
