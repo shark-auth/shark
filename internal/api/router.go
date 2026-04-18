@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/sharkauth/sharkauth/internal/admin"
 	"github.com/sharkauth/sharkauth/internal/audit"
 	"github.com/sharkauth/sharkauth/internal/auth"
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
@@ -424,11 +425,9 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		})
 	})
 
-	// Admin dashboard (static files)
-	r.Handle("/admin/*", http.StripPrefix("/admin/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Placeholder: will serve embedded Svelte dashboard files in Wave 4
-		http.Error(w, "Admin dashboard not yet built", http.StatusNotFound)
-	})))
+	// Admin dashboard (Phase 4) — embedded HTML/React bundle, SPA fallback.
+	r.Handle("/admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))
+	r.Handle("/admin/*", http.StripPrefix("/admin/", admin.Handler()))
 
 	s.Router = r
 	return s
