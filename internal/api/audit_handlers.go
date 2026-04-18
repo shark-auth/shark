@@ -298,6 +298,49 @@ func (s *Server) handleExportAuditLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// purgeAuditLogsRequest is the request body for POST /api/v1/admin/audit-logs/purge.
+type purgeAuditLogsRequest struct {
+	Before string `json:"before"` // RFC3339 timestamp; logs created before this are deleted
+}
+
+// handlePurgeAuditLogs handles POST /api/v1/admin/audit-logs/purge.
+// Deletes all audit log entries created before the given timestamp.
+func (s *Server) handlePurgeAuditLogs(w http.ResponseWriter, r *http.Request) {
+	var body purgeAuditLogsRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "Invalid JSON body",
+		})
+		return
+	}
+
+	if body.Before == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "'before' timestamp is required (RFC3339 format)",
+		})
+		return
+	}
+
+	before, err := time.Parse(time.RFC3339, body.Before)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_parameter",
+			"message": "Invalid 'before' timestamp format, expected RFC3339",
+		})
+		return
+	}
+
+	count, err := s.Store.DeleteAuditLogsBefore(r.Context(), before)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]int64{"deleted": count})
+}
+
 // sortAuditLogsByCreatedAtDesc sorts audit logs by created_at descending.
 // Uses a simple insertion sort since the inputs are small (bounded by limit).
 func sortAuditLogsByCreatedAtDesc(logs []*storage.AuditLog) {

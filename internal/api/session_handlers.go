@@ -266,6 +266,17 @@ func (s *Server) auditSessionRevoke(ctx context.Context, actorType, actorID, tar
 	})
 }
 
+// handlePurgeExpiredSessions handles POST /api/v1/admin/sessions/purge-expired.
+// Deletes all sessions whose expires_at is in the past and returns the count deleted.
+func (s *Server) handlePurgeExpiredSessions(w http.ResponseWriter, r *http.Request) {
+	count, err := s.Store.DeleteExpiredSessions(r.Context())
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int64{"deleted": count})
+}
+
 // effectiveLimit mirrors the clamp applied inside ListActiveSessions so the
 // handler can decide whether a "next page probably exists" signal is warranted.
 func effectiveLimit(n int) int {

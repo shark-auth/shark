@@ -193,6 +193,52 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, adminUserToResponse(user))
 }
 
+// handleListUserOAuthAccounts handles GET /api/v1/users/{id}/oauth-accounts.
+// Returns all OAuth provider accounts linked to the user.
+func (s *Server) handleListUserOAuthAccounts(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+
+	accounts, err := s.Store.GetOAuthAccountsByUserID(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	if accounts == nil {
+		accounts = []*storage.OAuthAccount{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"oauth_accounts": accounts,
+	})
+}
+
+// handleDeleteUserOAuthAccount handles DELETE /api/v1/users/{id}/oauth-accounts/{oauthId}.
+// Unlinks a specific OAuth provider account from the user. Returns 204 on success.
+func (s *Server) handleDeleteUserOAuthAccount(w http.ResponseWriter, r *http.Request) {
+	oauthID := chi.URLParam(r, "oauthId")
+
+	if err := s.Store.DeleteOAuthAccount(r.Context(), oauthID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, http.StatusNotFound, map[string]string{
+				"error":   "not_found",
+				"message": "OAuth account not found",
+			})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleDeleteMe handles DELETE /api/v1/auth/me (user self-deletion)
 func (s *Server) handleDeleteMe(w http.ResponseWriter, r *http.Request) {
 	userID := mw.GetUserID(r.Context())

@@ -40,6 +40,7 @@ type Server struct {
 	SSOHandlers       *SSOHandlers
 	WebhookDispatcher *webhook.Dispatcher
 	magicLinkRL       *magicLinkRateLimiter
+	startTime         time.Time
 }
 
 // ServerOption configures optional dependencies for the Server.
@@ -87,6 +88,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		RateLimiter:    auth.NewTokenBucket(),
 		LockoutManager: auth.NewLockoutManager(5, 15*time.Minute),
 		FieldEncryptor: fe,
+		startTime:      time.Now().UTC(),
 	}
 
 	// Apply options
@@ -332,6 +334,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{id}/audit-logs", s.handleUserAuditLogs)
 			r.Get("/{id}/sessions", s.handleListUserSessions)
 			r.Delete("/{id}/sessions", s.handleRevokeUserSessions)
+			r.Get("/{id}/oauth-accounts", s.handleListUserOAuthAccounts)
+			r.Delete("/{id}/oauth-accounts/{oauthId}", s.handleDeleteUserOAuthAccount)
 		})
 
 		// SSO connections (admin + public endpoints)
@@ -412,10 +416,14 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		// Admin (stats + sessions + dev-mode inbox)
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
+			r.Get("/health", s.handleAdminHealth)
+			r.Get("/config", s.handleAdminConfig)
 			r.Get("/stats", s.handleAdminStats)
 			r.Get("/stats/trends", s.handleAdminStatsTrends)
 			r.Get("/sessions", s.handleAdminListSessions)
 			r.Delete("/sessions/{id}", s.handleAdminDeleteSession)
+			r.Post("/sessions/purge-expired", s.handlePurgeExpiredSessions)
+			r.Post("/audit-logs/purge", s.handlePurgeAuditLogs)
 
 			if cfg.Server.DevMode {
 				r.Get("/dev/emails", s.handleListDevEmails)
