@@ -65,6 +65,7 @@ type Store interface {
 	UpdateOrganization(ctx context.Context, o *Organization) error
 	DeleteOrganization(ctx context.Context, id string) error
 	ListOrganizationsByUserID(ctx context.Context, userID string) ([]*Organization, error)
+	ListAllOrganizations(ctx context.Context) ([]*Organization, error)
 
 	// Organization members
 	CreateOrganizationMember(ctx context.Context, m *OrganizationMember) error

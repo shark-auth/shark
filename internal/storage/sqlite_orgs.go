@@ -66,6 +66,26 @@ func (s *SQLiteStore) ListOrganizationsByUserID(ctx context.Context, userID stri
 	return out, rows.Err()
 }
 
+func (s *SQLiteStore) ListAllOrganizations(ctx context.Context) ([]*Organization, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, slug, metadata, created_at, updated_at
+		 FROM organizations ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*Organization
+	for rows.Next() {
+		var o Organization
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Metadata, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &o)
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) scanOrg(row *sql.Row) (*Organization, error) {
 	var o Organization
 	if err := row.Scan(&o.ID, &o.Name, &o.Slug, &o.Metadata, &o.CreatedAt, &o.UpdatedAt); err != nil {

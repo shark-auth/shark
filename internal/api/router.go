@@ -425,6 +425,11 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/sessions/purge-expired", s.handlePurgeExpiredSessions)
 			r.Post("/audit-logs/purge", s.handlePurgeAuditLogs)
 
+			// Admin organization endpoints (admin key auth, not session auth)
+			r.Get("/organizations", s.handleAdminListOrganizations)
+			r.Get("/organizations/{id}", s.handleAdminGetOrganization)
+			r.Get("/organizations/{id}/members", s.handleAdminListOrgMembers)
+
 			if cfg.Server.DevMode {
 				r.Get("/dev/emails", s.handleListDevEmails)
 				r.Get("/dev/emails/{id}", s.handleGetDevEmail)

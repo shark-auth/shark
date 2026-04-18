@@ -16,9 +16,14 @@ const API = {
     if (body && method !== 'GET') opts.body = JSON.stringify(body);
     const res = await fetch(`/api/v1${path}`, opts);
     if (res.status === 401) {
-      sessionStorage.removeItem('shark_admin_key');
-      window.dispatchEvent(new Event('shark-auth-expired'));
-      throw new Error('Session expired');
+      // Only auto-logout if a known admin endpoint rejects the key.
+      // Non-admin endpoints (e.g. /organizations) use session auth
+      // and will 401 legitimately — don't nuke the session for those.
+      if (path.startsWith('/admin/') || path.startsWith('/api-keys') || path.startsWith('/users') || path.startsWith('/roles') || path.startsWith('/audit-logs')) {
+        sessionStorage.removeItem('shark_admin_key');
+        window.dispatchEvent(new Event('shark-auth-expired'));
+      }
+      throw new Error('Unauthorized');
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));

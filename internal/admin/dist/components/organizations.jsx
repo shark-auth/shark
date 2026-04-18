@@ -1,7 +1,7 @@
 // Organizations — split-pane browser (list left, persistent detail right)
 
 function Organizations() {
-  const { data: orgsRaw, loading, refresh } = useAPI('/organizations');
+  const { data: orgsRaw, loading, refresh } = useAPI('/admin/organizations');
   const orgs = orgsRaw?.organizations || [];
 
   const [selectedId, setSelectedId] = React.useState(() => localStorage.getItem('org-selected') || '');
@@ -120,8 +120,8 @@ function OrgListItem({ org, active, onClick }) {
 function OrgDetail({ org, onRefresh }) {
   const [tab, setTab] = React.useState('overview');
 
-  const { data: membersRaw, loading: membersLoading, refresh: membersRefresh } = useAPI('/organizations/' + org.id + '/members');
-  const { data: rolesRaw, loading: rolesLoading, refresh: rolesRefresh } = useAPI('/organizations/' + org.id + '/roles');
+  const { data: membersRaw, loading: membersLoading, refresh: membersRefresh } = useAPI('/admin/organizations/' + org.id + '/members');
+  const { data: rolesRaw, loading: rolesLoading, refresh: rolesRefresh } = useAPI('/admin/organizations/' + org.id + '/roles');
 
   const members = membersRaw?.members || [];
   const roles = rolesRaw?.roles || [];
@@ -213,7 +213,7 @@ function OrgActions({ org, onRefresh }) {
     if (!confirm(`Delete organization "${org.name}"? This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      await API.del('/organizations/' + org.id);
+      await API.del('/admin/organizations/' + org.id);
       onRefresh();
     } catch (e) {
       alert('Delete failed: ' + e.message);
@@ -420,7 +420,7 @@ function OrgRolesTab({ org, roles, loading, onRefresh }) {
     setSaving(true);
     setErr(null);
     try {
-      await API.post('/organizations/' + org.id + '/roles', { name: newName.trim(), description: newDesc.trim() });
+      await API.post('/admin/organizations/' + org.id + '/roles', { name: newName.trim(), description: newDesc.trim() });
       setNewName('');
       setNewDesc('');
       setCreating(false);
@@ -507,7 +507,7 @@ function OrgSettingsTab({ org, onRefresh }) {
     setErr(null);
     setOk(false);
     try {
-      await API.patch('/organizations/' + org.id, { name: name.trim() });
+      await API.patch('/admin/organizations/' + org.id, { name: name.trim() });
       setOk(true);
       onRefresh();
     } catch (e) {

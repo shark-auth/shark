@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // adminHealthResponse is the response shape for GET /admin/health.
@@ -114,4 +116,41 @@ func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 // Returns the sanitised runtime configuration (no secrets).
 func (s *Server) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.buildConfigSummary(r.Context()))
+}
+
+// handleAdminListOrganizations handles GET /api/v1/admin/organizations.
+// Lists ALL organizations (admin view, not user-scoped).
+func (s *Server) handleAdminListOrganizations(w http.ResponseWriter, r *http.Request) {
+	orgs, err := s.Store.ListAllOrganizations(r.Context())
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	out := make([]organizationResponse, 0, len(orgs))
+	for _, o := range orgs {
+		out = append(out, orgToResponse(o))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"organizations": out})
+}
+
+// handleAdminGetOrganization handles GET /api/v1/admin/organizations/{id}.
+func (s *Server) handleAdminGetOrganization(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	org, err := s.Store.GetOrganizationByID(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
+		return
+	}
+	writeJSON(w, http.StatusOK, orgToResponse(org))
+}
+
+// handleAdminListOrgMembers handles GET /api/v1/admin/organizations/{id}/members.
+func (s *Server) handleAdminListOrgMembers(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+	members, err := s.Store.ListOrganizationMembers(r.Context(), orgID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"members": members})
 }
