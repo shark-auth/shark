@@ -141,7 +141,7 @@ export function Sessions() {
 
         {/* Toolbar */}
         <div style={{
-          padding: '10px 16px',
+          padding: '8px 16px',
           borderBottom: '1px solid var(--hairline)',
           display: 'flex', gap: 8, alignItems: 'center',
           background: 'var(--surface-0)',
@@ -158,7 +158,7 @@ export function Sessions() {
               placeholder="Search email, IP, city…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              style={{ flex: 1, fontSize: 12 }}
+              style={{ flex: 1, fontSize: 11, lineHeight: 1.5 }}
             />
             <Kbd keys="/"/>
           </div>
@@ -182,19 +182,20 @@ export function Sessions() {
 
           <div style={{ flex: 1 }}/>
 
-          <span className="faint" style={{ fontSize: 11 }}>
+          <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
             {filtered.length.toLocaleString()} of {all.length.toLocaleString()}
           </span>
 
-          <div className="seg" style={{ display: 'inline-flex', border: '1px solid var(--hairline-strong)', borderRadius: 5, overflow: 'hidden' }}>
+          {/* View toggle — matches Segment height */}
+          <div className="seg" style={{ display: 'inline-flex', border: '1px solid var(--hairline-strong)', borderRadius: 5, overflow: 'hidden', height: 28 }}>
             <button
               onClick={() => setView('table')}
-              style={{ padding: '0 8px', height: 26, fontSize: 11, background: view === 'table' ? 'var(--surface-3)' : 'var(--surface-1)', color: view === 'table' ? 'var(--fg)' : 'var(--fg-muted)', borderRight: '1px solid var(--hairline)' }}>
+              style={{ padding: '0 10px', height: 28, fontSize: 11, background: view === 'table' ? 'var(--surface-3)' : 'var(--surface-1)', color: view === 'table' ? 'var(--fg)' : 'var(--fg-muted)', borderRight: '1px solid var(--hairline)' }}>
               Table
             </button>
             <button
               onClick={() => setView('geo')}
-              style={{ padding: '0 8px', height: 26, fontSize: 11, background: view === 'geo' ? 'var(--surface-3)' : 'var(--surface-1)', color: view === 'geo' ? 'var(--fg)' : 'var(--fg-muted)' }}>
+              style={{ padding: '0 10px', height: 28, fontSize: 11, background: view === 'geo' ? 'var(--surface-3)' : 'var(--surface-1)', color: view === 'geo' ? 'var(--fg)' : 'var(--fg-muted)' }}>
               Geo
             </button>
           </div>
@@ -206,7 +207,7 @@ export function Sessions() {
         {/* Content */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           {view === 'table'
-            ? <SessionsTable sessions={filtered} selected={selected} setSelected={setSelected} pulse={pulse}/>
+            ? <SessionsTable sessions={filtered} selected={selected} setSelected={setSelected} pulse={pulse} onRevoke={handleRevoke}/>
             : <GeoView sessions={filtered} setSelected={setSelected} selected={selected} pulse={pulse}/>}
         </div>
       </div>
@@ -223,7 +224,7 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
     <div style={{
       borderBottom: '1px solid var(--hairline)',
       background: 'var(--surface-1)',
-      padding: '14px 16px 10px',
+      padding: '12px 16px',
       display: 'grid',
       gridTemplateColumns: '240px 1fr 1fr 1fr',
       gap: 0,
@@ -237,34 +238,34 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
             style={{ cursor: 'pointer' }}>
             <span className={'dot ' + (live ? 'success pulse' : '')} style={{ display: 'inline-block' }}/>
           </span>
-          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: live ? 'var(--success)' : 'var(--fg-dim)', fontWeight: 500 }}>
+          <span style={{ fontSize: 11, lineHeight: 1.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: live ? 'var(--success)' : 'var(--fg-muted)', fontWeight: 500 }}>
             {live ? 'Live' : 'Paused'}
           </span>
-          <span className="faint mono" style={{ fontSize: 10 }}>· {live ? 'polling' : ''}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span className="mono" style={{ fontSize: 34, fontWeight: 500, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+        {/* Hero counter — display font, 20px */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
             {totalActive.toLocaleString()}
           </span>
-          <span className="faint" style={{ fontSize: 11 }}>active sessions</span>
+          <span style={{ fontSize: 11, lineHeight: 1.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)' }}>active sessions</span>
         </div>
-        <div className="row" style={{ gap: 10, fontSize: 10.5 }}>
+        <div className="row" style={{ gap: 10 }}>
           <span className="row" style={{ gap: 4 }}>
             <span className="dot success"/>
-            <span className="faint">healthy</span>
-            <span className="mono">{totalActive - suspicious}</span>
+            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>healthy</span>
+            <span className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{totalActive - suspicious}</span>
           </span>
           <span className="row" style={{ gap: 4 }}>
             <span className="dot danger"/>
-            <span className="faint">risk</span>
-            <span className="mono" style={{ color: suspicious > 0 ? 'var(--danger)' : 'var(--fg)' }}>{suspicious}</span>
+            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>risk</span>
+            <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: suspicious > 0 ? 'var(--danger)' : 'var(--fg)' }}>{suspicious}</span>
           </span>
         </div>
       </div>
 
       {/* Clients */}
       <div style={{ padding: '0 16px', borderRight: '1px solid var(--hairline)' }}>
-        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--fg-dim)', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, lineHeight: 1.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 8 }}>
           By client
         </div>
         <StackedBar
@@ -279,7 +280,7 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
 
       {/* Auth methods */}
       <div style={{ padding: '0 16px', borderRight: '1px solid var(--hairline)' }}>
-        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--fg-dim)', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, lineHeight: 1.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 8 }}>
           By auth method
         </div>
         <div className="col" style={{ gap: 3 }}>
@@ -289,24 +290,24 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
             .map(([method, count]) => {
               const pct = totalActive > 0 ? count / totalActive : 0;
               return (
-                <div key={method} className="row" style={{ gap: 8, fontSize: 10.5 }}>
-                  <span className="mono" style={{ width: 72, color: 'var(--fg-muted)' }}>{method || '—'}</span>
+                <div key={method} className="row" style={{ gap: 8 }}>
+                  <span className="mono" style={{ width: 72, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{method || '—'}</span>
                   <div style={{ flex: 1, height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{ width: `${pct*100}%`, height: '100%', background: 'var(--fg)' }}/>
                   </div>
-                  <span className="mono" style={{ width: 18, textAlign: 'right' }}>{count}</span>
+                  <span className="mono" style={{ width: 18, fontSize: 11, lineHeight: 1.5, textAlign: 'right' }}>{count}</span>
                 </div>
               );
             })}
           {totalActive > 0 && (
-            <div className="faint" style={{ fontSize: 10, marginTop: 4 }}>MFA enrolled: {mfaRate}%</div>
+            <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginTop: 4 }}>MFA enrolled: {mfaRate}%</div>
           )}
         </div>
       </div>
 
       {/* Regions */}
       <div style={{ paddingLeft: 16 }}>
-        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--fg-dim)', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, lineHeight: 1.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 8 }}>
           By region
         </div>
         <div className="col" style={{ gap: 3 }}>
@@ -316,12 +317,12 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
             .map(([r, n]) => {
               const pct = n / Math.max(...Object.values(regionCounts));
               return (
-                <div key={r} className="row" style={{ gap: 8, fontSize: 10.5 }}>
-                  <span className="mono" style={{ width: 78, color: 'var(--fg-muted)' }}>{r}</span>
+                <div key={r} className="row" style={{ gap: 8 }}>
+                  <span className="mono" style={{ width: 78, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{r}</span>
                   <div style={{ flex: 1, height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{ width: `${pct*100}%`, height: '100%', background: r === 'tor' ? 'var(--danger)' : 'var(--fg)' }}/>
                   </div>
-                  <span className="mono" style={{ width: 18, textAlign: 'right' }}>{n}</span>
+                  <span className="mono" style={{ width: 18, fontSize: 11, lineHeight: 1.5, textAlign: 'right' }}>{n}</span>
                 </div>
               );
             })}
@@ -335,18 +336,18 @@ function StackedBar({ entries }) {
   const total = entries.reduce((a, e) => a + e.v, 0);
   return (
     <>
-      <div style={{ display: 'flex', height: 10, borderRadius: 2, overflow: 'hidden', marginBottom: 8 }}>
+      <div style={{ display: 'flex', height: 8, borderRadius: 2, overflow: 'hidden', marginBottom: 8 }}>
         {entries.map((e, i) => (
           <div key={i} title={`${e.k}: ${e.v}`} style={{ flex: e.v, background: e.color, opacity: e.v === 0 ? 0.2 : 1 }}/>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 10px', fontSize: 10.5 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 10px' }}>
         {entries.map((e, i) => (
           <div key={i} className="row" style={{ gap: 6 }}>
-            <span style={{ width: 8, height: 8, background: e.color, borderRadius: 1, opacity: e.v === 0 ? 0.2 : 1 }}/>
-            <span style={{ color: 'var(--fg-muted)' }}>{e.k}</span>
-            <span className="mono" style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>{e.v}</span>
-            <span className="faint mono" style={{ fontSize: 9.5 }}>{Math.round((e.v/total)*100)}%</span>
+            <span style={{ width: 8, height: 8, background: e.color, borderRadius: 1, opacity: e.v === 0 ? 0.2 : 1, flexShrink: 0 }}/>
+            <span style={{ color: 'var(--fg-muted)', fontSize: 11, lineHeight: 1.5 }}>{e.k}</span>
+            <span className="mono" style={{ marginLeft: 'auto', fontSize: 11, lineHeight: 1.5, fontVariantNumeric: 'tabular-nums' }}>{e.v}</span>
+            <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{total > 0 ? Math.round((e.v/total)*100) : 0}%</span>
           </div>
         ))}
       </div>
@@ -360,7 +361,7 @@ function Segment({ value, setValue, options }) {
       {options.map((o, i) => (
         <button key={o.v} onClick={() => setValue(o.v)}
           style={{
-            padding: '0 10px', fontSize: 11,
+            padding: '0 10px', height: 28, fontSize: 11, lineHeight: '28px',
             background: value === o.v ? 'var(--surface-3)' : 'var(--surface-1)',
             color: value === o.v ? 'var(--fg)' : 'var(--fg-muted)',
             borderRight: i < options.length - 1 ? '1px solid var(--hairline)' : 'none',
@@ -374,27 +375,29 @@ function Segment({ value, setValue, options }) {
 
 /* ---------------- TABLE VIEW ---------------- */
 
-export function SessionsTable({ sessions, selected, setSelected, pulse }) {
+export function SessionsTable({ sessions, selected, setSelected, pulse, onRevoke }) {
   return (
     <table className="tbl">
       <thead>
         <tr>
-          <th style={{ width: 24, paddingLeft: 16 }}></th>
-          <th>User</th>
-          <th style={{ width: 220 }}>Device</th>
-          <th style={{ width: 80 }}>Client</th>
-          <th style={{ width: 150 }}>IP · Location</th>
-          <th style={{ width: 80 }}>MFA</th>
-          <th style={{ width: 90 }}>Risk</th>
-          <th style={{ width: 90 }}>Started</th>
-          <th style={{ width: 110 }}>Last seen</th>
-          <th style={{ width: 36 }}></th>
+          <th style={{ width: 24, paddingLeft: 16, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}></th>
+          <th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>User</th>
+          <th style={{ width: 220, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Device</th>
+          <th style={{ width: 80, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Client</th>
+          <th style={{ width: 150, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>IP · Location</th>
+          <th style={{ width: 80, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>MFA</th>
+          <th style={{ width: 90, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Risk</th>
+          <th style={{ width: 90, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Started</th>
+          <th style={{ width: 110, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Last seen</th>
+          <th style={{ width: 60, position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}></th>
         </tr>
       </thead>
       <tbody>
         {sessions.map(s => {
           const recent = Date.now() - s.last < 60 * 1000; // < 1m
           const veryRecent = Date.now() - s.last < 15 * 1000;
+          // Risk dot color: danger=blocked/high, warn=medium/suspicious, success=clean
+          const dotClass = s.blocked ? 'danger' : (recent && !s.risk || s.risk === 'low') ? (recent ? 'success pulse' : '') : s.risk === 'high' ? 'danger' : s.risk === 'medium' ? 'warn' : s.suspicious ? 'warn' : '';
           return (
             <tr key={s.id}
                 className={selected?.id === s.id ? 'active' : ''}
@@ -402,47 +405,55 @@ export function SessionsTable({ sessions, selected, setSelected, pulse }) {
                 style={{ cursor: 'pointer' }}>
               <td style={{ paddingLeft: 16 }}>
                 <span
-                  className={"dot " + (s.blocked ? 'danger' : recent ? 'success pulse' : s.risk === 'high' ? 'danger' : s.risk === 'medium' ? 'warn' : '')}
+                  className={"dot " + (s.blocked ? 'danger' : s.suspicious ? 'warn' : recent ? 'success pulse' : s.risk === 'high' ? 'danger' : s.risk === 'medium' ? 'warn' : '')}
                   style={{ display: 'inline-block' }}/>
               </td>
               <td>
                 <div className="row" style={{ gap: 8 }}>
                   <Avatar name={s.name} email={s.user} agent={s.client === 'agent' || s.client === 'api'}/>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: 12.5 }}>{s.name}</div>
-                    <div className="faint" style={{ fontSize: 11 }}>{s.user}</div>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{s.name}</div>
+                    <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{s.user}</div>
                   </div>
                   {s.current && <span className="chip success" style={{ height: 18 }}>you</span>}
                 </div>
               </td>
               <td>
-                <div style={{ fontSize: 12 }}>{s.dev.split('·')[0].trim()}</div>
-                <div className="faint mono" style={{ fontSize: 10.5 }}>{s.dev.split('·').slice(1).join('·').trim() || '—'}</div>
+                <div style={{ fontSize: 13 }}>{s.dev.split('·')[0].trim()}</div>
+                <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{s.dev.split('·').slice(1).join('·').trim() || '—'}</div>
               </td>
               <td>
                 <span className={'chip' + (s.client === 'agent' ? ' agent' : '')} style={{ height: 18 }}>{s.client}</span>
               </td>
               <td>
-                <div className="mono" style={{ fontSize: 11, color: s.region === 'tor' ? 'var(--danger)' : 'var(--fg)' }}>{s.ip}</div>
-                <div className="faint" style={{ fontSize: 10.5 }}>{s.city}{s.country && s.country !== '—' && ` · ${s.country}`}</div>
+                <div className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: s.region === 'tor' ? 'var(--danger)' : 'var(--fg)' }}>{s.ip}</div>
+                <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{s.city}{s.country && s.country !== '—' && ` · ${s.country}`}</div>
               </td>
               <td>
                 {s.mfa ? (
                   <span className="row" style={{ gap: 4, color: 'var(--success)' }}>
                     <Icon.Shield width={11} height={11}/>
-                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--fg-muted)' }}>{s.mfa}</span>
+                    <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{s.mfa}</span>
                   </span>
-                ) : <span className="faint mono" style={{ fontSize: 10.5 }}>none</span>}
+                ) : <span className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>none</span>}
               </td>
               <td>
                 <RiskChip risk={s.risk} suspicious={s.suspicious} blocked={s.blocked}/>
               </td>
-              <td className="mono faint" style={{ fontSize: 11 }}>{relTime(s.created)}</td>
-              <td className="mono" style={{ fontSize: 11, color: veryRecent ? 'var(--success)' : recent ? 'var(--fg)' : 'var(--fg-muted)' }}>
+              <td className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{relTime(s.created)}</td>
+              <td className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: veryRecent ? 'var(--success)' : recent ? 'var(--fg)' : 'var(--fg-muted)' }}>
                 {veryRecent ? <span className="row" style={{gap:4}}><span className="dot success pulse"/>now</span> : relTime(s.last)}
               </td>
-              <td onClick={e => e.stopPropagation()}>
-                <button className="btn ghost icon sm"><Icon.More width={12} height={12}/></button>
+              {/* Inline revoke — ghost danger sm, stops row click */}
+              <td onClick={e => e.stopPropagation()} style={{ paddingRight: 8 }}>
+                <button
+                  className="btn ghost sm"
+                  onClick={() => onRevoke && onRevoke(s.id)}
+                  style={{ fontSize: 11, color: 'var(--danger)', opacity: 0.7 }}
+                  title="Revoke session"
+                >
+                  Revoke
+                </button>
               </td>
             </tr>
           );
@@ -453,8 +464,9 @@ export function SessionsTable({ sessions, selected, setSelected, pulse }) {
 }
 
 function RiskChip({ risk, suspicious, blocked }) {
+  // Color = status only. danger=blocked, warn=suspicious/medium, success implied by absence
   if (blocked) return <span className="chip danger" style={{ height: 18 }}><Icon.X width={9} height={9}/>blocked</span>;
-  if (suspicious) return <span className="chip danger" style={{ height: 18 }}><Icon.Warn width={9} height={9}/>{suspicious}</span>;
+  if (suspicious) return <span className="chip warn" style={{ height: 18 }}><Icon.Warn width={9} height={9}/>{suspicious}</span>;
   if (risk === 'high')   return <span className="chip danger" style={{ height: 18 }}>high</span>;
   if (risk === 'medium') return <span className="chip warn" style={{ height: 18 }}>medium</span>;
   return <span className="chip" style={{ height: 18, color: 'var(--fg-muted)' }}>low</span>;
@@ -486,14 +498,14 @@ function GeoView({ sessions, selected, setSelected, pulse }) {
           borderRadius: 6, overflow: 'hidden',
         }}>
           <div style={{
-            padding: '10px 12px',
+            padding: '8px 12px',
             borderBottom: '1px solid var(--hairline)',
             display: 'flex', alignItems: 'center', gap: 8,
             background: reg === 'tor' ? 'color-mix(in oklch, var(--danger) 12%, var(--surface-2))' : 'var(--surface-2)',
           }}>
             <Icon.Globe width={13} height={13} style={{ opacity: 0.6 }}/>
-            <span className="mono" style={{ fontSize: 12, fontWeight: 500, color: reg === 'tor' ? 'var(--danger)' : 'var(--fg)' }}>{reg}</span>
-            <span className="faint" style={{ fontSize: 11, marginLeft: 'auto' }}>{sess.length} {sess.length === 1 ? 'session' : 'sessions'}</span>
+            <span className="mono" style={{ fontSize: 13, fontWeight: 500, color: reg === 'tor' ? 'var(--danger)' : 'var(--fg)' }}>{reg}</span>
+            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginLeft: 'auto' }}>{sess.length} {sess.length === 1 ? 'session' : 'sessions'}</span>
           </div>
           <div className="col" style={{ gap: 0 }}>
             {sess.map((s, i) => {
@@ -502,19 +514,19 @@ function GeoView({ sessions, selected, setSelected, pulse }) {
                 <div key={s.id}
                   onClick={() => setSelected(s)}
                   style={{
-                    padding: '8px 12px',
+                    padding: '7px 12px',
                     borderBottom: i < sess.length - 1 ? '1px solid var(--hairline)' : 'none',
                     display: 'flex', alignItems: 'center', gap: 10,
                     cursor: 'pointer',
                     background: selected?.id === s.id ? 'var(--surface-3)' : 'transparent',
                   }}>
-                  <span className={"dot " + (s.blocked ? 'danger' : recent ? 'success pulse' : s.risk === 'high' ? 'danger' : s.risk === 'medium' ? 'warn' : '')}/>
+                  <span className={"dot " + (s.blocked ? 'danger' : s.suspicious ? 'warn' : recent ? 'success pulse' : s.risk === 'high' ? 'danger' : s.risk === 'medium' ? 'warn' : '')}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12 }}>{s.name}</div>
-                    <div className="faint mono" style={{ fontSize: 10.5 }}>{s.city} · {s.ip}</div>
+                    <div style={{ fontSize: 13 }}>{s.name}</div>
+                    <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{s.city} · {s.ip}</div>
                   </div>
-                  <span className={'chip' + (s.client === 'agent' ? ' agent' : '')} style={{ height: 17, fontSize: 10 }}>{s.client}</span>
-                  <span className="mono faint" style={{ fontSize: 10.5, width: 60, textAlign: 'right' }}>{relTime(s.last)}</span>
+                  <span className={'chip' + (s.client === 'agent' ? ' agent' : '')} style={{ height: 17, fontSize: 11 }}>{s.client}</span>
+                  <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5, width: 60, textAlign: 'right' }}>{relTime(s.last)}</span>
                 </div>
               );
             })}
@@ -552,14 +564,14 @@ function AbstractMap({ sessions, pulse, setSelected }) {
       borderRadius: 6, overflow: 'hidden', position: 'relative',
     }}>
       <div style={{
-        padding: '10px 12px',
+        padding: '8px 12px',
         borderBottom: '1px solid var(--hairline)',
         display: 'flex', alignItems: 'center', gap: 8,
         background: 'var(--surface-2)',
       }}>
         <Icon.Globe width={13} height={13} style={{ opacity: 0.6 }}/>
-        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500 }}>Live session map</span>
-        <span className="faint" style={{ fontSize: 10.5, marginLeft: 'auto' }}>{sessions.length} points · clustered within 3°</span>
+        <span style={{ fontSize: 11, lineHeight: 1.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', fontWeight: 500 }}>Live session map</span>
+        <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginLeft: 'auto' }}>{sessions.length} points · clustered within 3°</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 280, display: 'block' }}>
         <defs>
@@ -601,11 +613,12 @@ function AbstractMap({ sessions, pulse, setSelected }) {
           <path d="M 790 195 Q 830 185 860 205 Q 855 220 820 220 Q 795 215 790 195 Z"/>
         </g>
 
-        {/* Session dots */}
+        {/* Session dots — color = risk status only */}
         {Object.values(clusters).map((c, i) => {
           const [x, y] = proj(c.lat, c.lng);
           const r = Math.max(5, Math.min(18, 4 + c.sess.length * 2.5));
           const glow = c.risk === 'high' ? '#glowR' : c.risk === 'medium' ? '#glowY' : '#glowG';
+          // --danger for high/blocked, --warn for medium/suspicious, --success for clean
           const color = c.risk === 'high' ? 'oklch(0.7 0.2 25)' : c.risk === 'medium' ? 'oklch(0.82 0.14 80)' : 'oklch(0.74 0.14 150)';
           return (
             <g key={i} style={{ cursor: 'pointer' }} onClick={() => setSelected(c.sess[0])}>
@@ -675,20 +688,30 @@ function SessionSlideover({ session, onClose, onRevoke }) {
           <button className="btn ghost sm" onClick={onClose}><Icon.X width={12} height={12}/>Close</button>
           <div className="row" style={{ gap: 4 }}>
             <button className="btn ghost sm">Replay</button>
-            <button className="btn ghost sm danger" onClick={handleRevoke} disabled={revoking}>{revoking ? 'Revoking…' : 'Revoke'}</button>
+            {/* Revoke: ghost danger sm — present but not screaming */}
+            <button
+              className="btn ghost sm"
+              onClick={handleRevoke}
+              disabled={revoking}
+              style={{ color: 'var(--danger)' }}
+            >
+              {revoking ? 'Revoking…' : 'Revoke'}
+            </button>
             <button className="btn ghost icon sm"><Icon.More width={12} height={12}/></button>
           </div>
         </div>
+        {/* User identity */}
         <div className="row" style={{ gap: 12 }}>
           <Avatar name={session.name} email={session.user} size={38} agent={session.client === 'agent' || session.client === 'api'}/>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: '-0.01em' }}>{session.name}</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{session.name}</div>
             <div className="row" style={{ gap: 6, marginTop: 2 }}>
-              <span className="faint" style={{ fontSize: 11.5 }}>{session.user}</span>
+              <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{session.user}</span>
               <CopyField value={session.id}/>
             </div>
           </div>
         </div>
+        {/* Status chips */}
         <div className="row" style={{ gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
           <span className={'chip' + (session.client === 'agent' ? ' agent' : '')}>{session.client}</span>
           <RiskChip risk={session.risk} suspicious={session.suspicious} blocked={session.blocked}/>
@@ -696,13 +719,14 @@ function SessionSlideover({ session, onClose, onRevoke }) {
           <span className="chip">{session.method}</span>
           {session.current && <span className="chip success">you</span>}
         </div>
+        {/* Suspicious banner */}
         {session.suspicious && (
           <div style={{
             marginTop: 12, padding: '8px 10px',
             background: 'color-mix(in oklch, var(--danger) 10%, var(--surface-1))',
             border: '1px solid color-mix(in oklch, var(--danger) 40%, var(--hairline))',
             borderRadius: 4,
-            fontSize: 11.5, color: 'var(--danger)',
+            fontSize: 11, lineHeight: 1.5, color: 'var(--danger)',
           }}>
             <Icon.Warn width={11} height={11} style={{ verticalAlign: 'middle', marginRight: 6 }}/>
             {session.suspicious === 'impossible-travel' && 'Impossible travel — last seen in SF 8m ago; now Berlin.'}
@@ -718,7 +742,7 @@ function SessionSlideover({ session, onClose, onRevoke }) {
       }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '10px 10px', fontSize: 12,
+            padding: '10px 10px', fontSize: 11, lineHeight: 1.5,
             color: tab === t.id ? 'var(--fg)' : 'var(--fg-muted)',
             fontWeight: tab === t.id ? 500 : 400,
             borderBottom: tab === t.id ? '1.5px solid var(--fg)' : '1.5px solid transparent',
@@ -738,12 +762,12 @@ function SessionSlideover({ session, onClose, onRevoke }) {
       <div style={{
         borderTop: '1px solid var(--hairline)',
         padding: '10px 16px',
-        background: 'var(--surface-1)', fontSize: 11,
+        background: 'var(--surface-1)', fontSize: 11, lineHeight: 1.5,
       }}>
         <div className="row" style={{ gap: 8 }}>
           <Icon.Terminal width={12} height={12} style={{ opacity: 0.5 }}/>
-          <span className="faint" style={{ fontSize: 10.5 }}>cli</span>
-          <code className="mono" style={{ flex: 1, color: 'var(--fg-muted)' }}>shark session show {session.id}</code>
+          <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>cli</span>
+          <code className="mono" style={{ flex: 1, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>shark session show {session.id}</code>
           <button className="btn ghost icon sm"><Icon.Copy width={11} height={11}/></button>
         </div>
       </div>
@@ -751,54 +775,97 @@ function SessionSlideover({ session, onClose, onRevoke }) {
   );
 }
 
+/* Shared label style for section headings inside slideover */
+const sectionHeadingStyle = {
+  fontSize: 11,
+  lineHeight: 1.5,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.08em',
+  color: 'var(--fg-muted)',
+  fontWeight: 500,
+  marginBottom: 4,
+};
+
 function SessionField({ label, children, mono }) {
   return (
-    <div style={{ padding: '8px 0', borderBottom: '1px solid var(--hairline)', display: 'grid', gridTemplateColumns: '110px 1fr', gap: 12 }}>
-      <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{label}</span>
-      <div className={mono ? 'mono' : ''} style={{ fontSize: 12 }}>{children}</div>
+    <div style={{ padding: '6px 0', borderBottom: '1px solid var(--hairline)', display: 'grid', gridTemplateColumns: '110px 1fr', gap: 12, alignItems: 'start' }}>
+      <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{label}</span>
+      <div className={mono ? 'mono' : ''} style={{ fontSize: 13, lineHeight: 1.5 }}>{children}</div>
+    </div>
+  );
+}
+
+function FieldGroup({ title, children }) {
+  return (
+    <div style={{ marginBottom: 0 }}>
+      <div style={{ ...sectionHeadingStyle, paddingTop: 4 }}>{title}</div>
+      {children}
     </div>
   );
 }
 
 function SessionOverviewTab({ s }) {
   return (
-    <>
-      <SessionField label="Device">{s.dev}</SessionField>
-      <SessionField label="IP address" mono>{s.ip}</SessionField>
-      <SessionField label="Location">{s.city}{s.country && s.country !== '—' && `, ${s.country}`} <span className="faint mono" style={{ fontSize: 10.5, marginLeft: 6 }}>{s.region}</span></SessionField>
-      <SessionField label="Auth method">{s.method}{s.mfa && <span className="faint" style={{ marginLeft: 6 }}>+ {s.mfa}</span>}</SessionField>
-      <SessionField label="Started" mono>{relTime(s.created)}</SessionField>
-      <SessionField label="Last seen" mono>{relTime(s.last)}</SessionField>
-      <SessionField label="Expires" mono>{relTime(s.expires)}</SessionField>
-      <SessionField label="Risk score">
-        <div className="row" style={{ gap: 8 }}>
-          <RiskChip risk={s.risk} suspicious={s.suspicious} blocked={s.blocked}/>
-          <span className="faint" style={{ fontSize: 11 }}>
-            {s.risk === 'high' && 'Unusual geography, no MFA'}
-            {s.risk === 'medium' && 'No MFA enrolled'}
-            {s.risk === 'low' && 'Passed all signals'}
-          </span>
-        </div>
-      </SessionField>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-      <div style={{ marginTop: 12, padding: 10, border: '1px solid var(--hairline)', borderRadius: 4, background: 'var(--surface-1)' }}>
-        <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 8 }}>Related</div>
-        <div className="col" style={{ gap: 4 }}>
-          <div className="row" style={{ fontSize: 11.5 }}>
-            <span className="faint" style={{ width: 90 }}>Refresh token</span>
+      {/* ── User info ── */}
+      <FieldGroup title="User">
+        <SessionField label="Name">{s.name}</SessionField>
+        <SessionField label="Email">{s.user}</SessionField>
+        <SessionField label="Auth method">{s.method}{s.mfa && <span style={{ color: 'var(--fg-muted)', marginLeft: 6, fontSize: 11 }}>+ {s.mfa}</span>}</SessionField>
+        <SessionField label="Client"><span className={'chip' + (s.client === 'agent' ? ' agent' : '')}>{s.client}</span></SessionField>
+      </FieldGroup>
+
+      {/* ── Connection info ── */}
+      <FieldGroup title="Connection">
+        <SessionField label="IP address" mono>{s.ip}</SessionField>
+        <SessionField label="Location">
+          {s.city}{s.country && s.country !== '—' && `, ${s.country}`}
+          {s.region && <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginLeft: 6 }}>{s.region}</span>}
+        </SessionField>
+        <SessionField label="Device">{s.dev.split('·')[0].trim()}</SessionField>
+        <SessionField label="User agent">
+          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', wordBreak: 'break-all' }}>{s.dev}</span>
+        </SessionField>
+      </FieldGroup>
+
+      {/* ── Timing ── */}
+      <FieldGroup title="Timing">
+        <SessionField label="Started" mono>{relTime(s.created)}</SessionField>
+        <SessionField label="Last seen" mono>{relTime(s.last)}</SessionField>
+        <SessionField label="Expires" mono>{relTime(s.expires)}</SessionField>
+      </FieldGroup>
+
+      {/* ── Security ── */}
+      <FieldGroup title="Security">
+        <SessionField label="Risk score">
+          <div className="row" style={{ gap: 8 }}>
+            <RiskChip risk={s.risk} suspicious={s.suspicious} blocked={s.blocked}/>
+            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>
+              {s.risk === 'high' && 'Unusual geography, no MFA'}
+              {s.risk === 'medium' && 'No MFA enrolled'}
+              {s.risk === 'low' && 'Passed all signals'}
+            </span>
+          </div>
+        </SessionField>
+      </FieldGroup>
+
+      {/* ── Token references ── */}
+      <div style={{ padding: 10, border: '1px solid var(--hairline)', borderRadius: 4, background: 'var(--surface-1)' }}>
+        <div style={{ ...sectionHeadingStyle, marginBottom: 8 }}>Token refs</div>
+        <div className="col" style={{ gap: 6 }}>
+          <div className="row" style={{ fontSize: 13 }}>
+            <span style={{ width: 90, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>Refresh token</span>
             <CopyField value="rtk_01HMK2P8Q9W4T6X"/>
           </div>
-          <div className="row" style={{ fontSize: 11.5 }}>
-            <span className="faint" style={{ width: 90 }}>Access JTI</span>
+          <div className="row" style={{ fontSize: 13 }}>
+            <span style={{ width: 90, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>Access JTI</span>
             <CopyField value="jti_8f4a2c9e1b7d"/>
-          </div>
-          <div className="row" style={{ fontSize: 11.5 }}>
-            <span className="faint" style={{ width: 90 }}>User agent</span>
-            <span className="mono faint" style={{ fontSize: 10.5 }}>{s.dev}</span>
           </div>
         </div>
       </div>
-    </>
+
+    </div>
   );
 }
 
@@ -840,12 +907,11 @@ function SessionEventsTab({ s }) {
     <div className="col" style={{ gap: 0 }}>
       {events.map((e, i) => (
         <div key={i} className="row" style={{ padding: '7px 0', borderBottom: '1px solid var(--hairline)', gap: 10 }}>
-          <span className="mono faint" style={{ fontSize: 10.5, width: 70 }}>{relTime(e.t)}</span>
-          <span className="mono" style={{ fontSize: 11.5, width: 160 }}>{e.action}</span>
-          <span className="mono faint" style={{ fontSize: 11 }}>{e.meta}</span>
+          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', width: 70 }}>{relTime(e.t)}</span>
+          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, width: 160 }}>{e.action}</span>
+          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{e.meta}</span>
         </div>
       ))}
     </div>
   );
 }
-
