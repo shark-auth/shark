@@ -62,6 +62,8 @@
   <script type="text/babel" src="components/rbac.jsx"></script>
   <script type="text/babel" src="components/dev_inbox.jsx"></script>
   <script type="text/babel" src="components/sso.jsx"></script>
+  <script type="text/babel" src="components/authentication.jsx"></script>
+  <script type="text/babel" src="components/signing_keys.jsx"></script>
 
   <script type="text/babel">
     const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -134,6 +136,8 @@
         rbac: RBAC,
         'dev-inbox': DevInbox,
         sso: SSO,
+        auth: Authentication,
+        signing: SigningKeys,
       }[page] || Overview;
 
       return (

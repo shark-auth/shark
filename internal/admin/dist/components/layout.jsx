@@ -16,7 +16,7 @@ const NAV = [
   ]},
   { group: 'ACCESS', items: [
     { id: 'apps', label: 'Applications', icon: 'App' },
-    { id: 'auth', label: 'Authentication', icon: 'Lock', disabled: true },
+    { id: 'auth', label: 'Authentication', icon: 'Lock' },
     { id: 'sso', label: 'SSO', icon: 'SSO' },
     { id: 'rbac', label: 'Roles & Permissions', icon: 'Shield' },
     { id: 'keys', label: 'API Keys', icon: 'Key' },
@@ -25,7 +25,7 @@ const NAV = [
     { id: 'audit', label: 'Audit Log', icon: 'Audit' },
     { id: 'webhooks', label: 'Webhooks', icon: 'Webhook' },
     { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', badge: 'dev' },
-    { id: 'signing', label: 'Signing Keys', icon: 'Signing', disabled: true },
+    { id: 'signing', label: 'Signing Keys', icon: 'Signing' },
     { id: 'settings', label: 'Settings', icon: 'Settings', disabled: true },
   ]},
   { group: 'DEVELOPERS', items: [
@@ -187,6 +187,8 @@ function TopBar({ page, setTweaksOpen }) {
     rbac: 'Roles & Permissions',
     'dev-inbox': 'Dev Inbox',
     sso: 'SSO Connections',
+    auth: 'Authentication',
+    signing: 'Signing Keys',
   }[page] || page;
 
   return (
