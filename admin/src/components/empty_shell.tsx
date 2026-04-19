@@ -25,4 +25,3 @@ export function Impersonation() { return <EmptyShell title="Impersonation" phase
 export function CompliancePage() { return <EmptyShell title="Compliance" phase={9} description="GDPR data export, right-to-erasure, SOC2 access reviews, and session geography analysis." />; }
 export function Migrations() { return <EmptyShell title="Migrations" phase={9} description="Import users from Auth0, Clerk, or Supabase with field mapping, dry-run preview, and conflict resolution." />; }
 export function Branding() { return <EmptyShell title="Branding" phase={9} description="Customize sign-in components, email templates, logos, and colors for your brand." />; }
-export function FlowBuilder() { return <EmptyShell title="Flow Builder" phase={10} description="Visual drag-and-drop auth flow editor. Design authentication sequences and export as YAML." />; }
