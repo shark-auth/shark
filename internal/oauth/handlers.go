@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -101,15 +102,28 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// No consent yet (or new scopes requested). Return consent info as JSON.
-	// A full HTML consent screen will be implemented in a later task.
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{ //#nosec G104
-		"type":            "consent_required",
-		"client_id":       clientID,
-		"requested_scope": ar.GetRequestedScopes(),
-		"redirect_uri":    ar.GetRedirectURI().String(),
+	// No consent yet (or new scopes requested). Render the HTML consent page.
+	scopes := make([]string, 0, len(ar.GetRequestedScopes()))
+	for _, sc := range ar.GetRequestedScopes() {
+		scopes = append(scopes, string(sc))
+	}
+
+	// Use the client name if available; fall back to the client ID.
+	agentName := clientID
+	if named, ok := ar.GetClient().(interface{ GetName() string }); ok {
+		if n := named.GetName(); n != "" {
+			agentName = n
+		}
+	}
+
+	RenderConsentPage(w, ConsentData{
+		AgentName:   agentName,
+		ClientID:    clientID,
+		Scopes:      scopes,
+		RedirectURI: ar.GetRedirectURI().String(),
+		State:       r.URL.Query().Get("state"),
+		Challenge:   r.URL.RawQuery, // carry full query string for reconstruct on POST
+		Issuer:      s.Issuer,
 	})
 }
 
@@ -117,7 +131,26 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleAuthorizeDecision(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	ar, err := s.Provider.NewAuthorizeRequest(ctx, r)
+	// Parse the POST body so we can read form fields.
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// The consent form posts the original authorize request query string back
+	// in the "challenge" field. Reconstruct a synthetic GET request so fosite
+	// can re-validate the same authorize request.
+	challenge := r.FormValue("challenge")
+	syntheticReq := r.Clone(ctx)
+	syntheticReq.Method = http.MethodGet
+	syntheticReq.Form = nil
+	syntheticReq.PostForm = nil
+	syntheticReq.Body = http.NoBody
+	if challenge != "" {
+		syntheticReq.URL = r.URL.ResolveReference(&url.URL{RawQuery: challenge})
+	}
+
+	ar, err := s.Provider.NewAuthorizeRequest(ctx, syntheticReq)
 	if err != nil {
 		slog.Debug("oauth: authorize decision parse failed", "error", err)
 		s.Provider.WriteAuthorizeError(ctx, w, ar, err)

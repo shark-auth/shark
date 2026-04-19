@@ -273,7 +273,7 @@ func TestAuthorizeEndpoint_NotLoggedIn(t *testing.T) {
 }
 
 // TestAuthorizeEndpoint_ConsentRequired tests that the authorize endpoint
-// returns consent info when a user is logged in but has no prior consent.
+// renders the HTML consent page when a user is logged in but has no prior consent.
 func TestAuthorizeEndpoint_ConsentRequired(t *testing.T) {
 	srv, store := newTestOAuthServer(t)
 	seedAgent(t, store, "test-consent-client", false)
@@ -313,12 +313,18 @@ func TestAuthorizeEndpoint_ConsentRequired(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 	}
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding response: %v", err)
+	// Verify the response is an HTML consent page.
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "text/html") {
+		t.Errorf("expected Content-Type text/html, got %q", contentType)
 	}
-	if result["type"] != "consent_required" {
-		t.Errorf("expected type=consent_required, got %q", result["type"])
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+	if !strings.Contains(bodyStr, "test-consent-client") {
+		t.Errorf("expected consent page to contain client ID, body snippet: %.200s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "Authorize") {
+		t.Errorf("expected consent page to contain Authorize button, body snippet: %.200s", bodyStr)
 	}
 }
 
