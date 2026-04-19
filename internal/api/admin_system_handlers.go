@@ -15,15 +15,55 @@ import (
 )
 
 // adminHealthResponse is the response shape for GET /admin/health.
+//
+// The shape is consumed by the dashboard Overview page health card
+// (admin/src/components/overview.tsx, mapHealth). When changing fields
+// here, update both. Smoke section 25 asserts the contract.
 type adminHealthResponse struct {
-	Version       string             `json:"version"`
-	UptimeSeconds int64              `json:"uptime_seconds"`
-	DBSizeBytes   int64              `json:"db_size_bytes"`
-	Config        adminConfigSummary `json:"config"`
+	Version        string            `json:"version"`
+	UptimeSeconds  int64             `json:"uptime_seconds"`
+	DB             healthDBSection   `json:"db"`
+	Migrations     healthMigrations  `json:"migrations"`
+	JWT            healthJWTSection  `json:"jwt"`
+	SMTP           healthSMTPSection `json:"smtp"`
+	OAuthProviders []string          `json:"oauth_providers"`
+	SSOConnections int               `json:"sso_connections"`
 }
 
-// adminConfigSummary holds non-sensitive config fields exposed by both
-// GET /admin/health and GET /admin/config.
+// healthDBSection reports database driver + size + status.
+type healthDBSection struct {
+	Driver string  `json:"driver"`
+	SizeMB float64 `json:"size_mb"`
+	Status string  `json:"status"`
+}
+
+// healthMigrations reports the current applied migration version.
+// Name is best-effort and may be empty when not derivable.
+type healthMigrations struct {
+	Current int64  `json:"current"`
+	Name    string `json:"name,omitempty"`
+}
+
+// healthJWTSection reports JWT signing mode + key info.
+// Mode is "session" (legacy/opaque) or "jwt".
+type healthJWTSection struct {
+	Mode       string `json:"mode"`
+	Algorithm  string `json:"algorithm,omitempty"`
+	ActiveKeys int    `json:"active_keys"`
+}
+
+// healthSMTPSection reports email provider info. SentToday/DailyLimit are
+// nullable because backend does not currently track per-day send counts;
+// frontend tolerates null and shows "—".
+type healthSMTPSection struct {
+	Host       string `json:"host,omitempty"`
+	Tier       string `json:"tier"`
+	Configured bool   `json:"configured"`
+	SentToday  *int   `json:"sent_today"`
+	DailyLimit *int   `json:"daily_limit"`
+}
+
+// adminConfigSummary holds non-sensitive config fields exposed by GET /admin/config.
 type adminConfigSummary struct {
 	DevMode             bool     `json:"dev_mode"`
 	JWTMode             bool     `json:"jwt_mode"`
@@ -101,16 +141,91 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 	}
 }
 
+// currentMigrationVersion returns the highest version_id from goose's tracking
+// table (goose_db_version). Returns 0 if the table is missing or empty.
+func currentMigrationVersion(ctx context.Context, db *sql.DB) int64 {
+	var v sql.NullInt64
+	err := db.QueryRowContext(ctx,
+		`SELECT MAX(version_id) FROM goose_db_version WHERE is_applied = 1`).Scan(&v)
+	if err != nil || !v.Valid {
+		return 0
+	}
+	return v.Int64
+}
+
 // handleAdminHealth handles GET /api/v1/admin/health.
-// Returns system diagnostics: version, uptime, DB size, and a sanitised config snapshot.
+// Returns system diagnostics in the nested shape consumed by the dashboard
+// Overview health card (admin/src/components/overview.tsx mapHealth).
 func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	cfg := s.Config
+
+	// --- DB ---
+	bytes := dbSizeBytes(ctx, s.Store.DB())
+	sizeMB := float64(bytes) / (1024.0 * 1024.0)
+	// Round to 2 decimals.
+	sizeMB = float64(int64(sizeMB*100+0.5)) / 100.0
+	dbStatus := "ok"
+	if err := s.Store.DB().PingContext(ctx); err != nil {
+		dbStatus = "error"
+	}
+
+	// --- Migrations ---
+	migCurrent := currentMigrationVersion(ctx, s.Store.DB())
+
+	// --- JWT ---
+	jwtMode := "session"
+	if cfg.Auth.JWT.Enabled && cfg.Auth.JWT.Mode != "session" {
+		jwtMode = "jwt"
+	}
+	jwtAlg := ""
+	jwtKeys := 0
+	if keys, err := s.Store.ListJWKSCandidates(ctx, true, time.Time{}); err == nil {
+		jwtKeys = len(keys)
+		if len(keys) > 0 {
+			jwtAlg = keys[0].Algorithm
+		}
+	}
+
+	// --- SMTP ---
+	smtpConfigured := cfg.Email.Provider != "" &&
+		cfg.Email.Provider != "dev" &&
+		(cfg.Email.Host != "" || cfg.Email.APIKey != "")
+	smtpTier := "dev"
+	if smtpConfigured {
+		smtpTier = "production"
+	}
+
+	// --- OAuth providers (reuse logic via config summary helper) ---
+	summary := s.buildConfigSummary(ctx)
 
 	resp := adminHealthResponse{
 		Version:       resolveAppVersion(),
 		UptimeSeconds: int64(time.Since(s.startTime).Seconds()),
-		DBSizeBytes:   dbSizeBytes(ctx, s.Store.DB()),
-		Config:        s.buildConfigSummary(ctx),
+		DB: healthDBSection{
+			Driver: "sqlite",
+			SizeMB: sizeMB,
+			Status: dbStatus,
+		},
+		Migrations: healthMigrations{
+			Current: migCurrent,
+		},
+		JWT: healthJWTSection{
+			Mode:       jwtMode,
+			Algorithm:  jwtAlg,
+			ActiveKeys: jwtKeys,
+		},
+		SMTP: healthSMTPSection{
+			Host:       cfg.Email.Host,
+			Tier:       smtpTier,
+			Configured: smtpConfigured,
+			// sent_today/daily_limit not tracked yet — return null so
+			// the frontend renders "—" instead of a fabricated number.
+			SentToday:  nil,
+			DailyLimit: nil,
+		},
+		OAuthProviders: summary.OAuthProviders,
+		SSOConnections: summary.SSOConnectionsCount,
 	}
 
 	writeJSON(w, http.StatusOK, resp)

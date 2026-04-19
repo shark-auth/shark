@@ -28,15 +28,18 @@ function statusCodeChip(code) {
   return <span className={'chip ' + cls} style={{height:16, fontSize:10, padding:'0 5px'}}>{code}</span>;
 }
 
+// Aligned with backend KnownWebhookEvents (internal/api/webhook_handlers.go).
+// Backend uses canonical `organization.*` and `session.revoked` names.
 const COMMON_EVENTS = [
   'user.created',
+  'user.updated',
   'user.deleted',
   'session.created',
+  'session.revoked',
   'mfa.enabled',
-  'user.updated',
-  'session.deleted',
-  'org.created',
-  'org.deleted',
+  'organization.created',
+  'organization.member_added',
+  'organization.deleted',
 ];
 
 const wThStyle = { textAlign:'left', padding:'8px 14px', fontSize:10, fontWeight:500, color:'var(--fg-dim)', borderBottom:'1px solid var(--hairline)', background:'var(--surface-0)', position:'sticky', top:0, textTransform:'uppercase', letterSpacing:'0.05em' };
@@ -57,7 +60,10 @@ export function Webhooks() {
   const [toast, setToast] = React.useState(null);
 
   const { data: raw, loading, refresh } = useAPI('/webhooks');
-  const webhooks = raw?.webhooks || raw || [];
+  // Backend returns {data: [...]}; tolerate legacy {webhooks: [...]} or bare array.
+  const webhooks = Array.isArray(raw?.data) ? raw.data
+    : Array.isArray(raw?.webhooks) ? raw.webhooks
+    : Array.isArray(raw) ? raw : [];
 
   const filtered = webhooks.filter(w => {
     if (!query) return true;
@@ -524,7 +530,10 @@ function WebhookConfigTab({ w, onUpdate, onDelete }) {
 
 function WebhookDeliveriesTab({ webhookId }) {
   const { data: raw, loading } = useAPI('/webhooks/' + webhookId + '/deliveries');
-  const deliveries = raw?.deliveries || raw || [];
+  // Backend returns {data, next_cursor}; tolerate legacy shapes.
+  const deliveries = Array.isArray(raw?.data) ? raw.data
+    : Array.isArray(raw?.deliveries) ? raw.deliveries
+    : Array.isArray(raw) ? raw : [];
   const [expanded, setExpanded] = React.useState(null);
 
   if (loading) {
@@ -658,7 +667,8 @@ function WebhookTestFireTab({ webhookId }) {
   const [firing, setFiring] = React.useState(false);
   const [result, setResult] = React.useState(null);
 
-  const events = ['user.created','user.deleted','user.updated','session.created','mfa.enabled','org.member.added','webhook.test'];
+  // Aligned with backend KnownWebhookEvents.
+  const events = ['user.created','user.updated','user.deleted','session.created','session.revoked','mfa.enabled','organization.created','organization.member_added','organization.deleted','webhook.test'];
 
   const handleFire = async () => {
     setFiring(true); setResult(null);

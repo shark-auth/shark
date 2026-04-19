@@ -529,11 +529,16 @@ const (
 // Webhook event names. Ship minimal set for real dev integration —
 // expand alongside SDK in Phase 5.
 const (
-	WebhookEventUserCreated        = "user.created"
-	WebhookEventUserDeleted        = "user.deleted"
-	WebhookEventSessionRevoked     = "session.revoked"
-	WebhookEventOrgCreated         = "organization.created"
-	WebhookEventOrgMemberAdded     = "organization.member_added"
+	WebhookEventUserCreated    = "user.created"
+	WebhookEventUserUpdated    = "user.updated"
+	WebhookEventUserDeleted    = "user.deleted"
+	WebhookEventSessionCreated = "session.created"
+	WebhookEventSessionRevoked = "session.revoked"
+	WebhookEventMFAEnabled     = "mfa.enabled"
+	WebhookEventOrgCreated     = "organization.created"
+	WebhookEventOrgDeleted     = "organization.deleted"
+	WebhookEventOrgMemberAdded = "organization.member_added"
+	WebhookEventTest           = "webhook.test"
 )
 
 // Webhook is an admin-registered outbound event endpoint.

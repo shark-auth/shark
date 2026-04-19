@@ -25,6 +25,7 @@ type adminUserResponse struct {
 	Metadata      string  `json:"metadata"`
 	CreatedAt     string  `json:"createdAt"`
 	UpdatedAt     string  `json:"updatedAt"`
+	LastLoginAt   *string `json:"last_login_at,omitempty"`
 }
 
 func adminUserToResponse(u *storage.User) adminUserResponse {
@@ -38,6 +39,7 @@ func adminUserToResponse(u *storage.User) adminUserResponse {
 		Metadata:      u.Metadata,
 		CreatedAt:     u.CreatedAt,
 		UpdatedAt:     u.UpdatedAt,
+		LastLoginAt:   u.LastLoginAt,
 	}
 }
 

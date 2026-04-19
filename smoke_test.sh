@@ -394,13 +394,40 @@ WH_BODY=$(echo "$WH_RESP" | head -1)
 WH_ID=$(echo "$WH_BODY" | jq -r '.id // empty')
 
 # List
+WH_LIST=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/webhooks)
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/webhooks)
 [ "$CODE" = 200 ] && pass "webhook list 200" || fail "webhook list $CODE"
+
+# Bug E5 contract: response shape MUST be {data: [...]} (frontend webhooks.tsx:60 reads .data).
+WH_LIST_TYPE=$(echo "$WH_LIST" | jq -r 'if (.data|type)=="array" then "ok" else "bad" end')
+[ "$WH_LIST_TYPE" = ok ] && pass "webhook list shape {data:[]} (E5 contract)" || fail "webhook list shape: $WH_LIST_TYPE"
+
+# Bug E4: previously rejected events now accepted (KnownWebhookEvents alignment).
+WH2_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/hook2","events":["user.updated"],"description":"E4 user.updated"}')
+[ "$WH2_CODE" = 201 ] && pass "webhook create user.updated 201 (E4 fix)" || fail "webhook create user.updated $WH2_CODE"
+
+WH3_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/hook3","events":["session.revoked"],"description":"E4 session.revoked"}')
+[ "$WH3_CODE" = 201 ] && pass "webhook create session.revoked 201 (E4 fix)" || fail "webhook create session.revoked $WH3_CODE"
 
 # Test fire
 if [ -n "$WH_ID" ]; then
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/webhooks/$WH_ID/test)
   [ "$CODE" = 200 ] || [ "$CODE" = 202 ] && pass "webhook test $CODE" || fail "webhook test $CODE"
+
+  # Bug C1: test fire honors event_type body field.
+  C1_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/webhooks/$WH_ID/test \
+    -H "Content-Type: application/json" \
+    -d '{"event_type":"user.created"}')
+  [ "$C1_CODE" = 202 ] && pass "webhook test custom event_type 202 (C1 fix)" || fail "webhook test custom event_type $C1_CODE"
+
+  C1_BAD=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/webhooks/$WH_ID/test \
+    -H "Content-Type: application/json" \
+    -d '{"event_type":"bogus.event"}')
+  [ "$C1_BAD" = 400 ] && pass "webhook test bogus event_type 400 (C1 fix)" || fail "webhook test bogus event_type $C1_BAD"
 
   # Delete
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/webhooks/$WH_ID)
@@ -444,6 +471,13 @@ if [ -n "$USERID" ]; then
     -X PATCH $BASE/api/v1/users/$USERID \
     -H "Content-Type: application/json" -d '{"name":"Smoke User"}')
   [ "$CODE" = 200 ] && pass "user update 200" || fail "user update $CODE"
+
+  # last_login_at populated after login (multiple relogin calls happened earlier)
+  LLA_LIST=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?search=$EMAIL" | jq -r '.[0].last_login_at // empty')
+  [ -n "$LLA_LIST" ] && pass "user list includes last_login_at" || fail "user list missing last_login_at (got empty)"
+
+  LLA_GET=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/users/$USERID | jq -r '.last_login_at // empty')
+  [ -n "$LLA_GET" ] && pass "user get includes last_login_at" || fail "user get missing last_login_at (got empty)"
 fi
 
 # --- 22: Dev Inbox -------------------------------------------------------------
@@ -497,6 +531,26 @@ fi
 section "admin config + health"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/health)
 [ "$CODE" = 200 ] && pass "admin health 200" || fail "admin health $CODE"
+
+# Bug C6: response shape must match dashboard mapHealth (overview.tsx ~L100).
+HBODY=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/health)
+[ -n "$(echo "$HBODY" | jq -r '.version // empty')" ] && pass "admin health .version present" || fail "admin health .version missing"
+echo "$HBODY" | jq -e '.uptime_seconds | type == "number" and . >= 0' >/dev/null 2>&1 \
+  && pass "admin health .uptime_seconds is number >= 0" || fail "admin health .uptime_seconds bad"
+[ -n "$(echo "$HBODY" | jq -r '.db.driver // empty')" ] && pass "admin health .db.driver present" || fail "admin health .db.driver missing"
+echo "$HBODY" | jq -e '.db.size_mb | type == "number"' >/dev/null 2>&1 \
+  && pass "admin health .db.size_mb is number" || fail "admin health .db.size_mb not number"
+echo "$HBODY" | jq -e '.migrations.current | type == "number" and . > 0' >/dev/null 2>&1 \
+  && pass "admin health .migrations.current is number > 0" || fail "admin health .migrations.current bad"
+[ -n "$(echo "$HBODY" | jq -r '.jwt.mode // empty')" ] && pass "admin health .jwt.mode present" || fail "admin health .jwt.mode missing"
+echo "$HBODY" | jq -e '.jwt.active_keys | type == "number" and . >= 1' >/dev/null 2>&1 \
+  && pass "admin health .jwt.active_keys is number >= 1" || fail "admin health .jwt.active_keys bad"
+echo "$HBODY" | jq -e '.smtp | has("configured")' >/dev/null 2>&1 \
+  && pass "admin health .smtp.configured present" || fail "admin health .smtp.configured missing"
+echo "$HBODY" | jq -e '.oauth_providers | type == "array"' >/dev/null 2>&1 \
+  && pass "admin health .oauth_providers is array" || fail "admin health .oauth_providers not array"
+echo "$HBODY" | jq -e '.sso_connections | type == "number"' >/dev/null 2>&1 \
+  && pass "admin health .sso_connections is number" || fail "admin health .sso_connections not number"
 
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/config)
 [ "$CODE" = 200 ] && pass "admin config 200" || fail "admin config $CODE"

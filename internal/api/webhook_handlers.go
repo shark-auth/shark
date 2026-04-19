@@ -23,10 +23,15 @@ import (
 // typos surface on create rather than silently never firing.
 var KnownWebhookEvents = map[string]bool{
 	storage.WebhookEventUserCreated:    true,
+	storage.WebhookEventUserUpdated:    true,
 	storage.WebhookEventUserDeleted:    true,
+	storage.WebhookEventSessionCreated: true,
 	storage.WebhookEventSessionRevoked: true,
+	storage.WebhookEventMFAEnabled:     true,
 	storage.WebhookEventOrgCreated:     true,
+	storage.WebhookEventOrgDeleted:     true,
 	storage.WebhookEventOrgMemberAdded: true,
+	storage.WebhookEventTest:           true,
 }
 
 type webhookResponse struct {
@@ -194,8 +199,16 @@ func (s *Server) handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleTestWebhook emits a synthetic `webhook.test` event so admins can verify
-// signature + network reachability without triggering a real flow.
+// testWebhookRequest lets admins pick which event the test fire emits so the
+// frontend dropdown is real, not decorative. Empty EventType => default
+// `webhook.test`. Unknown EventType => 400 (matches create-time validation).
+type testWebhookRequest struct {
+	EventType string `json:"event_type,omitempty"`
+}
+
+// handleTestWebhook emits a synthetic event so admins can verify signature +
+// network reachability without triggering a real flow. Honors `event_type`
+// in the body when set; otherwise falls back to `webhook.test`.
 func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, err := s.Store.GetWebhookByID(r.Context(), id); errors.Is(err, sql.ErrNoRows) {
@@ -209,8 +222,30 @@ func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, errPayload("dispatcher_unavailable", "Webhook dispatcher not initialized"))
 		return
 	}
-	deliveryID, err := s.WebhookDispatcher.Redeliver(r.Context(), id, "webhook.test", map[string]string{
+
+	event := storage.WebhookEventTest
+	// Body is optional — keep backward compatibility with empty POST.
+	if r.ContentLength > 0 || r.Header.Get("Content-Type") != "" {
+		var req testWebhookRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, http.ErrBodyReadAfterClose) {
+			// Tolerate empty body / EOF; only reject malformed JSON.
+			if err.Error() != "EOF" {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+				return
+			}
+		}
+		if req.EventType != "" {
+			if !KnownWebhookEvents[req.EventType] {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_event", "unknown event: "+req.EventType))
+				return
+			}
+			event = req.EventType
+		}
+	}
+
+	deliveryID, err := s.WebhookDispatcher.Redeliver(r.Context(), id, event, map[string]string{
 		"webhook_id": id,
+		"event":      event,
 		"note":       "This is a test event triggered from the admin API.",
 	})
 	if err != nil {
@@ -220,6 +255,7 @@ func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{
 		"message":     "Test event enqueued",
 		"delivery_id": deliveryID,
+		"event":       event,
 	})
 }
 
