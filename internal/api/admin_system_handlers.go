@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -323,6 +324,54 @@ func (s *Server) handleAdminListUserPasskeys(w http.ResponseWriter, r *http.Requ
 		creds = []*storage.PasskeyCredential{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"passkeys": creds})
+}
+
+// handleAdminDisableUserMFA handles DELETE /api/v1/users/{id}/mfa.
+// Admin-only escape hatch when a user has lost their TOTP device — clears
+// the secret, recovery codes, and the enabled flag without requiring the
+// user's current TOTP code (the user-facing /auth/mfa endpoint requires it).
+// Audited as `admin.mfa.disabled` so the action is traceable.
+func (s *Server) handleAdminDisableUserMFA(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+
+	user, err := s.Store.GetUserByID(r.Context(), userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "User not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	user.MFAEnabled = false
+	user.MFAVerified = false
+	user.MFASecret = nil
+	user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := s.Store.UpdateUser(r.Context(), user); err != nil {
+		internal(w, err)
+		return
+	}
+	// Best-effort: clear recovery codes too. A failure here doesn't roll back
+	// the disable — admin already wanted MFA off.
+	_ = s.Store.DeleteAllMFARecoveryCodesByUserID(r.Context(), userID)
+
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "admin.mfa.disabled",
+			TargetType: "user",
+			TargetID:   userID,
+			IP:         ipOf(r),
+			UserAgent:  uaOf(r),
+			Status:     "success",
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"mfa_enabled": false,
+		"user_id":     userID,
+	})
 }
 
 // handleAdminRotateSigningKey handles POST /api/v1/admin/auth/rotate-signing-key.

@@ -288,6 +288,68 @@ func (s *Server) handleListDeliveries(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleReplayWebhookDelivery enqueues a fresh delivery using the original
+// event + payload from a past delivery row. Frontend wires the per-row replay
+// button against this. We validate that the URL `{id}` matches the delivery's
+// webhook_id so an admin can't replay across webhooks via URL tampering.
+func (s *Server) handleReplayWebhookDelivery(w http.ResponseWriter, r *http.Request) {
+	webhookID := chi.URLParam(r, "id")
+	deliveryID := chi.URLParam(r, "deliveryId")
+
+	if _, err := s.Store.GetWebhookByID(r.Context(), webhookID); errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Webhook not found"))
+		return
+	} else if err != nil {
+		internal(w, err)
+		return
+	}
+
+	del, err := s.Store.GetWebhookDeliveryByID(r.Context(), deliveryID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Delivery not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	if del.WebhookID != webhookID {
+		// URL-mismatch: caller asked for a delivery that belongs to a
+		// different webhook. Treat as not found rather than leak the truth.
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Delivery not found"))
+		return
+	}
+
+	if s.WebhookDispatcher == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errPayload("dispatcher_unavailable", "Webhook dispatcher not initialized"))
+		return
+	}
+
+	// Original payload is `{event, created_at, data}`. We re-emit using the
+	// stored `data` so retries are byte-faithful to the original event body.
+	// Falls back to the raw payload if it doesn't decode to the envelope.
+	var envelope struct {
+		Data any `json:"data"`
+	}
+	var data any
+	if err := json.Unmarshal([]byte(del.Payload), &envelope); err == nil && envelope.Data != nil {
+		data = envelope.Data
+	} else {
+		data = json.RawMessage(del.Payload)
+	}
+
+	newDeliveryID, err := s.WebhookDispatcher.Redeliver(r.Context(), webhookID, del.Event, data)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"message":         "Delivery replay enqueued",
+		"new_delivery_id": newDeliveryID,
+		"event":           del.Event,
+	})
+}
+
 // --- validation helpers ---
 
 // validateWebhookURL requires https:// in production (http:// allowed in dev)

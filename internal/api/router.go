@@ -389,6 +389,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{id}/oauth-accounts", s.handleListUserOAuthAccounts)
 			r.Delete("/{id}/oauth-accounts/{oauthId}", s.handleDeleteUserOAuthAccount)
 			r.Get("/{id}/passkeys", s.handleAdminListUserPasskeys)
+			// Admin MFA disable: clears the user's TOTP without their code so
+			// support can recover an account when the device is lost. The
+			// user-facing /auth/mfa endpoint still requires a current code.
+			r.Delete("/{id}/mfa", s.handleAdminDisableUserMFA)
 		})
 
 		// SSO connections (admin + public endpoints)
@@ -447,6 +451,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Delete("/{id}", s.handleDeleteWebhook)
 			r.Post("/{id}/test", s.handleTestWebhook)
 			r.Get("/{id}/deliveries", s.handleListDeliveries)
+			r.Post("/{id}/deliveries/{deliveryId}/replay", s.handleReplayWebhookDelivery)
 		})
 
 		// Agents (admin)
@@ -526,10 +531,20 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/test-email", s.handleAdminTestEmail)
 			r.Post("/auth/rotate-signing-key", s.handleAdminRotateSigningKey)
 
-			// Admin organization endpoints (admin key auth, not session auth)
+			// Admin organization endpoints (admin key auth, not session auth).
+			// User-facing /api/v1/organizations/{id} requires a session cookie
+			// + RBAC permissions; the dashboard uses admin-key auth, so we
+			// duplicate the CRUD surface here under /admin/organizations to
+			// avoid muddying the per-user permission model. Mirrors the
+			// /admin/sessions, /admin/apps, /admin/flows pattern.
 			r.Get("/organizations", s.handleAdminListOrganizations)
 			r.Get("/organizations/{id}", s.handleAdminGetOrganization)
+			r.Patch("/organizations/{id}", s.handleAdminUpdateOrganization)
+			r.Delete("/organizations/{id}", s.handleAdminDeleteOrganization)
 			r.Get("/organizations/{id}/members", s.handleAdminListOrgMembers)
+			r.Post("/organizations/{id}/roles", s.handleAdminCreateOrgRole)
+			r.Delete("/organizations/{id}/invitations/{invitationId}", s.handleAdminDeleteOrgInvitation)
+			r.Post("/organizations/{id}/invitations/{invitationId}/resend", s.handleAdminResendOrgInvitation)
 
 			if cfg.Server.DevMode {
 				r.Get("/dev/emails", s.handleListDevEmails)

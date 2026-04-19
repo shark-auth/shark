@@ -1,0 +1,301 @@
+// Package api — admin-key-authenticated organization management handlers.
+//
+// The user-facing handlers in `organization_handlers.go` rely on session auth
+// + RBAC permission middleware. Dashboard pages send the admin Bearer key, so
+// those routes 401 from the admin UI. Rather than add an admin-key bypass to
+// the existing routes (which would muddle the permission model), we mount a
+// parallel `/admin/organizations/*` group authenticated only by the admin
+// API key — same shape as `/admin/sessions`, `/admin/apps`, `/admin/flows`.
+package api
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/sharkauth/sharkauth/internal/storage"
+)
+
+// --- Update org (admin) ---
+
+type adminUpdateOrgRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Slug        *string `json:"slug,omitempty"`
+	Description *string `json:"description,omitempty"` // not stored; accepted for forward-compat
+	Metadata    *string `json:"metadata,omitempty"`
+}
+
+// handleAdminUpdateOrganization handles PATCH /api/v1/admin/organizations/{id}.
+// Body fields are optional; omitted fields keep their existing values.
+func (s *Server) handleAdminUpdateOrganization(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+
+	var req adminUpdateOrgRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+
+	org, err := s.Store.GetOrganizationByID(r.Context(), orgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name != "" {
+			org.Name = name
+		}
+	}
+	if req.Slug != nil {
+		slug := strings.ToLower(strings.TrimSpace(*req.Slug))
+		if slug != "" {
+			if !slugRE.MatchString(slug) {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_slug", "Slug must be 3-64 chars, lowercase a-z, 0-9, hyphens, no leading/trailing hyphen"))
+				return
+			}
+			// Reject duplicate slug unless it belongs to this org already.
+			if other, err := s.Store.GetOrganizationBySlug(r.Context(), slug); err == nil && other.ID != org.ID {
+				writeJSON(w, http.StatusConflict, errPayload("slug_taken", "An organization with this slug already exists"))
+				return
+			}
+			org.Slug = slug
+		}
+	}
+	if req.Metadata != nil {
+		org.Metadata = normalizeMetadata(*req.Metadata)
+	}
+	org.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+
+	if err := s.Store.UpdateOrganization(r.Context(), org); err != nil {
+		internal(w, err)
+		return
+	}
+	s.auditAdminOrg(r.Context(), "admin.organization.update", orgID, ipOf(r), uaOf(r))
+	writeJSON(w, http.StatusOK, orgToResponse(org))
+}
+
+// handleAdminDeleteOrganization handles DELETE /api/v1/admin/organizations/{id}.
+// Cascade is the storage layer's responsibility (FK ON DELETE CASCADE).
+func (s *Server) handleAdminDeleteOrganization(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+
+	// Verify exists for a clean 404 (DeleteOrganization is a no-op for missing rows).
+	if _, err := s.Store.GetOrganizationByID(r.Context(), orgID); errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
+		return
+	} else if err != nil {
+		internal(w, err)
+		return
+	}
+
+	if err := s.Store.DeleteOrganization(r.Context(), orgID); err != nil {
+		internal(w, err)
+		return
+	}
+	s.auditAdminOrg(r.Context(), "admin.organization.delete", orgID, ipOf(r), uaOf(r))
+	s.emit(r.Context(), storage.WebhookEventOrgDeleted, map[string]any{"id": orgID})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Organization deleted"})
+}
+
+// --- Org RBAC (admin) ---
+
+// handleAdminCreateOrgRole handles POST /api/v1/admin/organizations/{id}/roles.
+// Mirrors the user-facing handleCreateOrgRole but skips RBAC permission
+// middleware — admin key is full-access by design.
+func (s *Server) handleAdminCreateOrgRole(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+
+	// Sanity-check the org exists so callers don't end up with a role row
+	// pointing at a missing parent (FK would catch it, but explicit 404 reads
+	// better than the generic internal_error fallback).
+	if _, err := s.Store.GetOrganizationByID(r.Context(), orgID); errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
+		return
+	} else if err != nil {
+		internal(w, err)
+		return
+	}
+
+	var req createOrgRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Name is required"))
+		return
+	}
+
+	role, err := s.RBAC.CreateOrgRole(r.Context(), orgID, req.Name, req.Description)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	s.auditAdminOrg(r.Context(), "admin.org.role.create", orgID, ipOf(r), uaOf(r))
+	writeJSON(w, http.StatusCreated, orgRoleToResponse(role))
+}
+
+// --- Invitations (admin) ---
+
+// handleAdminDeleteOrgInvitation handles
+// DELETE /api/v1/admin/organizations/{id}/invitations/{invitationId}.
+// Removes the row entirely; outstanding email links become 404 on accept.
+func (s *Server) handleAdminDeleteOrgInvitation(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+	invID := chi.URLParam(r, "invitationId")
+
+	inv, err := s.Store.GetOrganizationInvitationByID(r.Context(), invID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Invitation not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	if inv.OrganizationID != orgID {
+		// URL mismatch — don't let an admin nuke another org's invitation
+		// via a crafted URL.
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Invitation not found"))
+		return
+	}
+
+	if err := s.Store.DeleteOrganizationInvitation(r.Context(), invID); err != nil {
+		internal(w, err)
+		return
+	}
+	s.auditAdminOrg(r.Context(), "admin.org.invitation.delete", orgID, ipOf(r), uaOf(r))
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Invitation deleted"})
+}
+
+// handleAdminResendOrgInvitation handles
+// POST /api/v1/admin/organizations/{id}/invitations/{invitationId}/resend.
+// Rotates the invitation token (so any old link stops working), bumps expiry,
+// and re-emails the same address.
+func (s *Server) handleAdminResendOrgInvitation(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+	invID := chi.URLParam(r, "invitationId")
+
+	inv, err := s.Store.GetOrganizationInvitationByID(r.Context(), invID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Invitation not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	if inv.OrganizationID != orgID {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Invitation not found"))
+		return
+	}
+	if inv.AcceptedAt != nil {
+		writeJSON(w, http.StatusConflict, errPayload("invitation_used", "Invitation already accepted"))
+		return
+	}
+
+	org, err := s.Store.GetOrganizationByID(r.Context(), orgID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	rawToken, tokenHash, err := newInvitationToken()
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	expires := time.Now().UTC().Add(72 * time.Hour).Format(time.RFC3339)
+	if err := s.Store.UpdateOrganizationInvitationToken(r.Context(), invID, tokenHash, expires); err != nil {
+		internal(w, err)
+		return
+	}
+	inv.TokenHash = tokenHash
+	inv.ExpiresAt = expires
+
+	emailSent := false
+	if s.MagicLinkManager != nil && s.emailSender() != nil {
+		// Synchronous send: dev provider writes to the inbox so smoke can
+		// observe it, and admin gets immediate feedback when SMTP is
+		// misconfigured rather than a silent fire-and-forget swallow.
+		s.sendAdminInvitationResend(r.Context(), inv, org, rawToken)
+		emailSent = true
+	}
+
+	s.auditAdminOrg(r.Context(), "admin.org.invitation.resend", orgID, ipOf(r), uaOf(r))
+	resp := map[string]any{
+		"message":    "Invitation resent",
+		"id":         inv.ID,
+		"email":      inv.Email,
+		"expires_at": inv.ExpiresAt,
+		"email_sent": emailSent,
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// sendAdminInvitationResend mirrors sendOrgInvitationEmail but runs in-line so
+// the admin endpoint can report whether the send succeeded. We still cap the
+// SMTP attempt at 15s to keep the request responsive.
+func (s *Server) sendAdminInvitationResend(parent context.Context, inv *storage.OrganizationInvitation, org *storage.Organization, rawToken string) {
+	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
+	defer cancel()
+
+	var inviter *storage.User
+	if inv.InvitedBy != nil {
+		inviter, _ = s.Store.GetUserByID(ctx, *inv.InvitedBy)
+	}
+	acceptURL := fmt.Sprintf("%s/organizations/invitations/%s/accept",
+		strings.TrimRight(s.Config.Server.BaseURL, "/"), rawToken)
+
+	html, err := email.RenderOrganizationInvitation(email.OrganizationInvitationData{
+		AppName:      s.Config.MFA.Issuer,
+		OrgName:      org.Name,
+		Role:         inv.Role,
+		AcceptURL:    acceptURL,
+		InviterEmail: inviterEmailOrEmpty(inviter),
+		ExpiryHours:  72,
+	})
+	if err != nil {
+		return
+	}
+	if sender := s.emailSender(); sender != nil {
+		_ = sender.Send(&email.Message{
+			To:      inv.Email,
+			Subject: fmt.Sprintf("You're invited to %s", org.Name),
+			HTML:    html,
+		})
+	}
+}
+
+// auditAdminOrg writes an admin-actor audit log row. ActorID is empty since
+// admin-key auth doesn't carry a user identity; the action prefix
+// `admin.organization.*` makes the source obvious.
+func (s *Server) auditAdminOrg(ctx context.Context, action, orgID, ip, ua string) {
+	if s.AuditLogger == nil {
+		return
+	}
+	_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
+		ActorType:  "admin",
+		Action:     action,
+		TargetType: "organization",
+		TargetID:   orgID,
+		IP:         ip,
+		UserAgent:  ua,
+		Status:     "success",
+	})
+}
+

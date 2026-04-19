@@ -79,9 +79,12 @@ type Store interface {
 
 	// Organization invitations
 	CreateOrganizationInvitation(ctx context.Context, inv *OrganizationInvitation) error
+	GetOrganizationInvitationByID(ctx context.Context, id string) (*OrganizationInvitation, error)
 	GetOrganizationInvitationByTokenHash(ctx context.Context, tokenHash string) (*OrganizationInvitation, error)
 	MarkOrganizationInvitationAccepted(ctx context.Context, id string, acceptedAt string) error
 	ListOrganizationInvitationsByOrgID(ctx context.Context, orgID string) ([]*OrganizationInvitation, error)
+	UpdateOrganizationInvitationToken(ctx context.Context, id, tokenHash, expiresAt string) error
+	DeleteOrganizationInvitation(ctx context.Context, id string) error
 
 	// Webhooks
 	CreateWebhook(ctx context.Context, w *Webhook) error

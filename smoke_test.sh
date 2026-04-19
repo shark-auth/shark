@@ -1441,6 +1441,249 @@ echo "$OUTCOMES" | grep -q "block" && pass "at least one run has outcome=block" 
 # Cleanup so re-runs of the smoke test start from a clean flows table.
 curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/flows/$FLOW_ID
 
+# --- 55: webhook delivery replay (Wave 1 A1) ---------------------------------
+# Validates POST /webhooks/{id}/deliveries/{deliveryId}/replay returns 202 with
+# a new_delivery_id and that the new delivery is visible via the deliveries
+# list endpoint. Frontend webhooks.tsx:646 wires the per-row replay button
+# against this; previously it 404'd silently.
+section "55: webhook delivery replay (A1)"
+
+REP_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/replay","events":["user.created"],"description":"replay smoke"}')
+REP_CODE=$(echo "$REP_RESP" | tail -1)
+REP_BODY=$(echo "$REP_RESP" | head -1)
+[ "$REP_CODE" = 201 ] && pass "replay setup: webhook create 201" || fail "replay setup: webhook create $REP_CODE"
+REP_WH=$(echo "$REP_BODY" | jq -r '.id // empty')
+
+# Fire a test event so we have one delivery row to replay.
+TEST_RESP=$(curl -s -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/webhooks/$REP_WH/test \
+  -H "Content-Type: application/json" -d '{"event_type":"user.created"}')
+ORIG_DEL=$(echo "$TEST_RESP" | jq -r '.delivery_id // empty')
+[ -n "$ORIG_DEL" ] && pass "test fire returned delivery_id $ORIG_DEL" || fail "test fire response: $TEST_RESP"
+
+# Replay it.
+RREP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST \
+  $BASE/api/v1/webhooks/$REP_WH/deliveries/$ORIG_DEL/replay)
+RCODE=$(echo "$RREP" | tail -1)
+RBODY=$(echo "$RREP" | head -1)
+[ "$RCODE" = 202 ] && pass "replay -> 202" || fail "replay -> $RCODE (body: $RBODY)"
+NEW_DEL=$(echo "$RBODY" | jq -r '.new_delivery_id // empty')
+[ -n "$NEW_DEL" ] && [ "$NEW_DEL" != "$ORIG_DEL" ] && pass "replay returned distinct new_delivery_id $NEW_DEL" \
+  || fail "new_delivery_id missing/duplicate: orig=$ORIG_DEL new=$NEW_DEL"
+
+# Confirm the new delivery is visible via list.
+LIST=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/webhooks/$REP_WH/deliveries?limit=10")
+echo "$LIST" | jq -e --arg id "$NEW_DEL" '.data[] | select(.id == $id)' >/dev/null \
+  && pass "new delivery visible in list" || fail "new delivery missing from list: $LIST"
+
+# Cross-webhook replay must 404 (URL tampering protection).
+OTHER_RESP=$(curl -s -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/other","events":["user.created"]}')
+OTHER_WH=$(echo "$OTHER_RESP" | jq -r '.id')
+CCODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST \
+  $BASE/api/v1/webhooks/$OTHER_WH/deliveries/$ORIG_DEL/replay)
+[ "$CCODE" = 404 ] && pass "cross-webhook replay -> 404" || fail "cross-webhook replay -> $CCODE"
+
+# Cleanup.
+curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/webhooks/$REP_WH
+curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/webhooks/$OTHER_WH
+
+# --- 56: admin org CRUD (Wave 1 A2-A4) ----------------------------------------
+# Validates the admin-key-authenticated org CRUD surface that the dashboard
+# uses (admin/src/components/organizations.tsx). Pre-fix, PATCH/DELETE/roles
+# under /admin/organizations were 404 — now they mirror the user-facing routes
+# without requiring a session cookie.
+section "56: admin org CRUD (A2-A4)"
+
+ORG_SLUG="adm-smoke-$RANDOM"
+AOC=$(curl -s -b cj.txt -X POST $BASE/api/v1/organizations -H "Content-Type: application/json" \
+  -d "{\"name\":\"AdminCRUD\",\"slug\":\"$ORG_SLUG\"}")
+# Falls back: admin org create still goes through user-facing route (it requires
+# a creator user); we test the admin PATCH/DELETE/roles surfaces against it.
+AO_ID=$(echo "$AOC" | jq -r '.id // empty')
+if [ -z "$AO_ID" ]; then
+  # cj.txt may have been logged out by §13; relogin once and retry.
+  relogin
+  AOC=$(curl -s -b cj.txt -X POST $BASE/api/v1/organizations -H "Content-Type: application/json" \
+    -d "{\"name\":\"AdminCRUD\",\"slug\":\"$ORG_SLUG\"}")
+  AO_ID=$(echo "$AOC" | jq -r '.id // empty')
+fi
+[ -n "$AO_ID" ] && pass "org seeded for admin CRUD: $AO_ID" || fail "org seed: $AOC"
+
+# PATCH name + slug via admin endpoint (not session route).
+NEW_SLUG="adm-renamed-$RANDOM"
+PRESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X PATCH \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"AdminRenamed\",\"slug\":\"$NEW_SLUG\"}" \
+  $BASE/api/v1/admin/organizations/$AO_ID)
+PCODE=$(echo "$PRESP" | tail -1)
+PBODY=$(echo "$PRESP" | head -1)
+[ "$PCODE" = 200 ] && pass "admin PATCH org -> 200" || fail "admin PATCH org -> $PCODE (body: $PBODY)"
+PNAME=$(echo "$PBODY" | jq -r '.name')
+[ "$PNAME" = "AdminRenamed" ] && pass "PATCH applied name field" || fail "name not updated: $PNAME"
+
+# GET to verify persistence.
+GBODY=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/organizations/$AO_ID)
+[ "$(echo "$GBODY" | jq -r '.slug')" = "$NEW_SLUG" ] && pass "admin GET reflects new slug" || fail "GET slug mismatch: $GBODY"
+
+# Create org-role via admin endpoint (was 404 pre-fix).
+RRESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"name":"admin-editor","description":"admin-created role"}' \
+  $BASE/api/v1/admin/organizations/$AO_ID/roles)
+RCODE=$(echo "$RRESP" | tail -1)
+RBODY=$(echo "$RRESP" | head -1)
+[ "$RCODE" = 201 ] && pass "admin POST org-role -> 201" || fail "admin POST org-role -> $RCODE (body: $RBODY)"
+ROLE_ID=$(echo "$RBODY" | jq -r '.id // empty')
+[ -n "$ROLE_ID" ] && pass "new role id $ROLE_ID" || fail "no role id in body"
+
+# Reject blank name.
+BAD_R=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST \
+  -H "Content-Type: application/json" -d '{"name":"  "}' \
+  $BASE/api/v1/admin/organizations/$AO_ID/roles)
+[ "$BAD_R" = 400 ] && pass "admin POST org-role blank name -> 400" || fail "blank name -> $BAD_R"
+
+# Slug uniqueness on PATCH: try to take the original org's slug back via a
+# second org. Should 409.
+OTHER_ORG=$(curl -s -b cj.txt -X POST $BASE/api/v1/organizations -H "Content-Type: application/json" \
+  -d "{\"name\":\"Other\",\"slug\":\"other-$RANDOM\"}" | jq -r '.id // empty')
+if [ -n "$OTHER_ORG" ]; then
+  CONFLICT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X PATCH \
+    -H "Content-Type: application/json" -d "{\"slug\":\"$NEW_SLUG\"}" \
+    $BASE/api/v1/admin/organizations/$OTHER_ORG)
+  [ "$CONFLICT" = 409 ] && pass "duplicate slug PATCH -> 409" || fail "duplicate slug -> $CONFLICT"
+  curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/organizations/$OTHER_ORG
+fi
+
+# DELETE the org via admin endpoint.
+DCODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE \
+  $BASE/api/v1/admin/organizations/$AO_ID)
+[ "$DCODE" = 200 ] && pass "admin DELETE org -> 200" || fail "admin DELETE org -> $DCODE"
+
+# GET 404 after delete.
+GCODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  $BASE/api/v1/admin/organizations/$AO_ID)
+[ "$GCODE" = 404 ] && pass "deleted org GET -> 404" || fail "deleted org GET -> $GCODE"
+
+# DELETE missing org -> 404.
+MCODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE \
+  $BASE/api/v1/admin/organizations/org_definitely_not_there)
+[ "$MCODE" = 404 ] && pass "DELETE missing org -> 404" || fail "DELETE missing org -> $MCODE"
+
+# --- 57: admin org invitation manage (Wave 1 A5-A6) --------------------------
+# Tests admin DELETE + resend on an org invitation. Pre-fix both routes 404'd
+# (organizations.tsx:609,616 silent-failed). Resend rotates the token + bumps
+# expiry; delete drops the row entirely.
+section "57: admin org invitation manage (A5-A6)"
+
+INV_SLUG="inv-smoke-$RANDOM"
+INV_ORG=$(curl -s -b cj.txt -X POST $BASE/api/v1/organizations -H "Content-Type: application/json" \
+  -d "{\"name\":\"InvOrg\",\"slug\":\"$INV_SLUG\"}" | jq -r '.id // empty')
+[ -n "$INV_ORG" ] && pass "invitation org seeded: $INV_ORG" || fail "invitation org seed failed"
+
+# Create invitation via session route (admin doesn't have a create endpoint;
+# this is fine — dashboard creates via the session-authenticated user-facing
+# route too. Admin only manages existing rows.)
+INV_RESP=$(curl -s -b cj.txt -X POST $BASE/api/v1/organizations/$INV_ORG/invitations \
+  -H "Content-Type: application/json" \
+  -d '{"email":"invitee@example.com","role":"member"}')
+INV_ID=$(echo "$INV_RESP" | jq -r '.id // empty')
+INV_EXP_OLD=$(echo "$INV_RESP" | jq -r '.expires_at // empty')
+[ -n "$INV_ID" ] && pass "invitation seeded: $INV_ID" || fail "invitation create: $INV_RESP"
+
+# Resend rotates the token and updates expiry. Sleep 1s so expiry strictly differs.
+sleep 1
+RES_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST \
+  $BASE/api/v1/admin/organizations/$INV_ORG/invitations/$INV_ID/resend)
+RES_CODE=$(echo "$RES_RESP" | tail -1)
+RES_BODY=$(echo "$RES_RESP" | head -1)
+[ "$RES_CODE" = 200 ] && pass "admin resend invitation -> 200" || fail "resend -> $RES_CODE (body: $RES_BODY)"
+NEW_EXP=$(echo "$RES_BODY" | jq -r '.expires_at // empty')
+[ -n "$NEW_EXP" ] && [ "$NEW_EXP" != "$INV_EXP_OLD" ] && pass "resend rotated expires_at" \
+  || fail "expires_at unchanged: old=$INV_EXP_OLD new=$NEW_EXP"
+echo "$RES_BODY" | jq -e '.email_sent | type == "boolean"' >/dev/null && pass "resend reports email_sent flag" || fail "missing email_sent: $RES_BODY"
+
+# Cross-org URL tampering: same invitation id, different org -> 404.
+OTHER_INV=$(curl -s -b cj.txt -X POST $BASE/api/v1/organizations \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"OtherInv\",\"slug\":\"otherinv-$RANDOM\"}" | jq -r '.id // empty')
+if [ -n "$OTHER_INV" ]; then
+  XCODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST \
+    $BASE/api/v1/admin/organizations/$OTHER_INV/invitations/$INV_ID/resend)
+  [ "$XCODE" = 404 ] && pass "cross-org resend -> 404" || fail "cross-org resend -> $XCODE"
+  curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/organizations/$OTHER_INV
+fi
+
+# Delete invitation.
+DEL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE \
+  $BASE/api/v1/admin/organizations/$INV_ORG/invitations/$INV_ID)
+[ "$DEL_CODE" = 200 ] && pass "admin DELETE invitation -> 200" || fail "DELETE invitation -> $DEL_CODE"
+
+# Second delete -> 404 (gone).
+GONE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE \
+  $BASE/api/v1/admin/organizations/$INV_ORG/invitations/$INV_ID)
+[ "$GONE" = 404 ] && pass "deleted invitation -> 404 on retry" || fail "deleted invitation re-delete -> $GONE"
+
+# Cleanup org.
+curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/organizations/$INV_ORG
+
+# --- 58: admin MFA disable (Wave 1 A7) ----------------------------------------
+# Admin-only DELETE /users/{id}/mfa wipes MFA without requiring the user's
+# current TOTP code. Used by support to recover lost-device accounts. The
+# user-facing /auth/mfa endpoint still requires a code (sec. boundary intact).
+section "58: admin MFA disable (A7)"
+
+MFA_EMAIL="mfa-admin-$RANDOM@test.com"
+MFA_PW='GetCake117$$$'
+MFA_RESP=$(curl -s -c mfacj.txt -X POST $BASE/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$MFA_EMAIL\",\"password\":\"$MFA_PW\"}")
+MFA_USER=$(echo "$MFA_RESP" | jq -r '.id // empty')
+[ -n "$MFA_USER" ] && pass "MFA test user created: $MFA_USER" || fail "MFA user signup: $MFA_RESP"
+
+# Force email_verified so /auth/mfa endpoints (which require verified email) work.
+curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X PATCH \
+  -H "Content-Type: application/json" \
+  -d '{"email_verified":true}' $BASE/api/v1/users/$MFA_USER
+
+# Re-login to refresh the cookie's email_verified claim.
+curl -s -c mfacj.txt -X POST $BASE/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$MFA_EMAIL\",\"password\":\"$MFA_PW\"}" > /dev/null
+
+# Enroll MFA via the user-facing endpoint to populate the secret (then we
+# bypass the verify step by directly flipping mfa_enabled via storage path
+# isn't possible from smoke — instead we rely on the admin endpoint clearing
+# whatever state exists).
+ENR=$(curl -s -b mfacj.txt -X POST $BASE/api/v1/auth/mfa/enroll)
+SECRET=$(echo "$ENR" | jq -r '.secret // empty')
+[ -n "$SECRET" ] && pass "MFA enroll returned secret" || note "enroll: $ENR"
+
+# Admin disable: should clear secret + flag regardless of verify state.
+ADMIN_DEL=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE \
+  $BASE/api/v1/users/$MFA_USER/mfa)
+AD_CODE=$(echo "$ADMIN_DEL" | tail -1)
+AD_BODY=$(echo "$ADMIN_DEL" | head -1)
+[ "$AD_CODE" = 200 ] && pass "admin DELETE /users/{id}/mfa -> 200" || fail "admin MFA disable -> $AD_CODE (body: $AD_BODY)"
+echo "$AD_BODY" | jq -e '.mfa_enabled == false' >/dev/null && pass "response asserts mfa_enabled=false" || fail "body: $AD_BODY"
+
+# Verify via GET that mfa_enabled is now false on the user record.
+USER_BODY=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/users/$MFA_USER)
+echo "$USER_BODY" | jq -e '.mfaEnabled == false' >/dev/null && pass "GET user reflects mfa_enabled=false" || fail "user body: $USER_BODY"
+
+# Audit log entry exists.
+if [ -f $DB ]; then
+  N=$(sqlite3 $DB "SELECT COUNT(*) FROM audit_logs WHERE action='admin.mfa.disabled' AND target_id='$MFA_USER'")
+  [ "$N" -ge 1 ] 2>/dev/null && pass "audit log: admin.mfa.disabled (n=$N)" || fail "no admin.mfa.disabled audit row"
+fi
+
+# Missing user -> 404.
+NF_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE \
+  $BASE/api/v1/users/usr_definitely_not_here/mfa)
+[ "$NF_CODE" = 404 ] && pass "admin MFA disable missing user -> 404" || fail "missing user -> $NF_CODE"
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
