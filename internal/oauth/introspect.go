@@ -118,6 +118,14 @@ func (s *Server) HandleIntrospect(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp) //#nosec G104
 }
 
+// LookupBearer resolves a raw OAuth bearer token (JWT or opaque) to the
+// stored OAuthToken record, or nil if no match. Exposed so other packages
+// (vault handlers, agent auth, etc.) can share the canonical three-tier
+// lookup instead of rolling their own half-measures that miss JWT tokens.
+func (s *Server) LookupBearer(ctx context.Context, tokenStr string) *storage.OAuthToken {
+	return s.findTokenInDB(ctx, tokenStr)
+}
+
 // findTokenInDB resolves a raw token string to an OAuthToken record.
 //
 // For JWT access tokens (3-part dot-separated): extract the JTI claim and

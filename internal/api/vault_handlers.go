@@ -1,9 +1,7 @@
 package api
 
 import (
-	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -474,6 +472,19 @@ func (s *Server) handleVaultCallback(w http.ResponseWriter, r *http.Request) {
 	providerName := chi.URLParam(r, "provider")
 	userID := mw.GetUserID(r.Context())
 
+	// Provider reported an error (user rejected consent, scope denied, etc.).
+	// Mirror oauth_handlers.go: surface the provider-side message early so the
+	// dashboard can show "connection cancelled" without dragging state-cookie
+	// bookkeeping into the failure path.
+	if errMsg := r.URL.Query().Get("error"); errMsg != "" {
+		desc := r.URL.Query().Get("error_description")
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "oauth_error",
+			"message": errMsg + ": " + desc,
+		})
+		return
+	}
+
 	stateCookie, err := r.Cookie(vaultStateCookieName)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_state", "Missing vault state cookie"))
@@ -582,9 +593,10 @@ func (s *Server) handleVaultGetToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Token lookup uses sha256(raw) first, then sha256(signature-part) for
-	// opaque HMAC tokens — mirrors introspect.findTokenInDB without re-exporting it.
-	tok := s.lookupVaultBearer(r.Context(), rawToken)
+	// Token lookup delegates to the oauth Server's canonical three-tier
+	// resolver (JWT → JTI, opaque "key.sig" → sha256(sig), raw → sha256(raw)).
+	// Rolling our own half-measure here silently 401'd JWT bearers.
+	tok := s.OAuthServer.LookupBearer(r.Context(), rawToken)
 	if tok == nil {
 		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
 		writeJSON(w, http.StatusUnauthorized, errPayload("invalid_token", "Bearer token not recognised"))
@@ -678,28 +690,6 @@ func (s *Server) handleVaultGetToken(w http.ResponseWriter, r *http.Request) {
 		resp["expires_at"] = expiresAt.UTC().Format(time.RFC3339)
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// lookupVaultBearer resolves a raw OAuth bearer to a storage.OAuthToken by
-// hashing the whole string (SHA-256 hex), then — if that misses — the signature
-// half of an opaque "<key>.<sig>" token. This mirrors the fallbacks in
-// internal/oauth/introspect.findTokenInDB without re-exporting that helper.
-func (s *Server) lookupVaultBearer(ctx context.Context, raw string) *storage.OAuthToken {
-	// whole-token hash
-	h := sha256.Sum256([]byte(raw))
-	full := hex.EncodeToString(h[:])
-	if tok, err := s.OAuthServer.RawStore.GetOAuthTokenByHash(ctx, full); err == nil && tok != nil {
-		return tok
-	}
-	// signature-part hash (opaque HMAC tokens)
-	if idx := strings.LastIndex(raw, "."); idx > 0 && idx < len(raw)-1 {
-		sig := raw[idx+1:]
-		sh := sha256.Sum256([]byte(sig))
-		if tok, err := s.OAuthServer.RawStore.GetOAuthTokenByHash(ctx, hex.EncodeToString(sh[:])); err == nil && tok != nil {
-			return tok
-		}
-	}
-	return nil
 }
 
 // scopeContains reports whether space-separated scope string s contains

@@ -316,6 +316,151 @@ func TestVaultCallback_ExchangesAndStores(t *testing.T) {
 	t.Skip("covered by T6 smoke tests; provider token URL swap is non-trivial at the HTTP layer")
 }
 
+// vaultCallbackGet issues a GET to the vault callback with the given query
+// string and an optional state cookie. The session cookie set by
+// loginFreshUser is carried automatically by the client's jar.
+func vaultCallbackGet(t *testing.T, ts *testutil.TestServer, providerName, query string, stateCookie *http.Cookie) *http.Response {
+	t.Helper()
+	u := ts.URL("/api/v1/vault/callback/" + providerName)
+	if query != "" {
+		u += "?" + query
+	}
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		t.Fatalf("build callback request: %v", err)
+	}
+	if stateCookie != nil {
+		req.AddCookie(stateCookie)
+	}
+	resp, err := ts.Client.Do(req)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	return resp
+}
+
+// TestVaultCallback_MissingState verifies the handler rejects a callback that
+// arrives without the state cookie the connect step set.
+func TestVaultCallback_MissingState(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	_ = loginFreshUser(t, ts, "cbmiss@x.io")
+	p := seedVaultProvider(t, ts, "google_calendar", "Google Calendar")
+
+	resp := vaultCallbackGet(t, ts, p.Name, "state=abc&code=xyz", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		b := readBody(t, resp)
+		t.Fatalf("expected 400 without state cookie, got %d: %s", resp.StatusCode, b)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body["error"] != "invalid_state" {
+		t.Errorf("expected error=invalid_state, got %+v", body)
+	}
+}
+
+// TestVaultCallback_StateMismatch sends a cookie with state=A but a query
+// state=B. The handler must reject with 400.
+func TestVaultCallback_StateMismatch(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	_ = loginFreshUser(t, ts, "cbmismatch@x.io")
+	p := seedVaultProvider(t, ts, "slack", "Slack")
+
+	cookie := &http.Cookie{
+		Name:  "shark_vault_state",
+		Value: "stateA:" + p.ID,
+	}
+	resp := vaultCallbackGet(t, ts, p.Name, "state=stateB&code=xyz", cookie)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		b := readBody(t, resp)
+		t.Fatalf("expected 400 on state mismatch, got %d: %s", resp.StatusCode, b)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body["error"] != "invalid_state" {
+		t.Errorf("expected error=invalid_state, got %+v", body)
+	}
+}
+
+// TestVaultCallback_CookieProviderMismatch packs state:providerA in the cookie
+// but calls /vault/callback/providerB. The handler must refuse so a cookie
+// grabbed from one flow can't be replayed against a different provider.
+func TestVaultCallback_CookieProviderMismatch(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	_ = loginFreshUser(t, ts, "cbprovider@x.io")
+	providerA := seedVaultProvider(t, ts, "provider_a", "Provider A")
+	providerB := seedVaultProvider(t, ts, "provider_b", "Provider B")
+
+	// Cookie is bound to providerA but request hits providerB's callback.
+	cookie := &http.Cookie{
+		Name:  "shark_vault_state",
+		Value: "sharedstate:" + providerA.ID,
+	}
+	resp := vaultCallbackGet(t, ts, providerB.Name, "state=sharedstate&code=xyz", cookie)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		b := readBody(t, resp)
+		t.Fatalf("expected 400 on provider mismatch, got %d: %s", resp.StatusCode, b)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body["error"] != "invalid_state" {
+		t.Errorf("expected error=invalid_state, got %+v", body)
+	}
+}
+
+// TestVaultCallback_MissingCode verifies that a well-formed state round-trip
+// with no authorization code still rejects cleanly, rather than blindly
+// calling into the token exchange with an empty code.
+func TestVaultCallback_MissingCode(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	_ = loginFreshUser(t, ts, "cbnocode@x.io")
+	p := seedVaultProvider(t, ts, "github", "GitHub")
+
+	cookie := &http.Cookie{
+		Name:  "shark_vault_state",
+		Value: "goodstate:" + p.ID,
+	}
+	resp := vaultCallbackGet(t, ts, p.Name, "state=goodstate", cookie)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		b := readBody(t, resp)
+		t.Fatalf("expected 400 on missing code, got %d: %s", resp.StatusCode, b)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body["error"] != "missing_code" {
+		t.Errorf("expected error=missing_code, got %+v", body)
+	}
+}
+
+// TestVaultCallback_ProviderError simulates a provider sending the user back
+// with ?error=access_denied (e.g. consent rejected). The handler must surface
+// an oauth_error without touching state cookies or attempting an exchange.
+func TestVaultCallback_ProviderError(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	_ = loginFreshUser(t, ts, "cberror@x.io")
+	p := seedVaultProvider(t, ts, "linear", "Linear")
+
+	// Error params take precedence over state validation — no cookie needed.
+	resp := vaultCallbackGet(t, ts, p.Name,
+		"error=access_denied&error_description=user+cancelled", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		b := readBody(t, resp)
+		t.Fatalf("expected 400 on provider error, got %d: %s", resp.StatusCode, b)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body["error"] != "oauth_error" {
+		t.Errorf("expected error=oauth_error, got %+v", body)
+	}
+	if !strings.Contains(body["message"], "access_denied") {
+		t.Errorf("expected message to include provider error code, got %q", body["message"])
+	}
+}
+
 func TestVaultGetToken_RequiresBearer(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 	seedVaultProvider(t, ts, "slack", "Slack")
