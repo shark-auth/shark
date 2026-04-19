@@ -23,10 +23,11 @@
 | **C — Agent + Consent** | Agent CRUD API, server-rendered consent HTML, consent management API | **Done** |
 | **D — Advanced Grants** | DCR (RFC 7591), Device Flow (RFC 8628), Token Exchange (RFC 8693) | **Done** |
 | **E — Security Hardening** | DPoP (RFC 9449), Introspection (RFC 7662), Revocation (RFC 7009), Resource Indicators (RFC 8707) | **Done** |
-| **F — Dashboard + Tests** | Agent/consent UI, device approval page, full OAuth smoke tests, unit coverage | Next |
+| **F — Dashboard + Tests** | Agent/consent UI, device approval page, full OAuth smoke tests, unit coverage | **Done** |
 
-**Smoke test status:** 91 PASS, 0 FAIL (sections 1-27).
-**Unit tests:** 100+ oauth-package tests passing (17 DCR + 13 device + 14 exchange + 15 DPoP + 11 introspection + 6 resource + 24 misc).
+**Smoke test status:** 181 PASS, 0 FAIL (sections 1-42).
+**Unit tests:** 120+ oauth + storage tests passing.
+**Phase 5 complete: all P0+P1 RFCs implemented, all waves shipped.**
 
 ---
 

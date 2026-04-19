@@ -160,44 +160,79 @@ Phase 4.5 — Dashboard Polish (3-5 days) — Done (except responsive)
 
 Remaining from specdashby.md: responsive design only. See specdashby.md for details.
 
-Phase 5 — SDK (5-7 days)
+Phase 5 — OAuth 2.1 + Agent Auth — Done
 
-- TypeScript SDK (#54)
-- React/Svelte/Vue wrappers  
+**Plan:** `docs/superpowers/plans/2026-04-18-oauth21-agent-auth.md`
+**Spec:** `AGENT_AUTH.md`
 
+Build core features FIRST, SDK on top LATER. Agents are first-class citizens.
 
-Now developers can actually integrate. Without this, Shark is unusable for most
-people.
+- ✅ Full OAuth 2.1 Authorization Server — fosite-based, ES256 signing
+- ✅ Agent identity (first-class, not user extension)
+- ✅ Auth Code + PKCE, Client Credentials, Refresh Token Rotation
+- ✅ Dynamic Client Registration (RFC 7591) — MCP discovery
+- ✅ Device Authorization Grant (RFC 8628) — headless agents
+- ✅ Token Exchange (RFC 8693) — agent-to-agent delegation chains
+- ✅ DPoP (RFC 9449) — proof-of-possession tokens
+- ✅ Token Introspection + Revocation (RFC 7662, 7009)
+- ✅ Resource Indicators (RFC 8707) — audience binding
+- ✅ AS Metadata (RFC 8414) — MCP compatibility
+- ✅ Consent UI (server-rendered + React)
+- ✅ Agent management dashboard + consent management + device flow React
+- ✅ Smoke tests: sections 26-42 (AS metadata, agent CRUD, all grants, DPoP, introspection, revocation, DCR, resource indicators, ES256 JWKS, consents) — 181 PASS, 0 FAIL
 
+Phase 5.5 — Token Vault (3-5 days)
 
+**Plan:** `docs/superpowers/plans/2026-04-18-token-vault.md`
 
+- Managed third-party OAuth tokens (Google, Slack, GitHub, etc.)
+- Agents request tokens through Shark, never handle raw credentials
+- Auto-refresh, encrypted at rest (AES-256-GCM)
+- Pre-built provider templates
+- Rich dashboard UI
 
-Phase 6 — Agent Auth (10-14 days)
+Phase 6 — Proxy + Visual Flow Builder (7-10 days)
 
-- Full OAuth 2.1 server (#57) — client credentials, auth code + PKCE, device
-  flow, token exchange, DCR
-- Token Vault (#66) — managed third-party OAuth
-- This is the headline feature. "First OSS auth with native MCP agent support."
+**Plan:** `docs/superpowers/plans/2026-04-18-proxy.md`
+**Plan:** `docs/superpowers/plans/2026-04-18-visual-flow-builder.md`
 
-Phase 8 — Proxy + OIDC Provider (5-7 days)
+- Shark Proxy (#58) — `shark proxy --upstream` + embedded mode
+- Route-level rules engine (path → requirement mapping)
+- Circuit breaker: JWT local verify (agents never down) + session cache (humans)
+- `X-User-ID` / `X-Agent-ID` / `X-User-Roles` header injection
+- Dashboard proxy config (visual rule editor)
+- Auth flow builder (Auth0 Actions-like: signup → verify → MFA → redirect)
 
-- Shark Proxy (#58) — shark proxy --upstream makes Shark usable without any SDK
-- OIDC Provider mode (#60) — shares OAuth 2.1 infrastructure from Phase 7  
+Phase 7 — SDK (5-7 days)
 
+**Plan:** TBD (builds on OAuth 2.1 flows)
+**Spec:** `SDK.md`
 
-Phase 9 — Polish & enterprise (7-10 days)
+- TypeScript SDK (#54) — now a thin OAuth 2.1 client
+- React/Svelte/Vue/Next.js wrappers
+- Node/Python/Go admin SDKs
+- SDK builds on top of real OAuth flows, not custom cookie logic
 
+Phase 8 — OIDC Provider + Polish (5-7 days)
+
+- OIDC Provider mode (#60) — shares OAuth 2.1 infrastructure from Phase 5
 - Impersonation (#59)
 - Compliance toolkit (#61)
-- Email provider presets (#52) + shark.email relay (#56) (overlap with Phase 2)
+- Email provider presets (#52) + shark.email relay (#56)
 - docs_url in error responses (#49)
 - Migration tools — Auth0 (#55), Clerk (#63), Supabase (#64)
-- Pre-built UI components + dashboard editor (#68)  
 
+Phase 9 — Enterprise (P2 from AGENT_AUTH.md)
+
+- Rich Authorization Requests (RFC 9396)
+- Pushed Authorization Requests (RFC 9126)
+- Step-up authorization flow
+- Consent management UI (advanced)
+- Agent analytics dashboard
 
 Phase 10 — Moonshot (when ready)
 
-- Visual flow builder (#62)
+- Pre-built UI components + dashboard editor (#68)
 - Remaining cloud-only issues (#27, #29, #30, #31)  
 
 
