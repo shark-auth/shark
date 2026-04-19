@@ -127,6 +127,7 @@ func ensureES256Key(store storage.Store, serverSecret string) (*ecdsa.PrivateKey
 
 	// Check for existing active ES256 key.
 	existing, err := store.GetActiveSigningKeyByAlgorithm(ctx, "ES256")
+	var staleKID string
 	if err == nil {
 		// Decrypt and return the existing key.
 		pemBytes, decErr := authjwt.DecryptPEM(existing.PrivateKeyPEM, serverSecret)
@@ -144,17 +145,12 @@ func ensureES256Key(store storage.Store, serverSecret string) (*ecdsa.PrivateKey
 			return key, nil
 		}
 		// Decrypt failed — most likely server.secret changed (dev mode rotates
-		// on each boot). Retire the un-decryptable key and fall through to
-		// generate a fresh one so /oauth/* stays functional.
-		slog.Warn("oauth: retiring un-decryptable ES256 key (secret mismatch); generating fresh key",
+		// on each boot). Defer retiring the un-decryptable key until after the
+		// replacement key has been successfully inserted, so /oauth/* stays
+		// functional even if the insert fails.
+		slog.Warn("oauth: will retire un-decryptable ES256 key (secret mismatch); generating fresh key",
 			"kid", existing.KID, "error", decErr)
-		now := time.Now().UTC().Format(time.RFC3339)
-		if _, retErr := store.DB().ExecContext(ctx,
-			`UPDATE jwt_signing_keys SET status = 'retired', rotated_at = ? WHERE kid = ?`,
-			now, existing.KID,
-		); retErr != nil {
-			slog.Warn("oauth: failed to retire stale ES256 key", "error", retErr)
-		}
+		staleKID = existing.KID
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("lookup active ES256 key: %w", err)
 	}
@@ -183,16 +179,48 @@ func ensureES256Key(store storage.Store, serverSecret string) (*ecdsa.PrivateKey
 		return nil, fmt.Errorf("encrypt ES256 private key: %w", err)
 	}
 
-	signingKey := &storage.SigningKey{
-		KID:           kid,
-		Algorithm:     "ES256",
-		PublicKeyPEM:  string(pubPEM),
-		PrivateKeyPEM: encPrivPEM,
-		Status:        "active",
-	}
+	// Persist retire-old + insert-new atomically in a single transaction when we
+	// have a stale key to replace. Either both happen or neither does, so we
+	// never retire the old key without a working replacement. If no stale key
+	// exists, just insert the new one directly.
+	if staleKID != "" {
+		tx, txErr := store.DB().BeginTx(ctx, nil)
+		if txErr != nil {
+			return nil, fmt.Errorf("begin ES256 rotation tx: %w", txErr)
+		}
+		defer tx.Rollback() //nolint:errcheck
 
-	if err := store.InsertSigningKey(ctx, signingKey); err != nil {
-		return nil, fmt.Errorf("store ES256 signing key: %w", err)
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO jwt_signing_keys (kid, algorithm, public_key_pem, private_key_pem, status)
+			 VALUES (?, ?, ?, ?, 'active')`,
+			kid, "ES256", string(pubPEM), encPrivPEM,
+		); err != nil {
+			return nil, fmt.Errorf("store ES256 signing key: %w", err)
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE jwt_signing_keys SET status = 'retired', rotated_at = ? WHERE kid = ?`,
+			now, staleKID,
+		); err != nil {
+			return nil, fmt.Errorf("retire stale ES256 key: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("commit ES256 rotation: %w", err)
+		}
+		slog.Info("oauth: retired stale ES256 key", "old_kid", staleKID, "new_kid", kid)
+	} else {
+		signingKey := &storage.SigningKey{
+			KID:           kid,
+			Algorithm:     "ES256",
+			PublicKeyPEM:  string(pubPEM),
+			PrivateKeyPEM: encPrivPEM,
+			Status:        "active",
+		}
+		if err := store.InsertSigningKey(ctx, signingKey); err != nil {
+			return nil, fmt.Errorf("store ES256 signing key: %w", err)
+		}
 	}
 
 	slog.Info("oauth: ES256 signing key generated and stored", "kid", kid)
