@@ -21,8 +21,11 @@ type ConsentData struct {
 	AgentLogoURI string
 	ClientID     string
 	Scopes       []string
-	RedirectURI  string
-	State        string
+	// Resource is the RFC 8707 resource indicator — the target audience for
+	// the access token being requested. Empty string means no restriction.
+	Resource    string
+	RedirectURI string
+	State       string
 	// Hidden form fields to POST back (option B: re-send all OAuth params)
 	Challenge string // opaque identifier for this consent request
 	Issuer    string

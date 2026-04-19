@@ -74,6 +74,14 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+
+	// RFC 8707: extract resource indicator before fosite sanitizes the form.
+	// Fosite's Sanitize() strips unrecognized params, so we pass resource via
+	// context so createTokenSession can pick it up.
+	if resource := r.FormValue("resource"); resource != "" {
+		ctx = contextWithResource(ctx, resource)
+	}
+
 	session := s.newSession("")
 
 	ar, err := s.Provider.NewAccessRequest(ctx, r, session)

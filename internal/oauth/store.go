@@ -138,6 +138,9 @@ func (s *FositeStore) CreateAuthorizeCodeSession(ctx context.Context, code strin
 		codeChallengeMethod = "S256"
 	}
 
+	// RFC 8707: extract resource parameter if present.
+	resource := req.GetRequestForm().Get("resource")
+
 	sc := &storage.OAuthAuthorizationCode{
 		CodeHash:            codeHash,
 		ClientID:            req.GetClient().GetID(),
@@ -147,6 +150,7 @@ func (s *FositeStore) CreateAuthorizeCodeSession(ctx context.Context, code strin
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
 		Nonce:               req.GetRequestForm().Get("nonce"),
+		Resource:            resource,
 		ExpiresAt:           expiresAt,
 		CreatedAt:           req.GetRequestedAt(),
 	}
@@ -172,19 +176,25 @@ func (s *FositeStore) GetAuthorizeCodeSession(ctx context.Context, code string, 
 		session.SetExpiresAt(fosite.AuthorizeCode, sc.ExpiresAt)
 	}
 
+	form := url.Values{
+		"redirect_uri":          {sc.RedirectURI},
+		"code_challenge":        {sc.CodeChallenge},
+		"code_challenge_method": {sc.CodeChallengeMethod},
+		"nonce":                 {sc.Nonce},
+	}
+	// RFC 8707: propagate resource so it's available during token issuance.
+	if sc.Resource != "" {
+		form.Set("resource", sc.Resource)
+	}
+
 	req := &fosite.Request{
-		ID:            sc.CodeHash, // use code hash as the request ID
-		RequestedAt:   sc.CreatedAt,
-		Client:        client,
+		ID:             sc.CodeHash, // use code hash as the request ID
+		RequestedAt:    sc.CreatedAt,
+		Client:         client,
 		RequestedScope: fosite.Arguments(strings.Split(sc.Scope, " ")),
 		GrantedScope:   fosite.Arguments(strings.Split(sc.Scope, " ")),
-		Session:       session,
-		Form: url.Values{
-			"redirect_uri":          {sc.RedirectURI},
-			"code_challenge":        {sc.CodeChallenge},
-			"code_challenge_method": {sc.CodeChallengeMethod},
-			"nonce":                 {sc.Nonce},
-		},
+		Session:        session,
+		Form:           form,
 	}
 
 	return req, nil
@@ -326,6 +336,16 @@ func (s *FositeStore) createTokenSession(ctx context.Context, signature, tokenTy
 
 	scope := strings.Join([]string(req.GetGrantedScopes()), " ")
 
+	// RFC 8707: bind audience from the resource indicator.
+	// For client_credentials, fosite's Sanitize() strips the raw form param,
+	// so we read it from the context (set by HandleToken before calling fosite).
+	// For authorization_code, we stored resource in the auth code and
+	// re-populated it in GetAuthorizeCodeSession's form, so that still works.
+	audience := resourceFromContext(ctx)
+	if audience == "" {
+		audience = req.GetRequestForm().Get("resource")
+	}
+
 	token := &storage.OAuthToken{
 		ID:        "tok_" + uuid.New().String()[:8],
 		JTI:       req.GetID(),
@@ -334,6 +354,7 @@ func (s *FositeStore) createTokenSession(ctx context.Context, signature, tokenTy
 		TokenType: tokenType,
 		TokenHash: tokenHash,
 		Scope:     scope,
+		Audience:  audience,
 		ExpiresAt: expiresAt,
 		CreatedAt: req.GetRequestedAt(),
 	}
@@ -377,6 +398,13 @@ func (s *FositeStore) getTokenSession(ctx context.Context, signature, tokenType 
 		session.SetExpiresAt(tokenTypeKey, token.ExpiresAt)
 	}
 
+	tokenForm := url.Values{}
+	// RFC 8707: re-populate resource so callers (e.g. introspection) can
+	// read the audience the token was issued for.
+	if token.Audience != "" {
+		tokenForm.Set("resource", token.Audience)
+	}
+
 	req := &fosite.Request{
 		ID:             token.JTI,
 		RequestedAt:    token.CreatedAt,
@@ -384,7 +412,7 @@ func (s *FositeStore) getTokenSession(ctx context.Context, signature, tokenType 
 		RequestedScope: fosite.Arguments(strings.Split(token.Scope, " ")),
 		GrantedScope:   fosite.Arguments(strings.Split(token.Scope, " ")),
 		Session:        session,
-		Form:           url.Values{},
+		Form:           tokenForm,
 	}
 
 	return req, nil

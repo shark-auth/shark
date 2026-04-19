@@ -115,6 +115,12 @@
     </div>
   </div>
 
+  {{if .Resource}}
+  <div style="margin-bottom:16px;padding:10px 14px;background:#0d1117;border:1px solid #1e1e1e;border-radius:6px;font-size:12px;color:#6b6b6b;">
+    <span style="color:#a3a3a3;font-weight:600;">Resource:</span> {{.Resource}}
+  </div>
+  {{end}}
+
   {{if .Scopes}}
   <h2>This will allow {{.AgentName}} to:</h2>
   <ul class="scopes">
