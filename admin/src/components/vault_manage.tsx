@@ -731,9 +731,9 @@ function CreateProviderWizard({ onClose, onCreate, onCreated }) {
   const pickTemplate = (tpl) => {
     setTemplate(tpl); // tpl is the template object or 'custom'
     if (tpl && tpl !== 'custom') {
-      setDisplayName(tpl.DisplayName || '');
-      setScopes((tpl.DefaultScopes || []).join('\n'));
-      setIconURL(tpl.IconURL || '');
+      setDisplayName(tpl.display_name || '');
+      setScopes((tpl.default_scopes || []).join('\n'));
+      setIconURL(tpl.icon_url || '');
     } else {
       setDisplayName('');
       setScopes('');
@@ -764,17 +764,17 @@ function CreateProviderWizard({ onClose, onCreate, onCreated }) {
       };
     } else {
       payload = {
-        template: template.Name,
+        template: template.name,
         client_id: clientID.trim(),
         client_secret: clientSecret.trim(),
       };
-      if (displayName.trim() && displayName.trim() !== template.DisplayName) {
+      if (displayName.trim() && displayName.trim() !== template.display_name) {
         payload.display_name = displayName.trim();
       }
       if (scopeList.length > 0) {
         payload.scopes = scopeList;
       }
-      if (iconURL.trim() && iconURL.trim() !== (template.IconURL || '')) {
+      if (iconURL.trim() && iconURL.trim() !== (template.icon_url || '')) {
         payload.icon_url = iconURL.trim();
       }
     }
@@ -822,7 +822,7 @@ function CreateProviderWizard({ onClose, onCreate, onCreated }) {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                     {templates.map(t => (
-                      <TemplateCard key={t.Name} template={t} onPick={() => pickTemplate(t)}/>
+                      <TemplateCard key={t.name} template={t} onPick={() => pickTemplate(t)}/>
                     ))}
                     <button onClick={() => pickTemplate('custom')} style={{
                       display: 'flex', alignItems: 'center', gap: 10, padding: 12,
@@ -861,13 +861,13 @@ function CreateProviderWizard({ onClose, onCreate, onCreated }) {
                     display:'flex', alignItems:'center', justifyContent:'center',
                     border:'1px solid var(--hairline)', overflow: 'hidden',
                   }}>
-                    {template.IconURL
-                      ? <img src={template.IconURL} alt="" style={{ width: 26, height: 26, objectFit: 'contain' }}/>
-                      : <span style={{fontSize: 14, fontWeight: 600}}>{(template.DisplayName || '?')[0]}</span>}
+                    {template.icon_url
+                      ? <img src={template.icon_url} alt="" style={{ width: 26, height: 26, objectFit: 'contain' }}/>
+                      : <span style={{fontSize: 14, fontWeight: 600}}>{(template.display_name || '?')[0]}</span>}
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize: 12.5, fontWeight: 500}}>{template.DisplayName}</div>
-                    <div className="faint mono" style={{fontSize: 10.5}}>{template.Name}</div>
+                    <div style={{fontSize: 12.5, fontWeight: 500}}>{template.display_name}</div>
+                    <div className="faint mono" style={{fontSize: 10.5}}>{template.name}</div>
                   </div>
                   <button className="btn ghost sm" onClick={() => { setTemplate(null); setStep(1); }}>
                     Change
@@ -962,7 +962,7 @@ function CreateProviderWizard({ onClose, onCreate, onCreated }) {
                 <input
                   value={displayName}
                   onChange={e => setDisplayName(e.target.value)}
-                  placeholder={isCustom ? 'My Custom Provider' : (template?.DisplayName || '')}
+                  placeholder={isCustom ? 'My Custom Provider' : (template?.display_name || '')}
                   style={inputStyle}
                 />
               </div>
@@ -1011,7 +1011,7 @@ function CreateProviderWizard({ onClose, onCreate, onCreated }) {
             }}>
               {isCustom
                 ? `shark vault provider create --name ${customName || '<name>'} --auth-url … --token-url … --client-id … --client-secret …`
-                : `shark vault provider create --template ${template?.Name || '<template>'} --client-id … --client-secret …`}
+                : `shark vault provider create --template ${template?.name || '<template>'} --client-id … --client-secret …`}
             </span>
           </div>
         )}
@@ -1036,7 +1036,7 @@ function CreateProviderWizard({ onClose, onCreate, onCreated }) {
 
 function TemplateCard({ template, onPick }) {
   const [failed, setFailed] = React.useState(false);
-  const scopeCount = (template.DefaultScopes || []).length;
+  const scopeCount = (template.default_scopes || []).length;
   return (
     <button onClick={onPick} style={{
       display: 'flex', alignItems: 'center', gap: 10, padding: 12,
@@ -1053,19 +1053,19 @@ function TemplateCard({ template, onPick }) {
         display:'flex', alignItems:'center', justifyContent:'center',
         border:'1px solid var(--hairline)', overflow: 'hidden', flexShrink: 0,
       }}>
-        {template.IconURL && !failed
-          ? <img src={template.IconURL} onError={() => setFailed(true)} alt=""
+        {template.icon_url && !failed
+          ? <img src={template.icon_url} onError={() => setFailed(true)} alt=""
               style={{ width: 26, height: 26, objectFit: 'contain' }}/>
           : <span style={{fontSize: 14, fontWeight: 600, color: 'var(--fg)'}}>
-              {(template.DisplayName || template.Name || '?')[0].toUpperCase()}
+              {(template.display_name || template.name || '?')[0].toUpperCase()}
             </span>}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-          {template.DisplayName}
+          {template.display_name}
         </div>
         <div className="faint mono" style={{ fontSize: 10.5, marginTop: 1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-          {template.Name}
+          {template.name}
           {scopeCount > 0 && <span> · {scopeCount} scope{scopeCount !== 1 && 's'}</span>}
         </div>
       </div>

@@ -15,19 +15,19 @@ type ProviderTemplate struct {
 	// Name is the unique short key — e.g. "google_calendar", "slack",
 	// "github". Used as the VaultProvider.Name when the template is
 	// applied, and as the lookup key in the registry.
-	Name string
+	Name string `json:"name"`
 	// DisplayName is the user-visible label, e.g. "Google Calendar".
-	DisplayName string
+	DisplayName string `json:"display_name"`
 	// AuthURL is the provider's OAuth 2.0 authorization endpoint.
-	AuthURL string
+	AuthURL string `json:"auth_url"`
 	// TokenURL is the provider's OAuth 2.0 token endpoint.
-	TokenURL string
+	TokenURL string `json:"token_url"`
 	// DefaultScopes is the recommended scope list for this template. May
 	// be empty (e.g. Notion doesn't use scopes). Never nil.
-	DefaultScopes []string
+	DefaultScopes []string `json:"default_scopes"`
 	// IconURL is an optional public URL for a branded icon. Empty when
 	// we don't want to commit to a specific CDN path.
-	IconURL string
+	IconURL string `json:"icon_url,omitempty"`
 }
 
 // builtinTemplates is the internal registry. Access via Templates() /
