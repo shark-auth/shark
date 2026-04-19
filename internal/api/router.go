@@ -18,6 +18,7 @@ import (
 	rbacpkg "github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/sso"
 	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/sharkauth/sharkauth/internal/vault"
 	"github.com/sharkauth/sharkauth/internal/webhook"
 
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
@@ -41,6 +42,7 @@ type Server struct {
 	SSOHandlers       *SSOHandlers
 	WebhookDispatcher *webhook.Dispatcher
 	OAuthServer       *oauth.Server
+	VaultManager      *vault.Manager
 	magicLinkRL       *magicLinkRateLimiter
 	startTime         time.Time
 }
@@ -97,6 +99,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		RateLimiter:    auth.NewTokenBucket(),
 		LockoutManager: auth.NewLockoutManager(5, 15*time.Minute),
 		FieldEncryptor: fe,
+		VaultManager:   vault.NewManager(store, fe),
 		startTime:      time.Now().UTC(),
 	}
 
@@ -444,6 +447,39 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		r.Group(func(r chi.Router) {
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/admin/auth/revoke-jti", s.handleAdminRevokeJTI)
+		})
+
+		// Vault — third-party OAuth token storage.
+		// Admin routes manage the provider catalog + credential rotation; user
+		// routes run the connect/disconnect flow with a session cookie; the
+		// per-user token retrieval endpoint accepts an OAuth 2.1 bearer from
+		// an agent acting on the user's behalf.
+		r.Route("/vault", func(r chi.Router) {
+			// Admin provider CRUD + template discovery.
+			r.Group(func(r chi.Router) {
+				r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
+				r.Post("/providers", s.handleCreateVaultProvider)
+				r.Get("/providers", s.handleListVaultProviders)
+				r.Get("/providers/{id}", s.handleGetVaultProvider)
+				r.Patch("/providers/{id}", s.handleUpdateVaultProvider)
+				r.Delete("/providers/{id}", s.handleDeleteVaultProvider)
+				r.Get("/templates", s.handleListVaultTemplates)
+			})
+
+			// User-facing connect flow + connection management (session auth).
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Get("/connect/{provider}", s.handleVaultConnectStart)
+				r.Get("/callback/{provider}", s.handleVaultCallback)
+				r.Get("/connections", s.handleListVaultConnections)
+				r.Delete("/connections/{id}", s.handleDeleteVaultConnection)
+			})
+
+			// Agent token retrieval (OAuth bearer). Must come AFTER the static
+			// prefixes above — chi's trie prefers exact matches, so "providers",
+			// "templates", "connect", "callback", "connections" all win the
+			// route race before this wildcard is considered.
+			r.Get("/{provider}/token", s.handleVaultGetToken)
 		})
 
 		// Admin (stats + sessions + dev-mode inbox)
