@@ -47,6 +47,13 @@ type Options struct {
 	// EmailSenderOverride, when non-nil, replaces the sender chosen from cfg.SMTP.
 	// Used by tests to inject MemoryEmailSender.
 	EmailSenderOverride email.Sender
+
+	// ProxyUpstream, when non-empty, enables embedded proxy mode: the
+	// reverse proxy is mounted as a catch-all AFTER every other route, and
+	// cfg.Proxy is overridden to {Enabled: true, Upstream: <this>} with
+	// rules and other knobs still coming from the YAML config. Set via the
+	// `shark serve --proxy-upstream URL` flag.
+	ProxyUpstream string
 }
 
 // Bootstrap builds all components (config, store, migrations, admin key, API server)
@@ -83,6 +90,14 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	}
 	if len(cfg.Server.Secret) < 32 {
 		return nil, fmt.Errorf("server.secret must be at least 32 characters (got %d)", len(cfg.Server.Secret))
+	}
+
+	// --proxy-upstream override. Keeps rules + other ProxyConfig fields
+	// from YAML but flips Enabled on and pins the upstream URL so a single
+	// CLI flag is all an operator needs to demo embedded mode.
+	if opts.ProxyUpstream != "" {
+		cfg.Proxy.Enabled = true
+		cfg.Proxy.Upstream = opts.ProxyUpstream
 	}
 
 	cfg.Server.DevMode = opts.DevMode

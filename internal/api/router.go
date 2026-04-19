@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/oauth"
+	"github.com/sharkauth/sharkauth/internal/proxy"
 	rbacpkg "github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/sso"
 	"github.com/sharkauth/sharkauth/internal/storage"
@@ -43,8 +45,19 @@ type Server struct {
 	WebhookDispatcher *webhook.Dispatcher
 	OAuthServer       *oauth.Server
 	VaultManager      *vault.Manager
-	magicLinkRL       *magicLinkRateLimiter
-	startTime         time.Time
+	// ProxyEngine holds the compiled rule set. nil when proxy is disabled.
+	ProxyEngine *proxy.Engine
+	// ProxyBreaker drives the circuit breaker + session cache. nil when
+	// proxy is disabled; started on NewServer and expected to be stopped
+	// by the caller via Shutdown when the server exits.
+	ProxyBreaker *proxy.Breaker
+	// ProxyHandler is the reverse proxy itself, mounted as a catch-all
+	// AFTER every other API route. nil when proxy is disabled so the
+	// catch-all block in NewServer short-circuits.
+	ProxyHandler *proxy.ReverseProxy
+
+	magicLinkRL *magicLinkRateLimiter
+	startTime   time.Time
 }
 
 // ServerOption configures optional dependencies for the Server.
@@ -130,6 +143,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	ssoManager := sso.NewSSOManager(store, sm, cfg)
 	s.SSOHandlers = NewSSOHandlers(ssoManager)
 	s.SSOHandlers.server = s
+
+	// Initialize proxy (engine + breaker + handler) when enabled. Keeping
+	// this before chi.NewRouter keeps the wiring block linear: build the
+	// proxy, then mount admin routes that reference it, then mount the
+	// catch-all at the very end so it only captures paths no other route
+	// claimed.
+	s.initProxy()
 
 	// Email verification lookup for middleware
 	isEmailVerified := func(ctx context.Context, userID string) (bool, error) {
@@ -506,6 +526,14 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Get("/dev/emails/{id}", s.handleGetDevEmail)
 				r.Delete("/dev/emails", s.handleDeleteAllDevEmails)
 			}
+
+			// Phase 6 P4: proxy admin APIs. Always registered (they 404
+			// themselves when the proxy is disabled) so the dashboard can
+			// probe and fall back without inspecting the config first.
+			r.Get("/proxy/status", s.handleProxyStatus)
+			r.Get("/proxy/status/stream", s.handleProxyStatusStream)
+			r.Get("/proxy/rules", s.handleProxyRules)
+			r.Post("/proxy/simulate", s.handleProxySimulate)
 		})
 	})
 
@@ -542,8 +570,118 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	r.Handle("/admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))
 	r.Handle("/admin/*", http.StripPrefix("/admin/", admin.Handler()))
 
+	// Phase 6 P4: reverse proxy catch-all. Mounted last so every /api/v1/*,
+	// /oauth/*, /admin/*, /.well-known/* route above wins via chi's trie
+	// precedence. Only active when the proxy is configured — when
+	// ProxyHandler is nil we skip the handler entirely, keeping the router
+	// in its exact pre-P4 shape for deployments that don't use the proxy.
+	if s.ProxyHandler != nil {
+		r.Handle("/*", s.proxyAuthMiddleware(s.ProxyHandler))
+	}
+
 	s.Router = r
 	return s
+}
+
+// initProxy builds the compiled rules engine, starts the circuit breaker,
+// and constructs the ReverseProxy handler. Called from NewServer before
+// routes are mounted; a nil-safe no-op when ProxyConfig.Enabled is false
+// so test configs (and pre-P4 deployments) skip the setup entirely.
+//
+// Failures during compilation are surfaced as panics. The proxy's rule
+// list lives in user YAML, so a bad rule is a config error the operator
+// should fix on next boot — starting the server in a partly-wired state
+// would hide the problem behind silent 404s.
+func (s *Server) initProxy() {
+	cfg := s.Config
+	if cfg == nil || !cfg.Proxy.Enabled || cfg.Proxy.Upstream == "" {
+		return
+	}
+
+	logger := slog.Default()
+
+	ruleSpecs := make([]proxy.RuleSpec, len(cfg.Proxy.Rules))
+	for i, pr := range cfg.Proxy.Rules {
+		ruleSpecs[i] = proxy.RuleSpec{
+			Path:    pr.Path,
+			Methods: pr.Methods,
+			Require: pr.Require,
+			Allow:   pr.Allow,
+			Scopes:  pr.Scopes,
+		}
+	}
+	engine, err := proxy.NewEngine(ruleSpecs)
+	if err != nil {
+		panic("proxy: compiling rules: " + err.Error())
+	}
+	s.ProxyEngine = engine
+
+	breakerCfg := proxy.BreakerConfig{
+		HealthURL:        cfg.Server.BaseURL + "/api/v1/admin/health",
+		HealthInterval:   10 * time.Second,
+		FailureThreshold: 3,
+		CacheSize:        10000,
+		CacheTTL:         5 * time.Minute,
+		NegativeTTL:      30 * time.Second,
+		MissBehavior:     proxy.MissReject,
+	}
+	s.ProxyBreaker = proxy.NewBreaker(breakerCfg, logger)
+	// TODO(P4.1): wire the breaker shutdown into server.Serve's shutdown
+	// path so SIGTERM stops the monitor cleanly. For now the background
+	// goroutine exits when the process does.
+	s.ProxyBreaker.Start(context.Background())
+
+	handlerCfg := proxy.Config{
+		Enabled:        true,
+		Upstream:       cfg.Proxy.Upstream,
+		Timeout:        cfg.Proxy.TimeoutDuration(),
+		TrustedHeaders: cfg.Proxy.TrustedHeaders,
+		StripIncoming:  cfg.Proxy.StripIncomingOrDefault(),
+	}
+	h, err := proxy.New(handlerCfg, engine, logger)
+	if err != nil {
+		panic("proxy: building reverse proxy: " + err.Error())
+	}
+	s.ProxyHandler = h
+}
+
+// proxyAuthMiddleware resolves the inbound request's identity (via
+// BreakerResolver composing JWT + live-session resolvers) and stashes it
+// on the request context so ReverseProxy.ServeHTTP can read it. On any
+// resolve error we treat the request as anonymous — the rules engine
+// will deny if the matched rule requires authentication, producing a
+// 403 rather than an opaque 401.
+func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
+	composite := &proxy.BreakerResolver{
+		Breaker: s.ProxyBreaker,
+		JWTResolver: &JWTResolver{
+			JWT:   s.JWTManager,
+			Store: s.Store,
+		},
+		Live: &LiveResolver{
+			Sessions: s.SessionManager,
+			Store:    s.Store,
+			RBAC:     s.RBAC,
+		},
+		Logger: slog.Default(),
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, err := composite.Resolve(r)
+		if err != nil {
+			// Downgrade to anonymous — the rules engine is the single
+			// source of truth for whether that's allowed for this path.
+			// Logging here is intentionally at Debug: a flood of failed
+			// resolves (e.g. during an auth outage) shouldn't spam the
+			// info log.
+			slog.Debug("proxy auth resolve failed, treating as anonymous",
+				"err", err,
+				"path", r.URL.Path,
+			)
+			id = proxy.Identity{AuthMethod: "anonymous"}
+		}
+		r = r.WithContext(proxy.WithIdentity(r.Context(), id))
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {

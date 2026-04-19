@@ -1,13 +1,9 @@
 server:
   base_url: http://localhost:8080
   secret: "change-me-this-secret-is-not-secure-at-all-abc123456789"
-  listen_addr: ":8080"
 auth:
   jwt:
     enabled: true
     mode: "session"
-    audience: "shark"
 storage:
-  path: sharkauth.db
-email:
-  provider: "shark_relay"
+  path: dev.db

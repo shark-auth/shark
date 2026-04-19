@@ -12,9 +12,10 @@ import (
 )
 
 var (
-	serveConfigPath string
-	serveDev        bool
-	serveDevReset   bool
+	serveConfigPath    string
+	serveDev           bool
+	serveDevReset      bool
+	serveProxyUpstream string
 )
 
 var serveCmd = &cobra.Command{
@@ -44,6 +45,9 @@ var serveCmd = &cobra.Command{
 				return err
 			}
 		}
+		if serveProxyUpstream != "" {
+			opts.ProxyUpstream = serveProxyUpstream
+		}
 
 		return server.Serve(ctx, opts)
 	},
@@ -53,4 +57,5 @@ func init() {
 	serveCmd.Flags().StringVar(&serveConfigPath, "config", "sharkauth.yaml", "path to config file")
 	serveCmd.Flags().BoolVar(&serveDev, "dev", false, "enable dev mode (ephemeral storage, dev inbox, relaxed CORS)")
 	serveCmd.Flags().BoolVar(&serveDevReset, "reset", false, "wipe dev.db before starting (requires --dev)")
+	serveCmd.Flags().StringVar(&serveProxyUpstream, "proxy-upstream", "", "mount reverse proxy to this upstream URL (e.g. http://localhost:3000)")
 }

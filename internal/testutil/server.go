@@ -182,6 +182,70 @@ func NewTestServer(t *testing.T) *TestServer {
 	}
 }
 
+// NewTestServerWithConfig creates a test server like NewTestServer but applies
+// the given mutator to the config before mounting routes. Useful for
+// feature-gated subsystems (e.g. the reverse proxy) that change router
+// topology based on config.
+func NewTestServerWithConfig(t *testing.T, mutate func(*config.Config)) *TestServer {
+	t.Helper()
+
+	store := NewTestDB(t)
+	cfg := TestConfig()
+	if mutate != nil {
+		mutate(cfg)
+	}
+	seedTestDefaultApp(t, store, cfg)
+	emailSender := NewMemoryEmailSender()
+	jm := newTestJWTManager(t, store, cfg)
+	srv := api.NewServer(store, cfg, api.WithEmailSender(emailSender), api.WithJWTManager(jm))
+
+	ts := httptest.NewServer(srv.Router)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("creating cookiejar: %v", err)
+	}
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
+	if err != nil {
+		t.Fatalf("generating admin key: %v", err)
+	}
+	id, _ := gonanoid.New()
+	now := time.Now().UTC().Format(time.RFC3339)
+	adminKey := &storage.APIKey{
+		ID:        "key_" + id,
+		Name:      "test-admin",
+		KeyHash:   keyHash,
+		KeyPrefix: keyPrefix,
+		KeySuffix: keySuffix,
+		Scopes:    `["*"]`,
+		RateLimit: 100000,
+		CreatedAt: now,
+	}
+	if err := store.CreateAPIKey(context.Background(), adminKey); err != nil {
+		t.Fatalf("creating test admin key: %v", err)
+	}
+
+	t.Cleanup(func() { ts.Close() })
+
+	return &TestServer{
+		Server:      ts,
+		Client:      client,
+		Store:       store,
+		Config:      cfg,
+		T:           t,
+		APIServer:   srv,
+		EmailSender: emailSender,
+		AdminKey:    fullKey,
+	}
+}
+
 // URL returns the full URL for a given path on the test server.
 func (ts *TestServer) URL(path string) string {
 	return ts.Server.URL + path
