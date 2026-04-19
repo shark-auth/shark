@@ -29,6 +29,47 @@ type Config struct {
 	APIKeys     APIKeysConfig     `koanf:"api_keys"`
 	Audit       AuditConfig       `koanf:"audit"`
 	OAuthServer OAuthServerConfig `koanf:"oauth_server"`
+	Proxy       ProxyConfig       `koanf:"proxy"`
+}
+
+// ProxyConfig holds reverse-proxy settings consumed by internal/proxy. Koanf
+// unmarshals directly into this struct; internal/proxy.Config is built from
+// it at wiring time (Task P4) so this type stays free of non-serializable
+// fields like time.Duration or *slog.Logger.
+//
+// Timeout is a plain int in seconds (not a duration string) so operators
+// configuring via YAML or env vars don't have to remember a unit suffix
+// for a value that will almost always be single-digit seconds.
+//
+// StripIncoming is a pointer so YAML can distinguish "unset" (nil, treated
+// as the safe default of true) from an explicit `false`. Resolve applies
+// that default — code reading cfg.Proxy.StripIncoming must either go
+// through Resolve first or handle nil themselves.
+type ProxyConfig struct {
+	Enabled        bool     `koanf:"enabled"`
+	Upstream       string   `koanf:"upstream"`
+	Timeout        int      `koanf:"timeout_seconds"`
+	TrustedHeaders []string `koanf:"trusted_headers"`
+	StripIncoming  *bool    `koanf:"strip_incoming"`
+}
+
+// TimeoutDuration returns the configured timeout as a time.Duration,
+// falling back to 30s when the field is zero/unset.
+func (p *ProxyConfig) TimeoutDuration() time.Duration {
+	if p.Timeout <= 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(p.Timeout) * time.Second
+}
+
+// StripIncomingOrDefault returns the effective StripIncoming value,
+// defaulting to true when the pointer is nil. Safe to call on a
+// zero-valued ProxyConfig.
+func (p *ProxyConfig) StripIncomingOrDefault() bool {
+	if p.StripIncoming == nil {
+		return true
+	}
+	return *p.StripIncoming
 }
 
 // EmailProvider enum. `dev` is auto-selected by --dev when unset.
