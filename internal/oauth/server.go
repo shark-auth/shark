@@ -130,22 +130,32 @@ func ensureES256Key(store storage.Store, serverSecret string) (*ecdsa.PrivateKey
 	if err == nil {
 		// Decrypt and return the existing key.
 		pemBytes, decErr := authjwt.DecryptPEM(existing.PrivateKeyPEM, serverSecret)
-		if decErr != nil {
-			return nil, fmt.Errorf("decrypt existing ES256 key: %w", decErr)
-		}
-		defer func() {
-			for i := range pemBytes {
-				pemBytes[i] = 0
+		if decErr == nil {
+			defer func() {
+				for i := range pemBytes {
+					pemBytes[i] = 0
+				}
+			}()
+			key, parseErr := authjwt.ParseES256PrivateKeyPEM(pemBytes)
+			if parseErr != nil {
+				return nil, fmt.Errorf("parse existing ES256 key: %w", parseErr)
 			}
-		}()
-		key, parseErr := authjwt.ParseES256PrivateKeyPEM(pemBytes)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parse existing ES256 key: %w", parseErr)
+			slog.Info("oauth: loaded existing ES256 signing key", "kid", existing.KID)
+			return key, nil
 		}
-		slog.Info("oauth: loaded existing ES256 signing key", "kid", existing.KID)
-		return key, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+		// Decrypt failed — most likely server.secret changed (dev mode rotates
+		// on each boot). Retire the un-decryptable key and fall through to
+		// generate a fresh one so /oauth/* stays functional.
+		slog.Warn("oauth: retiring un-decryptable ES256 key (secret mismatch); generating fresh key",
+			"kid", existing.KID, "error", decErr)
+		now := time.Now().UTC().Format(time.RFC3339)
+		if _, retErr := store.DB().ExecContext(ctx,
+			`UPDATE jwt_signing_keys SET status = 'retired', rotated_at = ? WHERE kid = ?`,
+			now, existing.KID,
+		); retErr != nil {
+			slog.Warn("oauth: failed to retire stale ES256 key", "error", retErr)
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("lookup active ES256 key: %w", err)
 	}
 

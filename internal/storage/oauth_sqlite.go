@@ -62,12 +62,22 @@ func (s *SQLiteStore) DeleteExpiredAuthorizationCodes(ctx context.Context) (int6
 // --- OAuth Tokens ---
 
 func (s *SQLiteStore) CreateOAuthToken(ctx context.Context, token *OAuthToken) error {
+	// agent_id and user_id are FK columns; pass NULL when unset so the FK
+	// constraint is not violated by an empty string (which is never a valid ID).
+	var agentID, userID interface{}
+	if token.AgentID != "" {
+		agentID = token.AgentID
+	}
+	if token.UserID != "" {
+		userID = token.UserID
+	}
+
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO oauth_tokens (id, jti, client_id, agent_id, user_id, token_type,
 			token_hash, scope, audience, authorization_details, dpop_jkt,
 			delegation_subject, delegation_actor, family_id, expires_at, created_at, revoked_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		token.ID, token.JTI, token.ClientID, token.AgentID, token.UserID,
+		token.ID, token.JTI, token.ClientID, agentID, userID,
 		token.TokenType, token.TokenHash, token.Scope, token.Audience,
 		token.AuthorizationDetails, token.DPoPJKT, token.DelegationSubject,
 		token.DelegationActor, token.FamilyID,
@@ -160,17 +170,21 @@ func (s *SQLiteStore) scanOAuthToken(row *sql.Row) (*OAuthToken, error) {
 	var t OAuthToken
 	var expiresAt, createdAt string
 	var revokedAt *string
+	var agentID, userID sql.NullString
 	err := row.Scan(
-		&t.ID, &t.JTI, &t.ClientID, &t.AgentID, &t.UserID, &t.TokenType,
+		&t.ID, &t.JTI, &t.ClientID, &agentID, &userID, &t.TokenType,
 		&t.TokenHash, &t.Scope, &t.Audience, &t.AuthorizationDetails,
 		&t.DPoPJKT, &t.DelegationSubject, &t.DelegationActor, &t.FamilyID,
 		&expiresAt, &createdAt, &revokedAt,
 	)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("oauth token not found")
-	}
 	if err != nil {
 		return nil, err
+	}
+	if agentID.Valid {
+		t.AgentID = agentID.String
+	}
+	if userID.Valid {
+		t.UserID = userID.String
 	}
 	t.ExpiresAt, _ = time.Parse(time.RFC3339, expiresAt)
 	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
@@ -185,14 +199,21 @@ func (s *SQLiteStore) scanOAuthTokenFromRows(rows *sql.Rows) (*OAuthToken, error
 	var t OAuthToken
 	var expiresAt, createdAt string
 	var revokedAt *string
+	var agentID, userID sql.NullString
 	err := rows.Scan(
-		&t.ID, &t.JTI, &t.ClientID, &t.AgentID, &t.UserID, &t.TokenType,
+		&t.ID, &t.JTI, &t.ClientID, &agentID, &userID, &t.TokenType,
 		&t.TokenHash, &t.Scope, &t.Audience, &t.AuthorizationDetails,
 		&t.DPoPJKT, &t.DelegationSubject, &t.DelegationActor, &t.FamilyID,
 		&expiresAt, &createdAt, &revokedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if agentID.Valid {
+		t.AgentID = agentID.String
+	}
+	if userID.Valid {
+		t.UserID = userID.String
 	}
 	t.ExpiresAt, _ = time.Parse(time.RFC3339, expiresAt)
 	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)

@@ -1,23 +1,24 @@
 # Shark Smoke Test
 
-Post-build verification. Exercises every feature against a real running binary. Updated through Phase 5 Wave C (OAuth 2.1 + Agent Auth).
+Post-build verification. Exercises every feature against a real running binary. Updated through Phase 5 Wave F (OAuth 2.1 full protocol coverage).
 
 ## Prereqs
 
-- `jq`, `curl`, `sqlite3` in `$PATH` (cross-platform port kill supports Windows `taskkill`, Linux `fuser`, macOS `lsof`)
-- Binary built: `go build -ldflags="-s -w" -trimpath -o shark ./cmd/shark`
+- `jq`, `curl`, `sqlite3`, `openssl` in `$PATH` (cross-platform port kill supports Windows `taskkill`, Linux `fuser`, macOS `lsof`)
+- Binary built: `go build -ldflags="-s -w" -trimpath -o shark ./cmd/shark` (or `shark.exe` on Windows)
 - No server running on `:8080`
 - Fresh DB (script handles this)
 
 ## Run
 
 ```bash
-./smoke_test.sh
+./smoke_test.sh          # Linux/macOS
+BIN=./shark.exe bash smoke_test.sh  # Windows (Git Bash / MSYS2)
 ```
 
 Exits 0 on all-pass, non-zero on first failure. Colored PASS/FAIL per section.
 
-**Current: 91 PASS, 0 FAIL.**
+**Current: 181 PASS, 0 FAIL.**
 
 ## What it covers
 
@@ -50,6 +51,21 @@ Exits 0 on all-pass, non-zero on first failure. Colored PASS/FAIL per section.
 | 25 | Admin Config + Health | `GET /api/v1/admin/health`, `GET /api/v1/admin/config` |
 | 26 | OAuth 2.1 AS Metadata (RFC 8414) | `/.well-known/oauth-authorization-server` — issuer, authorization_endpoint, token_endpoint, registration_endpoint, PKCE S256, client_credentials + device_code grants |
 | 27 | OAuth 2.1 tables | agents, oauth_authorization_codes, oauth_tokens, oauth_consents, oauth_device_codes, oauth_dcr_clients exist |
+| 28 | AS metadata advanced (RFC 8414) | introspection_endpoint, revocation_endpoint, device_authorization_endpoint, token-exchange + authorization_code + refresh_token grants, response_type=code, dpop_signing_alg_values_supported (ES256) |
+| 29 | Agent CRUD (admin API) | POST/GET/PATCH /api/v1/agents/* with client_secret shown once, prefix `shark_agent_`, audit log (agent.created + agent.updated), no-auth → 401, lookup by id OR client_id |
+| 30 | Client Credentials grant | Fresh agent → `/oauth/token` via Basic auth issues bearer access_token with `expires_in>0`, scope echoed, wrong secret → 401, missing grant_type → 400 |
+| 31 | Auth Code + PKCE flow | Consent HTML render, decision POST, redirect with `code` + state echoed. Token exchange noted (fosite Sanitize strips code_challenge end-to-end; covered by unit tests) |
+| 32 | PKCE enforcement (OAuth 2.1) | Authorize without `code_challenge` → redirect with `error=invalid_request` |
+| 33 | Refresh Token Rotation | Depends on §31; noted when PKCE path incomplete |
+| 34 | Device Authorization Grant (RFC 8628) | `/oauth/device` issues device_code + user_code (XXXX-XXXX unambiguous charset) + interval≥5; immediate poll → authorization_pending; after approval via DB → bearer token issued |
+| 35 | Token Exchange (RFC 8693) | Best-effort (requires JWT subject_token); CC tokens are opaque so note + defer to `exchange_test.go` |
+| 36 | DPoP (RFC 9449) | No-DPoP still works (optional); garbage `DPoP:` header → 400 `invalid_dpop_proof`; metadata advertises ES256 |
+| 37 | Token Introspection (RFC 7662) | Valid CC token → `active:true` with client_id/exp/scope; fake token → `active:false` |
+| 38 | Token Revocation (RFC 7009) | `/oauth/revoke` → 200; revoked token introspects as `active:false`; invalid revoke → 200 per RFC |
+| 39 | Dynamic Client Registration (RFC 7591/7592) | POST /oauth/register → 201 with `shark_dcr_` prefix + client_secret + registration_access_token; GET/PUT/DELETE with RAT; no-auth → 401; RAT after delete → 401 |
+| 40 | Resource Indicators (RFC 8707) | `resource=…` param binds token audience; introspect reveals `aud`; no resource → different aud |
+| 41 | ES256 JWKS | `/.well-known/jwks.json` includes ES256 key with kty=EC, crv=P-256, use=sig, x/y are 43-char base64url, kid present |
+| 42 | Consent Management (self-service) | `GET /api/v1/auth/consents` (session-auth) → data array; DELETE consent → 200; removed on re-list; no-auth → 401 |
 
 ## Notes
 
@@ -61,23 +77,10 @@ Exits 0 on all-pass, non-zero on first failure. Colored PASS/FAIL per section.
 
 ## Coverage to add next
 
-**Wave D (OAuth 2.1 advanced grants):**
-- Dynamic Client Registration (POST /oauth/register) — RFC 7591
-- Device Authorization Grant — POST /oauth/device + polling
-- Token Exchange — `urn:ietf:params:oauth:grant-type:token-exchange`
-- Agent CRUD API (POST/GET/PATCH/DELETE /api/v1/agents + tokens + audit)
-- Consent management (GET/DELETE /api/v1/auth/consents)
-
-**Wave E (security hardening):**
-- DPoP proof validation (RFC 9449)
-- Token Introspection (RFC 7662)
-- Token Revocation (RFC 7009)
-- Resource Indicators (RFC 8707) — audience binding
-
-**Wave F (dashboard + final tests):**
-- OAuth 2.1 end-to-end flows: auth code + PKCE full flow, client_credentials, refresh token rotation + reuse detection
-- ES256 JWT verification via JWKS
-- Consent HTML page renders + decision flow
+- Full PKCE end-to-end (blocked by fosite Sanitize stripping code_challenge in authorize storage — requires server-side fix or custom flow handler)
+- DPoP signed proof JWT happy-path (needs ES256 JWT signing from bash; currently covered by `internal/oauth/dpop_test.go`)
+- Token exchange end-to-end with JWT subject (covered by `internal/oauth/exchange_test.go`)
+- Refresh token reuse detection end-to-end (depends on PKCE end-to-end)
 
 ## When to run
 

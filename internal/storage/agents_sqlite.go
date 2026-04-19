@@ -16,6 +16,13 @@ func (s *SQLiteStore) CreateAgent(ctx context.Context, agent *Agent) error {
 	scopes, _ := json.Marshal(agent.Scopes)
 	metadata, _ := json.Marshal(agent.Metadata)
 
+	// created_by is a FK to users(id) — pass NULL when empty so INSERT doesn't
+	// violate the foreign-key constraint (empty string is not a valid user ID).
+	var createdBy interface{}
+	if agent.CreatedBy != "" {
+		createdBy = agent.CreatedBy
+	}
+
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO agents (id, name, description, client_id, client_secret_hash,
 			client_type, auth_method, jwks, jwks_uri, redirect_uris, grant_types,
@@ -26,7 +33,7 @@ func (s *SQLiteStore) CreateAgent(ctx context.Context, agent *Agent) error {
 		agent.ClientType, agent.AuthMethod, agent.JWKS, agent.JWKSURI,
 		string(redirectURIs), string(grantTypes), string(responseTypes), string(scopes),
 		agent.TokenLifetime, string(metadata), agent.LogoURI, agent.HomepageURI,
-		agent.Active, agent.CreatedBy,
+		agent.Active, createdBy,
 		agent.CreatedAt.UTC().Format(time.RFC3339), agent.UpdatedAt.UTC().Format(time.RFC3339),
 	)
 	return err
@@ -131,22 +138,24 @@ func (s *SQLiteStore) scanAgent(row *sql.Row) (*Agent, error) {
 	var redirectURIs, grantTypes, responseTypes, scopes, metadata string
 	var createdAt, updatedAt string
 	var active int
+	var createdBy sql.NullString
 
 	err := row.Scan(
 		&a.ID, &a.Name, &a.Description, &a.ClientID, &a.ClientSecretHash,
 		&a.ClientType, &a.AuthMethod, &a.JWKS, &a.JWKSURI,
 		&redirectURIs, &grantTypes, &responseTypes, &scopes,
 		&a.TokenLifetime, &metadata, &a.LogoURI, &a.HomepageURI,
-		&active, &a.CreatedBy,
+		&active, &createdBy,
 		&createdAt, &updatedAt,
 	)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("agent not found")
-	}
 	if err != nil {
+		// Propagate sql.ErrNoRows unwrapped so callers can `errors.Is` it.
 		return nil, err
 	}
 
+	if createdBy.Valid {
+		a.CreatedBy = createdBy.String
+	}
 	a.Active = active == 1
 	json.Unmarshal([]byte(redirectURIs), &a.RedirectURIs)   //#nosec G104
 	json.Unmarshal([]byte(grantTypes), &a.GrantTypes)       //#nosec G104
@@ -181,19 +190,23 @@ func (s *SQLiteStore) scanAgentFromRows(rows *sql.Rows) (*Agent, error) {
 	var redirectURIs, grantTypes, responseTypes, scopes, metadata string
 	var createdAt, updatedAt string
 	var active int
+	var createdBy sql.NullString
 
 	err := rows.Scan(
 		&a.ID, &a.Name, &a.Description, &a.ClientID, &a.ClientSecretHash,
 		&a.ClientType, &a.AuthMethod, &a.JWKS, &a.JWKSURI,
 		&redirectURIs, &grantTypes, &responseTypes, &scopes,
 		&a.TokenLifetime, &metadata, &a.LogoURI, &a.HomepageURI,
-		&active, &a.CreatedBy,
+		&active, &createdBy,
 		&createdAt, &updatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	if createdBy.Valid {
+		a.CreatedBy = createdBy.String
+	}
 	a.Active = active == 1
 	json.Unmarshal([]byte(redirectURIs), &a.RedirectURIs)   //#nosec G104
 	json.Unmarshal([]byte(grantTypes), &a.GrantTypes)       //#nosec G104

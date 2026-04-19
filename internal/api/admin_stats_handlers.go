@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -191,7 +192,10 @@ func fillDailyGaps(sparse []storage.DayCount, days int) []dayBucket {
 }
 
 // internal writes a 500 with a generic message. Keeps err off the wire.
-func internal(w http.ResponseWriter, _ error) {
+func internal(w http.ResponseWriter, err error) {
+	if err != nil {
+		slog.Error("internal server error", "error", err)
+	}
 	writeJSON(w, http.StatusInternalServerError, map[string]string{
 		"error":   "internal_error",
 		"message": "Internal server error",
