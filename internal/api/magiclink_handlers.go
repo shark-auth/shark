@@ -12,6 +12,7 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/auth/redirect"
+	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 // Re-export magic link errors for convenience.
@@ -161,6 +162,13 @@ func (s *Server) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
 				"message": "Internal server error",
 			})
 		}
+		return
+	}
+
+	// Phase 6 F3: fire auth flow hook. Token has been consumed; a block
+	// here withholds the session cookie so the caller must retry with a
+	// fresh magic link to get past the flow requirement.
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerMagicLink, user, "") {
 		return
 	}
 

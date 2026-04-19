@@ -14,6 +14,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/auth/providers"
 	"github.com/sharkauth/sharkauth/internal/auth/redirect"
+	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 const (
@@ -125,6 +126,14 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 			"error":   "oauth_callback_failed",
 			"message": "OAuth authentication failed",
 		})
+		return
+	}
+
+	// Phase 6 F3: fire auth flow hook. OAuthManager.HandleCallback already
+	// created a session row for us; if the flow blocks/redirects we leave
+	// that session in place — the cookie below is the caller-visible gate
+	// and we skip it on a handled outcome.
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerOAuthCallback, user, "") {
 		return
 	}
 

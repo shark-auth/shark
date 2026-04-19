@@ -159,6 +159,14 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Phase 6 F3: fire auth flow hook. Runs AFTER the user row lands so
+	// block/redirect outcomes leave the account in place but withhold the
+	// session — matches the documented "user created but login gated"
+	// semantics admins rely on.
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerSignup, user, req.Password) {
+		return
+	}
+
 	// Create session
 	sess, err := s.SessionManager.CreateSession(r.Context(), user.ID, r.RemoteAddr, r.UserAgent(), "password")
 	if err != nil {
@@ -265,6 +273,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 			_ = s.Store.UpdateUser(r.Context(), user)
 		}
+	}
+
+	// Phase 6 F3: fire auth flow hook. Runs after password (+ lockout) is
+	// cleared but before a session cookie is minted so block/redirect
+	// outcomes don't leak auth state to the client.
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerLogin, user, "") {
+		return
 	}
 
 	// Check if MFA is enabled
@@ -466,6 +481,13 @@ func (s *Server) handlePasswordReset(w http.ResponseWriter, r *http.Request) {
 			"error":   "internal_error",
 			"message": "Internal server error",
 		})
+		return
+	}
+
+	// Phase 6 F3: fire auth flow hook. The password has already rotated —
+	// block/redirect at this point gates the confirmation response only,
+	// which is the documented trade-off for "flow runs after the mutation".
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerPasswordReset, user, req.Password) {
 		return
 	}
 

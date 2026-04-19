@@ -13,6 +13,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/audit"
 	"github.com/sharkauth/sharkauth/internal/auth"
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
+	"github.com/sharkauth/sharkauth/internal/authflow"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/oauth"
@@ -45,6 +46,10 @@ type Server struct {
 	WebhookDispatcher *webhook.Dispatcher
 	OAuthServer       *oauth.Server
 	VaultManager      *vault.Manager
+	// FlowEngine runs admin-configured auth flows at signup/login/etc.
+	// trigger points. nil-safe at the call sites so tests that don't need
+	// flows can skip initialisation entirely.
+	FlowEngine *authflow.Engine
 	// ProxyEngine holds the compiled rule set. nil when proxy is disabled.
 	ProxyEngine *proxy.Engine
 	// ProxyBreaker drives the circuit breaker + session cache. nil when
@@ -135,6 +140,11 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 	// Initialize RBAC manager
 	s.RBAC = rbacpkg.NewRBACManager(store)
+
+	// Phase 6 F3: Initialize the auth flow engine so the signup/login/reset
+	// hooks below have somewhere to dispatch. Safe to wire unconditionally —
+	// Execute returns Continue when no flows are configured.
+	s.FlowEngine = authflow.NewEngine(store, slog.Default())
 
 	// Initialize Audit logger
 	s.AuditLogger = audit.NewLogger(store)
@@ -534,6 +544,18 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/proxy/status/stream", s.handleProxyStatusStream)
 			r.Get("/proxy/rules", s.handleProxyRules)
 			r.Post("/proxy/simulate", s.handleProxySimulate)
+
+			// Phase 6 F3: Auth flow CRUD + dry-run + history. Mounted under
+			// the admin group so admin-key auth gates everything.
+			r.Route("/flows", func(r chi.Router) {
+				r.Post("/", s.handleCreateFlow)
+				r.Get("/", s.handleListFlows)
+				r.Get("/{id}", s.handleGetFlow)
+				r.Patch("/{id}", s.handleUpdateFlow)
+				r.Delete("/{id}", s.handleDeleteFlow)
+				r.Post("/{id}/test", s.handleTestFlow)
+				r.Get("/{id}/runs", s.handleListFlowRuns)
+			})
 		})
 	})
 
