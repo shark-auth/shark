@@ -265,6 +265,25 @@ type Store interface {
 	GetDCRClient(ctx context.Context, clientID string) (*OAuthDCRClient, error)
 	UpdateDCRClient(ctx context.Context, client *OAuthDCRClient) error
 	DeleteDCRClient(ctx context.Context, clientID string) error
+
+	// Vault Providers (Token Vault — third-party OAuth providers)
+	CreateVaultProvider(ctx context.Context, p *VaultProvider) error
+	GetVaultProviderByID(ctx context.Context, id string) (*VaultProvider, error)
+	GetVaultProviderByName(ctx context.Context, name string) (*VaultProvider, error)
+	ListVaultProviders(ctx context.Context, activeOnly bool) ([]*VaultProvider, error)
+	UpdateVaultProvider(ctx context.Context, p *VaultProvider) error
+	DeleteVaultProvider(ctx context.Context, id string) error
+
+	// Vault Connections (per-user links to a provider, with encrypted tokens)
+	CreateVaultConnection(ctx context.Context, c *VaultConnection) error
+	GetVaultConnectionByID(ctx context.Context, id string) (*VaultConnection, error)
+	GetVaultConnection(ctx context.Context, providerID, userID string) (*VaultConnection, error)
+	ListVaultConnectionsByUserID(ctx context.Context, userID string) ([]*VaultConnection, error)
+	ListVaultConnectionsByProviderID(ctx context.Context, providerID string) ([]*VaultConnection, error)
+	UpdateVaultConnection(ctx context.Context, c *VaultConnection) error
+	UpdateVaultConnectionTokens(ctx context.Context, id, accessEnc, refreshEnc string, expiresAt *time.Time) error
+	MarkVaultConnectionNeedsReauth(ctx context.Context, id string, needs bool) error
+	DeleteVaultConnection(ctx context.Context, id string) error
 }
 
 // --- Entity types ---
