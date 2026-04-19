@@ -17,7 +17,6 @@ function EmptyShell({ title, phase, description }) {
 }
 
 export function Tokens() { return <EmptyShell title="Tokens" phase={6} description="Active OAuth tokens across agents and users. View, filter, and revoke tokens." />; }
-export function Vault() { return <EmptyShell title="Vault" phase={6} description="Third-party OAuth token management. Store and refresh tokens for Google, Slack, GitHub, and more." />; }
 export function APIExplorer() { return <EmptyShell title="API Explorer" phase={5} description="In-dashboard API playground. Try endpoints, copy curl commands and SDK snippets." />; }
 export function SessionDebugger() { return <EmptyShell title="Session Debugger" phase={5} description="Paste a session cookie or JWT to decode, validate, and inspect claims." />; }
 export function EventSchemas() { return <EmptyShell title="Event Schemas" phase={5} description="Reference browser for webhook and audit event payload schemas." />; }
