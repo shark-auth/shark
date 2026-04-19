@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -9,6 +10,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 )
 
 // parsePEMPublicKey decodes a PKIX PEM-encoded RSA public key.
@@ -26,6 +29,23 @@ func parsePEMPublicKey(pemStr string) (*rsa.PublicKey, error) {
 		return nil, fmt.Errorf("key is not RSA")
 	}
 	return rsaPub, nil
+}
+
+// parseECPublicKeyPEM decodes a PKIX PEM-encoded ECDSA public key.
+func parseECPublicKeyPEM(pemStr string) (*ecdsa.PublicKey, error) {
+	block, _ := pem.Decode([]byte(pemStr))
+	if block == nil {
+		return nil, fmt.Errorf("no PEM block found")
+	}
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse public key: %w", err)
+	}
+	ecPub, ok := pub.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("key is not ECDSA")
+	}
+	return ecPub, nil
 }
 
 // jwkFromPublicKey builds an RFC 7517 JWK map for an RSA public key.
@@ -66,12 +86,25 @@ func (s *Server) HandleJWKS(w http.ResponseWriter, r *http.Request) {
 
 	jwks := make([]map[string]interface{}, 0, len(keys))
 	for _, sk := range keys {
-		pub, err := parsePEMPublicKey(sk.PublicKeyPEM)
-		if err != nil {
-			// Skip malformed keys rather than returning a broken JWKS
-			continue
+		var jwk map[string]interface{}
+		switch sk.Algorithm {
+		case "ES256":
+			ecPub, err := parseECPublicKeyPEM(sk.PublicKeyPEM)
+			if err != nil {
+				// Skip malformed keys rather than returning a broken JWKS
+				continue
+			}
+			jwk = jwtpkg.ES256PublicJWK(ecPub, sk.KID)
+		default:
+			// RS256 and any unrecognised algorithm fall back to RSA parsing.
+			rsaPub, err := parsePEMPublicKey(sk.PublicKeyPEM)
+			if err != nil {
+				// Skip malformed keys rather than returning a broken JWKS
+				continue
+			}
+			jwk = jwkFromPublicKey(sk.KID, rsaPub)
 		}
-		jwks = append(jwks, jwkFromPublicKey(sk.KID, pub))
+		jwks = append(jwks, jwk)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
