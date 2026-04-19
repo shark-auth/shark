@@ -48,6 +48,13 @@ type Config struct {
 	// true and that is the only secure setting; exposed as a field so
 	// tests can exercise the unsafe path.
 	StripIncoming bool
+
+	// Rules is the route-level authorization rule list, evaluated first
+	// match wins. Empty list + a non-nil Engine means default-deny for
+	// every request; this field is informational — the actual compiled
+	// engine is passed to New() separately so the Config struct stays
+	// YAML-serializable and free of precompiled state.
+	Rules []RuleSpec
 }
 
 // DefaultTimeout is applied when Config.Timeout is zero.

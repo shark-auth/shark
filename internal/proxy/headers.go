@@ -19,6 +19,14 @@ type Identity struct {
 	AgentName  string
 	AuthMethod string        // "jwt" | "session-live" | "session-cached" | "anonymous"
 	CacheAge   time.Duration // 0 if live; >0 if served from circuit-breaker cache
+
+	// Scopes lists the OAuth/agent scopes granted to this request. The
+	// rules engine (Task P2) uses it for ReqScope and the extra-scopes
+	// AND constraint. Intentionally NOT emitted as an upstream header by
+	// InjectIdentity — scopes drive authorization decisions in front of
+	// the upstream, not inside it. If a future use case needs scopes on
+	// the wire we'll add a dedicated header then.
+	Scopes []string
 }
 
 // Canonical header names injected by InjectIdentity and recognized by

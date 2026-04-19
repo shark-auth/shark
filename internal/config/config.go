@@ -46,11 +46,29 @@ type Config struct {
 // that default — code reading cfg.Proxy.StripIncoming must either go
 // through Resolve first or handle nil themselves.
 type ProxyConfig struct {
-	Enabled        bool     `koanf:"enabled"`
-	Upstream       string   `koanf:"upstream"`
-	Timeout        int      `koanf:"timeout_seconds"`
-	TrustedHeaders []string `koanf:"trusted_headers"`
-	StripIncoming  *bool    `koanf:"strip_incoming"`
+	Enabled        bool        `koanf:"enabled"`
+	Upstream       string      `koanf:"upstream"`
+	Timeout        int         `koanf:"timeout_seconds"`
+	TrustedHeaders []string    `koanf:"trusted_headers"`
+	StripIncoming  *bool       `koanf:"strip_incoming"`
+	Rules          []ProxyRule `koanf:"rules"`
+}
+
+// ProxyRule is a single route-level authorization rule consumed by the
+// proxy's rules engine (internal/proxy). Kept in the config package (not
+// in internal/proxy) so the YAML schema lives next to the rest of the
+// user-facing configuration.
+//
+// Exactly one of Require or Allow must be set. Allow is a readability
+// sugar that currently only accepts "anonymous"; it is equivalent to
+// Require="anonymous" but reads more naturally in "allow public paths"
+// scenarios. Scopes is an AND-constraint applied on top of Require.
+type ProxyRule struct {
+	Path    string   `koanf:"path"`
+	Methods []string `koanf:"methods"`
+	Require string   `koanf:"require"`
+	Allow   string   `koanf:"allow"`
+	Scopes  []string `koanf:"scopes"`
 }
 
 // TimeoutDuration returns the configured timeout as a time.Duration,

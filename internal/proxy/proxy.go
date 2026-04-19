@@ -30,6 +30,12 @@ func IdentityFromContext(ctx context.Context) (Identity, bool) {
 	return id, ok
 }
 
+// HeaderDenyReason is the response header set when the rules engine
+// denies a request. Its value is the Decision.Reason string, which is
+// safe to surface — it describes the policy that failed, not any
+// caller-supplied data.
+const HeaderDenyReason = "X-Shark-Deny-Reason"
+
 // ReverseProxy is SharkAuth's reverse proxy. It wraps net/http/httputil's
 // ReverseProxy with identity header injection, panic recovery, and
 // sensible defaults for upstream timeouts. Construct instances with New.
@@ -37,13 +43,16 @@ type ReverseProxy struct {
 	cfg      Config
 	upstream *url.URL
 	backend  *httputil.ReverseProxy
+	engine   *Engine
 	logger   *slog.Logger
 }
 
 // New builds a ReverseProxy from cfg. It validates the config, parses the
 // upstream URL, and wires the httputil.ReverseProxy director, transport,
-// and error handler. If logger is nil, slog.Default() is used.
-func New(cfg Config, logger *slog.Logger) (*ReverseProxy, error) {
+// and error handler. If engine is nil the proxy runs in passthrough mode
+// — no rule evaluation, all requests forwarded (P1 behavior). If logger
+// is nil, slog.Default() is used.
+func New(cfg Config, engine *Engine, logger *slog.Logger) (*ReverseProxy, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -71,6 +80,7 @@ func New(cfg Config, logger *slog.Logger) (*ReverseProxy, error) {
 	p := &ReverseProxy{
 		cfg:      cfg,
 		upstream: upstream,
+		engine:   engine,
 		logger:   logger,
 	}
 
@@ -125,11 +135,32 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	id, ok := IdentityFromContext(r.Context())
 	if !ok {
-		// Passthrough for anonymous traffic. The rules engine (Task P2)
-		// decides whether this is permitted; P1 just annotates the
-		// request so upstream services can see the auth outcome.
+		// Passthrough for anonymous traffic. The rules engine decides
+		// whether this is permitted; annotating happens whether the
+		// engine allows or denies.
 		id = Identity{AuthMethod: "anonymous"}
 	}
+
+	// Route-level authorization. nil engine = passthrough (legacy P1
+	// behavior preserved so existing tests and disabled-rules deployments
+	// keep working). On deny, write the response here and return — the
+	// upstream must never be contacted.
+	if p.engine != nil {
+		decision := p.engine.Evaluate(r, id)
+		if !decision.Allow {
+			p.logger.Info("proxy denied",
+				"path", r.URL.Path,
+				"method", r.Method,
+				"reason", decision.Reason,
+				"user_id", id.UserID,
+				"agent_id", id.AgentID,
+			)
+			w.Header().Set(HeaderDenyReason, decision.Reason)
+			http.Error(w, "forbidden: "+decision.Reason, http.StatusForbidden)
+			return
+		}
+	}
+
 	InjectIdentity(r.Header, id)
 
 	// Bound the whole upstream round-trip. Using context (rather than

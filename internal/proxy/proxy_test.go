@@ -28,7 +28,7 @@ func newProxy(t *testing.T, upstream string, logger *slog.Logger) *ReverseProxy 
 		Timeout:       2 * time.Second,
 		StripIncoming: true,
 	}
-	p, err := New(cfg, logger)
+	p, err := New(cfg, nil, logger)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestReverseProxy_PanicRecovery(t *testing.T) {
 		Upstream:      "http://example.invalid",
 		Timeout:       1 * time.Second,
 		StripIncoming: true,
-	}, logger)
+	}, nil, logger)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestReverseProxy_UpstreamTimeout(t *testing.T) {
 		Timeout:       75 * time.Millisecond,
 		StripIncoming: true,
 	}
-	p, err := New(cfg, nil)
+	p, err := New(cfg, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestReverseProxy_UpstreamUnreachable(t *testing.T) {
 		Upstream:      "http://127.0.0.1:1",
 		Timeout:       500 * time.Millisecond,
 		StripIncoming: true,
-	}, newTestLogger(&logBuf))
+	}, nil, newTestLogger(&logBuf))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -307,28 +307,28 @@ func TestReverseProxy_PreservesMethodAndBody(t *testing.T) {
 }
 
 func TestReverseProxy_New_RejectsMissingUpstream(t *testing.T) {
-	_, err := New(Config{Enabled: true}, nil)
+	_, err := New(Config{Enabled: true}, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing upstream, got nil")
 	}
 }
 
 func TestReverseProxy_New_AcceptsDisabledWithoutUpstream(t *testing.T) {
-	_, err := New(Config{Enabled: false}, nil)
+	_, err := New(Config{Enabled: false}, nil, nil)
 	if err != nil {
 		t.Fatalf("disabled config should not require upstream: %v", err)
 	}
 }
 
 func TestReverseProxy_New_RejectsMalformedUpstream(t *testing.T) {
-	_, err := New(Config{Enabled: true, Upstream: "not-a-url"}, nil)
+	_, err := New(Config{Enabled: true, Upstream: "not-a-url"}, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for malformed upstream, got nil")
 	}
 }
 
 func TestReverseProxy_New_NilLoggerUsesDefault(t *testing.T) {
-	p, err := New(Config{Enabled: true, Upstream: "http://example.com"}, nil)
+	p, err := New(Config{Enabled: true, Upstream: "http://example.com"}, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -367,7 +367,7 @@ func TestReverseProxy_NoStripWhenStripIncomingFalse(t *testing.T) {
 		Timeout:       time.Second,
 		StripIncoming: false,
 	}
-	p, err := New(cfg, nil)
+	p, err := New(cfg, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestReverseProxy_NoStripWhenStripIncomingFalse(t *testing.T) {
 
 // Sanity: effectiveTimeout returns the default when cfg.Timeout is zero.
 func TestReverseProxy_EffectiveTimeoutDefault(t *testing.T) {
-	p, err := New(Config{Enabled: true, Upstream: "http://example.com"}, nil)
+	p, err := New(Config{Enabled: true, Upstream: "http://example.com"}, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestReverseProxy_EffectiveTimeoutDefault(t *testing.T) {
 // "upstream unreachable" body is exercised even if the dial test above
 // someday picks a different error surface.
 func TestReverseProxy_ErrorHandlerBody(t *testing.T) {
-	p, err := New(Config{Enabled: true, Upstream: "http://example.com"}, nil)
+	p, err := New(Config{Enabled: true, Upstream: "http://example.com"}, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
