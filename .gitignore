@@ -43,6 +43,8 @@ sdk/dist/
 
 # Test
 coverage.out
+coverage*.out
+coverage*.txt
 *.test
 cookies.txt
 server.log
@@ -52,6 +54,11 @@ cj*.txt
 sharkauth.yaml
 smoke.sh
 debug_admin.sh
+
+# Build artifacts
+*.tsbuildinfo
+shark-*.exe
+shark-stripped
 
 # Docker
 .docker/
