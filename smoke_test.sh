@@ -157,10 +157,11 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/auth/me)
 section "JWKS"
 JWKS=$(curl -s $BASE/.well-known/jwks.json)
 N=$(echo "$JWKS" | jq '.keys | length')
-[ "$N" = 1 ] && pass "1 key in JWKS" || fail "JWKS keys=$N"
-echo "$JWKS" | jq -e '.keys[0].kty=="RSA" and .keys[0].alg=="RS256" and .keys[0].use=="sig"' >/dev/null && pass "kty/alg/use correct" || fail "JWK shape"
+[ "$N" -ge 1 ] && pass "$N key(s) in JWKS" || fail "JWKS keys=$N"
+# RS256 key (session JWTs) + ES256 key (OAuth 2.1) both expected
+echo "$JWKS" | jq -e '[.keys[] | select(.alg=="RS256")][0] | .kty=="RSA" and .use=="sig"' >/dev/null && pass "RS256 key present" || fail "no RS256 key"
 
-KID_JWKS=$(echo "$JWKS" | jq -r '.keys[0].kid')
+KID_JWKS=$(echo "$JWKS" | jq -r '[.keys[] | select(.alg=="RS256")][0].kid')
 KID_TOK=$(echo "$HEADER" | jq -r '.kid')
 [ "$KID_JWKS" = "$KID_TOK" ] && pass "kid match token/JWKS ($KID_JWKS)" || fail "kid mismatch: tok=$KID_TOK jwks=$KID_JWKS"
 
@@ -197,7 +198,8 @@ relogin
 sleep 0.5
 JWKS=$(curl -s $BASE/.well-known/jwks.json)
 N=$(echo "$JWKS" | jq '.keys | length')
-[ "$N" = 2 ] && pass "JWKS has 2 keys post-rotate" || fail "JWKS post-rotate keys=$N"
+# After RS256 rotation: old RS256 + new RS256 + ES256 = 3+ keys
+[ "$N" -ge 3 ] && pass "JWKS has $N keys post-rotate" || fail "JWKS post-rotate keys=$N (expected >=3)"
 
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -b cj.txt $BASE/api/v1/auth/me)
 [ "$CODE" = 200 ] && pass "session still validates after rotate" || fail "session after rotate $CODE"
