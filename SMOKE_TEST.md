@@ -1,6 +1,6 @@
 # Shark Smoke Test
 
-Post-build verification. Exercises every feature against a real running binary. Updated through Phase 5 Wave F (OAuth 2.1 full protocol coverage).
+Post-build verification. Exercises every feature against a real running binary. Updated through Phase 5.5 (Token Vault — third-party OAuth connection storage).
 
 ## Prereqs
 
@@ -18,7 +18,7 @@ BIN=./shark.exe bash smoke_test.sh  # Windows (Git Bash / MSYS2)
 
 Exits 0 on all-pass, non-zero on first failure. Colored PASS/FAIL per section.
 
-**Current: 181 PASS, 0 FAIL.**
+**Current: 222 PASS, 0 FAIL.**
 
 ## What it covers
 
@@ -66,6 +66,12 @@ Exits 0 on all-pass, non-zero on first failure. Colored PASS/FAIL per section.
 | 40 | Resource Indicators (RFC 8707) | `resource=…` param binds token audience; introspect reveals `aud`; no resource → different aud |
 | 41 | ES256 JWKS | `/.well-known/jwks.json` includes ES256 key with kty=EC, crv=P-256, use=sig, x/y are 43-char base64url, kid present |
 | 42 | Consent Management (self-service) | `GET /api/v1/auth/consents` (session-auth) → data array; DELETE consent → 200; removed on re-list; no-auth → 401 |
+| 43 | Vault provider CRUD (admin) | POST `/api/v1/vault/providers` with `template=github` + client_id/secret → 201, id captured; GET list + GET by id return sanitized rows (no `client_secret`); PATCH `display_name` → 200; PATCH `client_secret` rotation → 200; duplicate name → 409; DELETE → 204, subsequent GET → 404; no-auth → 401 |
+| 44 | Vault templates discovery | `GET /api/v1/vault/templates` → 200 with 9 built-in entries; each row has snake_case `name`/`display_name`/`auth_url`/`token_url`/`default_scopes`; no PascalCase leaks; `github` present |
+| 45 | Vault connect flow (session auth) | Relogin, seed a provider, `GET /api/v1/vault/connect/{provider}` with session → 302 to provider's authorize URL with `client_id=` + `state=`; `shark_vault_state` CSRF cookie set; without session → 401 |
+| 46 | Agent token retrieval (OAuth bearer) | `GET /api/v1/vault/{provider}/token` — missing bearer → 401 with `WWW-Authenticate: Bearer`; bogus bearer → 401 with `WWW-Authenticate`. Full happy path noted (requires mock upstream OAuth provider; covered by `internal/vault/vault_test.go`) |
+| 47 | Vault connections list (session auth) | `GET /api/v1/vault/connections` with session → 200 `{data:[]}` for a fresh user; no session → 401; DELETE unknown id with session → 404 (IDOR-safe) |
+| 48 | Audit events for vault ops | `GET /api/v1/audit-logs?action=vault.provider.created,vault.provider.updated,vault.provider.deleted&limit=200` → 200 with ≥1 of each action; unfiltered list has ≥3 `vault.*` events total |
 
 ## Notes
 
@@ -81,11 +87,12 @@ Exits 0 on all-pass, non-zero on first failure. Colored PASS/FAIL per section.
 - DPoP signed proof JWT happy-path (needs ES256 JWT signing from bash; currently covered by `internal/oauth/dpop_test.go`)
 - Token exchange end-to-end with JWT subject (covered by `internal/oauth/exchange_test.go`)
 - Refresh token reuse detection end-to-end (depends on PKCE end-to-end)
+- Vault `ExchangeAndStore` + `GetFreshToken` happy path (requires a mock upstream OAuth 2.0 provider; covered by `internal/vault/vault_test.go`)
 
 ## When to run
 
 - Before every release tag
-- After any touch to `internal/auth/jwt`, `internal/api/middleware/auth.go`, `internal/auth/redirect`, `internal/rbac`, `internal/storage/applications.go`, `internal/server/server.go`, `internal/oauth/*`
+- After any touch to `internal/auth/jwt`, `internal/api/middleware/auth.go`, `internal/auth/redirect`, `internal/rbac`, `internal/storage/applications.go`, `internal/server/server.go`, `internal/oauth/*`, `internal/vault/*`
 - After Phase 4+ merges
 
 ## Known gaps

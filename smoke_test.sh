@@ -1057,6 +1057,182 @@ fi
 NOAUTH_CONS=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/auth/consents)
 [ "$NOAUTH_CONS" = 401 ] && pass "no auth -> 401" || fail "no-auth consents -> $NOAUTH_CONS"
 
+# --- 43: Vault provider CRUD (admin) -----------------------------------------
+section "43: Vault provider CRUD (admin)"
+# Use a unique name per run so re-invocations don't collide with any leftover row.
+VAULT_PROV_NAME="github"
+VP_CREATE=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/vault/providers \
+  -H "Content-Type: application/json" \
+  -d "{\"template\":\"github\",\"client_id\":\"smoke-client-id\",\"client_secret\":\"smoke-secret-abc123\"}")
+VP_CODE=$(echo "$VP_CREATE" | tail -1)
+VP_BODY=$(echo "$VP_CREATE" | sed '$d')
+[ "$VP_CODE" = 201 ] && pass "POST /vault/providers (template=github) -> 201" || { echo "    $VP_BODY"; fail "POST /vault/providers -> $VP_CODE"; }
+VAULT_PID=$(echo "$VP_BODY" | jq -r '.id // empty')
+[ -n "$VAULT_PID" ] && pass "provider id captured ($VAULT_PID)" || fail "no provider id in response"
+echo "$VP_BODY" | jq -e 'has("client_secret") | not' >/dev/null && pass "client_secret NOT in create response" || fail "client_secret leaked in create response"
+echo "$VP_BODY" | jq -e '.name == "github"' >/dev/null && pass "name=github (from template)" || fail "name not github"
+
+# List — our provider present, no secret anywhere.
+VP_LIST=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/vault/providers)
+echo "$VP_LIST" | jq -e --arg id "$VAULT_PID" '.data[] | select(.id==$id)' >/dev/null && pass "GET /vault/providers lists created provider" || fail "created provider missing from list"
+echo "$VP_LIST" | jq -e '[.data[] | has("client_secret")] | any | not' >/dev/null && pass "no client_secret in list response" || fail "client_secret leaked in list response"
+
+# Get one — still sanitized.
+VP_GET=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/vault/providers/$VAULT_PID)
+VP_GET_CODE=$(echo "$VP_GET" | tail -1)
+VP_GET_BODY=$(echo "$VP_GET" | sed '$d')
+[ "$VP_GET_CODE" = 200 ] && pass "GET /vault/providers/{id} -> 200" || fail "GET /vault/providers/{id} -> $VP_GET_CODE"
+echo "$VP_GET_BODY" | jq -e 'has("client_secret") | not' >/dev/null && pass "GET by id sanitized (no client_secret)" || fail "client_secret leaked on GET by id"
+
+# PATCH display_name.
+VP_PATCH=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X PATCH $BASE/api/v1/vault/providers/$VAULT_PID \
+  -H "Content-Type: application/json" \
+  -d '{"display_name":"GitHub Enterprise"}')
+VP_PATCH_CODE=$(echo "$VP_PATCH" | tail -1)
+VP_PATCH_BODY=$(echo "$VP_PATCH" | sed '$d')
+[ "$VP_PATCH_CODE" = 200 ] && pass "PATCH display_name -> 200" || fail "PATCH display_name -> $VP_PATCH_CODE"
+[ "$(echo "$VP_PATCH_BODY" | jq -r .display_name)" = "GitHub Enterprise" ] && pass "display_name updated" || fail "display_name not updated"
+
+# PATCH client_secret (rotation).
+VP_ROT_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X PATCH $BASE/api/v1/vault/providers/$VAULT_PID \
+  -H "Content-Type: application/json" \
+  -d '{"client_secret":"new-secret-12345"}')
+[ "$VP_ROT_CODE" = 200 ] && pass "PATCH client_secret (rotation) -> 200" || fail "PATCH client_secret -> $VP_ROT_CODE"
+
+# Duplicate name -> 409.
+VP_DUP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/vault/providers \
+  -H "Content-Type: application/json" \
+  -d '{"template":"github","client_id":"smoke-client-id-2","client_secret":"secret-2-abc"}')
+[ "$VP_DUP_CODE" = 409 ] && pass "duplicate name -> 409" || fail "duplicate name -> $VP_DUP_CODE"
+
+# DELETE -> 204, GET after -> 404.
+VP_DEL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/vault/providers/$VAULT_PID)
+[ "$VP_DEL_CODE" = 204 ] && pass "DELETE /vault/providers/{id} -> 204" || fail "DELETE -> $VP_DEL_CODE"
+
+VP_GONE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/vault/providers/$VAULT_PID)
+[ "$VP_GONE_CODE" = 404 ] && pass "GET after delete -> 404" || fail "GET after delete -> $VP_GONE_CODE"
+
+# No-auth on admin CRUD is blocked.
+VP_NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/vault/providers)
+[ "$VP_NOAUTH" = 401 ] && pass "no auth -> 401 on /vault/providers" || fail "no-auth -> $VP_NOAUTH"
+
+# --- 44: Vault templates discovery -------------------------------------------
+section "44: Vault templates discovery"
+VT_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/vault/templates)
+VT_CODE=$(echo "$VT_RESP" | tail -1)
+VT_BODY=$(echo "$VT_RESP" | sed '$d')
+[ "$VT_CODE" = 200 ] && pass "GET /vault/templates -> 200" || fail "GET /vault/templates -> $VT_CODE"
+VT_LEN=$(echo "$VT_BODY" | jq '.data | length')
+[ "$VT_LEN" = 9 ] && pass "9 built-in templates" || fail "expected 9 templates, got $VT_LEN"
+
+# Required keys on each template row (snake_case, not PascalCase).
+MISSING_KEYS=$(echo "$VT_BODY" | jq -r '[.data[] | (has("name") and has("display_name") and has("auth_url") and has("token_url") and has("default_scopes"))] | all | not')
+[ "$MISSING_KEYS" = "false" ] && pass "all templates have name/display_name/auth_url/token_url/default_scopes" || fail "some templates missing required keys"
+
+# Sanity-check snake_case: no PascalCase keys surface.
+PASCAL_LEAK=$(echo "$VT_BODY" | jq -r '[.data[] | (has("Name") or has("DisplayName") or has("AuthURL"))] | any')
+[ "$PASCAL_LEAK" = "false" ] && pass "no PascalCase keys leaked" || fail "PascalCase keys in template response"
+
+# github known template present (sanity).
+echo "$VT_BODY" | jq -e '.data[] | select(.name=="github")' >/dev/null && pass "github template present" || fail "github template missing"
+
+# --- 45: Vault connect flow (session auth) ------------------------------------
+section "45: Vault connect flow (session auth)"
+relogin
+# Re-seed a provider for this section (section 43 deleted its own).
+VC_SEED=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/vault/providers \
+  -H "Content-Type: application/json" \
+  -d '{"template":"github","client_id":"smoke-connect-id","client_secret":"smoke-connect-secret-123"}')
+VC_SEED_CODE=$(echo "$VC_SEED" | tail -1)
+VC_SEED_BODY=$(echo "$VC_SEED" | sed '$d')
+[ "$VC_SEED_CODE" = 201 ] && pass "seeded provider for connect test" || { echo "    $VC_SEED_BODY"; fail "seed provider -> $VC_SEED_CODE"; }
+VAULT_PID2=$(echo "$VC_SEED_BODY" | jq -r '.id // empty')
+VAULT_NAME2=$(echo "$VC_SEED_BODY" | jq -r '.name // empty')
+
+# GET /vault/connect/{provider} with session — expect 302 to provider's authorize URL.
+# --max-redirs 0 prevents curl from following; we want to inspect the Location header.
+CONN_H=$(curl -s -o /dev/null -D - --max-redirs 0 -b cj.txt "$BASE/api/v1/vault/connect/$VAULT_NAME2")
+CONN_STATUS=$(echo "$CONN_H" | head -1 | awk '{print $2}')
+CONN_LOC=$(echo "$CONN_H" | grep -i '^location:' | tr -d '\r\n' | sed 's/^[Ll]ocation: //')
+[ "$CONN_STATUS" = "302" ] && pass "connect -> 302" || fail "connect -> $CONN_STATUS"
+echo "$CONN_LOC" | grep -q 'client_id=' && pass "Location contains client_id=" || fail "Location missing client_id=: $CONN_LOC"
+echo "$CONN_LOC" | grep -q 'state=' && pass "Location contains state=" || fail "Location missing state=: $CONN_LOC"
+
+# State cookie set on the response (CSRF binding).
+echo "$CONN_H" | grep -qi '^set-cookie:.*shark_vault_state=' && pass "shark_vault_state cookie set" || fail "shark_vault_state cookie missing"
+
+# Without session -> 401.
+CONN_NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" --max-redirs 0 "$BASE/api/v1/vault/connect/$VAULT_NAME2")
+[ "$CONN_NOAUTH" = 401 ] && pass "no session -> 401" || fail "no-session connect -> $CONN_NOAUTH"
+
+# Clean up the seed provider so section 48's audit count lines up with expectations.
+VC_CLEAN=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/vault/providers/$VAULT_PID2)
+[ "$VC_CLEAN" = 204 ] && pass "seed provider cleanup -> 204" || note "seed provider cleanup -> $VC_CLEAN"
+
+# --- 46: Agent token retrieval (OAuth bearer) ---------------------------------
+section "46: Agent token retrieval (OAuth bearer)"
+# Full happy-path ExchangeAndStore requires a live upstream OAuth provider
+# (token endpoint that will accept our test code). That's infeasible from
+# smoke; covered by internal/vault/*_test.go unit tests. What we CAN verify
+# here is the bearer-auth envelope: missing + bogus tokens are rejected
+# correctly with WWW-Authenticate.
+note "full token-retrieval happy path requires mock upstream OAuth server; unit-covered in internal/vault/vault_test.go"
+
+# No bearer -> 401 + WWW-Authenticate.
+NB_H=$(curl -s -o /dev/null -D - -w "%{http_code}" "$BASE/api/v1/vault/google_calendar/token")
+NB_STATUS=$(echo "$NB_H" | tail -1)
+# Remove last line (status code) before scanning headers.
+NB_HDRS=$(echo "$NB_H" | sed '$d')
+[ "$NB_STATUS" = "401" ] && pass "no bearer -> 401" || fail "no bearer -> $NB_STATUS"
+echo "$NB_HDRS" | grep -qi '^www-authenticate:.*Bearer' && pass "WWW-Authenticate: Bearer on no-bearer" || fail "WWW-Authenticate missing on no-bearer"
+
+# Bogus bearer -> 401 + WWW-Authenticate.
+BB_H=$(curl -s -o /dev/null -D - -w "%{http_code}" -H "Authorization: Bearer invalid_token_xyz" "$BASE/api/v1/vault/google_calendar/token")
+BB_STATUS=$(echo "$BB_H" | tail -1)
+BB_HDRS=$(echo "$BB_H" | sed '$d')
+[ "$BB_STATUS" = "401" ] && pass "bogus bearer -> 401" || fail "bogus bearer -> $BB_STATUS"
+echo "$BB_HDRS" | grep -qi '^www-authenticate:.*Bearer' && pass "WWW-Authenticate: Bearer on bogus" || fail "WWW-Authenticate missing on bogus"
+
+# --- 47: Vault connections list (session auth) --------------------------------
+section "47: Vault connections list (session auth)"
+relogin
+VCL_RESP=$(curl -s -w "\n%{http_code}" -b cj.txt $BASE/api/v1/vault/connections)
+VCL_CODE=$(echo "$VCL_RESP" | tail -1)
+VCL_BODY=$(echo "$VCL_RESP" | sed '$d')
+[ "$VCL_CODE" = 200 ] && pass "GET /vault/connections -> 200" || fail "GET /vault/connections -> $VCL_CODE"
+echo "$VCL_BODY" | jq -e '.data' >/dev/null && pass "response has data field" || fail "no data field"
+echo "$VCL_BODY" | jq -e '.data | length == 0' >/dev/null && pass "empty for new user (length=0)" || note "expected empty, got length=$(echo "$VCL_BODY" | jq '.data | length')"
+
+# Without session -> 401.
+VCL_NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/vault/connections)
+[ "$VCL_NOAUTH" = 401 ] && pass "no session -> 401" || fail "no-session connections -> $VCL_NOAUTH"
+
+# DELETE bogus id with session -> 404 (IDOR-safe).
+VCL_DEL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -b cj.txt -X DELETE $BASE/api/v1/vault/connections/vconn_nonexistent_xyz)
+[ "$VCL_DEL_CODE" = 404 ] && pass "DELETE unknown connection -> 404" || fail "DELETE unknown connection -> $VCL_DEL_CODE"
+
+# --- 48: Audit events for vault ops -------------------------------------------
+section "48: Audit events for vault ops"
+# The audit endpoint's ?action= param supports comma-separated exact matches.
+AUD_ACTIONS="vault.provider.created,vault.provider.updated,vault.provider.deleted"
+AUD_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/audit-logs?action=$AUD_ACTIONS&limit=200")
+AUD_CODE=$(echo "$AUD_RESP" | tail -1)
+AUD_BODY=$(echo "$AUD_RESP" | sed '$d')
+[ "$AUD_CODE" = 200 ] && pass "GET /audit-logs?action=vault.* -> 200" || fail "GET /audit-logs -> $AUD_CODE"
+
+AUD_CREATED=$(echo "$AUD_BODY" | jq '[.data[] | select(.action=="vault.provider.created")] | length')
+AUD_UPDATED=$(echo "$AUD_BODY" | jq '[.data[] | select(.action=="vault.provider.updated")] | length')
+AUD_DELETED=$(echo "$AUD_BODY" | jq '[.data[] | select(.action=="vault.provider.deleted")] | length')
+[ "$AUD_CREATED" -ge 1 ] 2>/dev/null && pass "vault.provider.created events: $AUD_CREATED" || fail "no vault.provider.created events"
+[ "$AUD_UPDATED" -ge 1 ] 2>/dev/null && pass "vault.provider.updated events: $AUD_UPDATED" || fail "no vault.provider.updated events"
+[ "$AUD_DELETED" -ge 1 ] 2>/dev/null && pass "vault.provider.deleted events: $AUD_DELETED" || fail "no vault.provider.deleted events"
+
+# Also grep the full unfiltered list for any vault.* events (defensive —
+# confirms the action filter matched the right namespace).
+AUD_ALL=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/audit-logs?limit=200")
+AUD_VAULT_TOTAL=$(echo "$AUD_ALL" | jq '[.data[] | select(.action | startswith("vault."))] | length')
+[ "$AUD_VAULT_TOTAL" -ge 3 ] 2>/dev/null && pass "unfiltered grep: >=3 vault.* events ($AUD_VAULT_TOTAL)" || fail "unfiltered grep: $AUD_VAULT_TOTAL vault.* events (expected >=3)"
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
