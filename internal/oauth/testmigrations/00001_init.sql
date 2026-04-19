@@ -154,7 +154,22 @@ CREATE TABLE audit_logs (
     created_at  TEXT NOT NULL
 );
 
+CREATE TABLE api_keys (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    key_hash     TEXT UNIQUE NOT NULL,
+    key_prefix   TEXT NOT NULL,
+    key_suffix   TEXT NOT NULL DEFAULT '',
+    scopes       TEXT NOT NULL DEFAULT '[]',
+    rate_limit   INTEGER NOT NULL DEFAULT 1000,
+    expires_at   TEXT,
+    last_used_at TEXT,
+    created_at   TEXT NOT NULL,
+    revoked_at   TEXT
+);
+
 -- +goose Down
+DROP TABLE IF EXISTS api_keys;
 DROP TABLE IF EXISTS audit_logs;
 DROP INDEX IF EXISTS idx_oauth_device_codes_expires_at;
 DROP INDEX IF EXISTS idx_oauth_device_codes_user_code;

@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,24 @@ import (
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
+
+// dpopTokenEndpointURL returns the canonical HTU for DPoP proof validation at
+// the token endpoint. Query parameters and fragments are stripped.
+func dpopTokenEndpointURL(r *http.Request) string {
+	scheme := r.URL.Scheme
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	host := r.Host
+	if host == "" {
+		host = r.URL.Host
+	}
+	return scheme + "://" + host + r.URL.Path
+}
 
 // HandleToken handles POST /oauth/token. Fosite dispatches the correct grant
 // type handler (authorization_code, client_credentials, refresh_token)
@@ -31,6 +50,27 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("grant_type") == grantTypeTokenExchange {
 		s.HandleTokenExchange(w, r)
 		return
+	}
+
+	// Intercept DPoP before passing to fosite. If the DPoP header is present,
+	// validate the proof and record the jkt for later storage.
+	var dpopJKT string
+	if proofJWT := r.Header.Get("DPoP"); proofJWT != "" {
+		htu := dpopTokenEndpointURL(r)
+		jkt, dpopErr := ValidateDPoPProof(proofJWT, r.Method, htu, "", s.DPoPCache)
+		if dpopErr != nil {
+			slog.Debug("oauth: DPoP proof invalid", "error", dpopErr)
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{ //#nosec G104
+				"error":             "invalid_dpop_proof",
+				"error_description": dpopErr.Error(),
+			})
+			return
+		}
+		dpopJKT = jkt
+		slog.Debug("oauth: DPoP proof validated", "jkt", jkt)
 	}
 
 	ctx := r.Context()
@@ -55,6 +95,13 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("oauth: access response failed", "error", err)
 		s.Provider.WriteAccessError(ctx, w, ar, err)
 		return
+	}
+
+	// If a DPoP proof was validated, store the jkt on the token record.
+	// This is a best-effort background operation — it does not affect the
+	// response because fosite has already committed the token to its own store.
+	if dpopJKT != "" {
+		s.storeDPoPJKT(ctx, ar, dpopJKT)
 	}
 
 	s.Provider.WriteAccessResponse(ctx, w, ar, response)
@@ -131,10 +178,17 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// RFC 8707: extract resource indicator for display on the consent page.
+	resource := r.URL.Query().Get("resource")
+	if resource != "" {
+		slog.Debug("oauth: authorize request includes resource indicator", "resource", resource, "client_id", clientID)
+	}
+
 	RenderConsentPage(w, ConsentData{
 		AgentName:   agentName,
 		ClientID:    clientID,
 		Scopes:      scopes,
+		Resource:    resource,
 		RedirectURI: ar.GetRedirectURI().String(),
 		State:       r.URL.Query().Get("state"),
 		Challenge:   r.URL.RawQuery, // carry full query string for reconstruct on POST
@@ -236,4 +290,24 @@ func getUserIDFromRequest(r *http.Request) string {
 	}
 	// Fallback: X-User-ID header (for testing).
 	return r.Header.Get("X-User-ID")
+}
+
+// storeDPoPJKT records the DPoP JWK thumbprint on the OAuthToken row created
+// by fosite. fosite's HMAC strategy stores opaque tokens whose identifiers are
+// opaque to us, so we look up by client ID and update the most-recently created
+// non-revoked access token for the client.
+//
+// This is best-effort: a failure here does NOT fail the token request.
+func (s *Server) storeDPoPJKT(ctx context.Context, ar fosite.AccessRequester, jkt string) {
+	clientID := ar.GetClient().GetID()
+	tokens, err := s.RawStore.ListOAuthTokensByAgentID(ctx, "agent_"+clientID, 1)
+	if err != nil || len(tokens) == 0 {
+		slog.Debug("oauth: storeDPoPJKT: no token found for client", "client_id", clientID)
+		return
+	}
+	tok := tokens[0]
+	tok.DPoPJKT = jkt
+	if updateErr := s.RawStore.UpdateOAuthTokenDPoPJKT(ctx, tok.ID, jkt); updateErr != nil {
+		slog.Debug("oauth: storeDPoPJKT: update failed", "error", updateErr)
+	}
 }

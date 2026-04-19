@@ -244,6 +244,7 @@ type Store interface {
 	RevokeOAuthTokenFamily(ctx context.Context, familyID string) (int64, error)
 	ListOAuthTokensByAgentID(ctx context.Context, agentID string, limit int) ([]*OAuthToken, error)
 	DeleteExpiredOAuthTokens(ctx context.Context) (int64, error)
+	UpdateOAuthTokenDPoPJKT(ctx context.Context, id string, jkt string) error
 
 	// OAuth Consents
 	CreateOAuthConsent(ctx context.Context, consent *OAuthConsent) error

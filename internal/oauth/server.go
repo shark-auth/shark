@@ -31,6 +31,7 @@ type Server struct {
 	RawStore       storage.Store        // for direct DB access (consent, agents, etc.)
 	SigningKeyID   string               // kid of the active ES256 signing key
 	signingPrivKey *ecdsa.PrivateKey    // ES256 private key; used by Sign() / token exchange
+	DPoPCache      *DPoPJTICache        // replay protection for DPoP JTIs
 }
 
 // NewServer creates an OAuth 2.1 server. It manages its own ES256 signing key
@@ -114,6 +115,7 @@ func NewServer(store storage.Store, cfg *config.Config) (*Server, error) {
 		RawStore:       store,
 		SigningKeyID:   kid,
 		signingPrivKey: signingKey,
+		DPoPCache:      NewDPoPJTICache(),
 	}, nil
 }
 

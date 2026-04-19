@@ -1,0 +1,259 @@
+package oauth
+
+// HandleIntrospect implements RFC 7662 Token Introspection.
+// POST /oauth/introspect
+//
+// Auth: client credentials (Basic or body) OR admin Bearer sk_live_*.
+// Returns {"active":true,...claims...} for valid tokens, {"active":false} otherwise.
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+
+	gojwt "github.com/golang-jwt/jwt/v5"
+
+	"github.com/sharkauth/sharkauth/internal/auth"
+	"github.com/sharkauth/sharkauth/internal/storage"
+)
+
+// introspectResponse is the RFC 7662 §2.2 response object.
+// When active is false, no other members are included (marshalled separately).
+type introspectResponse struct {
+	Active    bool   `json:"active"`
+	Scope     string `json:"scope,omitempty"`
+	ClientID  string `json:"client_id,omitempty"`
+	Sub       string `json:"sub,omitempty"`
+	Exp       int64  `json:"exp,omitempty"`
+	Iat       int64  `json:"iat,omitempty"`
+	Nbf       int64  `json:"nbf,omitempty"`
+	Aud       string `json:"aud,omitempty"`
+	Iss       string `json:"iss,omitempty"`
+	JTI       string `json:"jti,omitempty"`
+	TokenType string `json:"token_type,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
+	Username  string `json:"username,omitempty"`
+}
+
+// HandleIntrospect handles POST /oauth/introspect per RFC 7662.
+func (s *Server) HandleIntrospect(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if err := r.ParseForm(); err != nil {
+		writeIntrospectError(w, http.StatusBadRequest, "invalid_request", "failed to parse form")
+		return
+	}
+
+	// Authenticate the caller.
+	_, _, err := s.authenticateClient(r)
+	if err != nil {
+		slog.Debug("introspect: client auth failed", "error", err)
+		w.Header().Set("WWW-Authenticate", `Basic realm="oauth"`)
+		writeIntrospectError(w, http.StatusUnauthorized, "invalid_client", "client authentication required")
+		return
+	}
+
+	tokenStr := r.FormValue("token")
+	if tokenStr == "" {
+		// Per RFC 7662 §2.1, missing token → active:false (not an error response).
+		writeInactiveToken(w)
+		return
+	}
+
+	// Attempt to find the token in DB. Try JWT path first, then opaque hash.
+	dbToken := s.findTokenInDB(ctx, tokenStr)
+	if dbToken == nil {
+		writeInactiveToken(w)
+		return
+	}
+
+	// Check revoked.
+	if dbToken.RevokedAt != nil {
+		writeInactiveToken(w)
+		return
+	}
+
+	// Check expiry.
+	if time.Now().UTC().After(dbToken.ExpiresAt) {
+		writeInactiveToken(w)
+		return
+	}
+
+	// Build the response from the DB record (authoritative source).
+	resp := &introspectResponse{
+		Active:    true,
+		Scope:     dbToken.Scope,
+		ClientID:  dbToken.ClientID,
+		Sub:       dbToken.UserID,
+		Exp:       dbToken.ExpiresAt.Unix(),
+		Iat:       dbToken.CreatedAt.Unix(),
+		Nbf:       dbToken.CreatedAt.Unix(),
+		Iss:       s.Issuer,
+		JTI:       dbToken.JTI,
+		TokenType: "Bearer",
+		AgentID:   dbToken.AgentID,
+	}
+
+	// Enrich with audience from the DB record.
+	if dbToken.Audience != "" {
+		resp.Aud = dbToken.Audience
+	}
+
+	// Try to enrich with user email from the DB if we have a user ID.
+	if dbToken.UserID != "" {
+		if user, err := s.RawStore.GetUserByID(ctx, dbToken.UserID); err == nil {
+			resp.Username = user.Email
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp) //#nosec G104
+}
+
+// findTokenInDB resolves a raw token string to an OAuthToken record.
+//
+// For JWT access tokens (3-part dot-separated): extract the JTI claim and
+// look up by JTI — the most direct path.
+//
+// For opaque HMAC tokens (2-part dot-separated, format "key.sig"): the store
+// saves sha256(sig_part). Split on "." and hash the signature part.
+//
+// Final fallback: hash the full raw token string (covers edge cases).
+func (s *Server) findTokenInDB(ctx context.Context, tokenStr string) *storage.OAuthToken {
+	// 1. Try JWT path — extract JTI without signature verification.
+	jti := extractJTIFromJWT(tokenStr)
+	if jti != "" {
+		if tok, err := s.RawStore.GetOAuthTokenByJTI(ctx, jti); err == nil {
+			return tok
+		}
+	}
+
+	// 2. Opaque HMAC token: format is "<tokenKey>.<tokenSignature>", both base64url.
+	//    The store persists sha256(signature_part) as token_hash.
+	parts := strings.SplitN(tokenStr, ".", 2)
+	if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+		sigHash := sha256.Sum256([]byte(parts[1]))
+		sigHashHex := hex.EncodeToString(sigHash[:])
+		if tok, err := s.RawStore.GetOAuthTokenByHash(ctx, sigHashHex); err == nil {
+			return tok
+		}
+	}
+
+	// 3. Final fallback: hash the entire raw token string.
+	tokenHash := sha256.Sum256([]byte(tokenStr))
+	tokenHashHex := hex.EncodeToString(tokenHash[:])
+	if tok, err := s.RawStore.GetOAuthTokenByHash(ctx, tokenHashHex); err == nil {
+		return tok
+	}
+
+	return nil
+}
+
+// extractJTIFromJWT parses the token string as a JWT without verifying the
+// signature and returns the "jti" claim. Returns empty string on failure.
+// We do not verify here — we do an authoritative DB lookup instead.
+func extractJTIFromJWT(tokenStr string) string {
+	parser := gojwt.NewParser(gojwt.WithoutClaimsValidation())
+	token, _, err := parser.ParseUnverified(tokenStr, gojwt.MapClaims{})
+	if err != nil {
+		return ""
+	}
+	claims, ok := token.Claims.(gojwt.MapClaims)
+	if !ok {
+		return ""
+	}
+	jti, _ := claims["jti"].(string)
+	return jti
+}
+
+// authenticateClient validates the caller's identity for introspect/revoke endpoints.
+// Priority: Admin Bearer (sk_live_*) > HTTP Basic > form params.
+// Returns (clientID, isAdmin, error). On admin auth, clientID is "__admin__".
+func (s *Server) authenticateClient(r *http.Request) (clientID string, isAdmin bool, err error) {
+	ctx := r.Context()
+
+	// 1. Check for admin Bearer token (sk_live_*).
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			rawKey := parts[1]
+			if strings.HasPrefix(rawKey, "sk_live_") {
+				keyHash := auth.HashAPIKey(rawKey)
+				apiKey, apiKeyErr := s.RawStore.GetAPIKeyByKeyHash(ctx, keyHash)
+				if apiKeyErr != nil {
+					return "", false, errors.New("invalid admin api key")
+				}
+				if apiKey.RevokedAt != nil {
+					return "", false, errors.New("api key revoked")
+				}
+				// Check expiry.
+				if apiKey.ExpiresAt != nil && *apiKey.ExpiresAt != "" {
+					if expAt, parseErr := time.Parse(time.RFC3339, *apiKey.ExpiresAt); parseErr == nil {
+						if time.Now().UTC().After(expAt) {
+							return "", false, errors.New("api key expired")
+						}
+					}
+				}
+				return "__admin__", true, nil
+			}
+		}
+	}
+
+	// 2. HTTP Basic Auth.
+	basicClientID, clientSecret, ok := r.BasicAuth()
+	if ok && basicClientID != "" {
+		return s.validateClientCredentials(ctx, basicClientID, clientSecret)
+	}
+
+	// 3. Form params.
+	formClientID := r.FormValue("client_id")
+	formSecret := r.FormValue("client_secret")
+	if formClientID != "" {
+		return s.validateClientCredentials(ctx, formClientID, formSecret)
+	}
+
+	return "", false, errors.New("no client credentials provided")
+}
+
+// validateClientCredentials looks up the agent by clientID and verifies the secret.
+func (s *Server) validateClientCredentials(ctx context.Context, clientID, clientSecret string) (string, bool, error) {
+	agent, err := s.RawStore.GetAgentByClientID(ctx, clientID)
+	if err != nil {
+		return "", false, errors.New("invalid client")
+	}
+	if !agent.Active {
+		return "", false, errors.New("client is inactive")
+	}
+	if !verifyClientSecret(agent.ClientSecretHash, clientSecret) {
+		return "", false, errors.New("invalid client secret")
+	}
+	return clientID, false, nil
+}
+
+// writeInactiveToken writes {"active":false} per RFC 7662 §2.2.
+func writeInactiveToken(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"active":false}`)) //#nosec G104
+}
+
+// writeIntrospectError writes an OAuth JSON error response.
+func writeIntrospectError(w http.ResponseWriter, status int, errCode, description string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{ //#nosec G104
+		"error":             errCode,
+		"error_description": description,
+	})
+}

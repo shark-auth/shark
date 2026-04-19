@@ -151,6 +151,11 @@ func (s *SQLiteStore) DeleteExpiredOAuthTokens(ctx context.Context) (int64, erro
 	return res.RowsAffected()
 }
 
+func (s *SQLiteStore) UpdateOAuthTokenDPoPJKT(ctx context.Context, id string, jkt string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE oauth_tokens SET dpop_jkt = ? WHERE id = ?`, jkt, id)
+	return err
+}
+
 func (s *SQLiteStore) scanOAuthToken(row *sql.Row) (*OAuthToken, error) {
 	var t OAuthToken
 	var expiresAt, createdAt string
