@@ -5,6 +5,7 @@ import { API, useAPI } from './api'
 import { MOCK } from './mock'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
+import { TeachEmptyState } from './TeachEmptyState'
 
 // Organizations — split-pane browser (list left, persistent detail right)
 
@@ -65,10 +66,13 @@ export function Organizations() {
         {/* List */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {filtered.length === 0 && !loading && orgs.length === 0 ? (
-            <div style={{ padding: '32px 20px', textAlign: 'center' }}>
-              <div style={{ fontSize: 13, color: 'var(--fg-dim)', lineHeight: 1.6 }}>No organizations yet.</div>
-              <div style={{ fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.5, marginTop: 6 }}>Create one to manage multi-tenant access.</div>
-            </div>
+            <TeachEmptyState
+              icon="Org"
+              title="No organizations yet"
+              description="Organizations let you group users into tenants with separate roles and permissions."
+              createLabel="New Organization"
+              cliSnippet="shark org create --name 'Acme Inc'"
+            />
           ) : filtered.length === 0 && !loading ? (
             <div style={{ padding: 20, fontSize: 11, textAlign: 'center', color: 'var(--fg-muted)', lineHeight: 1.5 }}>No orgs match.</div>
           ) : (

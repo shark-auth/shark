@@ -2,6 +2,7 @@
 import React from 'react'
 import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
+import { TeachEmptyState } from './TeachEmptyState'
 
 // Webhooks page — endpoint management + delivery history
 // Table + create slide-over + detail slide-over w/ config/deliveries tabs
@@ -184,23 +185,14 @@ export function Webhooks() {
             {loading ? (
               <div className="faint" style={{ padding: 40, textAlign: 'center', fontSize: 12 }}>Loading…</div>
             ) : webhooks.length === 0 ? (
-              <div style={{ padding: '60px 20px', textAlign: 'center' }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 8,
-                  background: 'var(--surface-2)', border: '1px solid var(--hairline-strong)',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  marginBottom: 12,
-                }}>
-                  <Icon.Webhook width={20} height={20} style={{opacity:0.4}}/>
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>No webhooks yet</div>
-                <div className="faint" style={{ fontSize: 12, maxWidth: 320, margin: '0 auto 16px' }}>
-                  Webhooks notify your app when events happen in SharkAuth.
-                </div>
-                <button className="btn primary" onClick={() => setCreateOpen(true)}>
-                  <Icon.Plus width={11} height={11}/> New webhook
-                </button>
-              </div>
+              <TeachEmptyState
+                icon="Webhook"
+                title="No webhooks yet"
+                description="Webhooks notify your services when auth events happen — user signups, logins, MFA changes."
+                createLabel="New Webhook"
+                onCreate={() => setCreateOpen(true)}
+                cliSnippet="shark webhook create --url https://..."
+              />
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>

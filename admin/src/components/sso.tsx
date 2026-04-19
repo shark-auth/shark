@@ -3,6 +3,7 @@ import React from 'react'
 import { Icon } from './shared'
 import { API, useAPI } from './api'
 import { useToast } from './toast'
+import { TeachEmptyState } from './TeachEmptyState'
 
 // SSO Connections page — SAML + OIDC enterprise single sign-on
 
@@ -25,6 +26,7 @@ const ssoInputStyle = {
 export function SSO() {
   const [slideOver, setSlideOver] = React.useState(null); // null | { mode: 'create' } | { mode: 'edit', conn: {...} }
   const [deleteTarget, setDeleteTarget] = React.useState(null);
+  const [selectedConn, setSelectedConn] = React.useState(null);
 
   const { data, loading, refresh } = useAPI('/sso/connections');
   const connections = data?.connections || data || [];
@@ -85,6 +87,8 @@ export function SSO() {
                 <SSORow
                   key={conn.id}
                   conn={conn}
+                  selected={selectedConn?.id === conn.id}
+                  onClick={() => setSelectedConn(selectedConn?.id === conn.id ? null : conn)}
                   onEdit={() => setSlideOver({ mode: 'edit', conn })}
                   onDelete={() => handleDelete(conn)}
                 />
@@ -93,6 +97,9 @@ export function SSO() {
           </table>
         )}
       </div>
+
+      {/* Connection detail panel */}
+      {selectedConn && <SSOConnectionDetail conn={selectedConn} onClose={() => setSelectedConn(null)}/>}
 
       {/* Footer */}
       <div className="row" style={{ padding: '8px 20px', borderTop: '1px solid var(--hairline)', fontSize: 10.5, gap: 10 }}>
@@ -122,9 +129,9 @@ export function SSO() {
   );
 }
 
-export function SSORow({ conn, onEdit, onDelete }) {
+export function SSORow({ conn, selected, onClick, onEdit, onDelete }) {
   return (
-    <tr style={{ borderBottom: '1px solid var(--hairline)' }}>
+    <tr onClick={onClick} style={{ borderBottom: '1px solid var(--hairline)', cursor: 'pointer', background: selected ? 'var(--surface-2)' : undefined }}>
       <td style={ssoTdStyle}>
         <div className="row" style={{ gap: 8 }}>
           <div style={{
@@ -177,19 +184,14 @@ export function SSOTypeChip({ type }) {
 
 export function SSOEmptyState({ onAdd }) {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      padding: '60px 24px', gap: 12, textAlign: 'center',
-    }}>
-      <Icon.SSO width={32} height={32} style={{ opacity: 0.25 }}/>
-      <div style={{ fontSize: 13, fontWeight: 500 }}>No SSO connections</div>
-      <div className="faint" style={{ fontSize: 12, maxWidth: 340, lineHeight: 1.6 }}>
-        Add a SAML or OIDC connection to enable enterprise single sign-on for your organization.
-      </div>
-      <button className="btn primary" style={{ marginTop: 4 }} onClick={onAdd}>
-        <Icon.Plus width={11} height={11}/> Add connection
-      </button>
-    </div>
+    <TeachEmptyState
+      icon="SSO"
+      title="No SSO connections"
+      description="Add a SAML or OIDC connection to enable enterprise single sign-on for your users."
+      createLabel="Add Connection"
+      onCreate={onAdd}
+      cliSnippet="shark sso create --type oidc --domain example.com"
+    />
   );
 }
 
@@ -447,6 +449,61 @@ export function SSOField({ label, required, hint, children }) {
       </label>
       {hint && <div className="faint" style={{ fontSize: 10.5, marginBottom: 4, lineHeight: 1.4 }}>{hint}</div>}
       <div style={{ marginTop: hint ? 0 : 4 }}>{children}</div>
+    </div>
+  );
+}
+
+function SSOConnectionDetail({ conn, onClose }) {
+  const { data: auditData, loading: auditLoading } = useAPI('/audit-logs?limit=15&action_prefix=sso');
+
+  const events = (auditData?.items || auditData || []).filter(e =>
+    (e.metadata?.connection_id === conn.id) || (e.target_id === conn.id) ||
+    (e.action || e.event_type || '').includes('sso')
+  ).slice(0, 10);
+
+  return (
+    <div style={{
+      borderTop: '1px solid var(--hairline)',
+      background: 'var(--surface-1)',
+      padding: '12px 20px',
+    }}>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)' }}>{conn.name}</span>
+        <button className="btn ghost icon sm" onClick={onClose}><Icon.X width={11} height={11}/></button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Config summary */}
+        <div>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 6 }}>Configuration</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: 11 }}>
+            <span className="faint">Type</span><span className="mono">{conn.type || 'oidc'}</span>
+            <span className="faint">Domain</span><span className="mono">{conn.domain || '—'}</span>
+            <span className="faint">Status</span><span>{conn.enabled !== false ? 'Enabled' : 'Disabled'}</span>
+            {conn.issuer_url && <><span className="faint">Issuer</span><span className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{conn.issuer_url}</span></>}
+            {conn.idp_url && <><span className="faint">IdP URL</span><span className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{conn.idp_url}</span></>}
+            <span className="faint">ID</span><span className="mono faint">{conn.id}</span>
+          </div>
+        </div>
+
+        {/* Activity */}
+        <div>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 6 }}>Recent activity</div>
+          {auditLoading ? (
+            <div className="faint" style={{ fontSize: 11 }}>Loading…</div>
+          ) : events.length === 0 ? (
+            <div className="faint" style={{ fontSize: 11 }}>No SSO events found.</div>
+          ) : (
+            events.map((e, i) => (
+              <div key={e.id || i} className="row" style={{ padding: '3px 0', gap: 8, fontSize: 10.5 }}>
+                <span className="mono faint" style={{ width: 40 }}>{ssoRelativeTime(e.created_at || e.t)}</span>
+                <span className="mono" style={{ flex: 1 }}>{e.event_type || e.action}</span>
+                <span className="faint">{e.actor_email || ''}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }

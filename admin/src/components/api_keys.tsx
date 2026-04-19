@@ -428,6 +428,9 @@ function KeyDetail({ k, onClose, onRotate, onRevoke, onUpdate }) {
             </span>
           </div>
         </div>
+
+        {/* Usage audit */}
+        <KeyUsageAudit keyId={k.id}/>
       </div>
       {/* curl snippet */}
       <div style={{ padding: '10px 14px', borderTop: '1px solid var(--hairline)', background: 'var(--surface-1)' }}>
@@ -459,6 +462,42 @@ function CurlSnippet({ keyPrefix, scopes }) {
         onClick={() => { navigator.clipboard?.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 900); }}>
         {copied ? <Icon.Check width={10} height={10} style={{color:'var(--success)'}}/> : <Icon.Copy width={10} height={10}/>}
       </button>
+    </div>
+  );
+}
+
+function KeyUsageAudit({ keyId }) {
+  const { data, loading } = useAPI('/audit-logs?limit=10&actor_type=api_key&actor_id=' + keyId);
+  const events = data?.items || data || [];
+
+  return (
+    <div>
+      <h4 style={sectionLabelStyle}>Recent usage</h4>
+      {loading ? (
+        <div className="faint" style={{ fontSize: 11 }}>Loading…</div>
+      ) : events.length === 0 ? (
+        <div className="faint" style={{ fontSize: 11 }}>No audit events for this key.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {events.slice(0, 8).map((e, i) => (
+            <div key={e.id || i} className="row" style={{
+              padding: '5px 0', borderBottom: '1px solid var(--hairline)', gap: 8, fontSize: 11,
+            }}>
+              <span className="mono faint" style={{ width: 55, flexShrink: 0 }}>
+                {(() => {
+                  const d = Date.now() - new Date(e.created_at || e.t).getTime();
+                  if (d < 60e3) return Math.floor(d/1e3) + 's';
+                  if (d < 3600e3) return Math.floor(d/60e3) + 'm';
+                  if (d < 86400e3) return Math.floor(d/3600e3) + 'h';
+                  return Math.floor(d/86400e3) + 'd';
+                })()}
+              </span>
+              <span className="mono" style={{ flex: 1 }}>{e.event_type || e.action || '—'}</span>
+              <span className="faint" style={{ fontSize: 10 }}>{e.ip || ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

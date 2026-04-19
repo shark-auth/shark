@@ -234,6 +234,22 @@ export function Authentication() {
                   SMTP configured — verification emails will send on registration
                 </div>
               )}
+              <div style={{ marginTop: 10, borderTop: '1px solid var(--hairline)', paddingTop: 8 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 6 }}>
+                  Template preview
+                </div>
+                <div className="row" style={{ gap: 6 }}>
+                  {['verify_email', 'magic_link', 'password_reset'].map(t => (
+                    <button key={t} className="btn ghost sm" disabled title="Needs GET /admin/email-preview endpoint"
+                      style={{ fontSize: 10, opacity: 0.45, cursor: 'not-allowed' }}>
+                      {t.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
+                <div className="faint" style={{ fontSize: 10, marginTop: 4 }}>
+                  Preview blocked — <span className="mono">GET /admin/email-preview/&#123;template&#125;</span> not available
+                </div>
+              </div>
             </div>
           </div>
 

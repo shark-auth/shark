@@ -3,6 +3,7 @@ import React from 'react'
 import { Icon, CopyField, hashColor } from './shared'
 import { API, useAPI } from './api'
 import { useToast } from './toast'
+import { TeachEmptyState } from './TeachEmptyState'
 
 // Roles & Permissions — two-pane RBAC manager
 
@@ -100,9 +101,13 @@ export function RBAC() {
         {/* List */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {roles.length === 0 && !loading && (
-            <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--fg-dim)', fontSize: 11.5 }}>
-              No roles yet. Roles group permissions that can be assigned to users.
-            </div>
+            <TeachEmptyState
+              icon="Shield"
+              title="No roles yet"
+              description="Roles group permissions that can be assigned to users. Create one to start managing access."
+              createLabel="New Role"
+              cliSnippet="shark role create --name admin"
+            />
           )}
           {roles.map(r => (
             <RoleListItem

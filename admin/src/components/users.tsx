@@ -5,6 +5,7 @@ import { API, useAPI } from './api'
 import { MOCK } from './mock'
 import { CLIFooter } from './CLIFooter'
 import { useURLParam } from './useURLParams'
+import { useToast } from './toast'
 
 // Users page — table + detail slide-over
 
@@ -400,6 +401,7 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
   const [saving, setSaving] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [deleteInput, setDeleteInput] = React.useState('');
+  const toast = useToast();
 
   const handleSave = async () => {
     setSaving(true);
@@ -470,8 +472,14 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
       }}>
         <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--danger)', marginBottom: 8, fontWeight: 600, lineHeight: 1.5 }}>Danger zone</div>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn sm">Reset password</button>
-          <button className="btn sm">Disable MFA</button>
+          <button className="btn sm" onClick={async () => {
+            try { await API.post('/auth/password/send-reset-link', { email: user.email }); toast.success('Password reset email sent'); }
+            catch (e) { toast.error(e.message || 'Failed to send reset'); }
+          }}>Reset password</button>
+          <button className="btn sm" onClick={async () => {
+            try { await API.del('/users/' + user.id + '/mfa'); toast.success('MFA disabled'); onRefreshList && onRefreshList(); }
+            catch (e) { toast.error(e.message || 'Failed to disable MFA'); }
+          }} disabled={!user.mfa_enabled && !user.mfa_method && !user.mfa}>Disable MFA</button>
           <button className="btn sm danger" onClick={() => setDeleteConfirmOpen(true)}>Delete user</button>
         </div>
         <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>Deleting requires typing user email. Revokes all sessions + agent consents in one transaction.</div>
