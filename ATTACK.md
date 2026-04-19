@@ -181,15 +181,16 @@ Build core features FIRST, SDK on top LATER. Agents are first-class citizens.
 - ✅ Agent management dashboard + consent management + device flow React
 - ✅ Smoke tests: sections 26-42 (AS metadata, agent CRUD, all grants, DPoP, introspection, revocation, DCR, resource indicators, ES256 JWKS, consents) — 181 PASS, 0 FAIL
 
-Phase 5.5 — Token Vault (3-5 days)
+Phase 5.5 — Token Vault — Done
 
 **Plan:** `docs/superpowers/plans/2026-04-18-token-vault.md`
 
-- Managed third-party OAuth tokens (Google, Slack, GitHub, etc.)
-- Agents request tokens through Shark, never handle raw credentials
-- Auto-refresh, encrypted at rest (AES-256-GCM)
-- Pre-built provider templates
-- Rich dashboard UI
+- ✅ Managed third-party OAuth tokens (Google, Slack, GitHub, Microsoft, Notion, Linear, Jira)
+- ✅ Agents request tokens via `/api/v1/vault/{provider}/token` (OAuth Bearer delegation)
+- ✅ Auto-refresh on retrieval, AES-256-GCM encryption at rest (FieldEncryptor)
+- ✅ 9 pre-built provider templates (snake_case API)
+- ✅ Dashboard UI: split grid, create wizard, rotate secret, type-to-confirm delete, audit tab
+- ✅ Smoke tests sections 43-48 (provider CRUD, templates, connect, bearer auth, connections, audit) — 222 PASS, 0 FAIL
 
 Phase 6 — Proxy + Visual Flow Builder (7-10 days)
 
