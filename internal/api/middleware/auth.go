@@ -147,6 +147,60 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(ht
 	}
 }
 
+// OptionalSessionFunc returns a middleware that populates the request context
+// with user identity if a valid session cookie or Bearer JWT is present, but
+// does NOT reject unauthenticated requests. Use this for endpoints where
+// authentication is helpful but not required (e.g. /oauth/authorize which
+// handles the not-logged-in case itself).
+func OptionalSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+
+			// Branch 1: Bearer JWT path
+			if strings.HasPrefix(authHeader, "Bearer ") && jwtMgr != nil {
+				token := strings.TrimPrefix(authHeader, "Bearer ")
+				claims, err := jwtMgr.Validate(r.Context(), token)
+				if err == nil && claims.TokenType != "refresh" {
+					sessionID := ""
+					if claims.TokenType == "session" {
+						sessionID = claims.SessionID
+					}
+					ctx := r.Context()
+					ctx = context.WithValue(ctx, UserIDKey, claims.Subject)
+					ctx = context.WithValue(ctx, SessionIDKey, sessionID)
+					ctx = context.WithValue(ctx, MFAPassedKey, claims.MFAPassed)
+					ctx = context.WithValue(ctx, AuthMethodKey, "jwt")
+					ctx = context.WithValue(ctx, claimsKey, claims)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				// Invalid token: fall through to cookie path.
+			}
+
+			// Branch 2: Cookie path (best-effort)
+			if sm != nil {
+				sessionID, err := sm.GetSessionFromRequest(r)
+				if err == nil {
+					sess, err := sm.ValidateSession(r.Context(), sessionID)
+					if err == nil {
+						ctx := r.Context()
+						ctx = context.WithValue(ctx, UserIDKey, sess.UserID)
+						ctx = context.WithValue(ctx, SessionIDKey, sess.ID)
+						ctx = context.WithValue(ctx, MFAPassedKey, sess.MFAPassed)
+						ctx = context.WithValue(ctx, AuthMethodKey, "cookie")
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+				}
+			}
+
+			// No valid session — proceed unauthenticated.
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RequireSession is a middleware that validates the session cookie and sets the
 // user ID in the context. Returns 401 if no valid session is found.
 // This is the legacy placeholder version; use RequireSessionFunc(sm, jwtMgr) instead.

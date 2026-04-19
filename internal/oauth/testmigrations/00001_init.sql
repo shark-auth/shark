@@ -87,7 +87,38 @@ CREATE TABLE revoked_jti (
     expires_at  DATETIME NOT NULL
 );
 
+CREATE TABLE jwt_signing_keys (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    kid             TEXT    NOT NULL UNIQUE,
+    algorithm       TEXT    NOT NULL DEFAULT 'RS256',
+    public_key_pem  TEXT    NOT NULL,
+    private_key_pem TEXT    NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    rotated_at      DATETIME,
+    status          TEXT    NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active', 'retired'))
+);
+
+CREATE INDEX idx_jwt_signing_keys_status ON jwt_signing_keys(status);
+
+CREATE TABLE oauth_consents (
+    id                      TEXT PRIMARY KEY,
+    user_id                 TEXT NOT NULL REFERENCES users(id),
+    client_id               TEXT NOT NULL,
+    scope                   TEXT NOT NULL,
+    authorization_details   TEXT,
+    granted_at              TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    expires_at              TIMESTAMP,
+    revoked_at              TIMESTAMP
+);
+CREATE UNIQUE INDEX idx_oauth_consents_user_client
+    ON oauth_consents(user_id, client_id) WHERE revoked_at IS NULL;
+
 -- +goose Down
+DROP INDEX IF EXISTS idx_oauth_consents_user_client;
+DROP TABLE IF EXISTS oauth_consents;
+DROP INDEX IF EXISTS idx_jwt_signing_keys_status;
+DROP TABLE IF EXISTS jwt_signing_keys;
 DROP TABLE IF EXISTS revoked_jti;
 DROP TABLE IF EXISTS oauth_tokens;
 DROP TABLE IF EXISTS oauth_authorization_codes;

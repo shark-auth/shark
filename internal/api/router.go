@@ -40,6 +40,7 @@ type Server struct {
 	FieldEncryptor    *auth.FieldEncryptor
 	SSOHandlers       *SSOHandlers
 	WebhookDispatcher *webhook.Dispatcher
+	OAuthServer       *oauth.Server
 	magicLinkRL       *magicLinkRateLimiter
 	startTime         time.Time
 }
@@ -66,6 +67,13 @@ func WithWebhookDispatcher(d *webhook.Dispatcher) ServerOption {
 func WithJWTManager(jm *jwtpkg.Manager) ServerOption {
 	return func(s *Server) {
 		s.JWTManager = jm
+	}
+}
+
+// WithOAuthServer wires the OAuth 2.1 authorization server.
+func WithOAuthServer(os *oauth.Server) ServerOption {
+	return func(s *Server) {
+		s.OAuthServer = os
 	}
 }
 
@@ -444,6 +452,20 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			}
 		})
 	})
+
+	// OAuth 2.1 endpoints (fosite-backed).
+	if s.OAuthServer != nil {
+		r.Route("/oauth", func(r chi.Router) {
+			r.Post("/token", s.OAuthServer.HandleToken)
+			// Authorize endpoints: optionally wrap with session middleware so
+			// the user identity is available when a session cookie is present.
+			r.Group(func(r chi.Router) {
+				r.Use(mw.OptionalSessionFunc(sm, s.JWTManager))
+				r.Get("/authorize", s.OAuthServer.HandleAuthorize)
+				r.Post("/authorize", s.OAuthServer.HandleAuthorizeDecision)
+			})
+		})
+	}
 
 	// Admin dashboard (Phase 4) — embedded HTML/React bundle, SPA fallback.
 	r.Handle("/admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))

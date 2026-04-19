@@ -20,6 +20,7 @@ import (
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/sharkauth/sharkauth/internal/oauth"
 	"github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/storage"
 	"github.com/sharkauth/sharkauth/internal/webhook"
@@ -178,10 +179,21 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("seed default application: %w", err)
 	}
 
+	// OAuth 2.1 server
+	var oauthSrv *oauth.Server
+	if cfg.OAuthServer.Enabled {
+		oauthSrv, err = oauth.NewServer(store, cfg)
+		if err != nil {
+			slog.Warn("oauth: failed to initialize", "error", err)
+			// Non-fatal: server runs without OAuth if initialization fails.
+		}
+	}
+
 	apiSrv := api.NewServer(store, cfg,
 		api.WithEmailSender(sender),
 		api.WithWebhookDispatcher(dispatcher),
 		api.WithJWTManager(jwtMgr),
+		api.WithOAuthServer(oauthSrv),
 	)
 
 	return &Bootstrap{

@@ -201,6 +201,7 @@ type Store interface {
 	// JWT signing keys
 	InsertSigningKey(ctx context.Context, key *SigningKey) error
 	GetActiveSigningKey(ctx context.Context) (*SigningKey, error)
+	GetActiveSigningKeyByAlgorithm(ctx context.Context, algorithm string) (*SigningKey, error)
 	GetSigningKeyByKID(ctx context.Context, kid string) (*SigningKey, error)
 	RotateSigningKeys(ctx context.Context, newKey *SigningKey) error
 	ListJWKSCandidates(ctx context.Context, activeOnly bool, retiredCutoff time.Time) ([]*SigningKey, error)
