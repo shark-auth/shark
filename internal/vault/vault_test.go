@@ -465,6 +465,270 @@ func TestDisconnect_RemovesConnection(t *testing.T) {
 	}
 }
 
+// TestListConnections_ReturnsUserConnections verifies that ListConnections
+// scopes results to the requested user: two providers + two connections
+// belong to user_a while a third belongs to user_b. Only the first two
+// should come back when we query as user_a.
+func TestListConnections_ReturnsUserConnections(t *testing.T) {
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	m, _, store := setupManager(t, func() time.Time { return now })
+
+	seedUser(t, store, "usr_a")
+	seedUser(t, store, "usr_b")
+
+	// Two providers — use a second call to seedProvider-like logic since
+	// the helper hard-codes Name="mock".
+	providerA := seedProvider(t, m, "https://a.test/authorize", "https://a.test/token")
+	pB := &storage.VaultProvider{
+		Name:        "mock-b",
+		DisplayName: "Mock B",
+		AuthURL:     "https://b.test/authorize",
+		TokenURL:    "https://b.test/token",
+		ClientID:    "client-b",
+		Scopes:      []string{"read"},
+		Active:      true,
+	}
+	if err := m.CreateProvider(context.Background(), pB, "secret-b"); err != nil {
+		t.Fatalf("create provider B: %v", err)
+	}
+
+	future := now.Add(time.Hour)
+	mustSeedConnection(t, store, m, providerA, "usr_a", "acc-a1", "ref-a1", &future)
+	mustSeedConnection(t, store, m, pB.ID, "usr_a", "acc-a2", "ref-a2", &future)
+	mustSeedConnection(t, store, m, providerA, "usr_b", "acc-b1", "ref-b1", &future)
+
+	got, err := m.ListConnections(context.Background(), "usr_a")
+	if err != nil {
+		t.Fatalf("ListConnections: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 connections for usr_a, got %d", len(got))
+	}
+	for _, c := range got {
+		if c.UserID != "usr_a" {
+			t.Fatalf("ListConnections leaked a row for %q", c.UserID)
+		}
+	}
+
+	gotB, err := m.ListConnections(context.Background(), "usr_b")
+	if err != nil {
+		t.Fatalf("ListConnections usr_b: %v", err)
+	}
+	if len(gotB) != 1 {
+		t.Fatalf("expected 1 connection for usr_b, got %d", len(gotB))
+	}
+}
+
+// TestBuildAuthURL_IncludesScopesAndOffline verifies the authorize URL has
+// the pieces we rely on: response_type=code, the provider's client_id, the
+// space-joined scope list, and access_type=offline so the first consent
+// yields a refresh token.
+func TestBuildAuthURL_IncludesScopesAndOffline(t *testing.T) {
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	m, _, _ := setupManager(t, func() time.Time { return now })
+
+	// seedProvider uses scopes = ["read", "write"] and client_id "client-123".
+	providerID := seedProvider(t, m, "https://example.test/authorize", "https://example.test/token")
+
+	raw, err := m.BuildAuthURL(context.Background(), providerID, "state-abc", "https://app.test/cb", nil)
+	if err != nil {
+		t.Fatalf("BuildAuthURL: %v", err)
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse authorize URL: %v", err)
+	}
+	q := u.Query()
+	if got := q.Get("response_type"); got != "code" {
+		t.Fatalf("response_type: got %q want %q", got, "code")
+	}
+	if got := q.Get("client_id"); got != "client-123" {
+		t.Fatalf("client_id: got %q want %q", got, "client-123")
+	}
+	if got := q.Get("scope"); got != "read write" {
+		t.Fatalf("scope: got %q want %q", got, "read write")
+	}
+	if got := q.Get("access_type"); got != "offline" {
+		t.Fatalf("access_type: got %q want %q (offline access requests refresh tokens)", got, "offline")
+	}
+	if got := q.Get("state"); got != "state-abc" {
+		t.Fatalf("state echo mismatch: got %q", got)
+	}
+}
+
+// TestExchangeAndStore_PreservesRefreshTokenWhenOmittedOnReExchange covers
+// the regression flagged by I2: if an upstream provider omits refresh_token
+// on a re-exchange (user re-consented but provider didn't re-issue), we
+// must NOT overwrite the ciphertext with Encrypt(""). The original refresh
+// token ciphertext should remain decryptable to the original plaintext.
+func TestExchangeAndStore_PreservesRefreshTokenWhenOmittedOnReExchange(t *testing.T) {
+	// First response includes a refresh token; second one omits it.
+	resp := &mockTokenResponse{
+		accessToken:  "access-first",
+		refreshToken: "refresh-original",
+		expiresIn:    time.Hour,
+		scope:        "read write",
+	}
+	mock := newMockOAuthServer(t, resp)
+
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	m, enc, store := setupManager(t, func() time.Time { return now })
+
+	seedUser(t, store, "usr_reissue")
+	providerID := seedProvider(t, m, "https://example.test/authorize", mock.server.URL)
+
+	ctx := ctxWithHTTPClient(context.Background(), mock.server)
+	first, err := m.ExchangeAndStore(ctx, providerID, "usr_reissue", "code-1", "https://app.test/cb")
+	if err != nil {
+		t.Fatalf("first ExchangeAndStore: %v", err)
+	}
+	originalRefreshEnc := first.RefreshTokenEnc
+	if originalRefreshEnc == "" {
+		t.Fatalf("setup: first exchange produced empty refresh ciphertext")
+	}
+	if plain, _ := enc.Decrypt(originalRefreshEnc); plain != "refresh-original" {
+		t.Fatalf("setup: first refresh plaintext got %q want refresh-original", plain)
+	}
+
+	// Second exchange: access token rotates but refresh_token is omitted.
+	mock.response = &mockTokenResponse{
+		accessToken:  "access-second",
+		refreshToken: "", // upstream did NOT rotate the refresh token
+		expiresIn:    time.Hour,
+		scope:        "read write",
+	}
+
+	second, err := m.ExchangeAndStore(ctx, providerID, "usr_reissue", "code-2", "https://app.test/cb")
+	if err != nil {
+		t.Fatalf("second ExchangeAndStore: %v", err)
+	}
+
+	if second.RefreshTokenEnc != originalRefreshEnc {
+		t.Fatalf("refresh ciphertext was overwritten on re-exchange; want preserved original")
+	}
+
+	// Authoritative check: load from store and decrypt.
+	reloaded, err := store.GetVaultConnectionByID(context.Background(), second.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	refreshPlain, err := enc.Decrypt(reloaded.RefreshTokenEnc)
+	if err != nil {
+		t.Fatalf("decrypt preserved refresh: %v", err)
+	}
+	if refreshPlain != "refresh-original" {
+		t.Fatalf("preserved refresh plaintext: got %q want refresh-original", refreshPlain)
+	}
+
+	// Access token should have rotated.
+	accessPlain, err := enc.Decrypt(reloaded.AccessTokenEnc)
+	if err != nil {
+		t.Fatalf("decrypt access: %v", err)
+	}
+	if accessPlain != "access-second" {
+		t.Fatalf("access plaintext: got %q want access-second", accessPlain)
+	}
+}
+
+// markReauthErrStore wraps a real Store and forces
+// MarkVaultConnectionNeedsReauth to return a sentinel error. Everything
+// else delegates to the embedded store so the rest of the manager keeps
+// working. Method set is satisfied via interface embedding — Go picks up
+// the real implementation for every method we don't redeclare.
+type markReauthErrStore struct {
+	storage.Store
+	err error
+}
+
+func (s *markReauthErrStore) MarkVaultConnectionNeedsReauth(_ context.Context, _ string, _ bool) error {
+	return s.err
+}
+
+// TestGetFreshToken_RefreshFailureWithMarkReauthError verifies I3: when the
+// refresh fails AND the subsequent flag-flip also fails, the returned error
+// surfaces the storage failure instead of silently falling through to the
+// ErrNeedsReauth sentinel.
+func TestGetFreshToken_RefreshFailureWithMarkReauthError(t *testing.T) {
+	mock := newMockOAuthServer(t, &mockTokenResponse{
+		status:  http.StatusBadRequest,
+		errBody: `{"error":"invalid_grant"}`,
+	})
+
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+
+	// Build the normal stack first — seeding providers + connections needs
+	// the real store — then wrap the store and build a second Manager that
+	// shares the same DB but reroutes MarkVaultConnectionNeedsReauth.
+	baseStore := testutil.NewTestDB(t)
+	enc, err := auth.NewFieldEncryptor(testServerSecret)
+	if err != nil {
+		t.Fatalf("new encryptor: %v", err)
+	}
+	seedM := vault.NewManagerWithClock(baseStore, enc, func() time.Time { return now })
+
+	seedUser(t, baseStore, "usr_mark")
+	providerID := seedProvider(t, seedM, "https://example.test/authorize", mock.server.URL)
+	past := now.Add(-time.Hour)
+	mustSeedConnection(t, baseStore, seedM, providerID, "usr_mark", "stale", "dead-refresh", &past)
+
+	// The wrapped store returns a sentinel on MarkVaultConnectionNeedsReauth.
+	markErr := errors.New("boom: storage offline")
+	wrapped := &markReauthErrStore{Store: baseStore, err: markErr}
+	m := vault.NewManagerWithClock(wrapped, enc, func() time.Time { return now })
+
+	ctx := ctxWithHTTPClient(context.Background(), mock.server)
+	_, err = m.GetFreshToken(ctx, providerID, "usr_mark")
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if errors.Is(err, vault.ErrNeedsReauth) {
+		t.Fatalf("expected wrapped storage error, got ErrNeedsReauth (storage failure was swallowed)")
+	}
+	if !errors.Is(err, markErr) {
+		t.Fatalf("expected wrapped markErr, got %v", err)
+	}
+}
+
+// TestUpdateProviderSecret exercises the secret-rotation path: create a
+// provider with secret A, rotate to secret B, then reload + decrypt and
+// confirm we see B.
+func TestUpdateProviderSecret(t *testing.T) {
+	m, enc, store := setupManager(t, nil)
+
+	p := &storage.VaultProvider{
+		Name:        "rotate-me",
+		DisplayName: "Rotate Me",
+		AuthURL:     "https://rotate.test/authorize",
+		TokenURL:    "https://rotate.test/token",
+		ClientID:    "client-rot",
+		Scopes:      []string{"read"},
+		Active:      true,
+	}
+	if err := m.CreateProvider(context.Background(), p, "secret-A"); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+
+	if err := m.UpdateProviderSecret(context.Background(), p.ID, "secret-B"); err != nil {
+		t.Fatalf("UpdateProviderSecret: %v", err)
+	}
+
+	reloaded, err := store.GetVaultProviderByID(context.Background(), p.ID)
+	if err != nil {
+		t.Fatalf("reload provider: %v", err)
+	}
+	if reloaded.ClientSecretEnc == "secret-B" {
+		t.Fatalf("client secret stored in plaintext after rotation")
+	}
+	plain, err := enc.Decrypt(reloaded.ClientSecretEnc)
+	if err != nil {
+		t.Fatalf("decrypt rotated secret: %v", err)
+	}
+	if plain != "secret-B" {
+		t.Fatalf("rotated secret plaintext: got %q want secret-B", plain)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
@@ -494,7 +758,7 @@ func mustSeedConnection(t *testing.T, store storage.Store, m *vault.Manager, pro
 	}
 
 	now := time.Now().UTC()
-	id := fmt.Sprintf("vc_%s_%d", userID, time.Now().UnixNano())
+	id := fmt.Sprintf("vc_%s_%s_%d", userID, providerID, time.Now().UnixNano())
 	conn := &storage.VaultConnection{
 		ID:              id,
 		ProviderID:      providerID,

@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -203,10 +204,6 @@ func (m *Manager) ExchangeAndStore(ctx context.Context, providerID, userID, code
 	if err != nil {
 		return nil, fmt.Errorf("encrypt access token: %w", err)
 	}
-	refreshEnc, err := m.encryptor.Encrypt(token.RefreshToken)
-	if err != nil {
-		return nil, fmt.Errorf("encrypt refresh token: %w", err)
-	}
 
 	tokenType := token.TokenType
 	if tokenType == "" {
@@ -231,7 +228,19 @@ func (m *Manager) ExchangeAndStore(ctx context.Context, providerID, userID, code
 
 	if existing != nil {
 		existing.AccessTokenEnc = accessEnc
-		existing.RefreshTokenEnc = refreshEnc
+		// Many providers omit refresh_token on re-exchange when the user has
+		// already consented; preserve the existing ciphertext in that case
+		// rather than overwriting with an encrypted empty string. Mirrors
+		// the refresh-path behaviour below.
+		if token.RefreshToken == "" && existing.RefreshTokenEnc != "" {
+			// keep existing ciphertext — upstream didn't rotate
+		} else {
+			refreshEnc, err := m.encryptor.Encrypt(token.RefreshToken)
+			if err != nil {
+				return nil, fmt.Errorf("encrypt refresh token: %w", err)
+			}
+			existing.RefreshTokenEnc = refreshEnc
+		}
 		existing.TokenType = tokenType
 		existing.Scopes = grantedScopes
 		existing.ExpiresAt = expiresAt
@@ -242,6 +251,11 @@ func (m *Manager) ExchangeAndStore(ctx context.Context, providerID, userID, code
 			return nil, fmt.Errorf("update connection: %w", err)
 		}
 		return existing, nil
+	}
+
+	refreshEnc, err := m.encryptor.Encrypt(token.RefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt refresh token: %w", err)
 	}
 
 	id, err := newID("vc_")
@@ -324,8 +338,9 @@ func (m *Manager) GetFreshToken(ctx context.Context, providerID, userID string) 
 
 	// oauth2.TokenSource handles the POST-to-token-endpoint refresh and any
 	// provider-specific quirks. We feed it an expired *oauth2.Token so it
-	// always performs the refresh.
-	expiredAt := time.Now().Add(-time.Hour)
+	// always performs the refresh. Use the injectable clock so tests stay
+	// deterministic.
+	expiredAt := m.now().Add(-time.Hour)
 	if conn.ExpiresAt != nil {
 		expiredAt = *conn.ExpiresAt
 	}
@@ -335,10 +350,13 @@ func (m *Manager) GetFreshToken(ctx context.Context, providerID, userID string) 
 	})
 	fresh, err := source.Token()
 	if err != nil {
-		// Refresh rejected — mark re-auth required. We intentionally swallow
-		// the MarkVaultConnectionNeedsReauth error's info into the log path
-		// (caller gets the sentinel either way).
-		_ = m.store.MarkVaultConnectionNeedsReauth(ctx, conn.ID, true)
+		// Refresh rejected — mark re-auth required. If flipping the flag
+		// itself fails we surface the storage error so operators see it
+		// instead of silently stranding the connection in an inconsistent
+		// state.
+		if markErr := m.store.MarkVaultConnectionNeedsReauth(ctx, conn.ID, true); markErr != nil {
+			return "", fmt.Errorf("vault: refresh failed and mark-reauth failed: %w", markErr)
+		}
 		return "", ErrNeedsReauth
 	}
 
@@ -436,20 +454,8 @@ func extractGrantedScopes(token *oauth2.Token, requested []string) []string {
 	if token == nil {
 		return requested
 	}
-	raw, ok := token.Extra("scope").(string)
-	if !ok || raw == "" {
-		return requested
-	}
-	out := make([]string, 0, 4)
-	start := 0
-	for i := 0; i <= len(raw); i++ {
-		if i == len(raw) || raw[i] == ' ' {
-			if i > start {
-				out = append(out, raw[start:i])
-			}
-			start = i + 1
-		}
-	}
+	raw, _ := token.Extra("scope").(string)
+	out := strings.Fields(raw)
 	if len(out) == 0 {
 		return requested
 	}
