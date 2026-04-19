@@ -219,6 +219,50 @@ type Store interface {
 	UpdateApplication(ctx context.Context, app *Application) error
 	RotateApplicationSecret(ctx context.Context, id, newHash, newPrefix string) error
 	DeleteApplication(ctx context.Context, id string) error
+
+	// Agents (OAuth 2.1 clients)
+	CreateAgent(ctx context.Context, agent *Agent) error
+	GetAgentByID(ctx context.Context, id string) (*Agent, error)
+	GetAgentByClientID(ctx context.Context, clientID string) (*Agent, error)
+	ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*Agent, int, error)
+	UpdateAgent(ctx context.Context, agent *Agent) error
+	DeactivateAgent(ctx context.Context, id string) error
+
+	// OAuth Authorization Codes
+	CreateAuthorizationCode(ctx context.Context, code *OAuthAuthorizationCode) error
+	GetAuthorizationCode(ctx context.Context, codeHash string) (*OAuthAuthorizationCode, error)
+	DeleteAuthorizationCode(ctx context.Context, codeHash string) error
+	DeleteExpiredAuthorizationCodes(ctx context.Context) (int64, error)
+
+	// OAuth Tokens
+	CreateOAuthToken(ctx context.Context, token *OAuthToken) error
+	GetOAuthTokenByJTI(ctx context.Context, jti string) (*OAuthToken, error)
+	GetOAuthTokenByHash(ctx context.Context, tokenHash string) (*OAuthToken, error)
+	RevokeOAuthToken(ctx context.Context, id string) error
+	RevokeOAuthTokensByClientID(ctx context.Context, clientID string) (int64, error)
+	RevokeOAuthTokenFamily(ctx context.Context, familyID string) (int64, error)
+	ListOAuthTokensByAgentID(ctx context.Context, agentID string, limit int) ([]*OAuthToken, error)
+	DeleteExpiredOAuthTokens(ctx context.Context) (int64, error)
+
+	// OAuth Consents
+	CreateOAuthConsent(ctx context.Context, consent *OAuthConsent) error
+	GetActiveConsent(ctx context.Context, userID, clientID string) (*OAuthConsent, error)
+	ListConsentsByUserID(ctx context.Context, userID string) ([]*OAuthConsent, error)
+	RevokeOAuthConsent(ctx context.Context, id string) error
+
+	// Device Codes (RFC 8628)
+	CreateDeviceCode(ctx context.Context, dc *OAuthDeviceCode) error
+	GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*OAuthDeviceCode, error)
+	GetDeviceCodeByHash(ctx context.Context, hash string) (*OAuthDeviceCode, error)
+	UpdateDeviceCodeStatus(ctx context.Context, hash string, status string, userID string) error
+	UpdateDeviceCodePolledAt(ctx context.Context, hash string) error
+	DeleteExpiredDeviceCodes(ctx context.Context) (int64, error)
+
+	// Dynamic Client Registration (RFC 7591)
+	CreateDCRClient(ctx context.Context, client *OAuthDCRClient) error
+	GetDCRClient(ctx context.Context, clientID string) (*OAuthDCRClient, error)
+	UpdateDCRClient(ctx context.Context, client *OAuthDCRClient) error
+	DeleteDCRClient(ctx context.Context, clientID string) error
 }
 
 // --- Entity types ---
