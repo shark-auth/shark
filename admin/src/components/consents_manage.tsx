@@ -1,12 +1,13 @@
 // @ts-nocheck
 import React from 'react'
-import { Icon, CopyField } from './shared'
+import { Icon } from './shared'
 import { API, useAPI } from './api'
-import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
 
 // Consents page — per-user OAuth consent grants
-// Lists the authenticated user's active consent grants with revoke action.
+// Self-service consent view (session-authenticated endpoint). Admin-wide consent
+// listing would require a separate admin endpoint not yet implemented — fallback
+// empty state covers that case.
 // NOTE: backend endpoint /auth/consents is SESSION-authenticated, not admin-key
 // authenticated. When called from the admin UI (Bearer sk_live_*), it will
 // typically 401. We degrade gracefully into an explanatory empty state.
@@ -18,6 +19,7 @@ const modalCard = { background:'var(--surface-1)', border:'1px solid var(--hairl
 
 export function Consents() {
   const [filter, setFilter] = React.useState('all'); // all | hasExpiry | noExpiry
+  const [scopeFilter, setScopeFilter] = React.useState('all');
   const [query, setQuery] = React.useState('');
   const [revokeModal, setRevokeModal] = React.useState(null);
 
@@ -28,9 +30,22 @@ export function Consents() {
   const authMismatch = !!error && /unauthorized|forbidden|401|403/i.test(error);
   const showFallback = authMismatch || (!loading && !error && consents.length === 0);
 
+  // Distinct scopes across all consents, for the scope filter dropdown.
+  const allScopes = React.useMemo(() => {
+    const set = new Set();
+    for (const c of consents) {
+      for (const s of splitScope(c.scope)) set.add(s);
+    }
+    return Array.from(set).sort();
+  }, [consents]);
+
   const filtered = consents.filter(c => {
     if (filter === 'hasExpiry' && !c.expires_at) return false;
     if (filter === 'noExpiry' && c.expires_at) return false;
+    if (scopeFilter !== 'all') {
+      const scopes = splitScope(c.scope);
+      if (!scopes.includes(scopeFilter)) return false;
+    }
     if (query) {
       const q = query.toLowerCase();
       const name = (c.agent_name || '').toLowerCase();
@@ -75,6 +90,21 @@ export function Consents() {
             }}>{l}</button>
           ))}
         </div>
+        <select
+          value={scopeFilter}
+          onChange={e => setScopeFilter(e.target.value)}
+          style={{
+            height: 28, padding: '0 8px', fontSize: 11,
+            background: 'var(--surface-1)', color: 'var(--fg)',
+            border: '1px solid var(--hairline-strong)', borderRadius: 4,
+            cursor: 'pointer',
+          }}
+        >
+          <option value="all">All scopes</option>
+          {allScopes.map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         <div style={{flex:1}}/>
         <span className="faint mono" style={{fontSize:11}}>{filtered.length} / {consents.length}</span>
       </div>
@@ -191,11 +221,6 @@ function FallbackEmptyState({ authMismatch }) {
               Admin-wide consent viewing is not yet available — track via Audit Log
               (<span className="mono">action=consent.granted</span> / <span className="mono">consent.revoked</span>).
             </div>
-            <div className="row" style={{ justifyContent: 'center', gap: 8, marginTop: 16 }}>
-              <button className="btn ghost sm" onClick={() => { /* placeholder — no cross-page nav */ }}>
-                <Icon.Audit width={11} height={11}/> Audit log
-              </button>
-            </div>
           </>
         ) : (
           <>
@@ -228,7 +253,7 @@ function RevokeConsentModal({ consent, onClose, onSuccess }) {
     setError(null);
     try {
       await API.del('/auth/consents/' + consent.id);
-      toast.undo(`Revoked consent for "${consent.agent_name || consent.client_id}"`, () => { /* action is irreversible; undo window just lets toast dismiss */ });
+      toast.success(`Revoked consent for "${consent.agent_name || consent.client_id}"`);
       onSuccess();
     } catch (e) {
       setError(e.message);
