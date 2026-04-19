@@ -62,6 +62,17 @@ export function Settings() {
     }
   }
 
+  async function handleTestEmail() {
+    const to = prompt('Send test email to:');
+    if (!to) return;
+    try {
+      await API.post('/admin/test-email', { to });
+      showToast('Test email sent to ' + to);
+    } catch (e) {
+      showToast(e?.message || 'Failed to send', 'danger');
+    }
+  }
+
   function handleDeleteAllUsers() {
     setDeleteConfirmOpen(false);
     setDeleteConfirmInput('');
@@ -237,17 +248,14 @@ export function Settings() {
               </ConfigRow>
             )}
             <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div title="Endpoint not available yet" style={{ display: 'inline-block' }}>
-                <button
-                  className="btn sm"
-                  disabled
-                  style={{ cursor: 'not-allowed', opacity: 0.45 }}
-                >
-                  <Icon.Mail width={11} height={11}/>
-                  Send test email
-                </button>
-              </div>
-              <span className="faint" style={{ fontSize: 11 }}>Endpoint not available yet</span>
+              <button
+                className="btn sm"
+                onClick={handleTestEmail}
+              >
+                <Icon.Mail width={11} height={11}/>
+                Send test email
+              </button>
+              <span className="faint" style={{ fontSize: 11 }}>Sends to configured provider (dev inbox in dev mode)</span>
             </div>
           </div>
         </section>

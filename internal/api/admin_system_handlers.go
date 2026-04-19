@@ -3,11 +3,15 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"runtime/debug"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 // adminHealthResponse is the response shape for GET /admin/health.
@@ -153,4 +157,82 @@ func (s *Server) handleAdminListOrgMembers(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"members": members})
+}
+
+// handleAdminTestEmail handles POST /api/v1/admin/test-email.
+// Sends a test email to verify SMTP/email provider configuration.
+func (s *Server) handleAdminTestEmail(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		To string `json:"to"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.To == "" {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Field 'to' is required"))
+		return
+	}
+
+	// Get email sender from MagicLinkManager (or dev inbox in dev mode)
+	var sender email.Sender
+	if s.MagicLinkManager != nil {
+		sender = s.MagicLinkManager.Sender()
+	}
+	if sender == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errPayload("email_not_configured", "No email provider configured"))
+		return
+	}
+
+	msg := &email.Message{
+		To:      req.To,
+		Subject: "SharkAuth Test Email",
+		HTML:    "<h2>SharkAuth Email Test</h2><p>This is a test email from your SharkAuth instance.</p><p>If you received this, your email configuration is working correctly.</p>",
+		Text:    "SharkAuth Email Test\n\nThis is a test email from your SharkAuth instance.\nIf you received this, your email configuration is working correctly.",
+	}
+
+	if err := sender.Send(msg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, errPayload("send_failed", "Failed to send test email: "+err.Error()))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "to": req.To})
+}
+
+// handleAdminListUserPasskeys handles GET /api/v1/users/{id}/passkeys.
+// Lists passkey credentials for a user (admin access).
+func (s *Server) handleAdminListUserPasskeys(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+	creds, err := s.Store.GetPasskeysByUserID(r.Context(), userID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	if creds == nil {
+		creds = []*storage.PasskeyCredential{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"passkeys": creds})
+}
+
+// handleAdminRotateSigningKey handles POST /api/v1/admin/auth/rotate-signing-key.
+// Generates a new JWT signing key and retires the current one.
+func (s *Server) handleAdminRotateSigningKey(w http.ResponseWriter, r *http.Request) {
+	if s.JWTManager == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errPayload("jwt_not_configured", "JWT mode is not enabled"))
+		return
+	}
+
+	if err := s.JWTManager.GenerateAndStore(r.Context(), true); err != nil {
+		writeJSON(w, http.StatusInternalServerError, errPayload("rotation_failed", "Failed to rotate signing key: "+err.Error()))
+		return
+	}
+
+	// Get the new active key info
+	key, err := s.Store.GetActiveSigningKey(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"rotated": true})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"rotated":   true,
+		"kid":       key.KID,
+		"algorithm": key.Algorithm,
+	})
 }

@@ -51,11 +51,22 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 
-	users, err := s.Store.ListUsers(r.Context(), storage.ListUsersOpts{
+	opts := storage.ListUsersOpts{
 		Limit:  limit,
 		Offset: offset,
 		Search: search,
-	})
+		RoleID: r.URL.Query().Get("role_id"),
+	}
+	if v := r.URL.Query().Get("mfa_enabled"); v == "true" || v == "false" {
+		b := v == "true"
+		opts.MFAEnabled = &b
+	}
+	if v := r.URL.Query().Get("email_verified"); v == "true" || v == "false" {
+		b := v == "true"
+		opts.EmailVerified = &b
+	}
+
+	users, err := s.Store.ListUsers(r.Context(), opts)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",

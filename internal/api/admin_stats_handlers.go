@@ -29,8 +29,9 @@ type statsResponse struct {
 		Expiring7d  int `json:"expiring_7d"`
 	} `json:"api_keys"`
 	SSOConnections struct {
-		Total   int `json:"total"`
-		Enabled int `json:"enabled"`
+		Total      int            `json:"total"`
+		Enabled    int            `json:"enabled"`
+		UserCounts map[string]int `json:"user_counts,omitempty"`
 	} `json:"sso_connections"`
 }
 
@@ -110,6 +111,7 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	resp.APIKeys.Expiring7d = expiring
 	resp.SSOConnections.Total = ssoTotal
 	resp.SSOConnections.Enabled = ssoEnabled
+	resp.SSOConnections.UserCounts, _ = s.Store.CountSSOIdentitiesByConnection(ctx)
 
 	writeJSON(w, http.StatusOK, resp)
 }

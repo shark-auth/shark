@@ -75,13 +75,13 @@ func (s *SQLiteStore) CreateUser(ctx context.Context, u *User) error {
 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at
+		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at
 		 FROM users WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at
+		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at
 		 FROM users WHERE email = ?`, email))
 }
 
@@ -94,12 +94,30 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 	}
 
 	var args []interface{}
-	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at FROM users`
+	var conditions []string
 
+	if opts.RoleID != "" {
+		// Join through user_roles for role filter
+		conditions = append(conditions, `id IN (SELECT user_id FROM user_roles WHERE role_id = ?)`)
+		args = append(args, opts.RoleID)
+	}
 	if opts.Search != "" {
-		query += ` WHERE email LIKE ? OR name LIKE ?`
+		conditions = append(conditions, `(email LIKE ? OR name LIKE ?)`)
 		search := "%" + opts.Search + "%"
 		args = append(args, search, search)
+	}
+	if opts.MFAEnabled != nil {
+		conditions = append(conditions, `mfa_enabled = ?`)
+		args = append(args, boolToInt(*opts.MFAEnabled))
+	}
+	if opts.EmailVerified != nil {
+		conditions = append(conditions, `email_verified = ?`)
+		args = append(args, boolToInt(*opts.EmailVerified))
+	}
+
+	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at FROM users`
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
 	}
 
 	query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
@@ -124,11 +142,11 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 
 func (s *SQLiteStore) UpdateUser(ctx context.Context, u *User) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET email=?, email_verified=?, password_hash=?, hash_type=?, name=?, avatar_url=?, mfa_enabled=?, mfa_secret=?, mfa_verified=?, metadata=?, updated_at=?
+		`UPDATE users SET email=?, email_verified=?, password_hash=?, hash_type=?, name=?, avatar_url=?, mfa_enabled=?, mfa_secret=?, mfa_verified=?, metadata=?, updated_at=?, last_login_at=?
 		 WHERE id=?`,
 		u.Email, boolToInt(u.EmailVerified), u.PasswordHash, u.HashType,
 		u.Name, u.AvatarURL, boolToInt(u.MFAEnabled), u.MFASecret, boolToInt(u.MFAVerified),
-		u.Metadata, u.UpdatedAt, u.ID,
+		u.Metadata, u.UpdatedAt, u.LastLoginAt, u.ID,
 	)
 	return err
 }
@@ -144,7 +162,7 @@ func (s *SQLiteStore) scanUser(row *sql.Row) (*User, error) {
 	err := row.Scan(
 		&u.ID, &u.Email, &emailVerified, &u.PasswordHash, &u.HashType,
 		&u.Name, &u.AvatarURL, &mfaEnabled, &u.MFASecret, &mfaVerified,
-		&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+		&u.Metadata, &u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
 	)
 	if err != nil {
 		return nil, err
@@ -161,7 +179,7 @@ func (s *SQLiteStore) scanUserFromRows(rows *sql.Rows) (*User, error) {
 	err := rows.Scan(
 		&u.ID, &u.Email, &emailVerified, &u.PasswordHash, &u.HashType,
 		&u.Name, &u.AvatarURL, &mfaEnabled, &u.MFASecret, &mfaVerified,
-		&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+		&u.Metadata, &u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
 	)
 	if err != nil {
 		return nil, err
@@ -1120,6 +1138,26 @@ func (s *SQLiteStore) CountSSOConnections(ctx context.Context, enabledOnly bool)
 	var n int
 	err := s.db.QueryRowContext(ctx, q).Scan(&n)
 	return n, err
+}
+
+// CountSSOIdentitiesByConnection returns a map of connection_id → user count.
+func (s *SQLiteStore) CountSSOIdentitiesByConnection(ctx context.Context) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT connection_id, COUNT(*) FROM sso_identities GROUP BY connection_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int)
+	for rows.Next() {
+		var connID string
+		var count int
+		if err := rows.Scan(&connID, &count); err != nil {
+			return nil, err
+		}
+		result[connID] = count
+	}
+	return result, rows.Err()
 }
 
 func (s *SQLiteStore) GroupSessionsByAuthMethodSince(ctx context.Context, since time.Time) ([]MethodCount, error) {

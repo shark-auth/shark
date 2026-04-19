@@ -251,6 +251,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Clear lockout on successful login
 	s.LockoutManager.RecordSuccess(req.Email)
 
+	// Update last_login_at
+	now := time.Now().UTC().Format(time.RFC3339)
+	user.LastLoginAt = &now
+	_ = s.Store.UpdateUser(r.Context(), user)
+
 	// If password needs rehash (e.g. bcrypt from Auth0 migration), rehash to argon2id
 	if auth.NeedsRehash(*user.PasswordHash) {
 		newHash, err := auth.HashPassword(req.Password, s.Config.Auth.Argon2id)

@@ -49,6 +49,7 @@ type Store interface {
 	CountFailedLoginsSince(ctx context.Context, since time.Time) (int, error)
 	CountExpiringAPIKeys(ctx context.Context, within time.Duration) (int, error)
 	CountSSOConnections(ctx context.Context, enabledOnly bool) (int, error)
+	CountSSOIdentitiesByConnection(ctx context.Context) (map[string]int, error)
 	GroupSessionsByAuthMethodSince(ctx context.Context, since time.Time) ([]MethodCount, error)
 	GroupUsersCreatedByDay(ctx context.Context, days int) ([]DayCount, error)
 
@@ -237,6 +238,7 @@ type User struct {
 	Metadata      string  `json:"metadata"`
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`
+	LastLoginAt   *string `json:"last_login_at,omitempty"`
 }
 
 // Session represents a user session.
@@ -513,9 +515,12 @@ type DayCount struct {
 
 // ListUsersOpts configures user list queries.
 type ListUsersOpts struct {
-	Limit  int
-	Offset int
-	Search string // optional email/name search
+	Limit         int
+	Offset        int
+	Search        string // optional email/name search
+	MFAEnabled    *bool  // filter by mfa_enabled
+	EmailVerified *bool  // filter by email_verified
+	RoleID        string // filter by role assignment
 }
 
 // ListSessionsOpts configures admin session list queries with cursor pagination.

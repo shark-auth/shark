@@ -275,6 +275,70 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE/healthz)
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -b cj.txt -X POST $BASE/api/v1/auth/logout)
 if [ "$CODE" = 200 ] || [ "$CODE" = 204 ]; then pass "/logout $CODE"; else fail "/logout $CODE"; fi
 
+# --- 14: Admin System Endpoints (Wave G) --------------------------------------
+section "admin system endpoints"
+
+# Test email (dev mode sends to dev inbox)
+CODE=$(curl -s -o /tmp/test-email.json -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"test@example.com"}' \
+  $BASE/api/v1/admin/test-email)
+[ "$CODE" = 200 ] && pass "POST /admin/test-email → 200" || fail "POST /admin/test-email → $CODE"
+
+# Purge expired sessions
+CODE=$(curl -s -o /tmp/purge-sess.json -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -X POST $BASE/api/v1/admin/sessions/purge-expired)
+[ "$CODE" = 200 ] && pass "POST /admin/sessions/purge-expired → 200" || fail "POST /admin/sessions/purge-expired → $CODE"
+
+# Purge audit logs (far future date = 0 deleted)
+CODE=$(curl -s -o /tmp/purge-audit.json -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"before":"2020-01-01T00:00:00Z"}' \
+  $BASE/api/v1/admin/sessions/purge-expired)
+[ "$CODE" = 200 ] && pass "POST /admin/audit-logs/purge → 200" || fail "POST /admin/audit-logs/purge → $CODE"
+
+# User oauth-accounts (empty array is fine)
+CODE=$(curl -s -o /tmp/oauth-accts.json -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  $BASE/api/v1/users/$USERID/oauth-accounts 2>/dev/null)
+if [ "$CODE" = 200 ]; then pass "GET /users/{id}/oauth-accounts → 200"
+elif [ -z "${USERID:-}" ]; then note "USER_ID not set, skipping oauth-accounts"
+else fail "GET /users/{id}/oauth-accounts → $CODE"; fi
+
+# User passkeys (empty array is fine)
+CODE=$(curl -s -o /tmp/passkeys.json -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  $BASE/api/v1/users/$USERID/passkeys 2>/dev/null)
+if [ "$CODE" = 200 ]; then pass "GET /users/{id}/passkeys → 200"
+elif [ -z "${USERID:-}" ]; then note "USER_ID not set, skipping passkeys"
+else fail "GET /users/{id}/passkeys → $CODE"; fi
+
+# Rotate signing key
+CODE=$(curl -s -o /tmp/rotate-key.json -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -X POST $BASE/api/v1/admin/auth/rotate-signing-key)
+[ "$CODE" = 200 ] && pass "POST /admin/auth/rotate-signing-key → 200" || fail "POST /admin/auth/rotate-signing-key → $CODE"
+
+# Verify JWKS has 2+ keys after rotation
+JWKS_KEYS=$(curl -s $BASE/.well-known/jwks.json | jq '.keys | length')
+[ "$JWKS_KEYS" -ge 2 ] 2>/dev/null && pass "JWKS has $JWKS_KEYS keys after rotation" || fail "JWKS keys=$JWKS_KEYS (expected ≥2)"
+
+# --- 15: User List Filters ---------------------------------------------------
+section "user list filters"
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  "$BASE/api/v1/users?mfa_enabled=false")
+[ "$CODE" = 200 ] && pass "GET /users?mfa_enabled=false → 200" || fail "GET /users?mfa_enabled=false → $CODE"
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  "$BASE/api/v1/users?email_verified=true")
+[ "$CODE" = 200 ] && pass "GET /users?email_verified=true → 200" || fail "GET /users?email_verified=true → $CODE"
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"

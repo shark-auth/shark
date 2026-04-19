@@ -336,6 +336,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Delete("/{id}/sessions", s.handleRevokeUserSessions)
 			r.Get("/{id}/oauth-accounts", s.handleListUserOAuthAccounts)
 			r.Delete("/{id}/oauth-accounts/{oauthId}", s.handleDeleteUserOAuthAccount)
+			r.Get("/{id}/passkeys", s.handleAdminListUserPasskeys)
 		})
 
 		// SSO connections (admin + public endpoints)
@@ -424,6 +425,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Delete("/sessions/{id}", s.handleAdminDeleteSession)
 			r.Post("/sessions/purge-expired", s.handlePurgeExpiredSessions)
 			r.Post("/audit-logs/purge", s.handlePurgeAuditLogs)
+			r.Post("/test-email", s.handleAdminTestEmail)
+			r.Post("/auth/rotate-signing-key", s.handleAdminRotateSigningKey)
 
 			// Admin organization endpoints (admin key auth, not session auth)
 			r.Get("/organizations", s.handleAdminListOrganizations)

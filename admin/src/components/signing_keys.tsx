@@ -79,26 +79,22 @@ export function SigningKeys() {
             <Icon.External width={11} height={11}/>
             Download JWKS
           </button>
-          <div style={{ position: 'relative' }}
-            onMouseEnter={e => setRotateTooltip(true)}
-            onMouseLeave={() => setRotateTooltip(false)}>
-            <button className="btn sm" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-              <Icon.Signing width={11} height={11}/>
-              Rotate
-            </button>
-            {rotateTooltip && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 4,
-                background: 'var(--surface-3)', border: '1px solid var(--hairline)',
-                borderRadius: 4, padding: '5px 9px',
-                fontSize: 11, color: 'var(--fg-muted)',
-                whiteSpace: 'nowrap', zIndex: 20,
-                boxShadow: 'var(--shadow-lg)',
-              }}>
-                Rotation endpoint not available yet
-              </div>
-            )}
-          </div>
+          <button className="btn sm" onClick={async () => {
+            if (!confirm('Rotate signing key? Clients caching JWKS may see transient failures within cache TTL.')) return;
+            try {
+              const res = await API.post('/admin/auth/rotate-signing-key');
+              alert('Key rotated. New KID: ' + (res?.kid || 'unknown'));
+              setLoading(true);
+              const jwks = await fetch('/.well-known/jwks.json').then(r => r.json());
+              setKeys(jwks.keys || []);
+              setLoading(false);
+            } catch (e) {
+              alert('Rotation failed: ' + (e?.message || 'unknown error'));
+            }
+          }}>
+            <Icon.Signing width={11} height={11}/>
+            Rotate
+          </button>
         </div>
 
         {/* JWKS URL strip */}
