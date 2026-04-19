@@ -48,7 +48,7 @@ export function Agents() {
       const fresh = agents.find(a => a.id === selected.id);
       if (fresh) setSelected(fresh);
     }
-  }, [agents]);
+  }, [agents, selected?.id]);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 560px' : '1fr', height: '100%', overflow: 'hidden' }}>
@@ -418,7 +418,7 @@ function AgentConfig({ agent, onUpdate }) {
           {redirectUris.length === 0 ? (
             <div className="faint" style={{padding: '8px 10px', fontSize: 11}}>None configured.</div>
           ) : redirectUris.map((uri, i) => (
-            <div key={i} className="row" style={{ padding: '7px 10px', gap: 8, borderBottom: i < redirectUris.length - 1 ? '1px solid var(--hairline)' : 0 }}>
+            <div key={uri} className="row" style={{ padding: '7px 10px', gap: 8, borderBottom: i < redirectUris.length - 1 ? '1px solid var(--hairline)' : 0 }}>
               <span className="mono" style={{ fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{uri}</span>
               {uri.includes('localhost') && <span className="chip" style={{height:15, fontSize:9}}>dev</span>}
               <button className="btn ghost icon sm" onClick={() => removeRedirect(uri)} disabled={saving}><Icon.X width={10} height={10}/></button>
@@ -607,6 +607,12 @@ function DeactivateModal({ agent, onClose, onConfirm }) {
   const [working, setWorking] = React.useState(false);
   const [error, setError] = React.useState(null);
 
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const go = async () => {
     setWorking(true);
     setError(null);
@@ -657,6 +663,18 @@ function CreateAgentSlideOver({ onClose, onCreate }) {
   const [error, setError] = React.useState(null);
   const [created, setCreated] = React.useState(null); // holds response with secret
 
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !created?.client_secret) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, created?.client_secret]);
+
+  const handleBackdropClick = () => {
+    if (!created?.client_secret) onClose();
+  };
+
   const toggleGrant = (g) => {
     setGrantTypes(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
   };
@@ -683,7 +701,7 @@ function CreateAgentSlideOver({ onClose, onCreate }) {
   };
 
   return (
-    <div style={modalBackdrop} onClick={onClose}>
+    <div style={modalBackdrop} onClick={handleBackdropClick}>
       <div style={{
         position:'fixed', top: 0, right: 0, bottom: 0, width: 520,
         background:'var(--surface-0)', borderLeft:'1px solid var(--hairline-bright)',
@@ -693,7 +711,7 @@ function CreateAgentSlideOver({ onClose, onCreate }) {
           <h2 style={{margin:0, fontSize: 14, fontWeight: 600, flex:1}}>
             {created ? 'Agent created' : 'New agent'}
           </h2>
-          <button className="btn ghost icon sm" onClick={onClose}><Icon.X width={11} height={11}/></button>
+          <button className="btn ghost icon sm" onClick={handleBackdropClick}><Icon.X width={11} height={11}/></button>
         </div>
 
         <div style={{flex:1, overflowY:'auto', padding: 20}}>
