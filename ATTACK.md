@@ -136,7 +136,7 @@ Moves toward configless:
 Net: self-host = 1-question init + `shark app create` once per relying party.
 Cloud = zero YAML, all dashboard, shark.email auto-provisioned per tenant.
 
-Phase 4 — Dashboard (7-10 days)
+Phase 4 — Dashboard (7-10 days) — Done
 
 - Svelte admin dashboard (existing DASHBOARD.md spec)
 - nextjs/react dashboard mimiccking svelte but for cloud *do not code this here, just keep a note*
@@ -146,21 +146,19 @@ Phase 4 — Dashboard (7-10 days)
 This is what turns Shark from an API into a product. The HN demo GIF comes from
 this.
 
-Phase 4.5 — Dashboard Polish (3-5 days)
+Phase 4.5 — Dashboard Polish (3-5 days) — Done (except responsive)
 
 **Spec:** `specdashby.md` — full gap analysis + phased execution plan (Waves A–G)
 
-- **Wave A ✅ DONE** — Global UX: Cmd+K, keyboard shortcuts, undo toasts, deep linking, CLI footers, phase shells
-- **Wave B** — Settings + Auth config: session mode badge, shark.email tier, JWT toggle UI, passkey config, JWKS download, magic link shortcut
-- **Wave C** — Users + Sessions: filter dropdowns, type-email delete, JTI column, revoke-by-JTI input, profile actions
-- **Wave D** — Orgs + SSO: invitations tab, SSO enforcement, org audit, domain routing tester, connection detail
-- **Wave E** — RBAC + Keys + Webhooks: permission explorer, check-permission tool, curl snippets, replay, test fire, sig verify
-- **Wave F** — Polish: responsive design, optimistic mutations, empty state teach pattern
-- **Wave G** — Backend-blocked: health/config endpoints, test-email, purge, oauth-accounts, passkeys, last_login_at, signing key rotate
+- **Wave A ✅** — Global UX: Cmd+K, keyboard shortcuts, undo toasts, deep linking, CLI footers, phase shells
+- **Wave B ✅** — Settings + Auth config: session mode badge, shark.email tier, JWT toggle UI, passkey config, JWKS download, magic link shortcut
+- **Wave C ✅** — Users + Sessions: filter dropdowns, type-email delete, JTI column, revoke-by-JTI input, profile actions
+- **Wave D ✅** — Orgs + SSO: invitations tab, SSO enforcement, org audit, domain routing tester, connection detail
+- **Wave E ✅** — RBAC + Keys + Webhooks: permission explorer, check-permission tool, curl snippets, replay, test fire, sig verify
+- **Wave F ✅** — Teach empty states, user profile actions, API key audit, email preview stub, SSO detail. Responsive deferred.
+- **Wave G ✅** — Backend: test-email endpoint, admin passkeys endpoint, signing key rotation, last_login_at migration, user filters, SSO user counts, smoke test sections 14+15
 
-Depends on: Phase 4 (dashboard exists). Wave G blocked on Go backend work.
-
-Turns dashboard from "pages that render data" into "product-grade UX that matches spec."
+Remaining from specdashby.md: responsive design only. See specdashby.md for details.
 
 Phase 5 — SDK (5-7 days)
 
