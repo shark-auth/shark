@@ -115,6 +115,10 @@ sharkauth ships everything you need to replace a managed auth provider:
 - **M2M API keys** — `sk_live_` prefixed keys with scopes, per-key rate limits, rotation, and revocation.
 - **audit logs** — every auth event captured automatically. cursor-based pagination, filtering, CSV export.
 - **session management** — AES-256 encrypted cookies, server-side validation, MFA-aware sessions.
+- **OAuth 2.1 authorization server** — full fosite-based AS with auth code + PKCE, client credentials, refresh rotation, DPoP, DCR, device flow, token exchange, introspection, revocation. Agents as first-class identities. See `AGENT_AUTH.md`.
+- **token vault** — managed third-party OAuth for agents (Google, Slack, GitHub, Microsoft, Notion, Linear, Jira). auto-refresh, AES-256-GCM at rest, agent delegation. See `AGENT_AUTH.md` Token Vault section.
+- **reverse proxy** — `shark serve --proxy-upstream URL` injects identity headers (`X-User-ID`, `X-Agent-ID`, `X-User-Roles`) into upstream requests. route rules engine with default deny. circuit breaker keeps agents online during auth-server outages. See `PROXY.md`.
+- **visual auth flow builder** — Auth0 Actions-style post-auth pipelines (signup → verify → MFA → redirect). dashboard editor with palette, canvas, dry-run preview. 12 step types including webhooks and conditionals. See `FLOWS.md`.
 
 ---
 

@@ -191,3 +191,190 @@ Full registry including pre-Phase 3 prefixes: `usr_`, `sess_`, `pk_`, `mlt_`, `m
 **Session JWT TTL hardcoded**: `IssueSessionJWT` uses `30 * 24 * time.Hour` hardcoded, not `cfg.Auth.SessionLifetimeDuration()`. The session JWT and cookie session lifetimes are therefore independent. If `auth.session_lifetime` is changed in config, the cookie session will reflect it but the JWT will not. Fix: wire `cfg.Auth.SessionLifetimeDuration()` through to `IssueSessionJWT`. Low priority since both default to 30d.
 
 **`handleAdminRevokeJTI` returns 200 not 204**: the PHASE3.md spec said 204 for the admin endpoint. The implementation returns 200 with a body for consistency with the user revoke endpoint. The API contract is not yet stable so this can be corrected before Phase 6 ships OAuth token introspection.
+
+---
+
+## Phase 6 — Shark Proxy + Visual Auth Flow Builder
+Shipped: 2026-04-19
+Commits: 50ef326, 6363fe8, 718e1e1, d728114, 7d307ee, a2d8bba, 7fed7fe, 9c9b156, 9663dfd, d74d063
+
+### 1. Proxy architecture (`internal/proxy/`)
+
+Six-file layout: `config.go`, `headers.go`, `proxy.go`, `rules.go`, `circuit.go`, `lru.go`. Package is dependency-free except stdlib (`net/http/httputil`, `container/list`, `log/slog`, `crypto/sha256`). Zero external deps on the hot path means every upstream request goes through <500 LOC of auditable code.
+
+Identity flows through `context.Context` via a struct-typed key (`identityCtxKey{}`), NOT a string key. Prevents cross-package ctx collisions. `WithIdentity(ctx, id)` and `IdentityFromContext(ctx)` are the only public API.
+
+Headers injected AFTER strip, always overwriting any client-supplied variant (belt-and-suspenders anti-spoofing). `X-User-Roles` comma-joined; `X-Shark-Cache-Age` emitted only when > 0 seconds.
+
+Panic recovery wraps `httputil.ReverseProxy.ServeHTTP` in a deferred recover → 503, slog.Error with the panic value. Transport is `http.DefaultTransport.Clone()` (not shared — mutating Timeout would affect every caller). Per-request bound via `context.WithTimeout` in addition to `ResponseHeaderTimeout` on the transport (double-bound).
+
+ErrorHandler writes 502 with `"upstream unreachable"` body. Deliberately opaque — never leak internal error strings to upstream clients.
+
+### 2. Rules engine (`internal/proxy/rules.go`)
+
+Compile-once model: `NewEngine([]RuleSpec)` parses all rules up-front, stores compiled `pathPattern` + `Requirement`. Evaluate is O(rules × segments) per request, no allocation on hot path.
+
+Path matching chi-style. Wildcards: `/foo/*` (prefix), `/foo/*/bar` (single-segment), `/foo/{id}` (alias for single-segment). Case-sensitive. Leading `/` required at compile time.
+
+First-match-wins iteration. Method filter is an exclusion from match, NOT an explicit reject — a GET rule doesn't deny POST to the same path; POST falls through to the next rule. Lets you layer `methods: [POST] require: role:admin` above `require: authenticated` without blocking GET traffic.
+
+Default deny: empty rules → every request denied. Only correct default for an authorization layer.
+
+`Requirement` has 6 kinds: `Anonymous`, `Authenticated`, `Role`, `Permission`, `Agent`, `Scope`. `Permission` stubbed in MVP (always returns false with `"permission-based rules not yet implemented"`) — clean hook for Phase 6.5 to wire RBAC. Every other kind fully evaluated inline from `Identity` fields.
+
+Rule-level `scopes` are AND'd with the primary requirement.
+
+### 3. Circuit breaker (`internal/proxy/circuit.go`)
+
+State machine: `Closed` ↔ `Open` ↔ `HalfOpen`. `Closed` + 3 consecutive failures → `Open`. `Open` + 1 success probe → `HalfOpen`. `HalfOpen` + success → `Closed`, + failure → back to `Open`. Failure counter resets on success in `Closed` (prevents flapping). Defaults: 3 threshold / 10s interval / 3s probe timeout.
+
+LRU (`internal/proxy/lru.go`): custom impl, `container/list` doubly-linked + `map[string]*list.Element`. O(1) get/put. Lazy TTL expiry — entries evicted on get() if expired, not via background sweep. Capacity-based eviction at tail. `sync.Mutex`-guarded.
+
+Two LRU instances per breaker: positive cache (5m TTL, 10K capacity) for known-good `cookie_hash → identity` maps; negative cache (30s TTL) for known-bad tokens. Negative TTL strictly shorter — a token revoked in auth server should be re-checked quickly if re-presented.
+
+`HashCookie(raw)` is SHA-256 hex. Never use raw cookie as cache key — prevents leaky log from revealing session tokens.
+
+Health monitor in dedicated goroutine, `time.Ticker`-driven. `Stop()` signals via `stopCh` AND waits on `doneCh` (idempotent). `StartStop` test asserts no goroutine leak via `runtime.NumGoroutine` diff.
+
+`BreakerResolver` composes `JWTResolver` + `LiveResolver`:
+- JWT tokens short-circuit to `JWTResolver` regardless of breaker state (stateless)
+- Session cookies route by state: `Closed` → `Live` + cache positive result; `Open` → cache lookup; `HalfOpen` → `Live` (success closes)
+- `Open` + cache miss + `miss_behavior: "reject"` → `ErrBreakerOpenNoCache`
+- `Open` + cache miss + `miss_behavior: "allow_readonly"` → anonymous identity with `AuthMethod: "anonymous-degraded"` — GET/HEAD only
+
+Negative-cache population: on `Live` error, cookie hash added to neg cache for 30s.
+
+### 4. Integration points (`internal/api/`)
+
+`proxy_resolvers.go`: `JWTResolver` wraps `jwtpkg.Manager.Verify`, `LiveResolver` wraps `auth.SessionManager.Validate` + `rbac.RBACManager.ListUserRoles`. Both implement `proxy.AuthResolver`. `proxy_handlers.go`: admin handlers all 404 themselves when `ProxyBreaker`/`ProxyEngine` is nil — safer than route-level gating because admin API stays at stable URL regardless of config.
+
+SSE endpoint (`/admin/proxy/status/stream`): `http.Flusher` + `text/event-stream` + 2s `time.Ticker`. Client disconnect via `r.Context().Done()`. Native browser `EventSource` can't set `Authorization` header, so dashboard falls back to 2s polling — SSE endpoint works with curl or custom clients.
+
+Catch-all mount: `r.Handle("/*", s.proxyAuthMiddleware(s.ProxyHandler))` at END of router construction. Chi trie precedence gives every other registered route priority. `TestProxyIntegration_AuthRoutesBypassProxy` asserts `/auth/login` continues to function with proxy enabled.
+
+Simulate endpoint reconstructs an `Identity` from request body, calls `proxy.Engine.Evaluate`, then `proxy.InjectIdentity` to produce `injected_headers`. No mocks — dashboard simulator hits same code path as live request.
+
+### 5. Standalone proxy (`cmd/shark/cmd/proxy.go`)
+
+MVP anonymous-only. Full JWT verification requires JWKS fetch + cache with rotation awareness — deferred to P4.1. Documented in command Long help. Standalone acceptable for zero-auth read-through (CDN fronting, static API mirrors) and rule testing in isolation.
+
+### 6. Dashboard (`admin/src/components/proxy_config.tsx`)
+
+Three sections: circuit strip (3 gauges) → URL simulator hero → rules table (read-only). Inline YAML-only note for rule editing (P5.1 adds inline editor + drag reorder).
+
+Polling loop for status: `useProxyStats()` custom hook with `setInterval(2000)` + `document.visibilityState` check (pauses when tab hidden). Native `fetch` not `useAPI` — hook needs HTTP status code to detect 404 → proxy disabled empty state.
+
+Gauges use CSS `@keyframes pulse` on status dot — 3s cycle when Closed, 1s amber when HalfOpen, static red when Open. No box-shadow glow (rejected AI slop), just 1px border with semantic color tokens.
+
+### 7. Auth Flow storage (`internal/storage/auth_flows*`)
+
+Migration 00012 adds `auth_flows` and `auth_flow_runs`. `auth_flows.steps` JSON-encoded `[]FlowStep` (each step: `type`, `config`, plus branch fields `condition`/`then`/`else`). `auth_flow_runs.metadata` opaque JSON populated by engine — holds timeline for dashboard history.
+
+`auth_flow_runs.flow_id` FK cascades on flow delete. `user_id` nullable (pre-signup flows). `blocked_at_step` nullable INTEGER via `sql.NullInt64` with `*int` in Go.
+
+Indexed `(trigger, priority DESC)` for `ListAuthFlowsByTrigger` — used in every handler.
+
+### 8. Flow engine (`internal/authflow/`)
+
+Three-file split: `engine.go` (types, Execute/ExecuteDryRun/persistence), `steps.go` (12 executors), `conditions.go` (map-based predicate DSL).
+
+6 fully-wired step types, 6 stubbed. Stubbed dispatch, log warning, return `Continue` — flows don't break mid-execution. Each has `TODO(F2.1)` comment with specific backend integration needed.
+
+Webhook executor:
+- Timeout from `config.timeout` (default 5s, capped 30s)
+- `http.NewRequestWithContext(ctx, method, url, body)` with per-request context
+- Body is `{trigger, user (sanitized), metadata}` — `sanitizeUser` clears `PasswordHash` and `MFASecret` before marshaling. `TestEngine_Webhook_SanitizesUser_DoesntLeakPasswordHash` asserts.
+- Non-2xx → `outcome: error` (non-fatal; handler proceeds)
+- Timeout via context, `TestEngine_Webhook_TimeoutErrors` asserts
+
+Conditional evaluator: `condition` is JSON-encoded string on FlowStep. Engine parses at runtime, empty string = "always match" (backward-compat). Bad JSON → error outcome with reason.
+
+`Engine.Execute` idempotent across calls with same Context, modulo timeline timestamps. `ExecuteDryRun` skips `persistRun` entirely.
+
+Timeline populated even on Block/Error — every step that ran appears in `result.Timeline`. Subsequent steps after short-circuit not added; UI shows them as "skipped" via absence.
+
+Injectable clock + `WithHTTPClient` option for tests.
+
+### 9. Condition DSL (`internal/authflow/conditions.go`)
+
+Map-based, NOT expression engine. Keeps semantic surface small and auditable. Predicates: `email_domain`, `has_metadata`, `metadata_eq`, `trigger_eq`, `user_has_role`, `all_of`, `any_of`, `not`. Empty `{}` → always true.
+
+Top-level map is implicit-AND — every key must hold. Collapses simple flows without explicit `all_of` nesting.
+
+Unknown predicate keys return `ErrUnknownPredicate` (exported sentinel). Callers distinguish config errors from data errors via `errors.Is`.
+
+### 10. Flow integration hooks (`internal/api/*_handlers.go`)
+
+`Server.runAuthFlow(w, r, trigger, user, password)` single entry point. Called from `handleSignup`, `handleLogin`, `handleOAuthCallback`, `handleMagicLinkVerify`, `handlePasswordReset`.
+
+Returns `handled bool`. On `block` → 403 with `{"error":"flow_blocked"}`. On `redirect` → 302 with `Location` + JSON body. On `continue` or `error` → returns false so caller proceeds normally.
+
+**Login hook placement deviation**: spec said "after password/MFA verification". Actual fires after password verify, BEFORE MFA challenge. Login handler resolves MFA on separate `/auth/mfa/challenge` endpoint — post-MFA placement would require threading through that endpoint. Tracked as F3.1.
+
+**Mutation happens before flow**: signup/password_reset commit user row / password update before flow runs. Blocking flow leaves DB state mutated but withholds session. Documented in FLOWS.md — flow is authorization gate, not transactional rollback.
+
+### 11. Dashboard Flow Builder (`admin/src/components/flow_builder.tsx`)
+
+Two views: `FlowsList` (table) and `FlowEditor` (three-pane). Single-pane routing with state-backed "Back" rather than split-grid master-detail — editing warrants full focus.
+
+Palette organized by family (Block, Side effect, Branch). Click inserts after selection. Dragging deferred F4.1.
+
+Canvas auto-laid-out: `gap: 24px` vertical flex, trigger pseudo-node top, done pseudo-node bottom. Conditional steps render linearly with indented then/else beneath — forked visualization (two parallel tracks rejoining at merge) deferred F4.1.
+
+Config panel dispatches on `step.type` to render correct field schema. ~50 form components kept inline with repeated patterns rather than extracting JSON-schema renderer (YAGNI — every step shape known at build time).
+
+Preview tab POSTs `/admin/flows/{id}/test`, renders timeline with 80ms stagger per row. `fadeIn` keyframe. Blocked preview shows offending step in red, subsequent rows faded to 40% opacity.
+
+Mock user presets in `localStorage` under `sharkauth.flow.mocks`. Edit and save inline. No server storage.
+
+### 12. Smoke test coverage
+
+Sections 49-54 added to `smoke_test.sh`:
+- 49: proxy admin endpoints 404 when disabled + 401 on no-auth
+- 50: flow CRUD + validation (bad trigger → 400, empty steps → 400)
+- 51: dry-run with verified + unverified users, timeline populated + outcome differs
+- 52: signup with blocking flow returns 403 flow_blocked
+- 53: disabled flow lets signup through
+- 54: runs persisted after real execution
+
+Total smoke: 244 PASS, 0 FAIL (up from 222 in Phase 5.5).
+
+### 13. Trade-offs made
+
+**Custom LRU instead of dep**: `hashicorp/golang-lru` rejected. ~60 LOC hand-rolled eliminates supply-chain surface on hot path.
+
+**SSE despite dashboard polling**: `EventSource` can't set `Authorization`, but curl-based ops tools and future SDK clients will use SSE. Polling fallback is dashboard only.
+
+**Permission requirement stubbed, not omitted**: `require: permission:users:read` parses successfully but always denies. Parse-error alternative would make YAML config hard to author incrementally — users draft rules referencing Phase 6.5 permissions without YAML rejection.
+
+**Standalone proxy anonymous-only**: full JWKS-fetch impl ~200 LOC + cache-invalidation story. Deferred. Embedded mode covers 95% case.
+
+**Linear conditional display**: forked canvas with two visual tracks rejoining at merge requires dagre-style layout (or custom). Deferred. Linear with indented branches readable and ships today.
+
+**Flow error outcome non-fatal**: webhook timeout during login could brick auth. Errors log + proceed. "Strict" flows via `custom_check` (which returns block on non-2xx) — stubbed today, F2.1 wires properly.
+
+**MVP palette-click step insertion**: no drag-drop. Keeps JS bundle free of drag-drop libs (react-dnd, @dnd-kit add 20-50KB gzipped). Palette-click equivalent for building from scratch; drag benefit is reordering, deferred F4.1.
+
+**Steps array serialized as JSON text column, not relational**: `flow_steps` table with `step_order` + self-FK for branches is "more correct" but every access reads all steps anyway. Conditional's nested `then`/`else` arrays don't fit relationally without awkward recursion. JSON column keeps reads single-query and lets engine iterate native slices.
+
+### 14. What's next (Phase 7 dependencies now satisfied)
+
+**Phase 7 SDK**: TypeScript SDK (#54) builds on OAuth 2.1 (Phase 5) + optionally uses proxy for zero-code auth. Standalone proxy JWKS fetch (P4.1) is blocker for edge deployments.
+
+**Phase 8 OIDC Provider**: reuses `/oauth/authorize` flow from Phase 5; flow builder hooks work for `oauth_callback` trigger today.
+
+### 15. Known tech debt (Phase 6)
+
+**Windows IDE path case-insensitivity**: go-build cache caches paths with lowercase `desktop` vs uppercase `Desktop`, leading to spurious "undefined: Server" diagnostics across sessions. Cosmetic — real `go build` clean. Windows + goimports interaction.
+
+**`ProxyConfig.StripIncoming` as `*bool`**: pointer to distinguish unset (default true) from explicit false. YAML parser can't express "not set" for bare bool.
+
+**`proxy_handlers_test.go` fabricated helpers on first pass**: implementer invented `testutil.NewTestJWTManager` and `store.CreateAPIKeyHelper` that didn't exist. Fixed by adding `testutil.NewTestServerWithConfig` and rewriting helper block. Pattern: agents hallucinate helper names when real testutil API isn't loaded in context.
+
+**Flow conditional UI forked-canvas not implemented**: linear-indented works but isn't the "wow" visualization brief called for. F4.1.
+
+**Six stubbed step types**: `require_mfa_challenge`, `set_metadata` (persistence), `assign_role`, `add_to_org`, `custom_check`, `delay` dispatch but don't persist effects. F2.1 wires them.
+
+**Login hook pre-MFA**: fires before MFA challenge, not after. Post-MFA requires wiring through `handleMFAChallenge`. F3.1.
+
+**Proxy rule editor not in dashboard**: rules read-only; edit `sharkauth.yaml` and reload. P5.1 adds inline editor + drag-reorder.
