@@ -284,6 +284,18 @@ type Store interface {
 	UpdateVaultConnectionTokens(ctx context.Context, id, accessEnc, refreshEnc string, expiresAt *time.Time) error
 	MarkVaultConnectionNeedsReauth(ctx context.Context, id string, needs bool) error
 	DeleteVaultConnection(ctx context.Context, id string) error
+
+	// Auth Flows (Phase 6 Visual Flow Builder)
+	CreateAuthFlow(ctx context.Context, flow *AuthFlow) error
+	GetAuthFlowByID(ctx context.Context, id string) (*AuthFlow, error)
+	ListAuthFlows(ctx context.Context) ([]*AuthFlow, error)
+	ListAuthFlowsByTrigger(ctx context.Context, trigger string) ([]*AuthFlow, error)
+	UpdateAuthFlow(ctx context.Context, flow *AuthFlow) error
+	DeleteAuthFlow(ctx context.Context, id string) error
+
+	// Auth Flow Runs (history for the Flow Builder dashboard)
+	CreateAuthFlowRun(ctx context.Context, run *AuthFlowRun) error
+	ListAuthFlowRunsByFlowID(ctx context.Context, flowID string, limit int) ([]*AuthFlowRun, error)
 }
 
 // --- Entity types ---
