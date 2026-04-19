@@ -270,6 +270,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Delete("/sessions/{id}", s.handleRevokeMySession)
 			})
 
+			// Consent management (session auth - user manages their own consents)
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Get("/consents", s.handleListConsents)
+				r.Delete("/consents/{id}", s.handleRevokeConsent)
+			})
+
 			// JWT self-revoke (session-auth, cookie OR JWT)
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
@@ -407,6 +414,19 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Delete("/{id}", s.handleDeleteWebhook)
 			r.Post("/{id}/test", s.handleTestWebhook)
 			r.Get("/{id}/deliveries", s.handleListDeliveries)
+		})
+
+		// Agents (admin)
+		r.Route("/agents", func(r chi.Router) {
+			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
+			r.Post("/", s.handleCreateAgent)
+			r.Get("/", s.handleListAgents)
+			r.Get("/{id}", s.handleGetAgent)
+			r.Patch("/{id}", s.handleUpdateAgent)
+			r.Delete("/{id}", s.handleDeleteAgent)
+			r.Get("/{id}/tokens", s.handleListAgentTokens)
+			r.Post("/{id}/tokens/revoke-all", s.handleRevokeAgentTokens)
+			r.Get("/{id}/audit", s.handleAgentAuditLogs)
 		})
 
 		// Applications (admin)
