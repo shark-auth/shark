@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Device Authorization — SharkAuth</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    color: #fafafa;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .card {
+    background: #0c0c0c;
+    border: 1px solid #1e1e1e;
+    border-radius: 12px;
+    padding: 32px;
+    max-width: 420px;
+    width: 100%;
+  }
+  .icon {
+    font-size: 40px;
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  p {
+    color: #a3a3a3;
+    font-size: 13px;
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 14px;
+    background: #121212;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    color: #fafafa;
+    font-size: 20px;
+    font-family: 'Azeret Mono', 'Courier New', monospace;
+    letter-spacing: 4px;
+    text-align: center;
+    text-transform: uppercase;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type="text"]:focus {
+    border-color: #3a3a3a;
+  }
+  input[type="text"]::placeholder {
+    color: #3a3a3a;
+    letter-spacing: 2px;
+  }
+  button {
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px;
+    background: oklch(0.74 0.14 150);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  button:hover {
+    background: oklch(0.78 0.14 150);
+  }
+  .footer {
+    margin-top: 24px;
+    text-align: center;
+    color: #4a4a4a;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">&#x1F4BB;</div>
+  <h1>Enter Device Code</h1>
+  <p>Enter the code shown on your device to authorize it.</p>
+  <form method="GET" action="/oauth/device/verify">
+    <input
+      type="text"
+      name="user_code"
+      placeholder="SHARK-XXXX"
+      maxlength="10"
+      required
+      value="{{.UserCode}}"
+      autofocus
+      oninput="this.value = this.value.toUpperCase()"
+    >
+    <button type="submit">Continue</button>
+  </form>
+  <div class="footer">SharkAuth</div>
+</div>
+</body>
+</html>

@@ -17,7 +17,15 @@ import (
 // HandleToken handles POST /oauth/token. Fosite dispatches the correct grant
 // type handler (authorization_code, client_credentials, refresh_token)
 // automatically based on the request parameters.
+// Device Authorization Grant (RFC 8628) is intercepted and handled manually
+// before passing to fosite, since fosite v0.49 has no built-in device flow.
 func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
+	// Intercept device_code grant before fosite sees it.
+	if r.FormValue("grant_type") == "urn:ietf:params:oauth:grant-type:device_code" {
+		s.HandleDeviceTokenRequest(w, r)
+		return
+	}
+
 	ctx := r.Context()
 	session := s.newSession("")
 

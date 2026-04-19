@@ -484,6 +484,18 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Get("/authorize", s.OAuthServer.HandleAuthorize)
 				r.Post("/authorize", s.OAuthServer.HandleAuthorizeDecision)
 			})
+			// Dynamic Client Registration (RFC 7591 + RFC 7592).
+			r.Post("/register", s.OAuthServer.HandleDCRRegister)
+			r.Get("/register/{client_id}", s.OAuthServer.HandleDCRGet)
+			r.Put("/register/{client_id}", s.OAuthServer.HandleDCRUpdate)
+			r.Delete("/register/{client_id}", s.OAuthServer.HandleDCRDelete)
+			// Device Authorization Grant (RFC 8628)
+			r.Post("/device", s.OAuthServer.HandleDeviceAuthorization)
+			r.Group(func(r chi.Router) {
+				r.Use(mw.OptionalSessionFunc(sm, s.JWTManager))
+				r.Get("/device/verify", s.OAuthServer.HandleDeviceVerify)
+				r.Post("/device/verify", s.OAuthServer.HandleDeviceApprove)
+			})
 		})
 	}
 

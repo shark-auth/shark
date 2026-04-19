@@ -114,7 +114,52 @@ CREATE TABLE oauth_consents (
 CREATE UNIQUE INDEX idx_oauth_consents_user_client
     ON oauth_consents(user_id, client_id) WHERE revoked_at IS NULL;
 
+CREATE TABLE oauth_dcr_clients (
+    client_id               TEXT PRIMARY KEY,
+    registration_token_hash TEXT UNIQUE NOT NULL,
+    client_metadata         TEXT NOT NULL,
+    created_at              TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    expires_at              TIMESTAMP
+);
+
+CREATE TABLE oauth_device_codes (
+    device_code_hash    TEXT PRIMARY KEY,
+    user_code           TEXT UNIQUE NOT NULL,
+    client_id           TEXT NOT NULL,
+    scope               TEXT NOT NULL DEFAULT '',
+    resource            TEXT,
+    user_id             TEXT,
+    status              TEXT NOT NULL DEFAULT 'pending'
+                            CHECK (status IN ('pending', 'approved', 'denied', 'expired')),
+    last_polled_at      TIMESTAMP,
+    poll_interval       INTEGER NOT NULL DEFAULT 5,
+    expires_at          TIMESTAMP NOT NULL,
+    created_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX idx_oauth_device_codes_user_code ON oauth_device_codes(user_code);
+CREATE INDEX idx_oauth_device_codes_expires_at ON oauth_device_codes(expires_at);
+
+CREATE TABLE audit_logs (
+    id          TEXT PRIMARY KEY,
+    actor_id    TEXT,
+    actor_type  TEXT DEFAULT 'user',
+    action      TEXT NOT NULL,
+    target_type TEXT,
+    target_id   TEXT,
+    ip          TEXT,
+    user_agent  TEXT,
+    metadata    TEXT DEFAULT '{}',
+    status      TEXT DEFAULT 'success',
+    created_at  TEXT NOT NULL
+);
+
 -- +goose Down
+DROP TABLE IF EXISTS audit_logs;
+DROP INDEX IF EXISTS idx_oauth_device_codes_expires_at;
+DROP INDEX IF EXISTS idx_oauth_device_codes_user_code;
+DROP TABLE IF EXISTS oauth_device_codes;
+DROP TABLE IF EXISTS oauth_dcr_clients;
 DROP INDEX IF EXISTS idx_oauth_consents_user_client;
 DROP TABLE IF EXISTS oauth_consents;
 DROP INDEX IF EXISTS idx_jwt_signing_keys_status;
