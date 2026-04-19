@@ -26,8 +26,9 @@ type Config struct {
 	MFA       MFAConfig       `koanf:"mfa"`
 	Social    SocialConfig    `koanf:"social"`
 	SSO       SSOConfig       `koanf:"sso"`
-	APIKeys   APIKeysConfig   `koanf:"api_keys"`
-	Audit     AuditConfig     `koanf:"audit"`
+	APIKeys     APIKeysConfig     `koanf:"api_keys"`
+	Audit       AuditConfig       `koanf:"audit"`
+	OAuthServer OAuthServerConfig `koanf:"oauth_server"`
 }
 
 // EmailProvider enum. `dev` is auto-selected by --dev when unset.
@@ -245,6 +246,35 @@ func (a *AuditConfig) CleanupIntervalDuration() time.Duration {
 	return parseDuration(a.CleanupInterval, 1*time.Hour)
 }
 
+// OAuthServerConfig holds OAuth 2.1 Authorization Server settings.
+type OAuthServerConfig struct {
+	Enabled              bool   `koanf:"enabled"`
+	Issuer               string `koanf:"issuer"`                  // defaults to server.base_url
+	SigningAlgorithm     string `koanf:"signing_algorithm"`       // ES256 (default) | RS256
+	AccessTokenLifetime  string `koanf:"access_token_lifetime"`   // default: 15m
+	RefreshTokenLifetime string `koanf:"refresh_token_lifetime"`  // default: 30d
+	AuthCodeLifetime     string `koanf:"auth_code_lifetime"`      // default: 60s
+	DeviceCodeLifetime   string `koanf:"device_code_lifetime"`    // default: 15m
+	ConsentTemplate      string `koanf:"consent_template"`        // path to custom template dir
+	RequireDPoP          bool   `koanf:"require_dpop"`            // require DPoP for all clients
+}
+
+func (o *OAuthServerConfig) AccessTokenLifetimeDuration() time.Duration {
+	return parseDuration(o.AccessTokenLifetime, 15*time.Minute)
+}
+
+func (o *OAuthServerConfig) RefreshTokenLifetimeDuration() time.Duration {
+	return parseDuration(o.RefreshTokenLifetime, 30*24*time.Hour)
+}
+
+func (o *OAuthServerConfig) AuthCodeLifetimeDuration() time.Duration {
+	return parseDuration(o.AuthCodeLifetime, 60*time.Second)
+}
+
+func (o *OAuthServerConfig) DeviceCodeLifetimeDuration() time.Duration {
+	return parseDuration(o.DeviceCodeLifetime, 15*time.Minute)
+}
+
 // envVarPattern matches ${VAR_NAME} patterns in config values.
 var envVarPattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
 
@@ -311,6 +341,14 @@ func Load(path string) (*Config, error) {
 		"auth.jwt.refresh_token_ttl":         "30d",
 		"auth.jwt.clock_skew":                "30s",
 		"auth.jwt.revocation.check_per_request": false,
+		// OAuth server defaults
+		"oauth_server.enabled":                true,
+		"oauth_server.signing_algorithm":      "ES256",
+		"oauth_server.access_token_lifetime":  "15m",
+		"oauth_server.refresh_token_lifetime": "30d",
+		"oauth_server.auth_code_lifetime":     "60s",
+		"oauth_server.device_code_lifetime":   "15m",
+		"oauth_server.require_dpop":           false,
 	}
 	for key, val := range defaults {
 		if err := k.Set(key, val); err != nil {
