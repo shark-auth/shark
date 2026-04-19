@@ -3,8 +3,10 @@ package oauth
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"embed"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -482,6 +484,151 @@ func TestPKCERequestStorage(t *testing.T) {
 // ---------------------------------------------------------------------------
 // TestRevokeAccessToken
 // ---------------------------------------------------------------------------
+
+// TestClientAssertionJWT exercises ClientAssertionJWTValid and
+// SetClientAssertionJWT: first call is valid, second with same JTI returns ErrJTIKnown.
+func TestClientAssertionJWT(t *testing.T) {
+	fs, _ := newTestFositeStore(t)
+	ctx := context.Background()
+
+	jti := "client-assertion-jti-1"
+
+	// Initially not seen — should be valid.
+	if err := fs.ClientAssertionJWTValid(ctx, jti); err != nil {
+		t.Fatalf("expected JTI %q to be valid initially, got: %v", jti, err)
+	}
+
+	// Mark it used.
+	exp := time.Now().UTC().Add(5 * time.Minute)
+	if err := fs.SetClientAssertionJWT(ctx, jti, exp); err != nil {
+		t.Fatalf("SetClientAssertionJWT: %v", err)
+	}
+
+	// Now it should be rejected as replayed.
+	err := fs.ClientAssertionJWTValid(ctx, jti)
+	if err == nil {
+		t.Fatal("expected replay error after SetClientAssertionJWT")
+	}
+	if err != fosite.ErrJTIKnown {
+		t.Errorf("expected fosite.ErrJTIKnown, got: %v", err)
+	}
+}
+
+// TestDeleteRefreshTokenSession verifies the refresh-token delete path
+// (explicitly separate from RevokeRefreshToken).
+func TestDeleteRefreshTokenSession(t *testing.T) {
+	fs, db := newTestFositeStore(t)
+	seedAgent(t, db, "del-refresh-agent", false)
+	userID := seedUser(t, db, "del-refresh@example.com")
+
+	ctx := context.Background()
+	sig := "del-refresh-sig-1"
+
+	session := &fosite.DefaultSession{
+		Subject: userID,
+		ExpiresAt: map[fosite.TokenType]time.Time{
+			fosite.RefreshToken: time.Now().UTC().Add(24 * time.Hour),
+		},
+	}
+
+	client, _ := fs.GetClient(ctx, "del-refresh-agent")
+	req := &fosite.Request{
+		ID:             "del-refresh-req-1",
+		RequestedAt:    time.Now().UTC(),
+		Client:         client,
+		RequestedScope: fosite.Arguments{"openid"},
+		GrantedScope:   fosite.Arguments{"openid"},
+		Session:        session,
+		Form:           url.Values{},
+	}
+
+	if err := fs.CreateRefreshTokenSession(ctx, sig, "access-sig-unused", req); err != nil {
+		t.Fatalf("CreateRefreshTokenSession: %v", err)
+	}
+
+	if err := fs.DeleteRefreshTokenSession(ctx, sig); err != nil {
+		t.Fatalf("DeleteRefreshTokenSession: %v", err)
+	}
+
+	// After delete the token is revoked — Get should return ErrInactiveToken.
+	_, err := fs.GetRefreshTokenSession(ctx, sig, &fosite.DefaultSession{})
+	if err == nil {
+		t.Fatal("expected error after DeleteRefreshTokenSession")
+	}
+
+	// Idempotent delete on an unknown signature should not panic and should
+	// either succeed silently or return a wrapped error, never a fatal crash.
+	_ = fs.DeleteRefreshTokenSession(ctx, "signature-that-never-existed")
+}
+
+// TestRotateRefreshToken verifies the rotation helper revokes the old token
+// and is a no-op when the request ID is unknown or the token is already revoked.
+func TestRotateRefreshToken(t *testing.T) {
+	fs, db := newTestFositeStore(t)
+	seedAgent(t, db, "rotate-agent", false)
+	userID := seedUser(t, db, "rotate@example.com")
+
+	ctx := context.Background()
+	sig := "rotate-sig-1"
+	requestID := "rotate-req-1"
+
+	session := &fosite.DefaultSession{
+		Subject: userID,
+		ExpiresAt: map[fosite.TokenType]time.Time{
+			fosite.RefreshToken: time.Now().UTC().Add(24 * time.Hour),
+		},
+	}
+	client, _ := fs.GetClient(ctx, "rotate-agent")
+	req := &fosite.Request{
+		ID:             requestID,
+		RequestedAt:    time.Now().UTC(),
+		Client:         client,
+		RequestedScope: fosite.Arguments{"openid"},
+		GrantedScope:   fosite.Arguments{"openid"},
+		Session:        session,
+		Form:           url.Values{},
+	}
+	if err := fs.CreateRefreshTokenSession(ctx, sig, "unused-access-sig", req); err != nil {
+		t.Fatalf("CreateRefreshTokenSession: %v", err)
+	}
+
+	// First rotation: revokes the known token.
+	if err := fs.RotateRefreshToken(ctx, requestID, sig); err != nil {
+		t.Fatalf("RotateRefreshToken first call: %v", err)
+	}
+
+	// Second rotation on the same (now-revoked) token is a no-op.
+	if err := fs.RotateRefreshToken(ctx, requestID, sig); err != nil {
+		t.Fatalf("RotateRefreshToken on already-revoked: %v", err)
+	}
+
+	// Rotation with an unknown request ID is a no-op (no error).
+	if err := fs.RotateRefreshToken(ctx, "never-existed", "never-sig"); err != nil {
+		t.Fatalf("RotateRefreshToken unknown request: %v", err)
+	}
+
+	// Confirm the token is actually revoked by attempting to fetch.
+	_, err := fs.GetRefreshTokenSession(ctx, sig, &fosite.DefaultSession{})
+	if err == nil {
+		t.Fatal("expected token to be revoked after rotation")
+	}
+}
+
+// TestIsNotFound covers the small helper used by deleteTokenSession.
+func TestIsNotFound(t *testing.T) {
+	if isNotFound(nil) {
+		t.Error("nil should not be a not-found error")
+	}
+	if !isNotFound(sql.ErrNoRows) {
+		t.Error("sql.ErrNoRows should be a not-found error")
+	}
+	if !isNotFound(fmt.Errorf("authorization code not found")) {
+		t.Error("error message containing 'not found' should match")
+	}
+	if isNotFound(fmt.Errorf("some other error")) {
+		t.Error("unrelated error should not match")
+	}
+}
 
 func TestRevokeAccessToken(t *testing.T) {
 	fs, db := newTestFositeStore(t)

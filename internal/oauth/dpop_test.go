@@ -9,6 +9,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -524,6 +526,178 @@ func TestDPoP_MissingHeader(t *testing.T) {
 	_, err := ValidateDPoPProof("", "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected error for missing proof")
+	}
+}
+
+// TestRequireDPoPMiddleware_BearerPassthrough verifies that the middleware
+// does not interfere with plain Bearer tokens (it is opt-in via the DPoP scheme).
+func TestRequireDPoPMiddleware_BearerPassthrough(t *testing.T) {
+	cache := newCache()
+	mw := RequireDPoPMiddleware(cache)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "https://api.example.com/resource", nil)
+	req.Header.Set("Authorization", "Bearer some-bearer-token")
+	rec := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected pass-through 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRequireDPoPMiddleware_NoAuthHeader exercises the empty-Authorization
+// pass-through path.
+func TestRequireDPoPMiddleware_NoAuthHeader(t *testing.T) {
+	cache := newCache()
+	mw := RequireDPoPMiddleware(cache)
+
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "https://api.example.com/resource", nil)
+	rec := httptest.NewRecorder()
+	mw(next).ServeHTTP(rec, req)
+
+	if !called {
+		t.Fatal("expected next handler to run for unauthenticated request")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+// TestRequireDPoPMiddleware_MissingProof verifies 401 when a DPoP-scheme
+// authorization header has no accompanying DPoP header.
+func TestRequireDPoPMiddleware_MissingProof(t *testing.T) {
+	cache := newCache()
+	mw := RequireDPoPMiddleware(cache)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("next handler should not be called when DPoP proof is missing")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "https://api.example.com/resource", nil)
+	req.Header.Set("Authorization", "DPoP some-access-token")
+	// NOTE: No DPoP header.
+	rec := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "invalid_dpop_proof") {
+		t.Errorf("expected invalid_dpop_proof error, got: %s", rec.Body.String())
+	}
+}
+
+// TestRequireDPoPMiddleware_ValidProof verifies that a correct DPoP proof +
+// matching ath lets the request through.
+func TestRequireDPoPMiddleware_ValidProof(t *testing.T) {
+	priv := ecKeyPair(t)
+	jwk := ecJWK(&priv.PublicKey)
+	cache := newCache()
+
+	accessToken := "my-access-token-abc"
+	ath := HashAccessTokenForDPoP(accessToken)
+
+	// Build a proof whose htu matches what the middleware will compute.
+	proof := buildECProof(t, proofParams{
+		priv:   priv,
+		jwk:    jwk,
+		method: "GET",
+		htu:    "https://api.example.com/resource",
+		ath:    ath,
+	})
+
+	mw := RequireDPoPMiddleware(cache)
+
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "https://api.example.com/resource", nil)
+	req.Host = "api.example.com"
+	req.URL.Scheme = "https"
+	req.URL.Host = "api.example.com"
+	req.Header.Set("Authorization", "DPoP "+accessToken)
+	req.Header.Set("DPoP", proof)
+	rec := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(rec, req)
+
+	if !called {
+		t.Fatalf("expected next to run, got body: %s, status %d", rec.Body.String(), rec.Code)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRequireDPoPMiddleware_InvalidProof verifies that a malformed or wrong
+// DPoP proof is rejected with 401.
+func TestRequireDPoPMiddleware_InvalidProof(t *testing.T) {
+	cache := newCache()
+	mw := RequireDPoPMiddleware(cache)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("next should not run for invalid proof")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "https://api.example.com/resource", nil)
+	req.Header.Set("Authorization", "DPoP an-access-token")
+	req.Header.Set("DPoP", "not-a-jwt")
+	rec := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rec.Code)
+	}
+}
+
+// TestJWKToRSAPublicKey verifies that a JWK-encoded RSA key round-trips back to
+// a *rsa.PublicKey and that a DPoP proof signed with RSA is accepted.
+func TestJWKToRSAPublicKey(t *testing.T) {
+	priv := rsaKeyPair(t)
+	jwk := rsaJWK(&priv.PublicKey)
+
+	claims := gojwt.MapClaims{
+		"jti": randomJTI(t),
+		"htm": "POST",
+		"htu": "https://auth.example.com/oauth/token",
+		"iat": time.Now().UTC().Unix(),
+	}
+	token := gojwt.NewWithClaims(gojwt.SigningMethodRS256, claims)
+	token.Header["typ"] = "dpop+jwt"
+	token.Header["alg"] = "RS256"
+
+	jwkBytes, _ := json.Marshal(jwk)
+	var jwkMap interface{}
+	_ = json.Unmarshal(jwkBytes, &jwkMap)
+	token.Header["jwk"] = jwkMap
+
+	signed, err := token.SignedString(priv)
+	if err != nil {
+		t.Fatalf("sign RSA proof: %v", err)
+	}
+
+	jkt, err := ValidateDPoPProof(signed, "POST", "https://auth.example.com/oauth/token", "", newCache())
+	if err != nil {
+		t.Fatalf("RSA proof should validate: %v", err)
+	}
+	if jkt == "" {
+		t.Fatal("expected non-empty jkt for RSA proof")
 	}
 }
 
