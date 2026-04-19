@@ -14,6 +14,7 @@ import (
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/sharkauth/sharkauth/internal/oauth"
 	rbacpkg "github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/sso"
 	"github.com/sharkauth/sharkauth/internal/storage"
@@ -150,6 +151,9 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 	// JWKS endpoint (RFC 7517) — public, no auth, top-level
 	r.Get("/.well-known/jwks.json", s.HandleJWKS)
+
+	// RFC 8414 OAuth Authorization Server Metadata (MCP discovery entrypoint)
+	r.Get("/.well-known/oauth-authorization-server", oauth.MetadataHandler(cfg.Server.BaseURL))
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
