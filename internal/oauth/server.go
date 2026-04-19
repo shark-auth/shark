@@ -24,12 +24,13 @@ import (
 
 // Server holds the fosite OAuth2 provider and dependencies.
 type Server struct {
-	Provider     fosite.OAuth2Provider
-	Store        *FositeStore
-	Config       *config.OAuthServerConfig
-	Issuer       string
-	RawStore     storage.Store // for direct DB access (consent, agents, etc.)
-	SigningKeyID string        // kid of the active ES256 signing key
+	Provider       fosite.OAuth2Provider
+	Store          *FositeStore
+	Config         *config.OAuthServerConfig
+	Issuer         string
+	RawStore       storage.Store        // for direct DB access (consent, agents, etc.)
+	SigningKeyID   string               // kid of the active ES256 signing key
+	signingPrivKey *ecdsa.PrivateKey    // ES256 private key; used by Sign() / token exchange
 }
 
 // NewServer creates an OAuth 2.1 server. It manages its own ES256 signing key
@@ -106,12 +107,13 @@ func NewServer(store storage.Store, cfg *config.Config) (*Server, error) {
 	)
 
 	return &Server{
-		Provider:     provider,
-		Store:        fositeStore,
-		Config:       &cfg.OAuthServer,
-		Issuer:       issuer,
-		RawStore:     store,
-		SigningKeyID: kid,
+		Provider:       provider,
+		Store:          fositeStore,
+		Config:         &cfg.OAuthServer,
+		Issuer:         issuer,
+		RawStore:       store,
+		SigningKeyID:   kid,
+		signingPrivKey: signingKey,
 	}, nil
 }
 

@@ -26,6 +26,13 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Intercept RFC 8693 token-exchange before fosite sees it.
+	// fosite v0.49 has no built-in token-exchange handler.
+	if r.FormValue("grant_type") == grantTypeTokenExchange {
+		s.HandleTokenExchange(w, r)
+		return
+	}
+
 	ctx := r.Context()
 	session := s.newSession("")
 
