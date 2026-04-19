@@ -1233,6 +1233,164 @@ AUD_ALL=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/audit-logs?lim
 AUD_VAULT_TOTAL=$(echo "$AUD_ALL" | jq '[.data[] | select(.action | startswith("vault."))] | length')
 [ "$AUD_VAULT_TOTAL" -ge 3 ] 2>/dev/null && pass "unfiltered grep: >=3 vault.* events ($AUD_VAULT_TOTAL)" || fail "unfiltered grep: $AUD_VAULT_TOTAL vault.* events (expected >=3)"
 
+# --- 49: Proxy admin endpoints (proxy disabled) -------------------------------
+# Smoke runs against a default dev config with proxy disabled. The admin
+# endpoints must still be registered (so dashboards can probe them) but must
+# self-404 until proxy wiring is configured in sharkauth.yaml.
+section "49: Proxy admin endpoints (proxy disabled)"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/proxy/status)
+[ "$CODE" = 404 ] && pass "GET /admin/proxy/status -> 404 (disabled)" || fail "proxy status -> $CODE"
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/proxy/rules)
+[ "$CODE" = 404 ] && pass "GET /admin/proxy/rules -> 404 (disabled)" || fail "proxy rules -> $CODE"
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"method":"GET","path":"/api/foo"}' \
+  $BASE/api/v1/admin/proxy/simulate)
+[ "$CODE" = 404 ] && pass "POST /admin/proxy/simulate -> 404 (disabled)" || fail "proxy simulate -> $CODE"
+
+# No admin key -> 401 (admin middleware rejects before the handler's 404).
+CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/admin/proxy/status)
+[ "$CODE" = 401 ] && pass "no auth -> 401" || fail "unauth proxy -> $CODE"
+
+note "proxy happy-path smoke requires enabling proxy + upstream — covered in internal/api package tests"
+
+# --- 50: Auth flow CRUD -------------------------------------------------------
+section "50: Auth flow CRUD"
+
+# Create a signup-trigger flow whose only step requires email verification.
+# We reuse the resulting FLOW_ID across §§50-54.
+RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"name":"Smoke Signup","trigger":"signup","steps":[{"type":"require_email_verification"}],"enabled":true,"priority":10}' \
+  $BASE/api/v1/admin/flows)
+CODE=$(echo "$RESP" | tail -1)
+BODY=$(echo "$RESP" | sed '$d')
+[ "$CODE" = 201 ] && pass "POST /admin/flows -> 201" || fail "create flow -> $CODE: $BODY"
+FLOW_ID=$(echo "$BODY" | jq -r '.id')
+{ [ -n "$FLOW_ID" ] && [ "$FLOW_ID" != "null" ] ; } && pass "flow id returned ($FLOW_ID)" || fail "no flow id"
+
+# Get by id.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/flows/$FLOW_ID)
+[ "$CODE" = 200 ] && pass "GET /admin/flows/{id} -> 200" || fail "get flow -> $CODE"
+
+# List (no filter) should include the new flow.
+RESP=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/flows)
+COUNT=$(echo "$RESP" | jq '.data | length')
+[ "$COUNT" -ge 1 ] 2>/dev/null && pass "list includes flow (count=$COUNT)" || fail "list missing flow"
+
+# Filter by trigger=login (the smoke flow is a signup flow — expect zero).
+RESP=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/flows?trigger=login")
+COUNT=$(echo "$RESP" | jq '.data | length')
+[ "$COUNT" = 0 ] && pass "filter trigger=login -> 0 results" || fail "trigger filter wrong: $COUNT"
+
+# PATCH (toggle enabled off → back on later in §51).
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X PATCH \
+  -d '{"enabled":false}' $BASE/api/v1/admin/flows/$FLOW_ID)
+[ "$CODE" = 200 ] && pass "PATCH /admin/flows/{id} -> 200" || fail "patch flow -> $CODE"
+
+# Validation: bad trigger → 400 invalid_flow.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"name":"Bad","trigger":"bogus","steps":[{"type":"redirect"}]}' \
+  $BASE/api/v1/admin/flows)
+[ "$CODE" = 400 ] && pass "bad trigger -> 400" || fail "bad trigger accepted: $CODE"
+
+# Validation: empty steps → 400.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"name":"Empty","trigger":"signup","steps":[]}' \
+  $BASE/api/v1/admin/flows)
+[ "$CODE" = 400 ] && pass "empty steps -> 400" || fail "empty steps accepted: $CODE"
+
+# --- 51: Flow dry-run ---------------------------------------------------------
+section "51: Flow dry-run"
+
+# Re-enable the smoke flow so §§52+54 behave.
+curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -X PATCH -d '{"enabled":true}' $BASE/api/v1/admin/flows/$FLOW_ID > /dev/null
+
+# Dry-run with unverified user -> expect block + non-empty timeline.
+RESP=$(curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -X POST -d '{"user":{"email":"dry@test.com","email_verified":false}}' \
+  $BASE/api/v1/admin/flows/$FLOW_ID/test)
+OUTCOME=$(echo "$RESP" | jq -r '.outcome')
+[ "$OUTCOME" = "block" ] && pass "dry-run unverified -> block" || fail "outcome=$OUTCOME body=$RESP"
+
+REASON=$(echo "$RESP" | jq -r '.reason')
+echo "$REASON" | grep -qi "email verification" && pass "reason mentions email verification" || fail "reason=$REASON"
+
+TIMELINE_LEN=$(echo "$RESP" | jq '.timeline | length')
+[ "$TIMELINE_LEN" -ge 1 ] 2>/dev/null && pass "timeline populated (len=$TIMELINE_LEN)" || fail "empty timeline"
+
+# Dry-run with verified user -> continue.
+RESP=$(curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -X POST -d '{"user":{"email":"dry@test.com","email_verified":true}}' \
+  $BASE/api/v1/admin/flows/$FLOW_ID/test)
+OUTCOME=$(echo "$RESP" | jq -r '.outcome')
+[ "$OUTCOME" = "continue" ] && pass "dry-run verified -> continue" || fail "outcome=$OUTCOME"
+
+# 404 for unknown flow id.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST -d '{}' \
+  $BASE/api/v1/admin/flows/flow_nonexistent/test)
+[ "$CODE" = 404 ] && pass "bad flow id -> 404" || fail "bad id test -> $CODE"
+
+# --- 52: Flow blocks signup on unverified email -------------------------------
+# POSTing /auth/signup with the require_email_verification flow enabled should
+# land 403 with {"error":"flow_blocked"}. Note: the user row is created BEFORE
+# the flow fires (see internal/api/auth_handlers.go:166), so a DB entry remains
+# — acceptable per the plan; we only assert on the API response here.
+section "52: Flow blocks signup on unverified email"
+FLOW_EMAIL="flowtest-$(date +%s)-$RANDOM@test.com"
+FLOW_PW='GetCake117$$$'
+RESP=$(curl -s -w "\n%{http_code}" -H "Content-Type: application/json" -X POST \
+  -d "{\"email\":\"$FLOW_EMAIL\",\"password\":\"$FLOW_PW\"}" \
+  $BASE/api/v1/auth/signup)
+CODE=$(echo "$RESP" | tail -1)
+BODY=$(echo "$RESP" | sed '$d')
+[ "$CODE" = 403 ] && pass "signup with blocking flow -> 403" || fail "signup -> $CODE (body: $BODY)"
+echo "$BODY" | jq -e '.error=="flow_blocked"' >/dev/null && pass "body has flow_blocked error" || fail "body=$BODY"
+
+# --- 53: Disabled flow lets signup through ------------------------------------
+section "53: Disabled flow lets signup through"
+
+# Disable the flow and confirm signup returns the normal 201.
+curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -X PATCH -d '{"enabled":false}' $BASE/api/v1/admin/flows/$FLOW_ID > /dev/null
+
+FLOW_EMAIL2="flowtest2-$(date +%s)-$RANDOM@test.com"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -X POST \
+  -d "{\"email\":\"$FLOW_EMAIL2\",\"password\":\"$FLOW_PW\"}" \
+  $BASE/api/v1/auth/signup)
+{ [ "$CODE" = 201 ] || [ "$CODE" = 200 ] ; } && pass "signup with disabled flow -> $CODE (success)" || fail "disabled flow blocked signup: $CODE"
+
+# --- 54: Flow runs recorded ---------------------------------------------------
+section "54: Flow runs recorded"
+
+# Re-enable the flow and trigger another blocked signup so we have at least
+# one persisted run to read back.
+curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -X PATCH -d '{"enabled":true}' $BASE/api/v1/admin/flows/$FLOW_ID > /dev/null
+
+FLOW_EMAIL3="flowtest3-$(date +%s)-$RANDOM@test.com"
+curl -s -o /dev/null -H "Content-Type: application/json" -X POST \
+  -d "{\"email\":\"$FLOW_EMAIL3\",\"password\":\"$FLOW_PW\"}" \
+  $BASE/api/v1/auth/signup
+
+# GET /admin/flows/{id}/runs should have at least one entry, including a block.
+RESP=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/flows/$FLOW_ID/runs)
+COUNT=$(echo "$RESP" | jq '.data | length')
+[ "$COUNT" -ge 1 ] 2>/dev/null && pass "runs recorded (count=$COUNT)" || fail "no runs: $RESP"
+
+OUTCOMES=$(echo "$RESP" | jq -r '.data[].outcome' | sort -u)
+echo "$OUTCOMES" | grep -q "block" && pass "at least one run has outcome=block" || fail "outcomes: $OUTCOMES"
+
+# Cleanup so re-runs of the smoke test start from a clean flows table.
+curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/flows/$FLOW_ID
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"

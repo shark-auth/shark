@@ -1,6 +1,6 @@
 # Shark Smoke Test
 
-Post-build verification. Exercises every feature against a real running binary. Updated through Phase 5.5 (Token Vault — third-party OAuth connection storage).
+Post-build verification. Exercises every feature against a real running binary. Updated through Phase 6 (Proxy + Visual Flow Builder).
 
 ## Prereqs
 
@@ -18,7 +18,7 @@ BIN=./shark.exe bash smoke_test.sh  # Windows (Git Bash / MSYS2)
 
 Exits 0 on all-pass, non-zero on first failure. Colored PASS/FAIL per section.
 
-**Current: 222 PASS, 0 FAIL.**
+**Current: 244 PASS, 0 FAIL.**
 
 ## What it covers
 
@@ -72,6 +72,12 @@ Exits 0 on all-pass, non-zero on first failure. Colored PASS/FAIL per section.
 | 46 | Agent token retrieval (OAuth bearer) | `GET /api/v1/vault/{provider}/token` — missing bearer → 401 with `WWW-Authenticate: Bearer`; bogus bearer → 401 with `WWW-Authenticate`. Full happy path noted (requires mock upstream OAuth provider; covered by `internal/vault/vault_test.go`) |
 | 47 | Vault connections list (session auth) | `GET /api/v1/vault/connections` with session → 200 `{data:[]}` for a fresh user; no session → 401; DELETE unknown id with session → 404 (IDOR-safe) |
 | 48 | Audit events for vault ops | `GET /api/v1/audit-logs?action=vault.provider.created,vault.provider.updated,vault.provider.deleted&limit=200` → 200 with ≥1 of each action; unfiltered list has ≥3 `vault.*` events total |
+| 49 | Proxy admin endpoints (proxy disabled) | With proxy disabled in YAML, `GET /admin/proxy/status`, `GET /admin/proxy/rules`, `POST /admin/proxy/simulate` all self-404 (handler-level, so dashboards can probe); no-auth → 401 (admin middleware wins); happy-path noted as covered in `internal/api` unit tests |
+| 50 | Auth flow CRUD | `POST /admin/flows` → 201 with `flow_<hex>` id; `GET /admin/flows/{id}` → 200; list returns `{data,total}` with created flow; `?trigger=login` filter yields 0 for a signup-only flow; `PATCH /admin/flows/{id}` toggles `enabled`; unsupported `trigger` → 400; empty `steps` → 400 |
+| 51 | Flow dry-run | `POST /admin/flows/{id}/test` with unverified user → `outcome=block`, `reason` mentions email verification, `timeline` non-empty; verified user → `outcome=continue`; unknown id → 404 |
+| 52 | Flow blocks signup | With `require_email_verification` signup flow enabled, `POST /auth/signup` → 403 with `{"error":"flow_blocked"}`. Note: flow fires AFTER user-row insert so a DB row exists; smoke only asserts the HTTP response |
+| 53 | Disabled flow lets signup through | Same signup flow with `enabled=false` → `POST /auth/signup` returns normal 201 success |
+| 54 | Flow runs recorded | After a blocked signup, `GET /admin/flows/{id}/runs` returns `{data:[...]}` with ≥1 entry; at least one run has `outcome="block"`; cleanup `DELETE` so re-runs start clean |
 
 ## Notes
 

@@ -192,17 +192,21 @@ Phase 5.5 — Token Vault — Done
 - ✅ Dashboard UI: split grid, create wizard, rotate secret, type-to-confirm delete, audit tab
 - ✅ Smoke tests sections 43-48 (provider CRUD, templates, connect, bearer auth, connections, audit) — 222 PASS, 0 FAIL
 
-Phase 6 — Proxy + Visual Flow Builder (7-10 days)
+Phase 6 — Proxy + Visual Flow Builder — Done
 
 **Plan:** `docs/superpowers/plans/2026-04-18-proxy.md`
 **Plan:** `docs/superpowers/plans/2026-04-18-visual-flow-builder.md`
 
-- Shark Proxy (#58) — `shark proxy --upstream` + embedded mode
-- Route-level rules engine (path → requirement mapping)
-- Circuit breaker: JWT local verify (agents never down) + session cache (humans)
-- `X-User-ID` / `X-Agent-ID` / `X-User-Roles` header injection
-- Dashboard proxy config (visual rule editor)
-- Auth flow builder (Auth0 Actions-like: signup → verify → MFA → redirect)
+- ✅ Shark Proxy (#58) — embedded `shark serve --proxy-upstream` + standalone `shark proxy`
+- ✅ Route-level rules engine (path wildcards, method filters, require/allow)
+- ✅ Circuit breaker: L1 JWT local verify (agents never down), L2 session cache, L3 health monitor
+- ✅ Identity header injection (X-User-ID, X-Agent-ID, X-User-Roles, X-Auth-Method, X-Shark-Cache-Age)
+- ✅ Admin API: /admin/proxy/status + /rules + /simulate + SSE status stream
+- ✅ Proxy dashboard: 3-gauge circuit strip, URL simulator hero, rules table, read-only MVP
+- ✅ Auth Flow Builder — 12 step types (6 wired, 6 stubbed), conditional branches, priority + conditions
+- ✅ Flow integration: signup / login / oauth_callback / password_reset / magic_link hooks
+- ✅ Flow dashboard: palette + canvas + config + Preview dry-run + History tab
+- ✅ Smoke tests sections 49-54 (proxy disabled admin 404s, flow CRUD, dry-run timeline, signup block/disable/runs) — 244 PASS, 0 FAIL
 
 Phase 7 — SDK (5-7 days)
 
