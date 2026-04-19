@@ -171,6 +171,24 @@ export function Settings() {
                 )
               }
             </ConfigRow>
+            <ConfigRow label="Session Mode">
+              {configLoading
+                ? <Skeleton w={100}/>
+                : (
+                  <div className="row" style={{ gap: 8 }}>
+                    <span className={"chip" + (config?.jwt_mode ? '' : ' success')} style={{ height: 18, fontSize: 10 }}>
+                      {config?.jwt_mode ? 'JWT' : 'Cookie'}
+                    </span>
+                    {config?.jwt_mode && (
+                      <span className="mono faint" style={{ fontSize: 11 }}>{config?.jwt_algorithm || 'ES256'}</span>
+                    )}
+                    {!config?.jwt_mode && (
+                      <span className="faint" style={{ fontSize: 11 }}>server-side sessions</span>
+                    )}
+                  </div>
+                )
+              }
+            </ConfigRow>
           </div>
         </section>
 
@@ -201,6 +219,23 @@ export function Settings() {
                   )
               }
             </ConfigRow>
+            {(health?.smtp?.tier || health?.smtp?.sent_today != null) && (
+              <ConfigRow label="Email Tier">
+                <div className="row" style={{ gap: 8 }}>
+                  <span className={"chip" + (health.smtp.tier === 'testing' ? ' warn' : ' success')} style={{ height: 18, fontSize: 10 }}>
+                    {health.smtp.tier || 'default'}
+                  </span>
+                  {health.smtp.sent_today != null && (
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+                      {health.smtp.sent_today}/{health.smtp.daily_limit ?? '∞'} today
+                    </span>
+                  )}
+                  {health.smtp.tier === 'testing' && (
+                    <span className="faint" style={{ fontSize: 10.5 }}>switch before prod: <span className="mono">shark email setup</span></span>
+                  )}
+                </div>
+              </ConfigRow>
+            )}
             <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div title="Endpoint not available yet" style={{ display: 'inline-block' }}>
                 <button

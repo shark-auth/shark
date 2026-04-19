@@ -2,6 +2,8 @@
 import React from 'react'
 import { Icon, CopyField, Sparkline } from './shared'
 import { API, useAPI } from './api'
+import { CLIFooter } from './CLIFooter'
+import { useURLParam } from './useURLParams'
 
 // API Keys page — M2M credential management
 // Table + detail w/ rotation timeline + create/rotate modals + scope matrix
@@ -18,7 +20,7 @@ const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpac
 
 export function ApiKeys() {
   const [selected, setSelected] = React.useState(null);
-  const [filter, setFilter] = React.useState('all'); // all/active/revoked/expiring
+  const [filter, setFilter] = useURLParam('status', 'all'); // all/active/revoked/expiring
   const [env, setEnv] = React.useState('all');
   const [query, setQuery] = React.useState('');
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -427,7 +429,37 @@ function KeyDetail({ k, onClose, onRotate, onRevoke, onUpdate }) {
           </div>
         </div>
       </div>
+      {/* curl snippet */}
+      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--hairline)', background: 'var(--surface-1)' }}>
+        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 6 }}>curl snippet</div>
+        <CurlSnippet keyPrefix={k.key_prefix || 'sk_live_...'} scopes={k.scopes || []}/>
+      </div>
+      <CLIFooter command={`shark api-key show ${k.id}`}/>
     </aside>
+  );
+}
+
+function CurlSnippet({ keyPrefix, scopes }) {
+  const [copied, setCopied] = React.useState(false);
+  const endpoint = scopes.includes('users:read') ? '/api/v1/users'
+    : scopes.includes('orgs:read') ? '/api/v1/organizations'
+    : scopes.includes('audit:export') ? '/api/v1/audit-logs'
+    : '/api/v1/users';
+  const cmd = `curl -H "Authorization: Bearer ${keyPrefix}" ${window.location.origin}${endpoint}`;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '6px 8px', borderRadius: 4,
+      background: '#000', fontFamily: 'var(--font-mono)',
+      fontSize: 10.5, color: 'var(--fg-muted)', lineHeight: 1.4,
+    }}>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd}</span>
+      <button className="btn ghost icon sm" style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.2)' }}
+        onClick={() => { navigator.clipboard?.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 900); }}>
+        {copied ? <Icon.Check width={10} height={10} style={{color:'var(--success)'}}/> : <Icon.Copy width={10} height={10}/>}
+      </button>
+    </div>
   );
 }
 

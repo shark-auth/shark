@@ -3,6 +3,8 @@ import React from 'react'
 import { Icon, Avatar, CopyField, Kbd, hashColor } from './shared'
 import { API, useAPI } from './api'
 import { MOCK } from './mock'
+import { CLIFooter } from './CLIFooter'
+import { useURLParam } from './useURLParams'
 
 // Users page — table + detail slide-over
 
@@ -14,7 +16,10 @@ const NOW = Date.now();
 
 export function Users() {
   const [selected, setSelected] = React.useState(null);
-  const [query, setQuery] = React.useState('');
+  const [query, setQuery] = useURLParam('search', '');
+  const [filterVerified, setFilterVerified] = useURLParam('verified', '');
+  const [filterMfa, setFilterMfa] = useURLParam('mfa', '');
+  const [filterMethod, setFilterMethod] = useURLParam('method', '');
   const [debouncedQuery, setDebouncedQuery] = React.useState('');
   const [checked, setChecked] = React.useState(new Set());
   const [page, setPage] = React.useState(1);
@@ -33,9 +38,19 @@ export function Users() {
   const { data: usersData, loading, refresh } = useAPI(
     `/users?page=${page}&per_page=${perPage}${searchParam}`
   );
-  const users = usersData?.users || [];
+  const rawUsers = usersData?.users || [];
   const total = usersData?.total || 0;
   const totalPages = Math.ceil(total / perPage) || 1;
+
+  // Client-side filters on loaded page
+  const users = rawUsers.filter(u => {
+    if (filterVerified === 'yes' && !(u.email_verified ?? u.verified)) return false;
+    if (filterVerified === 'no' && (u.email_verified ?? u.verified)) return false;
+    if (filterMfa === 'on' && !u.mfa_enabled && !u.mfa_method && !u.mfa) return false;
+    if (filterMfa === 'off' && (u.mfa_enabled || u.mfa_method || u.mfa)) return false;
+    if (filterMethod && (u.auth_method || u.method || '') !== filterMethod) return false;
+    return true;
+  });
 
   const handleDelete = async (userId) => {
     await API.del('/users/' + userId);
@@ -71,11 +86,18 @@ export function Users() {
             />
             <Kbd keys="/"/>
           </div>
-          <button className="btn"><Icon.Filter width={11} height={11}/>Verified<Icon.ChevronDown width={10} height={10} style={{opacity:0.5}}/></button>
-          <button className="btn"><Icon.Filter width={11} height={11}/>MFA<Icon.ChevronDown width={10} height={10} style={{opacity:0.5}}/></button>
-          <button className="btn"><Icon.Filter width={11} height={11}/>Auth method<Icon.ChevronDown width={10} height={10} style={{opacity:0.5}}/></button>
-          <button className="btn"><Icon.Filter width={11} height={11}/>Org<Icon.ChevronDown width={10} height={10} style={{opacity:0.5}}/></button>
-          <button className="btn ghost sm" style={{ color: 'var(--fg-dim)' }}>+ Add filter</button>
+          <FilterSelect label="Verified" value={filterVerified} onChange={setFilterVerified} options={[
+            { v: '', l: 'All' }, { v: 'yes', l: 'Verified' }, { v: 'no', l: 'Unverified' },
+          ]}/>
+          <FilterSelect label="MFA" value={filterMfa} onChange={setFilterMfa} options={[
+            { v: '', l: 'All' }, { v: 'on', l: 'Enabled' }, { v: 'off', l: 'Disabled' },
+          ]}/>
+          <FilterSelect label="Auth method" value={filterMethod} onChange={setFilterMethod} options={[
+            { v: '', l: 'All' }, { v: 'password', l: 'Password' }, { v: 'oauth', l: 'OAuth' }, { v: 'passkey', l: 'Passkey' }, { v: 'magic_link', l: 'Magic link' },
+          ]}/>
+          {(filterVerified || filterMfa || filterMethod) && (
+            <button className="btn ghost sm" style={{ color: 'var(--fg-dim)' }} onClick={() => { setFilterVerified(''); setFilterMfa(''); setFilterMethod(''); }}>Clear filters</button>
+          )}
           <div style={{ flex: 1 }}/>
           <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
             {loading ? '…' : `${total.toLocaleString()} total`}
@@ -340,20 +362,7 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
         {tab === 'activity' && <ActivityTab user={user}/>}
       </div>
 
-      {/* CLI footer */}
-      <div style={{
-        borderTop: '1px solid var(--hairline)',
-        padding: '10px 16px',
-        background: 'var(--surface-1)',
-        fontSize: 11,
-      }}>
-        <div className="row" style={{ gap: 8 }}>
-          <Icon.Terminal width={12} height={12} style={{ opacity: 0.5 }}/>
-          <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>cli</span>
-          <code className="mono" style={{ flex: 1, color: 'var(--fg-muted)', fontSize: 11 }}>shark user show {user.id}</code>
-          <button className="btn ghost icon sm" title="Copy"><Icon.Copy width={11} height={11}/></button>
-        </div>
-      </div>
+      <CLIFooter command={`shark user show ${user.id}`}/>
     </div>
   );
 }
@@ -389,6 +398,8 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
   const [nameVal, setNameVal] = React.useState(user.name || '');
   const [emailVal, setEmailVal] = React.useState(user.email || '');
   const [saving, setSaving] = React.useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+  const [deleteInput, setDeleteInput] = React.useState('');
 
   const handleSave = async () => {
     setSaving(true);
@@ -461,14 +472,50 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm">Reset password</button>
           <button className="btn sm">Disable MFA</button>
-          <button className="btn sm danger" onClick={() => {
-            if (confirm(`Delete ${user.email}? This revokes all sessions and agent consents.`)) {
-              onDelete && onDelete(user.id);
-            }
-          }}>Delete user</button>
+          <button className="btn sm danger" onClick={() => setDeleteConfirmOpen(true)}>Delete user</button>
         </div>
-        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>Deleting requires confirmation. Revokes all sessions + agent consents in one transaction.</div>
+        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>Deleting requires typing user email. Revokes all sessions + agent consents in one transaction.</div>
       </div>
+
+      {deleteConfirmOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => { setDeleteConfirmOpen(false); setDeleteInput(''); }}>
+          <div className="card" style={{ width: 400, padding: 20, animation: 'slideIn 120ms ease-out' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--danger-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon.Warn width={14} height={14} style={{ color: 'var(--danger)' }}/>
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Delete user</div>
+                <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 1 }}>This action is permanent and cannot be undone.</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+              Type <span className="mono" style={{ color: 'var(--danger)', background: 'var(--danger-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>{user.email}</span> to confirm.
+            </div>
+            <input autoFocus type="text" value={deleteInput} onChange={e => setDeleteInput(e.target.value)}
+              placeholder={user.email}
+              style={{
+                width: '100%', height: 32, padding: '0 10px',
+                background: 'var(--surface-2)', border: '1px solid var(--hairline-strong)',
+                borderRadius: 5, color: 'var(--fg)', fontSize: 12, marginBottom: 14,
+              }}/>
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn sm ghost" onClick={() => { setDeleteConfirmOpen(false); setDeleteInput(''); }}>Cancel</button>
+              <button className="btn sm danger"
+                disabled={deleteInput !== user.email}
+                style={{ opacity: deleteInput !== user.email ? 0.45 : 1 }}
+                onClick={() => { setDeleteConfirmOpen(false); setDeleteInput(''); onDelete && onDelete(user.id); }}>
+                Delete user
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -684,6 +731,32 @@ function ActivityTab({ user }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function FilterSelect({ label, value, onChange, options }) {
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex' }}>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          appearance: 'none', WebkitAppearance: 'none',
+          height: 28, padding: '0 24px 0 8px',
+          background: value ? 'var(--surface-3)' : 'var(--surface-2)',
+          border: '1px solid ' + (value ? 'var(--fg-dim)' : 'var(--hairline-strong)'),
+          borderRadius: 5, color: 'var(--fg)',
+          fontSize: 12, fontWeight: 500, cursor: 'pointer',
+          colorScheme: 'dark',
+        }}
+      >
+        {options.map(o => <option key={o.v} value={o.v}>{o.v ? o.l : label + ': All'}</option>)}
+      </select>
+      <Icon.ChevronDown width={10} height={10} style={{
+        position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+        pointerEvents: 'none', opacity: 0.5,
+      }}/>
     </div>
   );
 }

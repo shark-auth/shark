@@ -2,6 +2,7 @@
 import React from 'react'
 import { Icon, CopyField } from './shared'
 import { API } from './api'
+import { CLIFooter } from './CLIFooter'
 
 // Signing Keys page — JWKS / JWT signing key management
 
@@ -213,6 +214,7 @@ export function SigningKeys() {
           <span className="mono faint">GET /.well-known/jwks.json</span>
         </div>
       )}
+      <CLIFooter command={`curl -s ${jwksUrl} | jq .`}/>
     </div>
   );
 }

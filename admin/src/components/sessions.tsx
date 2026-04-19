@@ -3,6 +3,8 @@ import React from 'react'
 import { Icon, Avatar, CopyField, Kbd, Sparkline } from './shared'
 import { API, useAPI } from './api'
 import { MOCK } from './mock'
+import { CLIFooter } from './CLIFooter'
+import { useURLParam } from './useURLParams'
 
 // Sessions — live header strip + geo view + table + detail slideover
 
@@ -68,11 +70,12 @@ function normalizeSession(s) {
 export function Sessions() {
   const [selected, setSelected] = React.useState(null);
   const [query, setQuery] = React.useState('');
-  const [clientFilter, setClientFilter] = React.useState('all');
+  const [clientFilter, setClientFilter] = useURLParam('client', 'all');
   const [riskFilter, setRiskFilter] = React.useState('all');
   const [view, setView] = React.useState('table'); // table | geo
   const [liveTail, setLiveTail] = React.useState(true);
   const [pulse, setPulse] = React.useState(0);
+  const [jtiInput, setJtiInput] = React.useState('');
 
   const { data: sessionsRaw, loading, refresh } = useAPI('/admin/sessions');
   const sessions = (sessionsRaw?.sessions || []).map(normalizeSession);
@@ -94,6 +97,18 @@ export function Sessions() {
   const handleRevoke = async (sessionId) => {
     await API.del('/admin/sessions/' + sessionId);
     refresh();
+  };
+
+  const handleRevokeJTI = async () => {
+    const jti = jtiInput.trim();
+    if (!jti) return;
+    try {
+      await API.post('/admin/auth/revoke-jti', { jti });
+      setJtiInput('');
+      refresh();
+    } catch (e) {
+      // silently fail for now
+    }
   };
 
   const all = sessions;
@@ -179,6 +194,26 @@ export function Sessions() {
               { v: 'medium', l: 'Med' },
               { v: 'high', l: 'High' },
             ]}/>
+
+          {/* Revoke by JTI */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            border: '1px solid var(--hairline-strong)',
+            background: 'var(--surface-1)', borderRadius: 5,
+            padding: '0 6px', height: 28,
+          }}>
+            <Icon.Token width={11} height={11} style={{ opacity: 0.4, flexShrink: 0 }}/>
+            <input
+              placeholder="Revoke JTI…"
+              value={jtiInput}
+              onChange={e => setJtiInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && jtiInput.trim()) handleRevokeJTI(); }}
+              style={{ width: 110, fontSize: 11, color: 'var(--fg)', fontFamily: 'var(--font-mono)' }}
+            />
+            <button className="btn ghost icon sm" disabled={!jtiInput.trim()} onClick={handleRevokeJTI} title="Revoke">
+              <Icon.X width={10} height={10}/>
+            </button>
+          </div>
 
           <div style={{ flex: 1 }}/>
 
@@ -389,6 +424,7 @@ export function SessionsTable({ sessions, selected, setSelected, pulse, onRevoke
           <th style={{ width: 90, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Risk</th>
           <th style={{ width: 90, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Started</th>
           <th style={{ width: 110, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Last seen</th>
+          <th style={{ width: 80, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>JTI</th>
           <th style={{ width: 60, position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}></th>
         </tr>
       </thead>
@@ -443,6 +479,9 @@ export function SessionsTable({ sessions, selected, setSelected, pulse, onRevoke
               <td className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{relTime(s.created)}</td>
               <td className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: veryRecent ? 'var(--success)' : recent ? 'var(--fg)' : 'var(--fg-muted)' }}>
                 {veryRecent ? <span className="row" style={{gap:4}}><span className="dot success pulse"/>now</span> : relTime(s.last)}
+              </td>
+              <td className="mono faint" style={{ fontSize: 10, lineHeight: 1.5, maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {s.jti ? s.jti.slice(0, 8) : '—'}
               </td>
               {/* Inline revoke — ghost danger sm, stops row click */}
               <td onClick={e => e.stopPropagation()} style={{ paddingRight: 8 }}>
@@ -758,19 +797,7 @@ function SessionSlideover({ session, onClose, onRevoke }) {
         {tab === 'events' && <SessionEventsTab s={session}/>}
       </div>
 
-      {/* CLI footer */}
-      <div style={{
-        borderTop: '1px solid var(--hairline)',
-        padding: '10px 16px',
-        background: 'var(--surface-1)', fontSize: 11, lineHeight: 1.5,
-      }}>
-        <div className="row" style={{ gap: 8 }}>
-          <Icon.Terminal width={12} height={12} style={{ opacity: 0.5 }}/>
-          <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>cli</span>
-          <code className="mono" style={{ flex: 1, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>shark session show {session.id}</code>
-          <button className="btn ghost icon sm"><Icon.Copy width={11} height={11}/></button>
-        </div>
-      </div>
+      <CLIFooter command={`shark session show ${session.id}`}/>
     </div>
   );
 }

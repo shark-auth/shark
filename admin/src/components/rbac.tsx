@@ -2,6 +2,7 @@
 import React from 'react'
 import { Icon, CopyField, hashColor } from './shared'
 import { API, useAPI } from './api'
+import { useToast } from './toast'
 
 // Roles & Permissions — two-pane RBAC manager
 
@@ -254,16 +255,16 @@ function RoleDetailHeader({ role, onRefresh, onDelete }) {
     }
   }
 
-  async function handleDelete() {
-    if (!confirm(`Delete role "${role.name}"? This cannot be undone.`)) return;
-    setDeleting(true);
-    try {
-      await API.del('/roles/' + role.id);
-      onDelete();
-    } catch (e) {
-      alert('Delete failed: ' + e.message);
-      setDeleting(false);
-    }
+  const toast = useToast();
+  function handleDelete() {
+    toast.undo(`Deleted role "${role.name}"`, async () => {
+      try {
+        await API.del('/roles/' + role.id);
+        onDelete();
+      } catch (e) {
+        toast.error('Delete failed: ' + e.message);
+      }
+    });
   }
 
   return (

@@ -2,6 +2,8 @@
 import React from 'react'
 import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
+import { CLIFooter } from './CLIFooter'
+import { useToast } from './toast'
 
 // Applications page — OAuth/OIDC client registrations
 // Table view → slide-over detail → live consent-screen preview
@@ -200,17 +202,17 @@ function relativeTime(val) {
 function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) {
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState(null);
+  const toast = useToast();
 
-  const handleDelete = async () => {
-    if (!confirm(`Delete "${app.name}"? This cannot be undone.`)) return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await onDelete();
-    } catch (e) {
-      setDeleteError(e.message);
-      setDeleting(false);
-    }
+  const handleDelete = () => {
+    onClose();
+    toast.undo(`Deleted "${app.name}"`, async () => {
+      try {
+        await onDelete();
+      } catch (e) {
+        toast.error(`Failed to delete: ${e.message}`);
+      }
+    });
   };
 
   return (
@@ -274,6 +276,7 @@ function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) 
         {tab === 'tokens' && <AppTokens app={app}/>}
         {tab === 'events' && <AppEvents app={app}/>}
       </div>
+      <CLIFooter command={`shark app show ${app.client_id || app.id}`}/>
     </aside>
   );
 }

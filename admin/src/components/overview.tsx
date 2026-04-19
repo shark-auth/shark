@@ -205,10 +205,10 @@ export function Overview() {
                 <div key={i} className="card" style={{ padding: 12, minWidth: 0, cursor: 'pointer' }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', lineHeight: 1.5 }}>{m.k}</span>
-                    {m.agent && <span className="chip agent" style={{ height: 14, fontSize: 9, padding: '0 4px' }}>new</span>}
+                    {m.agent && <span className="chip agent" style={{ height: 14, fontSize: 10, padding: '0 4px' }}>new</span>}
                     {m.warn && <Icon.Warn width={11} height={11} style={{ color: 'var(--warn)' }}/>}
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
+                  <div style={{ fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', lineHeight: 1.15, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
                   <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 1, lineHeight: 1.5 }}>{m.sub}</div>
                   <div style={{ marginTop: 8, marginLeft: -4, marginRight: -4 }}>
                     <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>
@@ -273,7 +273,7 @@ export function Overview() {
                         <tr key={i}>
                           <td style={{ width: 60, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5 }}>{relTime(a.t)}</td>
                           <td style={{ width: 90 }}>
-                            <span className={"chip" + (a.actor === 'agent' ? ' agent' : a.actor === 'system' ? '' : a.actor === 'admin' ? ' warn' : '')} style={{ height: 16, fontSize: 9, padding: '0 5px' }}>{a.actor}</span>
+                            <span className={"chip" + (a.actor === 'agent' ? ' agent' : a.actor === 'system' ? '' : a.actor === 'admin' ? ' warn' : '')} style={{ height: 16, fontSize: 10, padding: '0 5px' }}>{a.actor}</span>
                           </td>
                           <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="mono">
                             {a.name}
@@ -312,8 +312,8 @@ export function Overview() {
                 <Avatar name={a.name} agent size={22}/>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontWeight: 500, fontSize: 13 }}>{a.name}</span>
-                    {a.dpop && <span className="chip" style={{ height: 14, fontSize: 9, padding: '0 4px' }} title="DPoP bound">DPoP</span>}
+                    <span style={{ fontWeight: 600, fontSize: 13, fontFamily: 'var(--font-display)' }}>{a.name}</span>
+                    {a.dpop && <span className="chip" style={{ height: 14, fontSize: 10, padding: '0 4px' }} title="DPoP bound">DPoP</span>}
                     <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{MOCK.relativeTime(a.lastUsed)}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 2, alignItems: 'center' }}>
@@ -351,7 +351,7 @@ export function Overview() {
                 borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none',
               }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', lineHeight: 1.5 }}>{x.k}</div>
-                <div style={{ fontSize: 13, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-mono)', color: 'var(--fg)' }}>{x.v}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>{x.v}</div>
                 <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2, lineHeight: 1.5 }}>{x.sub}</div>
               </div>
             ))}
@@ -405,7 +405,7 @@ function AttentionPanel() {
               {item.kind === 'anomaly' && <Icon.Warn width={12} height={12}/>}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.4 }}>{item.title}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, fontFamily: 'var(--font-display)' }}>{item.title}</div>
               <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 3, lineHeight: 1.5 }}>{item.sub}</div>
               <div className="row" style={{ marginTop: 8, gap: 6 }}>
                 <button className="btn sm" style={{ height: 22, fontSize: 11 }}>{item.action}</button>

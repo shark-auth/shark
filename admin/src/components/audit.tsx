@@ -3,6 +3,7 @@ import React from 'react'
 import { Icon, CopyField, Kbd, Avatar } from './shared'
 import { useAPI } from './api'
 import { MOCK } from './mock'
+import { useURLParam } from './useURLParams'
 
 // Audit log page — live-tail event stream w/ filters, event detail, CSV export
 
@@ -29,14 +30,22 @@ function normalizeEvent(e) {
 export function Audit() {
   const [liveTail, setLiveTail] = React.useState(false);
   const [selected, setSelected] = React.useState(null);
-  const [query, setQuery] = React.useState('');
+  const [query, setQuery] = useURLParam('q', '');
+  const [urlRange, setUrlRange] = useURLParam('range', '24h');
+  const [urlActor, setUrlActor] = useURLParam('actor', '');
   const [filters, setFilters] = React.useState({
-    actorType: null,   // user/admin/agent/system
-    severity: null,    // info/warn/danger
+    actorType: urlActor || null,
+    severity: null,
     actionPrefix: null,
-    timeRange: '24h',  // 1h/24h/7d/all
+    timeRange: urlRange,
     delegated: false,
   });
+
+  // Sync filter changes to URL
+  React.useEffect(() => {
+    setUrlRange(filters.timeRange);
+    setUrlActor(filters.actorType || '');
+  }, [filters.timeRange, filters.actorType]);
   const tailRef = React.useRef(null);
 
   const apiPath = React.useMemo(() => {

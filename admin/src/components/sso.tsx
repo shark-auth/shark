@@ -2,6 +2,7 @@
 import React from 'react'
 import { Icon } from './shared'
 import { API, useAPI } from './api'
+import { useToast } from './toast'
 
 // SSO Connections page — SAML + OIDC enterprise single sign-on
 
@@ -28,14 +29,17 @@ export function SSO() {
   const { data, loading, refresh } = useAPI('/sso/connections');
   const connections = data?.connections || data || [];
 
-  const handleDelete = async (conn) => {
-    if (!confirm(`Delete "${conn.name}"? This cannot be undone.`)) return;
-    try {
-      await API.del('/sso/connections/' + conn.id);
-      refresh();
-    } catch (e) {
-      alert('Delete failed: ' + e.message);
-    }
+  const toast = useToast();
+  const handleDelete = (conn) => {
+    toast.undo(`Deleted "${conn.name}"`, async () => {
+      try {
+        await API.del('/sso/connections/' + conn.id);
+        refresh();
+      } catch (e) {
+        toast.error('Delete failed: ' + e.message);
+        refresh();
+      }
+    });
   };
 
   return (
@@ -54,6 +58,9 @@ export function SSO() {
           </button>
         </div>
       </div>
+
+      {/* Domain routing tester */}
+      <DomainRoutingTester connections={connections}/>
 
       {/* Table */}
       <div style={{ flex: 1, overflow: 'auto' }}>
@@ -440,6 +447,43 @@ export function SSOField({ label, required, hint, children }) {
       </label>
       {hint && <div className="faint" style={{ fontSize: 10.5, marginBottom: 4, lineHeight: 1.4 }}>{hint}</div>}
       <div style={{ marginTop: hint ? 0 : 4 }}>{children}</div>
+    </div>
+  );
+}
+
+function DomainRoutingTester({ connections }) {
+  const [email, setEmail] = React.useState('');
+  const conns = Array.isArray(connections) ? connections : [];
+
+  const domain = email.includes('@') ? email.split('@')[1]?.toLowerCase() : '';
+  const match = domain ? conns.find(c => (c.domain || '').toLowerCase() === domain) : null;
+
+  return (
+    <div style={{
+      padding: '8px 20px',
+      borderBottom: '1px solid var(--hairline)',
+      display: 'flex', alignItems: 'center', gap: 8,
+    }}>
+      <Icon.Search width={12} height={12} style={{ opacity: 0.4, flexShrink: 0 }}/>
+      <span className="faint" style={{ fontSize: 11, flexShrink: 0 }}>Route test</span>
+      <input
+        placeholder="user@domain.com"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        style={{
+          width: 200, height: 24, padding: '0 8px',
+          background: 'var(--surface-1)', border: '1px solid var(--hairline-strong)',
+          borderRadius: 4, fontSize: 11, color: 'var(--fg)', fontFamily: 'var(--font-mono)',
+        }}
+      />
+      {domain && match && (
+        <span className="chip success" style={{ height: 18, fontSize: 10 }}>
+          → {match.name} ({match.type || 'oidc'})
+        </span>
+      )}
+      {domain && !match && (
+        <span className="faint" style={{ fontSize: 11 }}>No connection for @{domain}</span>
+      )}
     </div>
   );
 }

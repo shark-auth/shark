@@ -3,6 +3,8 @@ import React from 'react'
 import { Icon, Avatar, CopyField, hashColor } from './shared'
 import { API, useAPI } from './api'
 import { MOCK } from './mock'
+import { CLIFooter } from './CLIFooter'
+import { useToast } from './toast'
 
 // Organizations — split-pane browser (list left, persistent detail right)
 
@@ -133,7 +135,10 @@ function OrgDetail({ org, onRefresh }) {
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'members', label: 'Members', chip: members.length || undefined },
+    { id: 'invitations', label: 'Invitations' },
     { id: 'roles', label: 'Roles', chip: roles.length || undefined },
+    { id: 'sso', label: 'SSO' },
+    { id: 'audit', label: 'Audit' },
     { id: 'settings', label: 'Settings' },
   ];
 
@@ -208,28 +213,31 @@ function OrgDetail({ org, onRefresh }) {
       <div style={{ padding: 20 }}>
         {tab === 'overview' && <OrgOverviewTab org={org} members={members}/>}
         {tab === 'members' && <OrgMembersTab org={org} members={members} loading={membersLoading} onRefresh={membersRefresh}/>}
+        {tab === 'invitations' && <OrgInvitationsTab org={org}/>}
         {tab === 'roles' && <OrgRolesTab org={org} roles={roles} loading={rolesLoading} onRefresh={rolesRefresh}/>}
+        {tab === 'sso' && <OrgSSOTab org={org}/>}
+        {tab === 'audit' && <OrgAuditTab org={org}/>}
         {tab === 'settings' && <OrgSettingsTab org={org} onRefresh={onRefresh}/>}
       </div>
+      <CLIFooter command={`shark org show ${org.id}`}/>
     </div>
   );
 }
 
 function OrgActions({ org, onRefresh }) {
   const [open, setOpen] = React.useState(false);
-  const [deleting, setDeleting] = React.useState(false);
+  const toast = useToast();
 
-  async function handleDelete() {
-    if (!confirm(`Delete organization "${org.name}"? This cannot be undone.`)) return;
-    setDeleting(true);
-    try {
-      await API.del('/admin/organizations/' + org.id);
-      onRefresh();
-    } catch (e) {
-      alert('Delete failed: ' + e.message);
-    } finally {
-      setDeleting(false);
-    }
+  function handleDelete() {
+    toast.undo(`Deleted "${org.name}"`, async () => {
+      try {
+        await API.del('/admin/organizations/' + org.id);
+        onRefresh();
+      } catch (e) {
+        toast.error('Delete failed: ' + e.message);
+        onRefresh();
+      }
+    });
   }
 
   return (
@@ -584,6 +592,109 @@ function OrgSettingsTab({ org, onRefresh }) {
           </div>
         </form>
       </Panel>
+    </div>
+  );
+}
+
+function OrgInvitationsTab({ org }) {
+  const { data, loading, refresh } = useAPI('/admin/organizations/' + org.id + '/invitations');
+  const invites = data?.invitations || data || [];
+
+  const handleRevoke = async (id) => {
+    try {
+      await API.del('/admin/organizations/' + org.id + '/invitations/' + id);
+      refresh();
+    } catch {}
+  };
+
+  const handleResend = async (id) => {
+    try {
+      await API.post('/admin/organizations/' + org.id + '/invitations/' + id + '/resend');
+    } catch {}
+  };
+
+  if (loading) return <div className="faint" style={{ fontSize: 11, padding: 8 }}>Loading…</div>;
+  if (invites.length === 0) return (
+    <div style={{ textAlign: 'center', padding: 32 }}>
+      <div className="faint" style={{ fontSize: 13 }}>No pending invitations</div>
+      <div className="faint" style={{ fontSize: 11, marginTop: 4 }}>Invite members from the Members tab or CLI: <span className="mono">shark org invite --org {org.slug || org.id} --email user@example.com</span></div>
+    </div>
+  );
+
+  return (
+    <table className="tbl" style={{ fontSize: 12 }}>
+      <thead><tr>
+        <th>Email</th><th>Role</th><th>Expires</th><th>Status</th><th style={{width:120}}></th>
+      </tr></thead>
+      <tbody>
+        {invites.map(inv => (
+          <tr key={inv.id}>
+            <td className="mono">{inv.email}</td>
+            <td><span className="chip" style={{ height: 18, fontSize: 10 }}>{inv.role || 'member'}</span></td>
+            <td className="mono faint" style={{ fontSize: 11 }}>{relTime(inv.expires_at || inv.expires)}</td>
+            <td>
+              <span className={'chip ' + (inv.status === 'accepted' ? 'success' : inv.status === 'expired' ? 'warn' : '')} style={{ height: 18, fontSize: 10 }}>
+                {inv.status || 'pending'}
+              </span>
+            </td>
+            <td>
+              <div className="row" style={{ gap: 4 }}>
+                <button className="btn ghost sm" onClick={() => handleResend(inv.id)}>Resend</button>
+                <button className="btn ghost sm" style={{ color: 'var(--danger)' }} onClick={() => handleRevoke(inv.id)}>Revoke</button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function OrgSSOTab({ org }) {
+  return (
+    <div style={{ padding: 4 }}>
+      <div style={{ marginBottom: 12 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 500 }}>Require SSO</span>
+          <span className="chip" style={{ height: 18, fontSize: 10 }}>{org.sso_required ? 'enforced' : 'optional'}</span>
+        </div>
+        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+          When enforced, members must authenticate via SSO. Password/magic-link login disabled for this org.
+          Edit via <span className="mono">sharkauth.yaml</span> or API.
+        </div>
+      </div>
+      {org.sso_domain && (
+        <div style={{ padding: '8px 0', borderTop: '1px solid var(--hairline)' }}>
+          <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)' }}>Domain routing</span>
+          <div className="mono" style={{ fontSize: 12, marginTop: 4 }}>{org.sso_domain}</div>
+          <div className="faint" style={{ fontSize: 11, marginTop: 2 }}>Emails matching @{org.sso_domain} auto-route to this org's SSO connection.</div>
+        </div>
+      )}
+      {!org.sso_domain && (
+        <div className="faint" style={{ fontSize: 11, padding: '8px 0', borderTop: '1px solid var(--hairline)' }}>
+          No SSO domain bound. Bind one to auto-route logins: <span className="mono">shark org update --sso-domain example.com</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrgAuditTab({ org }) {
+  const { data, loading } = useAPI('/audit-logs?limit=50&org_id=' + org.id);
+  const events = data?.items || data || [];
+
+  if (loading) return <div className="faint" style={{ fontSize: 11, padding: 8 }}>Loading…</div>;
+  if (events.length === 0) return <div className="faint" style={{ fontSize: 12, padding: 16 }}>No audit events for this organization.</div>;
+
+  return (
+    <div style={{ maxHeight: 400, overflow: 'auto' }}>
+      {events.slice(0, 30).map((e, i) => (
+        <div key={e.id || i} className="row" style={{ padding: '6px 0', borderBottom: '1px solid var(--hairline)', gap: 8, fontSize: 11 }}>
+          <span className="mono faint" style={{ width: 60, flexShrink: 0 }}>{relTime(e.created_at || e.t)}</span>
+          <span className="mono" style={{ flex: 1 }}>{e.event_type || e.action || '—'}</span>
+          <span className="faint">{e.actor_email || e.actor_id || '—'}</span>
+        </div>
+      ))}
     </div>
   );
 }

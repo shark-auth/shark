@@ -374,7 +374,7 @@ function WebhookDetail({ w, onClose, onUpdate, onDelete, onTest }) {
         {/* Tab bar + Test button */}
         <div className="row" style={{marginTop:10, gap:8}}>
           <div className="seg" style={segStyle}>
-            {[['config','Config'],['deliveries','Deliveries']].map(([v,l]) => (
+            {[['config','Config'],['deliveries','Deliveries'],['test','Test Fire'],['verify','Sig Verify']].map(([v,l]) => (
               <button key={v} onClick={() => setTab(v)}
                 style={{...segBtn, background: tab===v ? '#fafafa':'var(--surface-2)', color: tab===v ? '#000':'var(--fg-muted)'}}>
                 {l}
@@ -389,11 +389,10 @@ function WebhookDetail({ w, onClose, onUpdate, onDelete, onTest }) {
       </div>
 
       <div style={{flex:1, overflowY:'auto'}}>
-        {tab === 'config' ? (
-          <WebhookConfigTab w={w} onUpdate={onUpdate} onDelete={onDelete}/>
-        ) : (
-          <WebhookDeliveriesTab webhookId={w.id}/>
-        )}
+        {tab === 'config' && <WebhookConfigTab w={w} onUpdate={onUpdate} onDelete={onDelete}/>}
+        {tab === 'deliveries' && <WebhookDeliveriesTab webhookId={w.id}/>}
+        {tab === 'test' && <WebhookTestFireTab webhookId={w.id}/>}
+        {tab === 'verify' && <WebhookSigVerifyTab/>}
       </div>
     </aside>
   );
@@ -650,6 +649,113 @@ function DeliveryExpanded({ d }) {
           <span className="faint" style={{marginRight:6}}>Error:</span>{d.error}
         </div>
       )}
+      <div className="row" style={{ gap: 6 }}>
+        <button className="btn sm" onClick={async () => {
+          try { await API.post('/webhooks/' + d.webhook_id + '/deliveries/' + d.id + '/replay'); }
+          catch {}
+        }}>
+          <Icon.Refresh width={10} height={10}/> Replay
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WebhookTestFireTab({ webhookId }) {
+  const [event, setEvent] = React.useState('user.created');
+  const [firing, setFiring] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+
+  const events = ['user.created','user.deleted','user.updated','session.created','mfa.enabled','org.member.added','webhook.test'];
+
+  const handleFire = async () => {
+    setFiring(true); setResult(null);
+    try {
+      const res = await API.post('/webhooks/' + webhookId + '/test', { event_type: event });
+      setResult({ ok: true, status: res?.status_code || res?.status || 200 });
+    } catch (e) {
+      setResult({ ok: false, error: e.message });
+    } finally {
+      setFiring(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+        Fire a test event with sample payload. Delivery appears in Deliveries tab.
+      </div>
+      <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+        <select value={event} onChange={e => setEvent(e.target.value)}
+          style={{
+            height: 28, padding: '0 8px', background: 'var(--surface-2)',
+            border: '1px solid var(--hairline-strong)', borderRadius: 5,
+            color: 'var(--fg)', fontSize: 12, fontFamily: 'var(--font-mono)',
+            colorScheme: 'dark',
+          }}>
+          {events.map(e => <option key={e} value={e}>{e}</option>)}
+        </select>
+        <button className="btn sm" onClick={handleFire} disabled={firing}>
+          <Icon.Bolt width={10} height={10}/>{firing ? 'Firing…' : 'Fire test event'}
+        </button>
+      </div>
+      {result && (
+        <div className={'chip ' + (result.ok ? 'success' : 'danger')} style={{ height: 20, fontSize: 11 }}>
+          {result.ok ? `Delivered · ${result.status}` : `Failed: ${result.error}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WebhookSigVerifyTab() {
+  const [payload, setPayload] = React.useState('');
+  const [signature, setSignature] = React.useState('');
+  const [secret, setSecret] = React.useState('');
+  const [result, setResult] = React.useState(null);
+
+  const handleVerify = async () => {
+    if (!payload || !signature || !secret) return;
+    try {
+      const enc = new TextEncoder();
+      const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+      const computed = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const inputSig = signature.replace(/^sha256=/, '').toLowerCase();
+      setResult(computed === inputSig ? 'valid' : 'invalid');
+    } catch {
+      setResult('error');
+    }
+  };
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+        Paste a webhook payload + signature to verify HMAC-SHA256. Runs locally in browser.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div>
+          <label style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Webhook secret</label>
+          <input value={secret} onChange={e => setSecret(e.target.value)} placeholder="whsec_..."
+            style={{ width: '100%', height: 28, padding: '0 8px', background: 'var(--surface-2)', border: '1px solid var(--hairline-strong)', borderRadius: 4, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--fg)' }}/>
+        </div>
+        <div>
+          <label style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Payload body</label>
+          <textarea value={payload} onChange={e => setPayload(e.target.value)} rows={4} placeholder='{"event":"user.created",...}'
+            style={{ width: '100%', padding: 8, background: 'var(--surface-2)', border: '1px solid var(--hairline-strong)', borderRadius: 4, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--fg)', resize: 'vertical' }}/>
+        </div>
+        <div>
+          <label style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Signature header</label>
+          <input value={signature} onChange={e => setSignature(e.target.value)} placeholder="sha256=abc123..."
+            style={{ width: '100%', height: 28, padding: '0 8px', background: 'var(--surface-2)', border: '1px solid var(--hairline-strong)', borderRadius: 4, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--fg)' }}/>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn sm" onClick={handleVerify} disabled={!payload || !signature || !secret}>Verify</button>
+          {result === 'valid' && <span className="chip success" style={{ height: 20, fontSize: 11 }}>Valid signature</span>}
+          {result === 'invalid' && <span className="chip danger" style={{ height: 20, fontSize: 11 }}>Invalid — signature mismatch</span>}
+          {result === 'error' && <span className="chip danger" style={{ height: 20, fontSize: 11 }}>Verification error</span>}
+        </div>
+      </div>
     </div>
   );
 }

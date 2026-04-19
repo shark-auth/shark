@@ -37,6 +37,17 @@ export const NAV = [
     { id: 'debug', label: 'Session Debugger', icon: 'Debug', ph: 5 },
     { id: 'schemas', label: 'Event Schemas', icon: 'Schema', ph: 5 },
   ]},
+  { group: 'INFRASTRUCTURE', items: [
+    { id: 'proxy', label: 'Proxy', icon: 'Proxy', ph: 7 },
+    { id: 'oidc', label: 'OIDC Provider', icon: 'Globe', ph: 8 },
+  ]},
+  { group: 'ENTERPRISE', items: [
+    { id: 'impersonation', label: 'Impersonation', icon: 'Impersonate', ph: 9 },
+    { id: 'compliance', label: 'Compliance', icon: 'Compliance', ph: 9 },
+    { id: 'migrations', label: 'Migrations', icon: 'Migration', ph: 9 },
+    { id: 'branding', label: 'Branding', icon: 'Brand', ph: 9 },
+    { id: 'flow', label: 'Flow Builder', icon: 'Flow', ph: 10 },
+  ]},
 ];
 
 export function Sidebar({ page, setPage, collapsed, setCollapsed }) {
@@ -177,7 +188,7 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed }) {
   );
 }
 
-export function TopBar({ page, setTweaksOpen }) {
+export function TopBar({ page, setTweaksOpen, onOpenPalette }) {
   const pageTitle = {
     overview: 'Overview',
     users: 'Users',
@@ -200,6 +211,13 @@ export function TopBar({ page, setTweaksOpen }) {
     explorer: 'API Explorer',
     debug: 'Session Debugger',
     schemas: 'Event Schemas',
+    proxy: 'Proxy',
+    oidc: 'OIDC Provider',
+    impersonation: 'Impersonation',
+    compliance: 'Compliance',
+    migrations: 'Migrations',
+    branding: 'Branding',
+    flow: 'Flow Builder',
   }[page] || page;
 
   return (
@@ -224,7 +242,7 @@ export function TopBar({ page, setTweaksOpen }) {
 
       <div style={{ flex: 1 }}/>
 
-      <button className="btn ghost" style={{
+      <button className="btn ghost" onClick={onOpenPalette} style={{
         background: 'var(--surface-1)',
         border: '1px solid var(--hairline-strong)',
         width: 280, justifyContent: 'flex-start',

@@ -19,7 +19,9 @@ import { SSO } from './sso'
 import { Authentication } from './authentication'
 import { SigningKeys } from './signing_keys'
 import { Settings } from './settings'
-import { Consents, Tokens, Vault, APIExplorer, SessionDebugger, EventSchemas } from './empty_shell'
+import { Consents, Tokens, Vault, APIExplorer, SessionDebugger, EventSchemas, Proxy, OIDCProvider, Impersonation, CompliancePage, Migrations, Branding, FlowBuilder } from './empty_shell'
+import { useKeyboardShortcuts, KeyboardCheatsheet } from './useKeyboardShortcuts'
+import { CommandPalette } from './CommandPalette'
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "sidebarCollapsed": false,
@@ -85,6 +87,17 @@ export function App() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
+  const { cheatsheetOpen, setCheatsheetOpen } = useKeyboardShortcuts(setPage);
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setPaletteOpen(v => !v); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   if (!apiKey) {
     return <Login onLogin={(k) => setApiKey(k)} />;
   }
@@ -112,6 +125,13 @@ export function App() {
     explorer: APIExplorer,
     debug: SessionDebugger,
     schemas: EventSchemas,
+    proxy: Proxy,
+    oidc: OIDCProvider,
+    impersonation: Impersonation,
+    compliance: CompliancePage,
+    migrations: Migrations,
+    branding: Branding,
+    flow: FlowBuilder,
   }[page] || Overview;
 
   return (
@@ -121,11 +141,14 @@ export function App() {
         setCollapsed={(v) => setTweak('sidebarCollapsed', v)}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}
            data-screen-label={'01 ' + page}>
-        <TopBar page={page} setTweaksOpen={setTweaksOpen}/>
+        <TopBar page={page} setTweaksOpen={setTweaksOpen} onOpenPalette={() => setPaletteOpen(true)}/>
         <div style={{ flex: 1, overflow: 'hidden', animation: 'fadeIn 160ms ease-out' }}>
           <Page/>
         </div>
       </div>
+
+      {cheatsheetOpen && <KeyboardCheatsheet onClose={() => setCheatsheetOpen(false)}/>}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} setPage={setPage}/>
 
       {tweaksOpen && (
         <div className="tweaks-panel">

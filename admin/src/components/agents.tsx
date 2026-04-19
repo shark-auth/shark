@@ -2,6 +2,7 @@
 import React from 'react'
 import { Icon, Avatar, CopyField, Sparkline } from './shared'
 import { MOCK } from './mock'
+import { CLIFooter } from './CLIFooter'
 
 // Agents page — table + detail slide-over (Phase 6 standout)
 
@@ -222,19 +223,7 @@ function AgentSlideover({ agent, onClose }) {
         {tab === 'delegation' && <AgentDelegation agent={agent}/>}
       </div>
 
-      {/* CLI footer */}
-      <div style={{
-        borderTop: '1px solid var(--hairline)',
-        padding: '10px 16px',
-        background: 'var(--surface-1)',
-        fontSize: 11,
-      }}>
-        <div className="row" style={{ gap: 8 }}>
-          <Icon.Terminal width={12} height={12} style={{ opacity: 0.5 }}/>
-          <code className="mono" style={{ flex: 1, color: 'var(--fg-muted)' }}>shark agent show {agent.id}</code>
-          <button className="btn ghost icon sm"><Icon.Copy width={11} height={11}/></button>
-        </div>
-      </div>
+      <CLIFooter command={`shark agent show ${agent.id}`}/>
     </div>
   );
 }

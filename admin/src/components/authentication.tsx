@@ -158,8 +158,13 @@ export function Authentication() {
                 <Icon.Key width={13} height={13} style={{ opacity: 0.6 }}/>
                 <span>Passkeys</span>
               </div>
+              {cfg.passkey_count != null && (
+                <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>
+                  {cfg.passkey_count} registered
+                </span>
+              )}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}>
               <AuthCell
                 label="Status"
                 value="Enabled"
@@ -175,6 +180,23 @@ export function Authentication() {
                 label="RP ID"
                 value={cfg.rp_id || 'Default'}
                 mono
+                border="left"
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, borderTop: '1px solid var(--hairline)' }}>
+              <AuthCell
+                label="Origin"
+                value={cfg.passkey_origin || cfg.base_url || window.location.origin}
+                mono
+              />
+              <AuthCell
+                label="User Verification"
+                value={cfg.passkey_uv || 'preferred'}
+                border="left"
+              />
+              <AuthCell
+                label="Attestation"
+                value={cfg.passkey_attestation || 'none'}
                 border="left"
               />
             </div>
@@ -223,19 +245,49 @@ export function Authentication() {
                 <span>Session Mode</span>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: jwtMode ? '1fr 1fr' : '1fr', gap: 0 }}>
-              <AuthCell
-                label="Current mode"
-                value={jwtMode ? 'JWT mode' : 'Cookie sessions'}
-              />
+            <div style={{ padding: '12px 14px' }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                {[
+                  { id: 'cookie', label: 'Cookie sessions', desc: 'Server-side sessions stored in DB' },
+                  { id: 'jwt', label: 'JWT mode', desc: 'Stateless tokens signed with JWKS' },
+                ].map(opt => {
+                  const active = opt.id === 'jwt' ? jwtMode : !jwtMode;
+                  return (
+                    <div key={opt.id} style={{
+                      flex: 1, padding: '10px 12px', borderRadius: 5,
+                      border: `1px solid ${active ? 'var(--fg)' : 'var(--hairline-strong)'}`,
+                      background: active ? 'var(--surface-3)' : 'var(--surface-1)',
+                      cursor: 'not-allowed', opacity: active ? 1 : 0.5,
+                    }}>
+                      <div className="row" style={{ gap: 6 }}>
+                        <span style={{
+                          width: 12, height: 12, borderRadius: 99,
+                          border: `2px solid ${active ? 'var(--fg)' : 'var(--hairline-bright)'}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {active && <span style={{ width: 5, height: 5, borderRadius: 99, background: 'var(--fg)' }}/>}
+                        </span>
+                        <span style={{ fontSize: 12.5, fontWeight: 500 }}>{opt.label}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 4, marginLeft: 18 }}>{opt.desc}</div>
+                    </div>
+                  );
+                })}
+              </div>
               {jwtMode && (
-                <AuthCell
-                  label="Signing algorithm"
-                  value="ES256"
-                  mono
-                  border="left"
-                />
+                <div className="row" style={{ gap: 8 }}>
+                  <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)' }}>Algorithm</span>
+                  <span className="mono" style={{ fontSize: 12 }}>{cfg.jwt_algorithm || 'ES256'}</span>
+                </div>
               )}
+              <div style={{
+                marginTop: 10, padding: '8px 10px', borderRadius: 4,
+                background: 'var(--warn-bg)', border: '1px solid color-mix(in oklch, var(--warn) 25%, var(--hairline))',
+                fontSize: 11, color: 'var(--warn)', lineHeight: 1.5,
+              }}>
+                <Icon.Warn width={11} height={11} style={{ verticalAlign: -2, marginRight: 6 }}/>
+                Switching mode invalidates all existing sessions. Edit <span className="mono">auth.jwt.mode</span> in sharkauth.yaml and restart.
+              </div>
             </div>
           </div>
 
