@@ -22,10 +22,11 @@ type OAuthAuthorizationCode struct {
 type OAuthToken struct {
 	ID                   string     `json:"id"`
 	JTI                  string     `json:"jti"`
+	RequestID            string     `json:"-"` // fosite request ID (may repeat across rotations)
 	ClientID             string     `json:"client_id"`
 	AgentID              string     `json:"agent_id,omitempty"`
 	UserID               string     `json:"user_id,omitempty"`
-	TokenType            string     `json:"token_type"`        // access | refresh
+	TokenType            string     `json:"token_type"` // access | refresh
 	TokenHash            string     `json:"-"`
 	Scope                string     `json:"scope"`
 	Audience             string     `json:"audience,omitempty"`
@@ -73,4 +74,18 @@ type OAuthDCRClient struct {
 	ClientMetadata        string     `json:"client_metadata"` // full JSON
 	CreatedAt             time.Time  `json:"created_at"`
 	ExpiresAt             *time.Time `json:"expires_at,omitempty"`
+}
+
+// OAuthPKCESession persists the PKCE challenge associated with an authorization
+// code so the token endpoint can validate the code_verifier on exchange.
+// Required because fosite calls CreateAuthorizeCodeSession with a sanitized
+// Requester (form values stripped) but calls CreatePKCERequestSession with the
+// unsanitized challenge separately.
+type OAuthPKCESession struct {
+	SignatureHash       string    `json:"-"`
+	CodeChallenge       string    `json:"code_challenge"`
+	CodeChallengeMethod string    `json:"code_challenge_method"`
+	ClientID            string    `json:"client_id"`
+	ExpiresAt           time.Time `json:"expires_at"`
+	CreatedAt           time.Time `json:"created_at"`
 }

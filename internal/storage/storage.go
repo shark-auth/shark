@@ -235,10 +235,17 @@ type Store interface {
 	DeleteAuthorizationCode(ctx context.Context, codeHash string) error
 	DeleteExpiredAuthorizationCodes(ctx context.Context) (int64, error)
 
+	// OAuth PKCE Sessions
+	CreatePKCESession(ctx context.Context, sess *OAuthPKCESession) error
+	GetPKCESession(ctx context.Context, signatureHash string) (*OAuthPKCESession, error)
+	DeletePKCESession(ctx context.Context, signatureHash string) error
+	DeleteExpiredPKCESessions(ctx context.Context) (int64, error)
+
 	// OAuth Tokens
 	CreateOAuthToken(ctx context.Context, token *OAuthToken) error
 	GetOAuthTokenByJTI(ctx context.Context, jti string) (*OAuthToken, error)
 	GetOAuthTokenByHash(ctx context.Context, tokenHash string) (*OAuthToken, error)
+	GetActiveOAuthTokenByRequestIDAndType(ctx context.Context, requestID, tokenType string) (*OAuthToken, error)
 	RevokeOAuthToken(ctx context.Context, id string) error
 	RevokeOAuthTokensByClientID(ctx context.Context, clientID string) (int64, error)
 	RevokeOAuthTokenFamily(ctx context.Context, familyID string) (int64, error)

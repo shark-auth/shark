@@ -208,6 +208,25 @@ Phase 6 — Proxy + Visual Flow Builder — Done
 - ✅ Flow dashboard: palette + canvas + config + Preview dry-run + History tab
 - ✅ Smoke tests sections 49-54 (proxy disabled admin 404s, flow CRUD, dry-run timeline, signup block/disable/runs) — 244 PASS, 0 FAIL
 
+Phase 6.5 — Dashboard Gap Fix (2-4 days)
+
+**Spec:** `DASHBOARD_GAPS.md` — full audit + ranked plan + wave breakdown
+
+Backend smoke passes (244) but dashboard ~10% mocked/stubbed. Top gaps:
+- Proxy rules read-only (YAML-only edit) — needs CRUD endpoints + UI
+- Vault Connections tab is placeholder — needs admin cross-user endpoint + table
+- Overview agent metrics + sparklines + attention panel still pull from MOCK
+- Signing-key rotate button disabled despite backend endpoint shipped
+- Consents page 401s in admin (session-only endpoint) — needs admin-scoped variant
+- Device flow has no admin pending queue (handoff-only)
+- `last_login_at` exists in DB but not in admin user response
+- User filters missing `?auth_method=`, `?org=`
+- RBAC reverse lookup endpoints missing
+
+Wave plan: A (UI-only quick wins) → B (tiny backend extends) → C (vault connections)
+→ D (proxy rules CRUD) → E (admin consents + device queue) → F (RBAC + email preview).
+Wave A alone removes 80% of "broken-feeling" UX.
+
 Phase 7 — SDK (5-7 days)
 
 **Plan:** TBD (builds on OAuth 2.1 flows)

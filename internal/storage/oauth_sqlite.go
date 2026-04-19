@@ -59,39 +59,107 @@ func (s *SQLiteStore) DeleteExpiredAuthorizationCodes(ctx context.Context) (int6
 	return res.RowsAffected()
 }
 
+// --- PKCE Sessions ---
+
+func (s *SQLiteStore) CreatePKCESession(ctx context.Context, sess *OAuthPKCESession) error {
+	method := sess.CodeChallengeMethod
+	if method == "" {
+		method = "S256"
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT OR REPLACE INTO oauth_pkce_sessions
+			(signature_hash, code_challenge, code_challenge_method, client_id, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		sess.SignatureHash, sess.CodeChallenge, method, sess.ClientID,
+		sess.ExpiresAt.UTC().Format(time.RFC3339), sess.CreatedAt.UTC().Format(time.RFC3339),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetPKCESession(ctx context.Context, signatureHash string) (*OAuthPKCESession, error) {
+	var p OAuthPKCESession
+	var expiresAt, createdAt string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT signature_hash, code_challenge, code_challenge_method, client_id, expires_at, created_at
+		FROM oauth_pkce_sessions WHERE signature_hash = ?`, signatureHash).Scan(
+		&p.SignatureHash, &p.CodeChallenge, &p.CodeChallengeMethod, &p.ClientID, &expiresAt, &createdAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("pkce session not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.ExpiresAt, _ = time.Parse(time.RFC3339, expiresAt)
+	p.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	return &p, nil
+}
+
+func (s *SQLiteStore) DeletePKCESession(ctx context.Context, signatureHash string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM oauth_pkce_sessions WHERE signature_hash = ?`, signatureHash)
+	return err
+}
+
+func (s *SQLiteStore) DeleteExpiredPKCESessions(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM oauth_pkce_sessions WHERE expires_at < ?`,
+		time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // --- OAuth Tokens ---
 
 func (s *SQLiteStore) CreateOAuthToken(ctx context.Context, token *OAuthToken) error {
 	// agent_id and user_id are FK columns; pass NULL when unset so the FK
 	// constraint is not violated by an empty string (which is never a valid ID).
-	var agentID, userID interface{}
+	var agentID, userID, requestID interface{}
 	if token.AgentID != "" {
 		agentID = token.AgentID
 	}
 	if token.UserID != "" {
 		userID = token.UserID
 	}
+	if token.RequestID != "" {
+		requestID = token.RequestID
+	}
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO oauth_tokens (id, jti, client_id, agent_id, user_id, token_type,
 			token_hash, scope, audience, authorization_details, dpop_jkt,
-			delegation_subject, delegation_actor, family_id, expires_at, created_at, revoked_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			delegation_subject, delegation_actor, family_id, expires_at, created_at, revoked_at, request_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		token.ID, token.JTI, token.ClientID, agentID, userID,
 		token.TokenType, token.TokenHash, token.Scope, token.Audience,
 		token.AuthorizationDetails, token.DPoPJKT, token.DelegationSubject,
 		token.DelegationActor, token.FamilyID,
 		token.ExpiresAt.UTC().Format(time.RFC3339), token.CreatedAt.UTC().Format(time.RFC3339),
 		nil, // revoked_at
+		requestID,
 	)
 	return err
+}
+
+// GetActiveOAuthTokenByRequestIDAndType returns the latest non-revoked token
+// matching a fosite request ID + token type. fosite reuses request IDs across
+// rotation chains (refresh.go:86) so multiple rows may exist; we return the
+// freshest active row, or sql.ErrNoRows-equivalent error.
+func (s *SQLiteStore) GetActiveOAuthTokenByRequestIDAndType(ctx context.Context, requestID, tokenType string) (*OAuthToken, error) {
+	return s.scanOAuthToken(s.db.QueryRowContext(ctx, `
+		SELECT id, jti, client_id, agent_id, user_id, token_type, token_hash,
+			scope, audience, authorization_details, dpop_jkt, delegation_subject,
+			delegation_actor, family_id, expires_at, created_at, revoked_at, request_id
+		FROM oauth_tokens
+		WHERE request_id = ? AND token_type = ? AND revoked_at IS NULL
+		ORDER BY created_at DESC LIMIT 1`, requestID, tokenType))
 }
 
 func (s *SQLiteStore) GetOAuthTokenByJTI(ctx context.Context, jti string) (*OAuthToken, error) {
 	return s.scanOAuthToken(s.db.QueryRowContext(ctx, `
 		SELECT id, jti, client_id, agent_id, user_id, token_type, token_hash,
 			scope, audience, authorization_details, dpop_jkt, delegation_subject,
-			delegation_actor, family_id, expires_at, created_at, revoked_at
+			delegation_actor, family_id, expires_at, created_at, revoked_at, request_id
 		FROM oauth_tokens WHERE jti = ?`, jti))
 }
 
@@ -99,7 +167,7 @@ func (s *SQLiteStore) GetOAuthTokenByHash(ctx context.Context, tokenHash string)
 	return s.scanOAuthToken(s.db.QueryRowContext(ctx, `
 		SELECT id, jti, client_id, agent_id, user_id, token_type, token_hash,
 			scope, audience, authorization_details, dpop_jkt, delegation_subject,
-			delegation_actor, family_id, expires_at, created_at, revoked_at
+			delegation_actor, family_id, expires_at, created_at, revoked_at, request_id
 		FROM oauth_tokens WHERE token_hash = ?`, tokenHash))
 }
 
@@ -134,7 +202,7 @@ func (s *SQLiteStore) ListOAuthTokensByAgentID(ctx context.Context, agentID stri
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, jti, client_id, agent_id, user_id, token_type, token_hash,
 			scope, audience, authorization_details, dpop_jkt, delegation_subject,
-			delegation_actor, family_id, expires_at, created_at, revoked_at
+			delegation_actor, family_id, expires_at, created_at, revoked_at, request_id
 		FROM oauth_tokens WHERE agent_id = ? ORDER BY created_at DESC LIMIT ?`, agentID, limit)
 	if err != nil {
 		return nil, err
@@ -170,12 +238,12 @@ func (s *SQLiteStore) scanOAuthToken(row *sql.Row) (*OAuthToken, error) {
 	var t OAuthToken
 	var expiresAt, createdAt string
 	var revokedAt *string
-	var agentID, userID sql.NullString
+	var agentID, userID, requestID sql.NullString
 	err := row.Scan(
 		&t.ID, &t.JTI, &t.ClientID, &agentID, &userID, &t.TokenType,
 		&t.TokenHash, &t.Scope, &t.Audience, &t.AuthorizationDetails,
 		&t.DPoPJKT, &t.DelegationSubject, &t.DelegationActor, &t.FamilyID,
-		&expiresAt, &createdAt, &revokedAt,
+		&expiresAt, &createdAt, &revokedAt, &requestID,
 	)
 	if err != nil {
 		return nil, err
@@ -185,6 +253,9 @@ func (s *SQLiteStore) scanOAuthToken(row *sql.Row) (*OAuthToken, error) {
 	}
 	if userID.Valid {
 		t.UserID = userID.String
+	}
+	if requestID.Valid {
+		t.RequestID = requestID.String
 	}
 	t.ExpiresAt, _ = time.Parse(time.RFC3339, expiresAt)
 	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
@@ -199,12 +270,12 @@ func (s *SQLiteStore) scanOAuthTokenFromRows(rows *sql.Rows) (*OAuthToken, error
 	var t OAuthToken
 	var expiresAt, createdAt string
 	var revokedAt *string
-	var agentID, userID sql.NullString
+	var agentID, userID, requestID sql.NullString
 	err := rows.Scan(
 		&t.ID, &t.JTI, &t.ClientID, &agentID, &userID, &t.TokenType,
 		&t.TokenHash, &t.Scope, &t.Audience, &t.AuthorizationDetails,
 		&t.DPoPJKT, &t.DelegationSubject, &t.DelegationActor, &t.FamilyID,
-		&expiresAt, &createdAt, &revokedAt,
+		&expiresAt, &createdAt, &revokedAt, &requestID,
 	)
 	if err != nil {
 		return nil, err
@@ -214,6 +285,9 @@ func (s *SQLiteStore) scanOAuthTokenFromRows(rows *sql.Rows) (*OAuthToken, error
 	}
 	if userID.Valid {
 		t.UserID = userID.String
+	}
+	if requestID.Valid {
+		t.RequestID = requestID.String
 	}
 	t.ExpiresAt, _ = time.Parse(time.RFC3339, expiresAt)
 	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)

@@ -49,7 +49,7 @@ One binary replaces Auth0/Clerk at 98% less cost, with full feature parity on se
 ## Context
 
 - **Existing code:** Partial Go scaffold exists (router, auth handlers, password hashing, sessions, config, DB layer, OAuth stubs, middleware). Spec v2 expands significantly beyond what's built.
-- **Tech stack:** Go backend, SQLite (mattn/go-sqlite3), Svelte dashboard (embedded via go:embed), TypeScript SDK (tsup build).
+- **Tech stack:** Go backend, SQLite (mattn/go-sqlite3), React 18 + Vite + TypeScript admin dashboard at `admin/src/` (embedded via go:embed at `internal/admin/dist/`), TypeScript SDK (tsup build). (Original spec called for Svelte; React was chosen during Phase 4 build.)
 - **Key libraries:** go-webauthn/webauthn (passkeys), pquerna/otp (TOTP), gorilla/securecookie (sessions).
 - **Target audience:** Developers who currently use Auth0/Clerk and are frustrated by per-MAU pricing or vendor lock-in. Also self-hosters who want full control.
 - **Pricing philosophy:** Self-hosted = $0 unlimited. Cloud tiers: $19/$49/$149/mo. "You're paying for ops, not features" — the day that stops being true, we lose positioning.

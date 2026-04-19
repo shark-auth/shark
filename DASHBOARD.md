@@ -680,7 +680,8 @@ Admin session UI shows "Signed in as admin via API key ...xK9f" w/ sign-out butt
 
 ## Backend Endpoints — Status
 
-Legend: ✅ shipped, 🟡 partial, ❌ still needed, 🔮 Phase 6 (agent auth).
+Legend: ✅ shipped, 🟡 partial, ❌ still needed.
+Last refreshed 2026-04-19. See `DASHBOARD_GAPS.md` for current dashboard wiring status.
 
 | Endpoint | Status |
 |---|---|
@@ -688,33 +689,39 @@ Legend: ✅ shipped, 🟡 partial, ❌ still needed, 🔮 Phase 6 (agent auth).
 | `GET /api/v1/admin/stats/trends` | ✅ |
 | `GET /api/v1/admin/sessions` | ✅ |
 | `DELETE /api/v1/admin/sessions/{id}` | ✅ |
-| `POST /api/v1/admin/sessions/purge-expired` | ❌ |
-| `GET /api/v1/admin/health` | ❌ |
-| `GET /api/v1/admin/config` | ❌ |
+| `POST /api/v1/admin/sessions/purge-expired` | ✅ |
+| `GET /api/v1/admin/health` | ✅ |
+| `GET /api/v1/admin/config` | ✅ |
 | `GET /api/v1/admin/email-preview/{template}` | ❌ |
-| `POST /api/v1/admin/test-email` | ❌ |
-| `POST /api/v1/admin/audit-logs/purge` | ❌ |
+| `POST /api/v1/admin/test-email` | ✅ |
+| `POST /api/v1/admin/audit-logs/purge` | ✅ |
 | `GET /api/v1/users/{id}/sessions` | ✅ |
 | `DELETE /api/v1/users/{id}/sessions` | ✅ |
-| `GET /api/v1/users/{id}/oauth-accounts` | ❌ |
-| `DELETE /api/v1/users/{id}/oauth-accounts/{id}` | ❌ |
-| `GET /api/v1/users/{id}/passkeys` | 🟡 (store exists, endpoint needed) |
-| Users: `last_login_at` | ❌ |
-| Users: filter by role / auth_method / org / mfa | 🟡 |
+| `GET /api/v1/users/{id}/oauth-accounts` | ✅ |
+| `DELETE /api/v1/users/{id}/oauth-accounts/{id}` | ✅ |
+| `GET /api/v1/users/{id}/passkeys` | ✅ |
+| Users: `last_login_at` in admin response | ❌ (field in DB, not in JSON) |
+| Users: filter by `?role_id=`, `?mfa_enabled=` | ✅ |
+| Users: filter by `?auth_method=`, `?org=` | ❌ |
 | `/api/v1/organizations/*` | ✅ |
 | `/api/v1/webhooks/*` | ✅ |
 | `/api/v1/admin/apps/*` | ✅ |
 | `/api/v1/admin/auth/revoke-jti` | ✅ |
 | `GET /.well-known/jwks.json` | ✅ |
-| Signing keys CRUD / rotate endpoint | ❌ |
-| `POST /api/v1/admin/impersonate/{id}` | 🔮 (Phase 9) |
-| SSO users-per-connection count | ❌ |
-| Permissions reverse lookup | ❌ |
-| OAuth 2.1: authorize, token, revoke, introspect, device, register | 🔮 |
-| Agents CRUD | 🔮 |
-| Consents list / revoke | 🔮 |
-| Tokens list / revoke / family-revoke | 🔮 |
-| Vault providers + connections | 🔮 |
+| `POST /api/v1/admin/auth/rotate-signing-key` | ✅ (UI button still disabled) |
+| `POST /api/v1/admin/impersonate/{id}` | ❌ (Phase 9) |
+| SSO users-per-connection count | ✅ (in `ListConnections` response) |
+| Permissions reverse lookup `/permissions/{id}/roles` + `/users` | ❌ |
+| OAuth 2.1: authorize, token, revoke, introspect, device, register | ✅ (Phase 5) |
+| Agents CRUD `/api/v1/agents/*` | ✅ |
+| Consents list / revoke (session-only) `/auth/consents` | ✅ |
+| Consents admin cross-user listing | ❌ |
+| Vault providers `/api/v1/vault/providers/*` | ✅ |
+| Vault connections (admin cross-user view) | ❌ |
+| Device flow admin pending queue | ❌ |
+| Auth flows `/api/v1/admin/flows/*` | ✅ (Phase 6) |
+| Proxy `/api/v1/admin/proxy/{status,rules,simulate}` | ✅ (Phase 6, read-only) |
+| Proxy rules CRUD (POST/PATCH/DELETE) | ❌ |
 
 ---
 

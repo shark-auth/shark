@@ -244,38 +244,34 @@ func (s *FositeStore) DeleteRefreshTokenSession(ctx context.Context, signature s
 	return s.deleteTokenSession(ctx, signature)
 }
 
-// RotateRefreshToken invalidates the old refresh token signature and is called
-// during token refresh rotation. The requestID is the fosite request ID, which
-// we store as the token's JTI.
+// RotateRefreshToken invalidates the active refresh token associated with
+// fosite's requestID after a successful refresh exchange. fosite reuses the
+// same request ID across rotations, so we look up the latest still-active row.
 func (s *FositeStore) RotateRefreshToken(ctx context.Context, requestID string, refreshTokenSignature string) error {
-	// Find the old refresh token by request ID (stored as JTI) and revoke it.
-	token, err := s.store.GetOAuthTokenByJTI(ctx, requestID)
+	token, err := s.store.GetActiveOAuthTokenByRequestIDAndType(ctx, requestID, "refresh")
 	if err != nil {
-		// If not found, that's okay — the token may have already been rotated.
+		// Already rotated or never existed — nothing to do.
 		return nil
 	}
-	if token.RevokedAt == nil {
-		return s.store.RevokeOAuthToken(ctx, token.ID)
-	}
-	return nil
+	return s.store.RevokeOAuthToken(ctx, token.ID)
 }
 
 // ---------------------------------------------------------------------------
 // TokenRevocationStorage — RevokeAccessToken / RevokeRefreshToken
 // ---------------------------------------------------------------------------
 
-// RevokeAccessToken revokes an access token by its request ID (stored as JTI).
+// RevokeAccessToken revokes the active access token for a fosite request ID.
 func (s *FositeStore) RevokeAccessToken(ctx context.Context, requestID string) error {
-	token, err := s.store.GetOAuthTokenByJTI(ctx, requestID)
+	token, err := s.store.GetActiveOAuthTokenByRequestIDAndType(ctx, requestID, "access")
 	if err != nil {
 		return fosite.ErrNotFound.WithWrap(err)
 	}
 	return s.store.RevokeOAuthToken(ctx, token.ID)
 }
 
-// RevokeRefreshToken revokes a refresh token by its request ID (stored as JTI).
+// RevokeRefreshToken revokes the active refresh token for a fosite request ID.
 func (s *FositeStore) RevokeRefreshToken(ctx context.Context, requestID string) error {
-	token, err := s.store.GetOAuthTokenByJTI(ctx, requestID)
+	token, err := s.store.GetActiveOAuthTokenByRequestIDAndType(ctx, requestID, "refresh")
 	if err != nil {
 		return fosite.ErrNotFound.WithWrap(err)
 	}
@@ -286,28 +282,74 @@ func (s *FositeStore) RevokeRefreshToken(ctx context.Context, requestID string) 
 // PKCERequestStorage
 // ---------------------------------------------------------------------------
 
-// CreatePKCERequestSession stores the PKCE request data. We piggyback on the
-// auth code session since PKCE data is already stored in our authorization
-// codes table (code_challenge, code_challenge_method columns).
+// CreatePKCERequestSession persists the PKCE challenge for later validation
+// at the token endpoint. Required as a separate path because fosite calls
+// CreateAuthorizeCodeSession with a Sanitize()-stripped request (no
+// code_challenge in the form), so reconstructing PKCE data from the auth
+// code row would yield empty values and fail verification.
 func (s *FositeStore) CreatePKCERequestSession(ctx context.Context, signature string, req fosite.Requester) error {
-	// PKCE data is stored as part of the authorization code session.
-	// fosite calls CreateAuthorizeCodeSession and CreatePKCERequestSession
-	// with the same code. We only need to store once — the auth code
-	// already has PKCE columns. So this is a no-op if the auth code
-	// session already exists.
-	return nil
+	codeChallenge := req.GetRequestForm().Get("code_challenge")
+	if codeChallenge == "" {
+		// No challenge → public client without PKCE. fosite's PKCE handler
+		// enforces requirement at validation time; nothing to persist here.
+		return nil
+	}
+	codeChallengeMethod := req.GetRequestForm().Get("code_challenge_method")
+	if codeChallengeMethod == "" {
+		codeChallengeMethod = "S256"
+	}
+	expiresAt := req.GetSession().GetExpiresAt(fosite.AuthorizeCode)
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().UTC().Add(10 * time.Minute)
+	}
+	clientID := ""
+	if c := req.GetClient(); c != nil {
+		clientID = c.GetID()
+	}
+	return s.store.CreatePKCESession(ctx, &storage.OAuthPKCESession{
+		SignatureHash:       hashSignature(signature),
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		ClientID:            clientID,
+		ExpiresAt:           expiresAt,
+		CreatedAt:           req.GetRequestedAt(),
+	})
 }
 
-// GetPKCERequestSession retrieves the PKCE request session. We reconstruct it
-// from the authorization code.
+// GetPKCERequestSession returns a minimal Requester containing the stored
+// code_challenge and code_challenge_method in its form so fosite's PKCE
+// handler can compare against the supplied code_verifier.
 func (s *FositeStore) GetPKCERequestSession(ctx context.Context, signature string, session fosite.Session) (fosite.Requester, error) {
-	return s.GetAuthorizeCodeSession(ctx, signature, session)
+	sess, err := s.store.GetPKCESession(ctx, hashSignature(signature))
+	if err != nil {
+		return nil, fosite.ErrNotFound.WithWrap(err)
+	}
+	if session != nil {
+		session.SetExpiresAt(fosite.AuthorizeCode, sess.ExpiresAt)
+	}
+	form := url.Values{
+		"code_challenge":        {sess.CodeChallenge},
+		"code_challenge_method": {sess.CodeChallengeMethod},
+	}
+	var client fosite.Client
+	if sess.ClientID != "" {
+		if c, cerr := s.GetClient(ctx, sess.ClientID); cerr == nil {
+			client = c
+		}
+	}
+	return &fosite.Request{
+		ID:          sess.SignatureHash,
+		RequestedAt: sess.CreatedAt,
+		Client:      client,
+		Session:     session,
+		Form:        form,
+	}, nil
 }
 
-// DeletePKCERequestSession deletes the PKCE request session. This is a no-op
-// because the auth code deletion handles cleanup.
+// DeletePKCERequestSession removes the PKCE row after the auth code is
+// exchanged so the challenge cannot be reused.
 func (s *FositeStore) DeletePKCERequestSession(ctx context.Context, signature string) error {
-	return nil
+	return s.store.DeletePKCESession(ctx, hashSignature(signature))
 }
 
 // ---------------------------------------------------------------------------
@@ -347,8 +389,15 @@ func (s *FositeStore) createTokenSession(ctx context.Context, signature, tokenTy
 	}
 
 	token := &storage.OAuthToken{
-		ID:        "tok_" + uuid.New().String()[:8],
-		JTI:       req.GetID(),
+		ID: "tok_" + uuid.New().String()[:8],
+		// Generate per-token JTI. fosite reuses req.GetID() across access and
+		// refresh tokens minted from the same request AND across rotation
+		// chains (refresh.go:86 sets request.ID = originalRequest.ID), so
+		// using req.GetID() as JTI would collide on the unique constraint.
+		// We persist req.GetID() separately in the request_id column for
+		// fosite's Rotate/Revoke lookups.
+		JTI:       "jti_" + uuid.New().String(),
+		RequestID: req.GetID(),
 		ClientID:  req.GetClient().GetID(),
 		UserID:    sess.GetSubject(),
 		TokenType: tokenType,
@@ -405,8 +454,15 @@ func (s *FositeStore) getTokenSession(ctx context.Context, signature, tokenType 
 		tokenForm.Set("resource", token.Audience)
 	}
 
+	requestID := token.RequestID
+	if requestID == "" {
+		// Backward compatibility: tokens written before the request_id column
+		// existed have empty RequestID. Fall back to JTI so existing rows still
+		// roundtrip cleanly through introspection.
+		requestID = token.JTI
+	}
 	req := &fosite.Request{
-		ID:             token.JTI,
+		ID:             requestID,
 		RequestedAt:    token.CreatedAt,
 		Client:         client,
 		RequestedScope: fosite.Arguments(strings.Split(token.Scope, " ")),

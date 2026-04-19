@@ -60,6 +60,15 @@ CREATE TABLE oauth_authorization_codes (
     created_at              TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
+CREATE TABLE oauth_pkce_sessions (
+    signature_hash         TEXT PRIMARY KEY,
+    code_challenge         TEXT NOT NULL,
+    code_challenge_method  TEXT NOT NULL DEFAULT 'S256',
+    client_id              TEXT NOT NULL,
+    expires_at             TIMESTAMP NOT NULL,
+    created_at             TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
 CREATE TABLE oauth_tokens (
     id                      TEXT PRIMARY KEY,
     jti                     TEXT UNIQUE NOT NULL,
@@ -78,8 +87,10 @@ CREATE TABLE oauth_tokens (
     family_id               TEXT,
     expires_at              TIMESTAMP NOT NULL,
     created_at              TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    revoked_at              TIMESTAMP
+    revoked_at              TIMESTAMP,
+    request_id              TEXT
 );
+CREATE INDEX idx_oauth_tokens_request_id_type ON oauth_tokens(request_id, token_type);
 
 CREATE TABLE revoked_jti (
     jti         TEXT     PRIMARY KEY,

@@ -640,7 +640,7 @@ else
   # Create PKCE-capable agent.
   PKCE_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/agents \
     -H "Content-Type: application/json" \
-    -d '{"name":"pkce-agent","grant_types":["authorization_code","refresh_token"],"redirect_uris":["http://localhost:9999/callback"],"scopes":["openid","profile"],"client_type":"confidential","response_types":["code"]}')
+    -d '{"name":"pkce-agent","grant_types":["authorization_code","refresh_token"],"redirect_uris":["http://localhost:9999/callback"],"scopes":["openid","profile","offline_access"],"client_type":"confidential","response_types":["code"]}')
   PKCE_CODE=$(echo "$PKCE_RESP" | tail -1)
   PKCE_BODY=$(echo "$PKCE_RESP" | sed '$d')
   [ "$PKCE_CODE" = 201 ] && pass "pkce-agent create 201" || fail "pkce-agent create $PKCE_CODE"
@@ -649,8 +649,8 @@ else
 
   # Need fresh cookie (logged in user). Relogin just in case.
   relogin
-  # Build authorize query string.
-  SCOPE_ENC="openid%20profile"
+  # Build authorize query string. offline_access scope required for refresh_token issuance.
+  SCOPE_ENC="openid%20profile%20offline_access"
   AUTHZ_QS="response_type=code&client_id=$PKCE_CID&redirect_uri=http%3A%2F%2Flocalhost%3A9999%2Fcallback&state=xyzabcde&code_challenge=$PKCE_CHALLENGE&code_challenge_method=S256&scope=$SCOPE_ENC"
 
   # GET /oauth/authorize with session cookie -> either 200 (consent page) or 302/303 (auto-approve).
@@ -697,11 +697,7 @@ else
       [ -n "$PKCE_RT" ] && pass "refresh_token issued" || fail "no refresh_token"
       PKCE_DONE=1
     else
-      # Known limitation: fosite's Sanitize() strips code_challenge from stored
-      # authorize session, so token exchange fails PKCE verification end-to-end.
-      # Full PKCE logic is unit-tested (TestTokenEndpoint_AuthCode_MissingPKCE
-      # via direct DB injection). Leaving as note, not fail.
-      note "token exchange $EX_CODE — PKCE persistence gap in fosite integration; covered by unit tests (handlers_test.go)"
+      fail "token exchange $EX_CODE — PKCE persistence broken (oauth_pkce_sessions table or FositeStore.Create/GetPKCERequestSession)"
       PKCE_DONE=0
     fi
   else
