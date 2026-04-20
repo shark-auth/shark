@@ -609,6 +609,8 @@ function WebhookDeliveriesTab({ webhookId }) {
 }
 
 function DeliveryExpanded({ d }) {
+  const [replayErr, setReplayErr] = React.useState(null);
+  const [replayOk, setReplayOk] = React.useState(false);
   const prettyJson = (val) => {
     if (!val) return '—';
     if (typeof val === 'string') {
@@ -650,13 +652,20 @@ function DeliveryExpanded({ d }) {
           <span className="faint" style={{marginRight:6}}>Error:</span>{d.error}
         </div>
       )}
-      <div className="row" style={{ gap: 6 }}>
+      <div className="row" style={{ gap: 6, alignItems:'center' }}>
         <button className="btn sm" onClick={async () => {
-          try { await API.post('/webhooks/' + d.webhook_id + '/deliveries/' + d.id + '/replay'); }
-          catch {}
+          setReplayErr(null); setReplayOk(false);
+          try {
+            await API.post('/webhooks/' + d.webhook_id + '/deliveries/' + d.id + '/replay');
+            setReplayOk(true);
+          } catch (e) {
+            setReplayErr(e?.message || 'Replay failed');
+          }
         }}>
           <Icon.Refresh width={10} height={10}/> Replay
         </button>
+        {replayErr && <span style={{color:'var(--danger)', fontSize:11.5}}>{replayErr}</span>}
+        {replayOk && <span style={{color:'var(--success)', fontSize:11.5}}>Replay queued</span>}
       </div>
     </div>
   );

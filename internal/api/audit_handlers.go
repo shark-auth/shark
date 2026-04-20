@@ -40,15 +40,16 @@ func (s *Server) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	opts := storage.AuditLogQuery{
-		Action:   q.Get("action"),
-		ActorID:  q.Get("actor_id"),
-		TargetID: q.Get("target_id"),
-		Status:   q.Get("status"),
-		IP:       q.Get("ip"),
-		From:     q.Get("from"),
-		To:       q.Get("to"),
-		Limit:    limit + 1, // fetch one extra to determine has_more
-		Cursor:   q.Get("cursor"),
+		Action:    q.Get("action"),
+		ActorID:   q.Get("actor_id"),
+		ActorType: q.Get("actor_type"),
+		TargetID:  q.Get("target_id"),
+		Status:    q.Get("status"),
+		IP:        q.Get("ip"),
+		From:      q.Get("from"),
+		To:        q.Get("to"),
+		Limit:     limit + 1, // fetch one extra to determine has_more
+		Cursor:    q.Get("cursor"),
 	}
 
 	// Validate date formats if provided

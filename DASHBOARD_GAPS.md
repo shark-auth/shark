@@ -438,9 +438,15 @@ User flagged additional findings from smoke test review. These predate dashboard
 - A1–A7 from Round 2
 - **NEW: smoke section per route**: webhook replay, admin org CRUD, admin org invitations, admin user MFA disable
 
-**Wave 2 — Silent fail polish** (existing, ½ day)
-- B1–B3, C2, C3/C4, C7 from Round 2
-- **NEW: smoke section** for audit `actor_type` filter actually filtering (assert response only contains matching actor_type rows)
+**Wave 2 — Silent fail polish** ✅ DONE (smoke 303 → 315, 0 FAIL)
+- B1 ✅ webhooks.tsx replay catch — surfaces err inline + "Replay queued" success
+- B2 ✅ organizations.tsx invitation revoke + resend catches — toast.success/error
+- B3 ✅ vault_manage.tsx provider disable catch — setError surfaces upstream
+- C2 ✅ AuditLogQuery.ActorType plumbed through handler + sqlite WHERE
+- C3 ✅ failed_logins_24h: auth_handlers emits `user.login` audit on failure; query updated
+- C4 ✅ CountMFAEnabled now `mfa_enabled=1 AND mfa_verified=1` (verified-only)
+- C7 ✅ flow_handlers handleTestFlow already passed metadata; smoke locks it in
+- Smoke sections 59-62 added (12 new assertions)
 
 **Wave A–F (original gaps) + Wave 3 (glue stubs)** as before.
 

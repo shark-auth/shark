@@ -603,18 +603,26 @@ function OrgSettingsTab({ org, onRefresh }) {
 function OrgInvitationsTab({ org }) {
   const { data, loading, refresh } = useAPI('/admin/organizations/' + org.id + '/invitations');
   const invites = data?.invitations || data || [];
+  const toast = useToast();
 
   const handleRevoke = async (id) => {
     try {
       await API.del('/admin/organizations/' + org.id + '/invitations/' + id);
       refresh();
-    } catch {}
+      toast.success('Invitation revoked');
+    } catch (e) {
+      toast.error(`Revoke failed: ${e.message}`);
+    }
   };
 
   const handleResend = async (id) => {
     try {
       await API.post('/admin/organizations/' + org.id + '/invitations/' + id + '/resend');
-    } catch {}
+      refresh();
+      toast.success('Invitation resent');
+    } catch (e) {
+      toast.error(`Resend failed: ${e.message}`);
+    }
   };
 
   if (loading) return <div className="faint" style={{ fontSize: 11, padding: 8 }}>Loading…</div>;

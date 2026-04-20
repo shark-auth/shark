@@ -1684,6 +1684,107 @@ NF_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMI
   $BASE/api/v1/users/usr_definitely_not_here/mfa)
 [ "$NF_CODE" = 404 ] && pass "admin MFA disable missing user -> 404" || fail "missing user -> $NF_CODE"
 
+# --- 59: audit ?actor_type= filter (Wave 2 C2) --------------------------------
+# Frontend passes ?actor_type=user|agent|system|admin to /audit-logs. Pre-fix
+# AuditLogQuery had no ActorType field so the param silently dropped — every
+# request returned all rows regardless of selection. Seed two rows with
+# distinct actor_types and assert the filter actually filters.
+section "59: audit actor_type filter (C2)"
+
+if [ -f $DB ]; then
+  AGENT_AUD="aud_smoke_agent_$RANDOM"
+  USER_AUD="aud_smoke_user_$RANDOM"
+  NOW_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  # NB: storage.AuditLog scans into plain strings — NULL columns blow up the
+  # query handler. Seed every column explicitly so the row round-trips cleanly.
+  sqlite3 $DB "INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at) VALUES ('$AGENT_AUD','agt_smoke','agent','smoke.actor.agent','','','','','{}','success','$NOW_TS')" 2>/dev/null \
+    && pass "seeded agent audit row" || fail "seed agent row"
+  sqlite3 $DB "INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at) VALUES ('$USER_AUD','usr_smoke','user','smoke.actor.user','','','','','{}','success','$NOW_TS')" 2>/dev/null \
+    && pass "seeded user audit row" || fail "seed user row"
+
+  AGENT_BODY=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/audit-logs?actor_type=agent&limit=200")
+  echo "$AGENT_BODY" | jq -e --arg id "$AGENT_AUD" '.data | map(.id) | index($id) != null' >/dev/null \
+    && pass "actor_type=agent returns the agent row" || fail "agent row missing: $AGENT_BODY"
+  echo "$AGENT_BODY" | jq -e --arg id "$USER_AUD" '.data | map(.id) | index($id) == null' >/dev/null \
+    && pass "actor_type=agent excludes the user row" || fail "user row leaked into agent filter: $AGENT_BODY"
+
+  USER_BODY=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/audit-logs?actor_type=user&limit=200")
+  echo "$USER_BODY" | jq -e --arg id "$USER_AUD" '.data | map(.id) | index($id) != null' >/dev/null \
+    && pass "actor_type=user returns the user row" || fail "user row missing: $USER_BODY"
+  echo "$USER_BODY" | jq -e --arg id "$AGENT_AUD" '.data | map(.id) | index($id) == null' >/dev/null \
+    && pass "actor_type=user excludes the agent row" || fail "agent row leaked into user filter: $USER_BODY"
+fi
+
+# --- 60: failed_logins_24h counter accuracy (Wave 2 C3) -----------------------
+# Pre-fix CountFailedLoginsSince queried action='login' but the login handler
+# never emitted any audit log on failure — counter was always 0. Wave 2 emits
+# action='user.login' status='failure' on each failed login + flips the query
+# to match. Submit one bad login, snapshot stats, assert counter incremented.
+section "60: failed_logins_24h accuracy (C3)"
+
+BEFORE_FL=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/stats | jq -r '.failed_logins_24h // 0')
+curl -s -o /dev/null -X POST $BASE/api/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"smoke-nope@test.com","password":"definitely-wrong-x"}'
+AFTER_FL=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/stats | jq -r '.failed_logins_24h // 0')
+[ "$AFTER_FL" -gt "$BEFORE_FL" ] 2>/dev/null && pass "failed_logins_24h incremented ($BEFORE_FL -> $AFTER_FL)" \
+  || fail "counter unchanged: before=$BEFORE_FL after=$AFTER_FL"
+
+if [ -f $DB ]; then
+  N=$(sqlite3 $DB "SELECT COUNT(*) FROM audit_logs WHERE action='user.login' AND status='failure'")
+  [ "$N" -ge 1 ] 2>/dev/null && pass "audit row written on failed login (n=$N)" || fail "no user.login failure audit row"
+fi
+
+# --- 61: MFA verified-only count (Wave 2 C4) ----------------------------------
+# Pre-fix CountMFAEnabled counted users with mfa_enabled=1 regardless of
+# mfa_verified. Half-enrolled users (started TOTP but never verified) inflated
+# the dashboard adoption number. Wave 2 narrows the count to verified users.
+# Smoke: snapshot count, set mfa_enabled=1 mfa_verified=0, assert unchanged;
+# then flip mfa_verified=1 and assert it now increments.
+section "61: MFA enabled-vs-verified count (C4)"
+
+if [ -f $DB ]; then
+  MFA_CNT_EMAIL="mfa-count-$RANDOM@test.com"
+  MFA_CNT_RESP=$(curl -s -X POST $BASE/api/v1/auth/signup -H "Content-Type: application/json" \
+    -d "{\"email\":\"$MFA_CNT_EMAIL\",\"password\":\"GetCake117\$\$\$\"}")
+  MFA_CNT_USER=$(echo "$MFA_CNT_RESP" | jq -r '.id // empty')
+  [ -n "$MFA_CNT_USER" ] && pass "mfa-count user seeded: $MFA_CNT_USER" || fail "user seed: $MFA_CNT_RESP"
+
+  BEFORE_MFA=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/stats | jq -r '.mfa.enabled')
+  sqlite3 $DB "UPDATE users SET mfa_enabled=1, mfa_verified=0 WHERE id='$MFA_CNT_USER'" 2>/dev/null
+  HALF_MFA=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/stats | jq -r '.mfa.enabled')
+  [ "$HALF_MFA" = "$BEFORE_MFA" ] && pass "half-enrolled user does NOT count ($BEFORE_MFA == $HALF_MFA)" \
+    || fail "half-enrolled bumped count: before=$BEFORE_MFA half=$HALF_MFA"
+
+  sqlite3 $DB "UPDATE users SET mfa_enabled=1, mfa_verified=1 WHERE id='$MFA_CNT_USER'" 2>/dev/null
+  FULL_MFA=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/stats | jq -r '.mfa.enabled')
+  [ "$FULL_MFA" -gt "$BEFORE_MFA" ] 2>/dev/null && pass "verified user counts ($BEFORE_MFA -> $FULL_MFA)" \
+    || fail "verified user did not increment: before=$BEFORE_MFA full=$FULL_MFA"
+fi
+
+# --- 62: flow test metadata pass-through (Wave 2 C7) --------------------------
+# handleTestFlow takes {metadata:{...}} in the body and seeds the dry-run
+# context with it. Assert the response surfaces caller-supplied keys back so
+# we know the engine received them (the engine copies fc.Metadata into
+# Result.Metadata before any step runs).
+section "62: flow test metadata pass-through (C7)"
+
+# §54 deletes its FLOW_ID; create a fresh one here. Engine seeds Result.Metadata
+# from fc.Metadata before any step runs, so a single require_email_verification
+# step against a verified user is enough to drive the test.
+META_FLOW=$(curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" -X POST \
+  -d '{"name":"Meta Smoke","trigger":"signup","steps":[{"type":"require_email_verification"}],"enabled":true}' \
+  $BASE/api/v1/admin/flows | jq -r '.id // empty')
+if [ -n "$META_FLOW" ]; then
+  RESP=$(curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -X POST -d '{"user":{"email":"meta@test.com","email_verified":true},"metadata":{"smoke_meta_key":"smoke_meta_val"}}' \
+    $BASE/api/v1/admin/flows/$META_FLOW/test)
+  echo "$RESP" | jq -e '.metadata.smoke_meta_key == "smoke_meta_val"' >/dev/null \
+    && pass "test-flow echoes caller metadata" || fail "metadata dropped: $RESP"
+  curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/flows/$META_FLOW
+else
+  fail "could not seed metadata test flow"
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"

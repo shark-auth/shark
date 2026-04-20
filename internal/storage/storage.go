@@ -634,15 +634,16 @@ type ListSessionsOpts struct {
 
 // AuditLogQuery configures audit log queries with cursor-based pagination.
 type AuditLogQuery struct {
-	Action   string // filter by event type
-	ActorID  string // filter by actor
-	TargetID string // filter by target
-	Status   string // "success" or "failure"
-	IP       string // filter by IP
-	From     string // start of date range (RFC3339)
-	To       string // end of date range (RFC3339)
-	Limit    int    // page size (default 50, max 200)
-	Cursor   string // cursor-based pagination (ID of last item)
+	Action    string // filter by event type
+	ActorID   string // filter by actor
+	ActorType string // filter by actor type (user|agent|system|admin)
+	TargetID  string // filter by target
+	Status    string // "success" or "failure"
+	IP        string // filter by IP
+	From      string // start of date range (RFC3339)
+	To        string // end of date range (RFC3339)
+	Limit     int    // page size (default 50, max 200)
+	Cursor    string // cursor-based pagination (ID of last item)
 }
 
 // SigningKey represents a JWT signing keypair stored in the database.

@@ -784,7 +784,13 @@ function CreateProviderWizard({ onClose, onCreate, onCreated }) {
       const result = await onCreate(payload);
       // If active is false, patch immediately (create endpoint defaults to true).
       if (!active && result?.id) {
-        try { await API.patch('/vault/providers/' + result.id, { active: false }); } catch { /* ignore */ }
+        try {
+          await API.patch('/vault/providers/' + result.id, { active: false });
+        } catch (e) {
+          setError(`Provider created but disable failed: ${e.message}`);
+          onCreated && onCreated(result);
+          return;
+        }
       }
       onCreated && onCreated(result);
       onClose();

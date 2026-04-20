@@ -228,6 +228,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	user, err := s.Store.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		s.LockoutManager.RecordFailure(req.Email)
+		s.recordLoginFailure(r, "", req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
@@ -238,6 +239,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// User must have a password
 	if user.PasswordHash == nil {
 		s.LockoutManager.RecordFailure(req.Email)
+		s.recordLoginFailure(r, user.ID, req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
@@ -249,6 +251,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	match, err := auth.VerifyPassword(req.Password, *user.PasswordHash)
 	if err != nil || !match {
 		s.LockoutManager.RecordFailure(req.Email)
+		s.recordLoginFailure(r, user.ID, req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
@@ -577,6 +580,27 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "Password changed successfully",
+	})
+}
+
+// recordLoginFailure emits a `user.login` audit row with status=failure so the
+// admin stats counter (failed_logins_24h) and the audit page reflect real
+// activity. actorID may be empty when the email doesn't match a user.
+func (s *Server) recordLoginFailure(r *http.Request, actorID, email string) {
+	if s == nil || s.AuditLogger == nil {
+		return
+	}
+	meta, _ := json.Marshal(map[string]string{"email": email})
+	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+		ActorID:    actorID,
+		ActorType:  "user",
+		Action:     "user.login",
+		TargetType: "user",
+		TargetID:   actorID,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		Metadata:   string(meta),
+		Status:     "failure",
 	})
 }
 

@@ -958,6 +958,10 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 		conditions = append(conditions, "actor_id = ?")
 		args = append(args, opts.ActorID)
 	}
+	if opts.ActorType != "" {
+		conditions = append(conditions, "actor_type = ?")
+		args = append(args, opts.ActorType)
+	}
 	if opts.TargetID != "" {
 		conditions = append(conditions, "target_id = ?")
 		args = append(args, opts.TargetID)
@@ -1099,14 +1103,14 @@ func (s *SQLiteStore) CountActiveSessions(ctx context.Context) (int, error) {
 
 func (s *SQLiteStore) CountMFAEnabled(ctx context.Context) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE mfa_enabled = 1`).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE mfa_enabled = 1 AND mfa_verified = 1`).Scan(&n)
 	return n, err
 }
 
 func (s *SQLiteStore) CountFailedLoginsSince(ctx context.Context, since time.Time) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM audit_logs WHERE action = 'login' AND status = 'failure' AND created_at >= ?`,
+		`SELECT COUNT(*) FROM audit_logs WHERE action = 'user.login' AND status = 'failure' AND created_at >= ?`,
 		since.UTC().Format(time.RFC3339),
 	).Scan(&n)
 	return n, err
