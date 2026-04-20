@@ -443,25 +443,7 @@ function PermissionsTab({ role, onRefresh }) {
           </thead>
           <tbody>
             {permissions.map(p => (
-              <tr key={p.id}>
-                <td style={{ paddingLeft: 14 }}>
-                  <span className="mono chip">{p.action}</span>
-                </td>
-                <td>
-                  <span className="mono faint" style={{ fontSize: 12 }}>{p.resource}</span>
-                </td>
-                <td style={{ textAlign: 'right', paddingRight: 10 }}>
-                  <button
-                    className="btn ghost icon sm"
-                    title="Detach"
-                    disabled={detaching === p.id}
-                    onClick={() => handleDetach(p.id)}
-                    style={{ color: 'var(--danger)' }}
-                  >
-                    <Icon.X width={11} height={11}/>
-                  </button>
-                </td>
-              </tr>
+              <PermissionRow key={p.id} p={p} onDetach={handleDetach} detaching={detaching === p.id}/>
             ))}
             {permissions.length === 0 && (
               <tr>
@@ -660,6 +642,43 @@ function PermissionChecker() {
         </form>
       </div>
     </div>
+  );
+}
+
+// PermissionRow — single row in the attached-permissions table. Lazy-loads
+// the reverse-lookup counts (roles + users that have this permission) on
+// first render via the new /permissions/{id}/roles and /users endpoints.
+function PermissionRow({ p, onDetach, detaching }) {
+  const { data: rolesData } = useAPI('/permissions/' + p.id + '/roles');
+  const { data: usersData } = useAPI('/permissions/' + p.id + '/users');
+  const roleCount = rolesData?.total ?? (rolesData?.data?.length ?? 0);
+  const userCount = usersData?.total ?? (usersData?.data?.length ?? 0);
+
+  return (
+    <tr>
+      <td style={{ paddingLeft: 14 }}>
+        <span className="mono chip">{p.action}</span>
+      </td>
+      <td>
+        <div>
+          <span className="mono faint" style={{ fontSize: 12 }}>{p.resource}</span>
+          <div className="faint" style={{ fontSize: 10.5, marginTop: 2 }}>
+            Used by {roleCount} role{roleCount !== 1 ? 's' : ''} · {userCount} user{userCount !== 1 ? 's' : ''}
+          </div>
+        </div>
+      </td>
+      <td style={{ textAlign: 'right', paddingRight: 10 }}>
+        <button
+          className="btn ghost icon sm"
+          title="Detach"
+          disabled={detaching}
+          onClick={() => onDetach(p.id)}
+          style={{ color: 'var(--danger)' }}
+        >
+          <Icon.X width={11} height={11}/>
+        </button>
+      </td>
+    </tr>
   );
 }
 

@@ -611,3 +611,55 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, checkPermissionResponse{Allowed: allowed})
 }
+
+// handleListRolesByPermission handles GET /api/v1/permissions/{id}/roles.
+// Reverse lookup — given a permission, return every role that grants it.
+// Used by the dashboard's "where is this permission used?" card.
+func (s *Server) handleListRolesByPermission(w http.ResponseWriter, r *http.Request) {
+	permID := chi.URLParam(r, "id")
+	_, err := s.Store.GetPermissionByID(r.Context(), permID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Permission not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	roles, err := s.Store.GetRolesByPermissionID(r.Context(), permID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	out := make([]*roleResponse, 0, len(roles))
+	for _, role := range roles {
+		out = append(out, roleToResponse(role))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": out, "total": len(out)})
+}
+
+// handleListUsersByPermission handles GET /api/v1/permissions/{id}/users.
+// Reverse lookup — every user that has this permission via any role
+// assignment. Mirrors handleListRolesByPermission's contract.
+func (s *Server) handleListUsersByPermission(w http.ResponseWriter, r *http.Request) {
+	permID := chi.URLParam(r, "id")
+	_, err := s.Store.GetPermissionByID(r.Context(), permID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Permission not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	users, err := s.Store.GetUsersByPermissionID(r.Context(), permID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	out := make([]adminUserResponse, 0, len(users))
+	for _, u := range users {
+		out = append(out, adminUserToResponse(u))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": out, "total": len(out)})
+}

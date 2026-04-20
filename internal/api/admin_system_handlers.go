@@ -374,6 +374,65 @@ func (s *Server) handleAdminDisableUserMFA(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+// handleAdminEmailPreview handles GET /api/v1/admin/email-preview/{template}.
+// Renders the requested transactional email template against canned sample
+// data and returns the resulting HTML so the dashboard can show a preview
+// pane on the Authentication page.
+//
+// Supported templates: magic_link, verify_email, password_reset,
+// organization_invitation. Unknown templates return 404.
+func (s *Server) handleAdminEmailPreview(w http.ResponseWriter, r *http.Request) {
+	tpl := chi.URLParam(r, "template")
+	appName := "SharkAuth"
+	if s.Config != nil && s.Config.Server.BaseURL != "" {
+		// Display name only — no real URL exposure needed in preview copy.
+		appName = "SharkAuth"
+	}
+
+	var html string
+	var err error
+	switch tpl {
+	case "magic_link":
+		html, err = email.RenderMagicLink(email.MagicLinkData{
+			AppName:       appName,
+			MagicLinkURL:  "https://example.com/auth/magic?token=preview-token-not-real",
+			ExpiryMinutes: 15,
+		})
+	case "verify_email":
+		html, err = email.RenderVerifyEmail(email.VerifyEmailData{
+			AppName:       appName,
+			VerifyURL:     "https://example.com/auth/verify?token=preview-token-not-real",
+			ExpiryMinutes: 60,
+		})
+	case "password_reset":
+		html, err = email.RenderPasswordReset(email.PasswordResetData{
+			AppName:       appName,
+			ResetURL:      "https://example.com/auth/reset?token=preview-token-not-real",
+			ExpiryMinutes: 30,
+		})
+	case "organization_invitation":
+		html, err = email.RenderOrganizationInvitation(email.OrganizationInvitationData{
+			AppName:      appName,
+			OrgName:      "Acme Corp",
+			Role:         "member",
+			AcceptURL:    "https://example.com/orgs/acme/accept?token=preview",
+			InviterEmail: "alice@acme.com",
+			ExpiryHours:  72,
+		})
+	default:
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Unknown email template: "+tpl))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"template": tpl,
+		"html":     html,
+	})
+}
+
 // handleAdminRotateSigningKey handles POST /api/v1/admin/auth/rotate-signing-key.
 // Generates a new JWT signing key and retires the current one.
 func (s *Server) handleAdminRotateSigningKey(w http.ResponseWriter, r *http.Request) {

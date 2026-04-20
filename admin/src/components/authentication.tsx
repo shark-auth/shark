@@ -1,12 +1,27 @@
 // @ts-nocheck
 import React from 'react'
 import { Icon } from './shared'
-import { useAPI } from './api'
+import { API, useAPI } from './api'
 
 // Authentication Config page — read-only display of auth method configuration
 
 export function Authentication() {
   const { data: config, loading, error } = useAPI('/admin/config');
+  const [previewTpl, setPreviewTpl] = React.useState(null);
+  const [previewHTML, setPreviewHTML] = React.useState(null);
+  const [previewErr, setPreviewErr] = React.useState(null);
+
+  const openPreview = async (tpl) => {
+    setPreviewTpl(tpl);
+    setPreviewHTML(null);
+    setPreviewErr(null);
+    try {
+      const res = await API.get('/admin/email-preview/' + tpl);
+      setPreviewHTML(res?.html || '');
+    } catch (e) {
+      setPreviewErr(e.message || 'Failed to render preview');
+    }
+  };
 
   if (loading) {
     return (
@@ -239,15 +254,15 @@ export function Authentication() {
                   Template preview
                 </div>
                 <div className="row" style={{ gap: 6 }}>
-                  {['verify_email', 'magic_link', 'password_reset'].map(t => (
-                    <button key={t} className="btn ghost sm" disabled title="Needs GET /admin/email-preview endpoint"
-                      style={{ fontSize: 10, opacity: 0.45, cursor: 'not-allowed' }}>
-                      {t.replace('_', ' ')}
+                  {['verify_email', 'magic_link', 'password_reset', 'organization_invitation'].map(t => (
+                    <button key={t} className="btn ghost sm" onClick={() => openPreview(t)}
+                      style={{ fontSize: 10 }}>
+                      {t.replace(/_/g, ' ')}
                     </button>
                   ))}
                 </div>
                 <div className="faint" style={{ fontSize: 10, marginTop: 4 }}>
-                  Preview blocked — <span className="mono">GET /admin/email-preview/&#123;template&#125;</span> not available
+                  Renders against sample data via <span className="mono">GET /admin/email-preview/&#123;template&#125;</span>.
                 </div>
               </div>
             </div>
@@ -353,6 +368,37 @@ export function Authentication() {
         </div>
 
       </div>
+
+      {/* Email preview modal */}
+      {previewTpl && (
+        <div onClick={() => setPreviewTpl(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'var(--surface-1)', border: '1px solid var(--hairline-bright)',
+            borderRadius: 6, width: 720, maxWidth: '90vw', maxHeight: '85vh',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            <div className="row" style={{ padding: '10px 14px', borderBottom: '1px solid var(--hairline)' }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>Preview · {previewTpl.replace(/_/g, ' ')}</span>
+              <div style={{ flex: 1 }}/>
+              <button className="btn ghost sm" onClick={() => setPreviewTpl(null)}>Close</button>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', background: '#fff' }}>
+              {previewErr ? (
+                <div style={{ padding: 16, color: 'var(--danger)', fontSize: 12 }}>Failed: {previewErr}</div>
+              ) : previewHTML == null ? (
+                <div className="faint" style={{ padding: 24, fontSize: 12 }}>Rendering…</div>
+              ) : (
+                <iframe srcDoc={previewHTML} sandbox="" style={{
+                  width: '100%', height: 520, border: 0, background: '#fff',
+                }}/>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

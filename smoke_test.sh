@@ -1785,6 +1785,73 @@ else
   fail "could not seed metadata test flow"
 fi
 
+# --- 66: RBAC reverse lookup + email preview (F Wave) -------------------------
+section "66: RBAC reverse lookup + email preview"
+
+# Seed: create role + permission + assign
+PERM_RESP=$(curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" -X POST \
+  -d '{"action":"smoke_read","resource":"smoke_thing"}' $BASE/api/v1/permissions)
+PERM_ID=$(echo "$PERM_RESP" | jq -r '.id // empty')
+[ -n "$PERM_ID" ] && pass "seed permission $PERM_ID" || fail "perm seed: $PERM_RESP"
+
+ROLE_RESP=$(curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" -X POST \
+  -d '{"name":"smoke_role_F","description":"smoke F"}' $BASE/api/v1/roles)
+ROLE_ID=$(echo "$ROLE_RESP" | jq -r '.id // empty')
+[ -n "$ROLE_ID" ] && pass "seed role $ROLE_ID" || fail "role seed: $ROLE_RESP"
+
+if [ -n "$PERM_ID" ] && [ -n "$ROLE_ID" ]; then
+  # Attach perm to role
+  AT_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -X POST -d "{\"permission_id\":\"$PERM_ID\"}" "$BASE/api/v1/roles/$ROLE_ID/permissions")
+  if [ "$AT_CODE" = 200 ] || [ "$AT_CODE" = 201 ] || [ "$AT_CODE" = 204 ]; then
+    pass "attach perm to role ($AT_CODE)"
+  else
+    fail "attach -> $AT_CODE"
+  fi
+
+  # Assign role to user
+  AS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -X POST -d "{\"role_id\":\"$ROLE_ID\"}" "$BASE/api/v1/users/$USERID/roles")
+  if [ "$AS_CODE" = 200 ] || [ "$AS_CODE" = 201 ] || [ "$AS_CODE" = 204 ]; then
+    pass "assign role to user ($AS_CODE)"
+  else
+    fail "assign -> $AS_CODE"
+  fi
+
+  # Reverse lookup: roles for this permission
+  ROLES_BY_PERM=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/permissions/$PERM_ID/roles")
+  echo "$ROLES_BY_PERM" | jq -e --arg rid "$ROLE_ID" '.data[] | select(.id==$rid)' >/dev/null \
+    && pass "GET /permissions/{id}/roles returns assigned role" || fail "reverse role lookup: $ROLES_BY_PERM"
+
+  # Reverse lookup: users for this permission
+  USERS_BY_PERM=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/permissions/$PERM_ID/users")
+  echo "$USERS_BY_PERM" | jq -e --arg uid "$USERID" '.data[] | select(.id==$uid)' >/dev/null \
+    && pass "GET /permissions/{id}/users returns user via role" || fail "reverse user lookup: $USERS_BY_PERM"
+
+  # Missing permission -> 404
+  MISS_PR=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/permissions/perm_doesnt_exist/roles")
+  [ "$MISS_PR" = 404 ] && pass "missing perm -> 404" || fail "missing perm -> $MISS_PR"
+fi
+
+# Email preview — each template renders non-empty HTML
+for TPL in magic_link verify_email password_reset organization_invitation; do
+  EP=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/email-preview/$TPL")
+  HTML_LEN=$(echo "$EP" | jq -r '.html | length // 0')
+  if [ "$HTML_LEN" -gt 100 ]; then
+    pass "email-preview/$TPL renders non-empty HTML ($HTML_LEN bytes)"
+  else
+    fail "email-preview/$TPL empty: $EP"
+  fi
+done
+
+# Unknown template -> 404
+UNK_EP=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/email-preview/not_a_real_template")
+[ "$UNK_EP" = 404 ] && pass "unknown template -> 404" || fail "unknown template -> $UNK_EP"
+
+# No-auth blocked
+NA_EP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/admin/email-preview/magic_link")
+[ "$NA_EP" = 401 ] && pass "no auth -> 401 on email-preview" || fail "no-auth -> $NA_EP"
+
 # --- 65: Admin consents + device queue (E Wave) -------------------------------
 section "65: admin consents + device queue"
 

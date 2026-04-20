@@ -364,6 +364,9 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/", s.handleCreatePermission)
 			r.Get("/", s.handleListPermissions)
+			// Reverse lookup — which roles/users have this permission?
+			r.Get("/{id}/roles", s.handleListRolesByPermission)
+			r.Get("/{id}/users", s.handleListUsersByPermission)
 		})
 
 		// Auth check (admin) — validates if a user has a specific permission
@@ -529,6 +532,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/sessions/purge-expired", s.handlePurgeExpiredSessions)
 			r.Post("/audit-logs/purge", s.handlePurgeAuditLogs)
 			r.Post("/test-email", s.handleAdminTestEmail)
+			r.Get("/email-preview/{template}", s.handleAdminEmailPreview)
 			r.Post("/auth/rotate-signing-key", s.handleAdminRotateSigningKey)
 
 			// Cross-user vault connections (admin scope). The /vault/connections

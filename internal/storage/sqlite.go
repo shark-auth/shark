@@ -692,10 +692,63 @@ func (s *SQLiteStore) GetRolesByUserID(ctx context.Context, userID string) ([]*R
 
 func (s *SQLiteStore) GetUsersByRoleID(ctx context.Context, roleID string) ([]*User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at
+		`SELECT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at
 		 FROM users u
 		 INNER JOIN user_roles ur ON ur.user_id = u.id
 		 WHERE ur.role_id = ?`, roleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		u, err := s.scanUserFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+// GetRolesByPermissionID is the inverse of GetPermissionsByRoleID — returns
+// every role that grants the given permission. Used by the dashboard's
+// "where is this permission used?" reverse lookup.
+func (s *SQLiteStore) GetRolesByPermissionID(ctx context.Context, permissionID string) ([]*Role, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT r.id, r.name, r.description, r.created_at, r.updated_at
+		 FROM roles r
+		 INNER JOIN role_permissions rp ON rp.role_id = r.id
+		 WHERE rp.permission_id = ?
+		 ORDER BY r.name`, permissionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roles []*Role
+	for rows.Next() {
+		var r Role
+		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		roles = append(roles, &r)
+	}
+	return roles, rows.Err()
+}
+
+// GetUsersByPermissionID returns every user that has the given permission via
+// any role assignment. DISTINCT collapses duplicates when a user has the
+// permission through multiple roles. Used by the RBAC reverse-lookup card.
+func (s *SQLiteStore) GetUsersByPermissionID(ctx context.Context, permissionID string) ([]*User, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at
+		 FROM users u
+		 INNER JOIN user_roles ur ON ur.user_id = u.id
+		 INNER JOIN role_permissions rp ON rp.role_id = ur.role_id
+		 WHERE rp.permission_id = ?
+		 ORDER BY u.email`, permissionID)
 	if err != nil {
 		return nil, err
 	}

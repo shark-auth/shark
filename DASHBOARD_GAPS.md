@@ -438,6 +438,14 @@ User flagged additional findings from smoke test review. These predate dashboard
 - A1–A7 from Round 2
 - **NEW: smoke section per route**: webhook replay, admin org CRUD, admin org invitations, admin user MFA disable
 
+**Wave F — RBAC reverse lookup + email preview** ✅ DONE (smoke 341 → 354, 0 FAIL)
+- F-1 ✅ storage.GetRolesByPermissionID + GetUsersByPermissionID (DISTINCT join via role_permissions x user_roles); fixed pre-existing column-count bug in GetUsersByRoleID (selected 13, scan expected 14)
+- F-2 ✅ GET /permissions/{id}/roles + GET /permissions/{id}/users handlers (404 on unknown perm, returns {data, total})
+- F-3 ✅ GET /admin/email-preview/{template} (magic_link, verify_email, password_reset, organization_invitation) renders against canned sample data
+- F-4 ✅ rbac.tsx PermissionRow uses both reverse-lookup endpoints to render "Used by N roles · M users" subtext per attached permission
+- F-5 ✅ authentication.tsx wires the 4 preview buttons to a sandboxed iframe modal showing rendered HTML
+- F-6 ✅ Smoke section 66 (13 assertions): seed perm + role, attach + assign, reverse role/user lookup, missing 404, 4 templates render >100 bytes HTML, unknown template 404, no-auth 401
+
 **Wave E — Admin consents + device queue** ✅ DONE (smoke 328 → 341, 0 FAIL)
 - E-1 ✅ storage.ListAllConsents + GET /admin/oauth/consents (cross-user list w/ user_id + agent_name) + DELETE /admin/oauth/consents/{id} (admin-actor revoke + token cascade + audit)
 - E-2 ✅ storage.ListPendingDeviceCodes (status=pending AND not expired) + GET /admin/oauth/device-codes + POST /admin/oauth/device-codes/{user_code}/approve and /deny (audit oauth.device.approved/denied)

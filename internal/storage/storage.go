@@ -145,6 +145,8 @@ type Store interface {
 	AttachPermissionToRole(ctx context.Context, roleID, permissionID string) error
 	DetachPermissionFromRole(ctx context.Context, roleID, permissionID string) error
 	GetPermissionsByRoleID(ctx context.Context, roleID string) ([]*Permission, error)
+	GetRolesByPermissionID(ctx context.Context, permissionID string) ([]*Role, error)
+	GetUsersByPermissionID(ctx context.Context, permissionID string) ([]*User, error)
 
 	// UserRoles
 	AssignRoleToUser(ctx context.Context, userID, roleID string) error
