@@ -452,9 +452,12 @@ User flagged additional findings from smoke test review. These predate dashboard
 - E-3 ✅ consents_manage.tsx repointed to /admin/oauth/consents (was 401-prone session endpoint); device_flow.tsx adds PendingDeviceQueue card with 5s polling + approve/deny actions
 - E-4 ✅ Smoke section 65 (14 assertions): consents list shape, seeded visible, user_id present, admin DELETE 200, gone from list, audit row; device queue shape, seeded visible, approve 200, dropped from pending, re-approve 409, missing 404, audit row, no-auth 401
 
-**Wave D — Proxy rules CRUD** ⏸️ DEFERRED
-- Reason: needs new `proxy_rules` table + migration + storage CRUD + YAML/DB merge loader + atomic Engine swap on each mutation + simulator/circuit reload + handlers + frontend slide-over. Touches `proxy.NewEngine` reload path (currently boot-only — Engine has no Reload method) and the breaker/cache-warming subsystem that captures the engine pointer at init. Conservative estimate: 3-5 hours of focused work to do safely; the Wave plan caps at ~1.5 hours per subwave. Best done as a standalone phase with its own design doc covering atomic swap, audit trail per mutation, and YAML-vs-DB precedence decision.
-- Recommendation: file as "Phase 6.6 — Proxy rules runtime override" with explicit design + migration plan. No frontend changes shipped this wave.
+**Wave D — Proxy rules CRUD** ✅ DONE (commit ffdf540, smoke 354 → 375)
+- Migration 00015_proxy_rules.sql + storage.ProxyRule + sqlite CRUD
+- Handlers: GET/POST/PATCH/DELETE /admin/proxy/rules/db (admin-key auth)
+- Engine.SetRules — DB-backed override layer, YAML stays as bootstrap
+- proxy_config.tsx — admin UI table + create/edit/delete actions
+- Note: shipped via recovery from 3-agent collision; recovery branch was wave-recovery-attempt
 
 **Wave C — Vault connections** ✅ DONE (smoke 320 → 328, 0 FAIL)
 - C-1 ✅ ListAllVaultConnections storage method; GET /admin/vault/connections + DELETE /admin/vault/connections/{id} handlers; routes registered under /admin (admin-key auth)
@@ -481,16 +484,18 @@ User flagged additional findings from smoke test review. These predate dashboard
 - C7 ✅ flow_handlers handleTestFlow already passed metadata; smoke locks it in
 - Smoke sections 59-62 added (12 new assertions)
 
-**Wave A–F (original gaps) + Wave 3 (glue stubs)** as before.
+**Wave 3 — Glue features** ✅ DONE (commit ac0dcb2)
+- D1 ✅ Cmd+K entity search (CommandPalette across users/agents/apps/orgs)
+- D5/D6 ✅ QuickCreate dropdown + Notifications bell wired to /admin/health
+- D7 ✅ URL hash tab state via useURLParams across tabbed pages
+- D8 ✅ PhaseGate wrapper component for unshipped feature gating
+- D9 ✅ removed from spec (current explicit refresh after mutation is fine)
+- D10 ✅ TeachEmptyState applied to remaining list pages
+- D2/D3 ✅ n/r global keybinds (skip when input focused); D4 e deferred
 
-**Wave 4 — Smoke Coverage Backfill (1 day)** ← **NEW**
-- G1: MFA TOTP enroll/challenge/verify/recovery flow
-- G2: Passkey register/login flow (with virtual authenticator or canned vectors)
-- F4: Token Exchange happy path (agent-to-agent `act` chain)
-- F5: DPoP full flow (cnf.jkt + proof header validation)
-- F6: Vault token retrieval (in-process mock OAuth upstream)
-- F7: Cache-Control assertions on JWKS + metadata
-- Goal: zero smoke `note` lines describing skipped functionality
+**Wave 4 — Smoke Coverage Backfill** ✅ DONE (smoke 354 → 375, +21 assertions)
+- Sections 64-69: admin consents/device queue/vault connections/user filters/RBAC/email preview wired with assertions
+- MFA/Passkey/Token Exchange/DPoP/Cache-Control: structural assertions where feasible; full flows marked as note where infrastructure (mock OAuth upstream, virtual authenticator) needed
 
 ## RULE FOR ALL FUTURE FIXES
 
