@@ -26,6 +26,7 @@ import { SessionDebugger } from './session_debugger'
 import { CompliancePage } from './compliance'
 import { FlowBuilder } from './flow_builder'
 import { Proxy } from './proxy_config'
+import { GetStarted } from './get_started'
 import { useKeyboardShortcuts, KeyboardCheatsheet } from './useKeyboardShortcuts'
 import { CommandPalette } from './CommandPalette'
 import { HelpButton } from './HelpButton'
@@ -137,6 +138,29 @@ export function App() {
   }, [apiKey]);
   const devMode = adminConfig?.dev_mode ?? false;
 
+  // First-login redirect: if the admin hasn't been onboarded yet AND there
+  // are zero users, route them to /admin/get-started automatically. We guard
+  // with a ref so the redirect fires at most once per session even if stats
+  // later return users=0 again (e.g. after a user is deleted).
+  const redirectedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!apiKey || redirectedRef.current) return;
+    if (sessionStorage.getItem('shark_admin_onboarded') === '1') return;
+    // Only auto-redirect from the default landing page; respect deep links.
+    if (page !== 'overview') return;
+    fetch('/api/v1/admin/stats', { headers: { Authorization: `Bearer ${apiKey}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        const total = d?.users?.total ?? null;
+        if (total === 0 && !redirectedRef.current) {
+          redirectedRef.current = true;
+          setPage('get-started');
+        }
+      })
+      .catch(() => {});
+  }, [apiKey, page]);
+
   // If user navigates to dev-inbox but dev_mode is known-false, redirect to overview.
   React.useEffect(() => {
     if (adminConfig !== null && !devMode && page === 'dev-inbox') {
@@ -178,6 +202,7 @@ export function App() {
     migrations: Migrations,
     branding: Branding,
     flow: FlowBuilder,
+    'get-started': GetStarted,
   }[page] || Overview;
 
   return (
