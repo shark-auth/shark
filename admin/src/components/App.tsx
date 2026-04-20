@@ -191,7 +191,7 @@ export function App() {
            data-screen-label={'01 ' + page}>
         <TopBar page={page} setTweaksOpen={setTweaksOpen} onOpenPalette={() => setPaletteOpen(true)} setPage={setPage}/>
         <div style={{ flex: 1, overflow: 'hidden', animation: 'fadeIn 160ms ease-out' }}>
-          <Page/>
+          <Page setPage={setPage}/>
         </div>
       </div>
 

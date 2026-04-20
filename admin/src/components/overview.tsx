@@ -3,11 +3,90 @@ import React from 'react'
 import { Icon, Sparkline, Donut } from './shared'
 import { useAPI } from './api'
 
+// Poll /admin/proxy/status just for the 404 (disabled) signal. We don't need
+// the payload here; only the response status tells us if the proxy has ever
+// been configured. Returns { configured, loading } where configured=true when
+// the endpoint returns anything other than 404.
+function useProxyConfigured() {
+  const [configured, setConfigured] = React.useState(null); // null = unknown
+  React.useEffect(() => {
+    const key = sessionStorage.getItem('shark_admin_key');
+    if (!key) return;
+    let cancelled = false;
+    fetch('/api/v1/admin/proxy/status', { headers: { Authorization: 'Bearer ' + key } })
+      .then(res => {
+        if (cancelled) return;
+        if (res.status === 404) setConfigured(false);
+        else if (res.ok) setConfigured(true);
+        else setConfigured(null);
+      })
+      .catch(() => { if (!cancelled) setConfigured(null); });
+    return () => { cancelled = true; };
+  }, []);
+  return configured;
+}
+
+// Magical-moment hero tile shown on cold-start (no users, proxy not configured).
+// Replaces the metric strip to focus the new admin on the first ship action.
+function MagicalMomentTile({ onGo, onSkip }) {
+  return (
+    <div className="card" style={{
+      padding: '28px 32px',
+      background: 'linear-gradient(135deg, var(--surface-2), var(--surface-1))',
+      border: '1px solid var(--hairline-strong)',
+    }}>
+      <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+        <span className="chip agent" style={{ height: 18, fontSize: 10 }}>Magical moment</span>
+        <span className="faint mono" style={{ fontSize: 11 }}>~60s · no code changes</span>
+      </div>
+      <h2 style={{
+        margin: 0, fontSize: 26, fontWeight: 600,
+        fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', lineHeight: 1.15,
+      }}>
+        Add auth to any app in 60 seconds
+      </h2>
+      <p style={{
+        margin: '8px 0 18px',
+        fontSize: 13.5, color: 'var(--fg-muted)', lineHeight: 1.55, maxWidth: 620,
+      }}>
+        SharkAuth can protect any upstream with zero code changes. Paste a URL,
+        pick routes, done.
+      </p>
+      <div className="row" style={{ gap: 12 }}>
+        <button className="btn primary" onClick={onGo}>
+          Configure proxy <Icon.ChevronRight width={11} height={11}/>
+        </button>
+        <button className="btn ghost sm" onClick={onSkip} style={{ fontSize: 12 }}>
+          Skip, show me the dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Overview page — metrics, attention panel, activity, auth breakdown
 
-export function Overview() {
+export function Overview({ setPage } = {}) {
   // --- Real API calls ---
   const { data: statsRaw, loading: statsLoading } = useAPI('/admin/stats');
+  const proxyConfigured = useProxyConfigured();
+  const [heroHidden, setHeroHidden] = React.useState(
+    () => sessionStorage.getItem('shark_hide_hero') === '1'
+  );
+  const usersZero = (statsRaw?.users?.total ?? null) === 0;
+  const showHero = !heroHidden && usersZero && proxyConfigured === false;
+  const goConfigureProxy = () => {
+    if (typeof setPage === 'function') {
+      setPage('proxy', { new: '1' });
+    } else {
+      window.history.pushState(null, '', '/admin/proxy?new=1');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
+  const dismissHero = () => {
+    try { sessionStorage.setItem('shark_hide_hero', '1'); } catch {}
+    setHeroHidden(true);
+  };
   const { data: trendsRaw } = useAPI('/admin/stats/trends?days=14');
   const { data: healthRaw, loading: healthLoading, error: healthError, refresh: refreshHealth } = useAPI('/admin/health');
   const { data: agentsRaw } = useAPI('/agents?limit=1');
@@ -204,7 +283,10 @@ export function Overview() {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, padding: 16, height: '100%', overflow: 'auto' }}>
       {/* Main column */}
       <div className="col" style={{ minWidth: 0 }}>
-        {/* Metric strip */}
+        {/* Magical moment hero OR metric strip */}
+        {showHero ? (
+          <MagicalMomentTile onGo={goConfigureProxy} onSkip={dismissHero}/>
+        ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
           {statsLoading
             ? Array.from({ length: 6 }).map((_, i) => (
@@ -233,6 +315,7 @@ export function Overview() {
               ))
           }
         </div>
+        )}
 
         {/* Auth breakdown + activity */}
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, marginTop: 20 }}>
