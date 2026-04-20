@@ -49,3 +49,4 @@ Append-only. Every task state change = one row. Never edit prior rows.
 | 2026-04-20T21:30:00Z | T21 | claim | subagent-F | rbac permission matrix grid — backend verified (all routes present) |
 | 2026-04-20T21:35:00Z | T05 | claim | subagent-D | create-user slide-over frontend |
 | 2026-04-20T21:42:00Z | T05 | done | subagent-D | 2b4d649 — CreateUserSlideover wired into users.tsx: email/password/name/email_verified/roles/orgs, HTML5 email validation, password reveal toggle + 12-char min, 409→email-field red + exact backend message toast, 400→inline error under first invalid field, ?new=1 auto-open + strip, ESC + backdrop close w/ discard confirm, auto-select new row on 201. Typecheck clean. |
+| 2026-04-20T21:45:00Z | T15 | claim | subagent-E | bootstrap token login flow: backend handler + router + startup print |

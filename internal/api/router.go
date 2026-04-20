@@ -530,6 +530,12 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{provider}/token", s.handleVaultGetToken)
 		})
 
+		// Bootstrap token consume (T15) — NO auth middleware. The token in the
+		// request body IS the credential; the handler validates it against an
+		// in-memory single-use hash minted at startup. Mounted before the
+		// /admin group below so AdminAPIKeyFromStore doesn't gate it.
+		r.Post("/admin/bootstrap/consume", s.handleBootstrapConsume)
+
 		// Admin (stats + sessions + dev-mode inbox)
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))

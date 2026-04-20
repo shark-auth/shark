@@ -232,6 +232,15 @@ func Serve(ctx context.Context, opts Options) error {
 		printAdminKey(b.AdminKey)
 	}
 
+	// T15: mint a one-time bootstrap token if no admin has ever acted on
+	// this install. Prints a URL the operator can click to log in without
+	// pasting the sk_live_ key. Best-effort — failures just skip the print.
+	if tok, err := b.API.MintBootstrapToken(ctx); err != nil {
+		slog.Warn("bootstrap token: mint failed", "err", err)
+	} else if tok != "" {
+		printBootstrapURL(b.Config.Server.Port, tok)
+	}
+
 	addr := fmt.Sprintf(":%d", b.Config.Server.Port)
 	httpServer := &http.Server{
 		Addr:         addr,
@@ -351,5 +360,14 @@ func printAdminKey(key string) {
 	fmt.Printf("    %s\n", key)
 	fmt.Println()
 	fmt.Println("  Use as: Authorization: Bearer <key>")
+	fmt.Println()
+}
+
+// printBootstrapURL prints a clickable dashboard URL that auto-logs-in via
+// the T15 bootstrap token. Only called when no admin has ever acted on this
+// install. The token is single-use and expires in 10 minutes.
+func printBootstrapURL(port int, token string) {
+	fmt.Println()
+	fmt.Printf("  Open http://localhost:%d/admin/?bootstrap=%s  (expires in 10 minutes)\n", port, token)
 	fmt.Println()
 }

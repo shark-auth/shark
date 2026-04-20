@@ -1,0 +1,205 @@
+package api
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	gonanoid "github.com/matoous/go-nanoid/v2"
+
+	"github.com/sharkauth/sharkauth/internal/auth"
+	"github.com/sharkauth/sharkauth/internal/storage"
+)
+
+// Bootstrap token (T15) — one-time URL that mints a short-lived admin API key
+// so a fresh install doesn't force the operator to paste sk_live_… from the
+// server log. Flow:
+//   1. On `shark serve` startup, if no admin audit events exist, the caller
+//      (server.Serve) invokes Server.MintBootstrapToken and prints the URL to
+//      stdout.
+//   2. The dashboard's login.tsx reads ?bootstrap=<tok> and POSTs here.
+//   3. We verify the token (hash-compared, not-expired, not-consumed), mint a
+//      real admin API key with scopes ["*"], mark the token consumed, and
+//      return {api_key} to the browser. The browser drops the key into
+//      sessionStorage and reloads the dashboard.
+//
+// Security:
+//   - crypto/rand, 32 bytes → base16 (64 chars)
+//   - only the SHA-256 hash is kept in memory; the raw token exists for one
+//     stdout line and one HTTP request
+//   - single-use (consumed=true flips on first match)
+//   - 10-minute expiry
+//   - in-memory only: restarting the server invalidates all outstanding
+//     tokens, which matches the "first start" intent
+//   - no auth middleware (this IS the auth bootstrap), but the consume
+//     endpoint 401s for any input that doesn't match the stored hash
+
+type bootstrapToken struct {
+	hash      string // hex(sha256(raw))
+	expiresAt time.Time
+	consumed  bool
+}
+
+var (
+	bootstrapMu    sync.Mutex
+	bootstrapToken_ *bootstrapToken //nolint:revive // package-private singleton
+)
+
+// bootstrapTokenTTL is the window in which the printed URL is valid. Kept
+// short because the token grants full admin — if the operator doesn't click
+// within 10 minutes, they can restart the server to get a fresh URL.
+const bootstrapTokenTTL = 10 * time.Minute
+
+// MintBootstrapToken generates a one-time token, stores its hash in-memory,
+// and returns the raw token for stdout. Calling it again replaces any prior
+// token (so repeated startups don't leave stale tokens lying around).
+//
+// Returns ("", nil) when an admin has already been bootstrapped — detected
+// via presence of any audit_logs row with action LIKE 'admin.%'. The caller
+// uses "" to mean "don't print anything".
+func (s *Server) MintBootstrapToken(ctx context.Context) (string, error) {
+	// "Has any admin ever acted on this install?" — cheap probe via
+	// QueryAuditLogs with a comma-separated action list is not feasible
+	// (LIKE isn't supported), so we scan the N most recent rows and check
+	// for any admin.* prefix. On a fresh DB this is zero rows and we mint.
+	logs, err := s.Store.QueryAuditLogs(ctx, storage.AuditLogQuery{Limit: 200})
+	if err != nil {
+		return "", fmt.Errorf("query audit logs: %w", err)
+	}
+	for _, l := range logs {
+		if strings.HasPrefix(l.Action, "admin.") {
+			return "", nil
+		}
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("crypto/rand: %w", err)
+	}
+	token := hex.EncodeToString(raw)
+	h := sha256.Sum256([]byte(token))
+
+	bootstrapMu.Lock()
+	bootstrapToken_ = &bootstrapToken{
+		hash:      hex.EncodeToString(h[:]),
+		expiresAt: time.Now().UTC().Add(bootstrapTokenTTL),
+		consumed:  false,
+	}
+	bootstrapMu.Unlock()
+
+	return token, nil
+}
+
+// bootstrapConsumeRequest is the JSON body for POST /admin/bootstrap/consume.
+type bootstrapConsumeRequest struct {
+	Token string `json:"token"`
+}
+
+// bootstrapConsumeResponse returns the fresh admin API key on success.
+type bootstrapConsumeResponse struct {
+	APIKey string `json:"api_key"`
+}
+
+// handleBootstrapConsume validates a bootstrap token and mints a real admin
+// API key. No auth middleware is mounted on this route — the token itself is
+// the credential.
+func (s *Server) handleBootstrapConsume(w http.ResponseWriter, r *http.Request) {
+	var req bootstrapConsumeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "Invalid JSON body",
+		})
+		return
+	}
+	if strings.TrimSpace(req.Token) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "token is required",
+		})
+		return
+	}
+
+	suppliedHash := sha256.Sum256([]byte(req.Token))
+	suppliedHex := hex.EncodeToString(suppliedHash[:])
+
+	bootstrapMu.Lock()
+	tok := bootstrapToken_
+	// Compare + flip consumed under the same lock so two racing requests
+	// can't both win. On mismatch/expired/consumed we return 401.
+	if tok == nil || tok.consumed || time.Now().After(tok.expiresAt) {
+		bootstrapMu.Unlock()
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error":   "invalid_token",
+			"message": "Bootstrap token is invalid, expired, or already used.",
+		})
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(tok.hash), []byte(suppliedHex)) != 1 {
+		bootstrapMu.Unlock()
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error":   "invalid_token",
+			"message": "Bootstrap token is invalid, expired, or already used.",
+		})
+		return
+	}
+	// Mark consumed BEFORE minting the key so a partial failure below
+	// doesn't leave the token replayable.
+	tok.consumed = true
+	bootstrapMu.Unlock()
+
+	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Failed to generate API key",
+		})
+		return
+	}
+
+	id, _ := gonanoid.New()
+	now := time.Now().UTC().Format(time.RFC3339)
+	ak := &storage.APIKey{
+		ID:        "key_" + id,
+		Name:      "bootstrap-admin",
+		KeyHash:   keyHash,
+		KeyPrefix: keyPrefix,
+		KeySuffix: keySuffix,
+		Scopes:    `["*"]`,
+		RateLimit: 0,
+		CreatedAt: now,
+	}
+	if err := s.Store.CreateAPIKey(r.Context(), ak); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Failed to persist API key",
+		})
+		return
+	}
+
+	// Audit trail: future `shark serve` runs will see this admin.* event and
+	// skip the token print.
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ID:        "audit_" + id,
+			ActorID:   ak.ID,
+			ActorType: "admin",
+			Action:    "admin.bootstrap.consumed",
+			TargetID:  ak.ID,
+			IP:        ipOf(r),
+			UserAgent: uaOf(r),
+			Status:    "success",
+			CreatedAt: now,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, bootstrapConsumeResponse{APIKey: fullKey})
+}
