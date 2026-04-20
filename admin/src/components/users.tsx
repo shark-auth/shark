@@ -18,6 +18,8 @@ const NOW = Date.now();
 
 export function Users() {
   const [selected, setSelected] = React.useState(null);
+  const [creating, setCreating] = React.useState(false);
+  const toast = useToast();
   const [query, setQuery] = useURLParam('search', '');
   const [filterVerified, setFilterVerified] = useURLParam('verified', '');
   const [filterMfa, setFilterMfa] = useURLParam('mfa', '');
@@ -59,11 +61,30 @@ export function Users() {
     }
   }, [rawUsers]);
 
-  // r=refresh; n surfaces a hint since we don't yet have a create modal here.
+  // r=refresh; n opens the create-user slide-over.
   usePageActions({
     onRefresh: refresh,
-    onNew: () => alert('Create user from the dashboard ships in a later phase. Use the CLI: shark users create --email <email>'),
+    onNew: () => setCreating(true),
   });
+
+  // `?new=1` query auto-opens the slide-over on mount; strip the param after.
+  React.useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('new') === '1') {
+      setCreating(true);
+      sp.delete('new');
+      const qs = sp.toString();
+      const url = window.location.pathname + (qs ? '?' + qs : '');
+      window.history.replaceState(null, '', url);
+    }
+  }, []);
+
+  const handleCreated = (newUser) => {
+    setCreating(false);
+    toast.success(`User ${newUser.email} created`);
+    refresh();
+    setSelected(newUser);
+  };
 
   // Server now applies all filters. Pass-through.
   const users = rawUsers;
@@ -119,7 +140,7 @@ export function Users() {
             {loading ? '…' : `${total.toLocaleString()} total`}
           </span>
           <button className="btn sm">Export</button>
-          <button className="btn primary sm"><Icon.Plus width={11} height={11}/>New user</button>
+          <button className="btn primary sm" onClick={() => setCreating(true)}><Icon.Plus width={11} height={11}/>New user</button>
         </div>
 
         {/* Bulk action bar */}
@@ -306,6 +327,339 @@ export function Users() {
           onRefreshList={refresh}
         />
       )}
+
+      {creating && (
+        <CreateUserSlideover
+          onClose={() => setCreating(false)}
+          onCreated={handleCreated}
+        />
+      )}
+    </div>
+  );
+}
+
+// CreateUserSlideover — T05 — right-side panel to create a new user via
+// POST /admin/users. Matches UserSlideover styling (540px wide, surface-0,
+// hairline border, 140ms slideIn). ESC + backdrop-click close with a dirty
+// check. Submits: email (required, HTML5 validated), password (optional, min
+// 12 chars if provided, reveal toggle), name, email_verified, role_ids,
+// org_ids (multiselect). 409 highlights email; 400 shows inline errors.
+function CreateUserSlideover({ onClose, onCreated }) {
+  const toast = useToast();
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [name, setName] = React.useState('');
+  const [emailVerified, setEmailVerified] = React.useState(false);
+  const [roleIds, setRoleIds] = React.useState([]);
+  const [orgIds, setOrgIds] = React.useState([]);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [fieldErrors, setFieldErrors] = React.useState({}); // {email, password, name, form}
+  const emailRef = React.useRef(null);
+
+  const { data: rolesData } = useAPI('/roles');
+  const { data: orgsData } = useAPI('/admin/organizations');
+  const roles = rolesData?.roles || rolesData?.data || (Array.isArray(rolesData) ? rolesData : []);
+  const orgs = orgsData?.organizations || orgsData?.data || (Array.isArray(orgsData) ? orgsData : []);
+
+  const dirty = email !== '' || password !== '' || name !== '' || emailVerified || roleIds.length > 0 || orgIds.length > 0;
+
+  const tryClose = () => {
+    if (dirty) {
+      if (!window.confirm('Discard this new user?')) return;
+    }
+    onClose();
+  };
+
+  // ESC closes; guard while submitting.
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !submitting) tryClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dirty, submitting]);
+
+  // Focus email on mount.
+  React.useEffect(() => {
+    if (emailRef.current) emailRef.current.focus();
+  }, []);
+
+  const toggleIn = (list, id) => list.includes(id) ? list.filter(x => x !== id) : [...list, id];
+
+  const validate = () => {
+    const errs = {};
+    if (!email.trim()) errs.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs.email = 'Enter a valid email address';
+    if (password !== '' && password.length < 12) errs.password = 'Password must be at least 12 characters';
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (submitting) return;
+    if (!validate()) return;
+    setSubmitting(true);
+
+    const body: any = {
+      email: email.trim(),
+      email_verified: emailVerified,
+    };
+    if (password) body.password = password;
+    if (name.trim()) body.name = name.trim();
+    if (roleIds.length > 0) body.role_ids = roleIds;
+    if (orgIds.length > 0) body.org_ids = orgIds;
+
+    // Direct fetch so we can read status code for 409 vs 400 branching.
+    try {
+      const key = sessionStorage.getItem('shark_admin_key');
+      const res = await fetch('/api/v1/admin/users', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (res.status === 201) {
+        const newUser = await res.json();
+        onCreated(newUser);
+        return;
+      }
+
+      const errBody = await res.json().catch(() => ({}));
+      const msg = errBody.message || errBody.error || `HTTP ${res.status}`;
+      const code = errBody.code || errBody.error;
+
+      if (res.status === 409) {
+        setFieldErrors({ email: msg });
+        toast.error(msg);
+      } else if (res.status === 400) {
+        // Heuristic: route message to the most likely offending field.
+        const lower = (code || msg).toLowerCase();
+        if (lower.includes('password') || lower === 'weak_password') {
+          setFieldErrors({ password: msg });
+        } else if (lower.includes('email')) {
+          setFieldErrors({ email: msg });
+        } else {
+          setFieldErrors({ form: msg });
+        }
+        toast.error('Could not create user. Check the form.');
+      } else {
+        setFieldErrors({ form: msg });
+        toast.error(msg);
+      }
+    } catch (err) {
+      const msg = err?.message || 'Network error';
+      setFieldErrors({ form: msg });
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={() => !submitting && tryClose()}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 40,
+          background: 'rgba(0,0,0,0.35)',
+        }}
+      />
+      {/* Panel — right-side slide-over, matches UserSlideover styling */}
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0,
+          width: 520, maxWidth: '100vw',
+          zIndex: 41,
+          borderLeft: '1px solid var(--hairline)',
+          background: 'var(--surface-0)',
+          display: 'flex', flexDirection: 'column',
+          animation: 'slideIn 140ms ease-out',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ padding: 16, borderBottom: '1px solid var(--hairline)' }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+            <button type="button" className="btn ghost sm" onClick={tryClose} disabled={submitting}>
+              <Icon.X width={12} height={12}/>Close
+            </button>
+            <span className="faint" style={{ fontSize: 11 }}>POST /admin/users</span>
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', fontFamily: 'var(--font-display)', lineHeight: 1.2 }}>
+            Create user
+          </div>
+          <div className="faint" style={{ fontSize: 13, marginTop: 4 }}>
+            New account. Password is optional — leave blank to invite via email later.
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Field label="Email">
+              <input
+                ref={emailRef}
+                type="email"
+                required
+                value={email}
+                onChange={e => { setEmail(e.target.value); if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined }); }}
+                placeholder="user@example.com"
+                style={{
+                  width: '100%', height: 28, padding: '0 8px',
+                  background: 'var(--surface-1)',
+                  border: '1px solid ' + (fieldErrors.email ? 'var(--danger)' : 'var(--hairline-strong)'),
+                  borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+                }}
+              />
+              {fieldErrors.email && (
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--danger)', marginTop: 3 }}>{fieldErrors.email}</div>
+              )}
+            </Field>
+
+            <Field label="Password" hint="Optional · min 12 chars if provided">
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: undefined }); }}
+                  placeholder="leave blank to invite via email"
+                  autoComplete="new-password"
+                  style={{
+                    width: '100%', height: 28, padding: '0 32px 0 8px',
+                    background: 'var(--surface-1)',
+                    border: '1px solid ' + (fieldErrors.password ? 'var(--danger)' : 'var(--hairline-strong)'),
+                    borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(s => !s)}
+                  style={{
+                    position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+                    height: 22, padding: '0 6px',
+                    background: 'transparent', border: 'none',
+                    color: 'var(--fg-muted)', fontSize: 11, cursor: 'pointer',
+                  }}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {fieldErrors.password && (
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--danger)', marginTop: 3 }}>{fieldErrors.password}</div>
+              )}
+            </Field>
+
+            <Field label="Name" hint="Optional">
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Full name"
+                style={{
+                  width: '100%', height: 28, padding: '0 8px',
+                  background: 'var(--surface-1)',
+                  border: '1px solid var(--hairline-strong)',
+                  borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+                }}
+              />
+            </Field>
+
+            <Field label="Email verified">
+              <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={emailVerified}
+                  onChange={e => setEmailVerified(e.target.checked)}
+                />
+                <span style={{ fontSize: 13, color: 'var(--fg)' }}>
+                  Mark email as already verified (skip confirmation email)
+                </span>
+              </label>
+            </Field>
+
+            <Field label="Roles" hint={`${roleIds.length} selected`}>
+              <MultiSelect
+                items={(Array.isArray(roles) ? roles : []).map(r => ({ id: r.id || r, label: r.name || r.id || String(r) }))}
+                selected={roleIds}
+                onToggle={(id) => setRoleIds(s => toggleIn(s, id))}
+                empty="No roles defined"
+              />
+            </Field>
+
+            <Field label="Organizations" hint={`${orgIds.length} selected`}>
+              <MultiSelect
+                items={(Array.isArray(orgs) ? orgs : []).map(o => ({ id: o.id, label: o.name || o.slug || o.id }))}
+                selected={orgIds}
+                onToggle={(id) => setOrgIds(s => toggleIn(s, id))}
+                empty="No organizations yet"
+              />
+            </Field>
+
+            {fieldErrors.form && (
+              <div style={{
+                padding: 8,
+                border: '1px solid var(--danger)',
+                borderRadius: 4,
+                background: 'color-mix(in oklch, var(--danger) 8%, var(--surface-1))',
+                fontSize: 12, color: 'var(--danger)', lineHeight: 1.5,
+              }}>
+                {fieldErrors.form}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: 12, borderTop: '1px solid var(--hairline)',
+          display: 'flex', justifyContent: 'flex-end', gap: 8,
+          background: 'var(--surface-0)',
+        }}>
+          <button type="button" className="btn sm ghost" onClick={tryClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button type="submit" className="btn primary sm" disabled={submitting}>
+            {submitting ? 'Creating…' : 'Create user'}
+          </button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+// MultiSelect — lightweight chip toggle list used by CreateUserSlideover.
+function MultiSelect({ items, selected, onToggle, empty }) {
+  if (!items || items.length === 0) {
+    return <span className="faint" style={{ fontSize: 12 }}>{empty}</span>;
+  }
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+      {items.map(it => {
+        const on = selected.includes(it.id);
+        return (
+          <button
+            key={it.id}
+            type="button"
+            onClick={() => onToggle(it.id)}
+            className={'chip' + (on ? ' solid' : '')}
+            style={{
+              cursor: 'pointer',
+              border: '1px solid ' + (on ? 'transparent' : 'var(--hairline-strong)'),
+            }}
+          >
+            {on && <Icon.Check width={9} height={9}/>}
+            {it.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
