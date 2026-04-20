@@ -287,6 +287,7 @@ export function Webhooks() {
             onUpdate={handleUpdate}
             onDelete={handleDelete}
             onTest={handleTest}
+            showToast={showToast}
           />
         )}
       </div>
@@ -379,7 +380,7 @@ function WebhookRow({ w, selected, onSelect, onTest, onDelete }) {
   );
 }
 
-function WebhookDetail({ w, onClose, onUpdate, onDelete, onTest }) {
+function WebhookDetail({ w, onClose, onUpdate, onDelete, onTest, showToast }) {
   const [tab, setTab] = useTabParam('config');
 
   return (
@@ -425,7 +426,7 @@ function WebhookDetail({ w, onClose, onUpdate, onDelete, onTest }) {
 
       <div style={{flex:1, overflowY:'auto'}}>
         {tab === 'config' && <WebhookConfigTab w={w} onUpdate={onUpdate} onDelete={onDelete}/>}
-        {tab === 'deliveries' && <WebhookDeliveriesTab webhookId={w.id}/>}
+        {tab === 'deliveries' && <WebhookDeliveriesTab webhookId={w.id} showToast={showToast}/>}
         {tab === 'test' && <WebhookTestFireTab webhookId={w.id}/>}
         {tab === 'verify' && <WebhookSigVerifyTab/>}
       </div>
@@ -566,13 +567,29 @@ function WebhookConfigTab({ w, onUpdate, onDelete }) {
   );
 }
 
-function WebhookDeliveriesTab({ webhookId }) {
-  const { data: raw, loading } = useAPI('/webhooks/' + webhookId + '/deliveries');
+function WebhookDeliveriesTab({ webhookId, showToast }) {
+  const { data: raw, loading, refresh } = useAPI('/webhooks/' + webhookId + '/deliveries?limit=20');
   // Backend returns {data, next_cursor}; tolerate legacy shapes.
   const deliveries = Array.isArray(raw?.data) ? raw.data
     : Array.isArray(raw?.deliveries) ? raw.deliveries
     : Array.isArray(raw) ? raw : [];
   const [expanded, setExpanded] = React.useState(null);
+  const [replayingId, setReplayingId] = React.useState(null);
+
+  const handleReplay = async (d, e) => {
+    if (e) e.stopPropagation();
+    setReplayingId(d.id);
+    try {
+      await API.post('/webhooks/' + (d.webhook_id || webhookId) + '/deliveries/' + d.id + '/replay');
+      showToast && showToast('Replay queued');
+      refresh && refresh();
+    } catch (err) {
+      // A1 gap fix: surface replay failures via toast instead of swallowing.
+      showToast && showToast(err?.message || 'Replay failed', 'danger');
+    } finally {
+      setReplayingId(null);
+    }
+  };
 
   if (loading) {
     return <div className="faint" style={{padding:40, textAlign:'center', fontSize:12}}>Loading…</div>;
@@ -581,7 +598,10 @@ function WebhookDeliveriesTab({ webhookId }) {
   if (deliveries.length === 0) {
     return (
       <div style={{padding:'40px 20px', textAlign:'center'}}>
-        <div className="faint" style={{fontSize:12}}>No deliveries yet.</div>
+        <Icon.Webhook width={18} height={18} style={{opacity:0.3, marginBottom:10}}/>
+        <div className="faint" style={{fontSize:12, lineHeight:1.5}}>
+          No deliveries yet.<br/>Trigger an event or click Test to fire one.
+        </div>
       </div>
     );
   }
@@ -593,14 +613,15 @@ function WebhookDeliveriesTab({ webhookId }) {
           <th style={wThStyle}>Event</th>
           <th style={wThStyle}>Time</th>
           <th style={wThStyle}>Status</th>
-          <th style={wThStyle}>Attempts</th>
+          <th style={wThStyle}>Attempt</th>
           <th style={wThStyle}>Duration</th>
-          <th style={{...wThStyle, width:28}}/>
+          <th style={{...wThStyle, width:90, textAlign:'right'}}/>
         </tr>
       </thead>
       <tbody>
         {deliveries.map(d => {
           const isOpen = expanded === d.id;
+          const durationMs = d.duration_ms ?? d.response_time_ms;
           return (
             <React.Fragment key={d.id}>
               <tr
@@ -617,24 +638,38 @@ function WebhookDeliveriesTab({ webhookId }) {
                   {statusCodeChip(d.status_code || d.response_status)}
                 </td>
                 <td style={wTdStyle}>
-                  <span className="mono faint" style={{fontSize:10.5}}>{d.attempts ?? '—'}</span>
+                  <span className="mono faint" style={{fontSize:10.5}}>{d.attempt ?? d.attempts ?? '—'}</span>
                 </td>
                 <td style={wTdStyle}>
                   <span className="mono faint" style={{fontSize:10.5}}>
-                    {d.duration_ms != null ? d.duration_ms + 'ms' : '—'}
+                    {durationMs != null ? durationMs + 'ms' : '—'}
                   </span>
                 </td>
-                <td style={wTdStyle}>
-                  <Icon.ChevronRight width={11} height={11} style={{
-                    opacity:0.5, transform: isOpen ? 'rotate(90deg)' : 'none',
-                    transition:'transform 120ms',
-                  }}/>
+                <td style={{...wTdStyle, textAlign:'right'}}>
+                  <div className="row" style={{gap:4, justifyContent:'flex-end'}}>
+                    <button
+                      className="btn ghost icon sm"
+                      title="Retry delivery"
+                      disabled={replayingId === d.id}
+                      onClick={(e) => handleReplay(d, e)}
+                    >
+                      <Icon.Refresh width={10} height={10}/>
+                    </button>
+                    <Icon.ChevronRight width={11} height={11} style={{
+                      opacity:0.5, transform: isOpen ? 'rotate(90deg)' : 'none',
+                      transition:'transform 120ms',
+                    }}/>
+                  </div>
                 </td>
               </tr>
               {isOpen && (
                 <tr>
                   <td colSpan={6} style={{padding:0, background:'var(--surface-1)', borderBottom:'1px solid var(--hairline)'}}>
-                    <DeliveryExpanded d={d}/>
+                    <DeliveryExpanded
+                      d={d}
+                      onReplay={() => handleReplay(d)}
+                      replaying={replayingId === d.id}
+                    />
                   </td>
                 </tr>
               )}
@@ -646,9 +681,7 @@ function WebhookDeliveriesTab({ webhookId }) {
   );
 }
 
-function DeliveryExpanded({ d }) {
-  const [replayErr, setReplayErr] = React.useState(null);
-  const [replayOk, setReplayOk] = React.useState(false);
+function DeliveryExpanded({ d, onReplay, replaying }) {
   const prettyJson = (val) => {
     if (!val) return '—';
     if (typeof val === 'string') {
