@@ -1785,6 +1785,89 @@ else
   fail "could not seed metadata test flow"
 fi
 
+# --- 65: Admin consents + device queue (E Wave) -------------------------------
+section "65: admin consents + device queue"
+
+# Admin consent listing — empty case shape.
+EMPTY_CONS=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/oauth/consents")
+echo "$EMPTY_CONS" | jq -e '.data | type == "array"' >/dev/null \
+  && pass "/admin/oauth/consents .data is array" || fail "shape: $EMPTY_CONS"
+
+# Seed a consent and a different one for another user
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+CID="shark_app_NqFBAOJvP9f9dAmskrArJ"
+sqlite3 $DB "INSERT INTO oauth_consents (id, user_id, client_id, scope, authorization_details, granted_at, expires_at, revoked_at)
+  VALUES ('cons_smoke_e1', '$USERID', '$CID', 'openid profile', '', '$NOW', NULL, NULL);"
+
+ADMIN_CONS=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/oauth/consents")
+echo "$ADMIN_CONS" | jq -e '.data[] | select(.id=="cons_smoke_e1")' >/dev/null \
+  && pass "seeded consent visible in admin list" || fail "consent missing: $ADMIN_CONS"
+
+# user_id present in admin response
+echo "$ADMIN_CONS" | jq -e --arg uid "$USERID" '.data[] | select(.id=="cons_smoke_e1" and .user_id==$uid)' >/dev/null \
+  && pass "admin consent row includes user_id" || fail "user_id missing"
+
+# Admin revoke
+REVK_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -X DELETE "$BASE/api/v1/admin/oauth/consents/cons_smoke_e1")
+[ "$REVK_CODE" = 200 ] && pass "DELETE /admin/oauth/consents/{id} -> 200" || fail "admin revoke -> $REVK_CODE"
+
+# Confirm revoked (no longer in list)
+AFTER_CONS=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/oauth/consents")
+echo "$AFTER_CONS" | jq -e '.data[] | select(.id=="cons_smoke_e1") | length == 0' >/dev/null 2>&1 \
+  && pass "revoked consent gone from list" \
+  || (echo "$AFTER_CONS" | jq -e '[.data[] | select(.id=="cons_smoke_e1")] | length == 0' >/dev/null \
+      && pass "revoked consent gone from list" || fail "consent still in list")
+
+# audit row written
+AUDIT_REVK=$(sqlite3 $DB "SELECT COUNT(*) FROM audit_logs WHERE action='consent.revoked' AND target_id='cons_smoke_e1' AND actor_type='admin';")
+[ "$AUDIT_REVK" = "1" ] && pass "audit log: consent.revoked by admin" || fail "audit row missing (got $AUDIT_REVK)"
+
+# Device codes admin queue — empty case
+EMPTY_DC=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/oauth/device-codes")
+echo "$EMPTY_DC" | jq -e '.data | type == "array"' >/dev/null \
+  && pass "/admin/oauth/device-codes .data is array" || fail "shape: $EMPTY_DC"
+
+# Seed pending device code
+DC_NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+DC_EXP=$(date -u -d "+10 minutes" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v+10M +"%Y-%m-%dT%H:%M:%SZ")
+sqlite3 $DB "INSERT INTO oauth_device_codes
+  (device_code_hash, user_code, client_id, scope, resource, status, poll_interval, expires_at, created_at)
+  VALUES ('dch_smoke_e2', 'SMOK-EE12', '$CID', 'openid', '', 'pending', 5, '$DC_EXP', '$DC_NOW');"
+
+PEND_DC=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/oauth/device-codes")
+echo "$PEND_DC" | jq -e '.data[] | select(.user_code=="SMOK-EE12")' >/dev/null \
+  && pass "seeded pending device code visible" || fail "device code missing: $PEND_DC"
+
+# Approve
+APPR_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -X POST "$BASE/api/v1/admin/oauth/device-codes/SMOK-EE12/approve" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$USERID\"}")
+[ "$APPR_CODE" = 200 ] && pass "POST /admin/oauth/device-codes/{user_code}/approve -> 200" || fail "approve -> $APPR_CODE"
+
+# After approve, status flipped — no longer pending
+NOT_PEND=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/oauth/device-codes")
+echo "$NOT_PEND" | jq -e '[.data[] | select(.user_code=="SMOK-EE12")] | length == 0' >/dev/null \
+  && pass "approved code dropped from pending queue" || fail "code still pending after approve"
+
+# Re-approve same code -> 409 (no longer pending)
+RE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -X POST "$BASE/api/v1/admin/oauth/device-codes/SMOK-EE12/approve")
+[ "$RE_CODE" = 409 ] && pass "re-approve already-decided -> 409" || fail "re-approve -> $RE_CODE"
+
+# Approve missing -> 404
+MISS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -X POST "$BASE/api/v1/admin/oauth/device-codes/NONE-XXXX/approve")
+[ "$MISS_CODE" = 404 ] && pass "approve missing -> 404" || fail "missing approve -> $MISS_CODE"
+
+# Audit row for approve
+AUDIT_DEV=$(sqlite3 $DB "SELECT COUNT(*) FROM audit_logs WHERE action='oauth.device.approved' AND target_id='SMOK-EE12';")
+[ "$AUDIT_DEV" = "1" ] && pass "audit log: oauth.device.approved" || fail "device approve audit missing (got $AUDIT_DEV)"
+
+# No-auth blocked
+NA_DC=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/admin/oauth/device-codes")
+[ "$NA_DC" = 401 ] && pass "no auth -> 401 on device-codes" || fail "no-auth -> $NA_DC"
+
 # --- 64: Admin vault connections (C Wave) -------------------------------------
 section "64: admin vault connections"
 

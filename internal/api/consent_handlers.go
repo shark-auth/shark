@@ -117,3 +117,98 @@ func (s *Server) handleRevokeConsent(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Consent revoked"})
 }
+
+// adminConsentResponse is the cross-user consent view used by the admin
+// dashboard. Adds user_id on top of the user-facing fields so operators can
+// triage consents across the whole tenant.
+type adminConsentResponse struct {
+	consentResponse
+	UserID string `json:"user_id"`
+}
+
+// handleAdminListConsents handles GET /api/v1/admin/oauth/consents.
+// Returns every active OAuth consent across all users (admin scope). The
+// per-user /auth/consents endpoint above is session-scoped to the caller.
+func (s *Server) handleAdminListConsents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	consents, err := s.Store.ListAllConsents(ctx)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	resp := make([]adminConsentResponse, 0, len(consents))
+	agentCache := make(map[string]string)
+	for _, c := range consents {
+		row := adminConsentResponse{
+			consentResponse: consentResponse{
+				ID:                   c.ID,
+				ClientID:             c.ClientID,
+				Scope:                c.Scope,
+				AuthorizationDetails: c.AuthorizationDetails,
+				GrantedAt:            c.GrantedAt,
+				ExpiresAt:            c.ExpiresAt,
+			},
+			UserID: c.UserID,
+		}
+		if name, ok := agentCache[c.ClientID]; ok {
+			row.AgentName = name
+		} else if agent, err := s.Store.GetAgentByClientID(ctx, c.ClientID); err == nil {
+			row.AgentName = agent.Name
+			agentCache[c.ClientID] = agent.Name
+		}
+		resp = append(resp, row)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": resp, "total": len(resp)})
+}
+
+// handleAdminRevokeConsent handles DELETE /api/v1/admin/oauth/consents/{id}.
+// Cross-user revoke. Skips ownership check (admin override) and audits as
+// admin actor. Same token-cascade revocation as the user-facing handler.
+func (s *Server) handleAdminRevokeConsent(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	consentID := chi.URLParam(r, "id")
+
+	// We need the row to capture client_id + user_id for audit + cascade.
+	all, err := s.Store.ListAllConsents(ctx)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	var target *storage.OAuthConsent
+	for _, c := range all {
+		if c.ID == consentID {
+			target = c
+			break
+		}
+	}
+	if target == nil {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Consent not found"))
+		return
+	}
+
+	if err := s.Store.RevokeOAuthConsent(ctx, consentID); err != nil {
+		internal(w, err)
+		return
+	}
+	if _, err := s.Store.RevokeOAuthTokensByClientID(ctx, target.ClientID); err != nil {
+		_ = err
+	}
+	if s.AuditLogger != nil {
+		meta, _ := json.Marshal(map[string]string{
+			"consent_id": consentID,
+			"client_id":  target.ClientID,
+			"user_id":    target.UserID,
+		})
+		_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "consent.revoked",
+			TargetType: "consent",
+			TargetID:   consentID,
+			IP:         ipOf(r),
+			UserAgent:  uaOf(r),
+			Metadata:   string(meta),
+			Status:     "success",
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Consent revoked"})
+}

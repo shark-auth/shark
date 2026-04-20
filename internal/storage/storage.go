@@ -260,12 +260,14 @@ type Store interface {
 	CreateOAuthConsent(ctx context.Context, consent *OAuthConsent) error
 	GetActiveConsent(ctx context.Context, userID, clientID string) (*OAuthConsent, error)
 	ListConsentsByUserID(ctx context.Context, userID string) ([]*OAuthConsent, error)
+	ListAllConsents(ctx context.Context) ([]*OAuthConsent, error)
 	RevokeOAuthConsent(ctx context.Context, id string) error
 
 	// Device Codes (RFC 8628)
 	CreateDeviceCode(ctx context.Context, dc *OAuthDeviceCode) error
 	GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*OAuthDeviceCode, error)
 	GetDeviceCodeByHash(ctx context.Context, hash string) (*OAuthDeviceCode, error)
+	ListPendingDeviceCodes(ctx context.Context) ([]*OAuthDeviceCode, error)
 	UpdateDeviceCodeStatus(ctx context.Context, hash string, status string, userID string) error
 	UpdateDeviceCodePolledAt(ctx context.Context, hash string) error
 	DeleteExpiredDeviceCodes(ctx context.Context) (int64, error)

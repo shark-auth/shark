@@ -376,6 +376,37 @@ func (s *SQLiteStore) RevokeOAuthConsent(ctx context.Context, id string) error {
 	return err
 }
 
+// ListAllConsents returns every active (non-revoked) OAuth consent across all
+// users — admin scope. Mirrors ListConsentsByUserID's row contract so handlers
+// can convert via the same path.
+func (s *SQLiteStore) ListAllConsents(ctx context.Context) ([]*OAuthConsent, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, user_id, client_id, scope, authorization_details, granted_at, expires_at, revoked_at
+		FROM oauth_consents WHERE revoked_at IS NULL ORDER BY granted_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var consents []*OAuthConsent
+	for rows.Next() {
+		var c OAuthConsent
+		var grantedAt string
+		var expiresAt, revokedAt *string
+		if err := rows.Scan(&c.ID, &c.UserID, &c.ClientID, &c.Scope,
+			&c.AuthorizationDetails, &grantedAt, &expiresAt, &revokedAt); err != nil {
+			return nil, err
+		}
+		c.GrantedAt, _ = time.Parse(time.RFC3339, grantedAt)
+		if expiresAt != nil {
+			ea, _ := time.Parse(time.RFC3339, *expiresAt)
+			c.ExpiresAt = &ea
+		}
+		consents = append(consents, &c)
+	}
+	return consents, rows.Err()
+}
+
 // --- Device Codes ---
 
 func (s *SQLiteStore) CreateDeviceCode(ctx context.Context, dc *OAuthDeviceCode) error {
@@ -402,6 +433,46 @@ func (s *SQLiteStore) GetDeviceCodeByHash(ctx context.Context, hash string) (*OA
 		SELECT device_code_hash, user_code, client_id, scope, resource, user_id,
 			status, last_polled_at, poll_interval, expires_at, created_at
 		FROM oauth_device_codes WHERE device_code_hash = ?`, hash))
+}
+
+// ListPendingDeviceCodes returns device codes still awaiting user approval
+// that haven't expired yet. Used by the dashboard's admin device queue.
+func (s *SQLiteStore) ListPendingDeviceCodes(ctx context.Context) ([]*OAuthDeviceCode, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT device_code_hash, user_code, client_id, scope, resource, user_id,
+			status, last_polled_at, poll_interval, expires_at, created_at
+		FROM oauth_device_codes
+		WHERE status = 'pending' AND expires_at > ?
+		ORDER BY created_at DESC`,
+		time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*OAuthDeviceCode
+	for rows.Next() {
+		var dc OAuthDeviceCode
+		var expiresAt, createdAt string
+		var lastPolledAt, userID *string
+		if err := rows.Scan(
+			&dc.DeviceCodeHash, &dc.UserCode, &dc.ClientID, &dc.Scope, &dc.Resource,
+			&userID, &dc.Status, &lastPolledAt, &dc.PollInterval, &expiresAt, &createdAt,
+		); err != nil {
+			return nil, err
+		}
+		dc.ExpiresAt, _ = time.Parse(time.RFC3339, expiresAt)
+		dc.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		if userID != nil {
+			dc.UserID = *userID
+		}
+		if lastPolledAt != nil {
+			t, _ := time.Parse(time.RFC3339, *lastPolledAt)
+			dc.LastPolledAt = &t
+		}
+		out = append(out, &dc)
+	}
+	return out, rows.Err()
 }
 
 func (s *SQLiteStore) UpdateDeviceCodeStatus(ctx context.Context, hash string, status string, userID string) error {

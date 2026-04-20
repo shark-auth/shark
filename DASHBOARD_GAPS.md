@@ -438,6 +438,16 @@ User flagged additional findings from smoke test review. These predate dashboard
 - A1–A7 from Round 2
 - **NEW: smoke section per route**: webhook replay, admin org CRUD, admin org invitations, admin user MFA disable
 
+**Wave E — Admin consents + device queue** ✅ DONE (smoke 328 → 341, 0 FAIL)
+- E-1 ✅ storage.ListAllConsents + GET /admin/oauth/consents (cross-user list w/ user_id + agent_name) + DELETE /admin/oauth/consents/{id} (admin-actor revoke + token cascade + audit)
+- E-2 ✅ storage.ListPendingDeviceCodes (status=pending AND not expired) + GET /admin/oauth/device-codes + POST /admin/oauth/device-codes/{user_code}/approve and /deny (audit oauth.device.approved/denied)
+- E-3 ✅ consents_manage.tsx repointed to /admin/oauth/consents (was 401-prone session endpoint); device_flow.tsx adds PendingDeviceQueue card with 5s polling + approve/deny actions
+- E-4 ✅ Smoke section 65 (14 assertions): consents list shape, seeded visible, user_id present, admin DELETE 200, gone from list, audit row; device queue shape, seeded visible, approve 200, dropped from pending, re-approve 409, missing 404, audit row, no-auth 401
+
+**Wave D — Proxy rules CRUD** ⏸️ DEFERRED
+- Reason: needs new `proxy_rules` table + migration + storage CRUD + YAML/DB merge loader + atomic Engine swap on each mutation + simulator/circuit reload + handlers + frontend slide-over. Touches `proxy.NewEngine` reload path (currently boot-only — Engine has no Reload method) and the breaker/cache-warming subsystem that captures the engine pointer at init. Conservative estimate: 3-5 hours of focused work to do safely; the Wave plan caps at ~1.5 hours per subwave. Best done as a standalone phase with its own design doc covering atomic swap, audit trail per mutation, and YAML-vs-DB precedence decision.
+- Recommendation: file as "Phase 6.6 — Proxy rules runtime override" with explicit design + migration plan. No frontend changes shipped this wave.
+
 **Wave C — Vault connections** ✅ DONE (smoke 320 → 328, 0 FAIL)
 - C-1 ✅ ListAllVaultConnections storage method; GET /admin/vault/connections + DELETE /admin/vault/connections/{id} handlers; routes registered under /admin (admin-key auth)
 - C-2 ✅ vault_manage.tsx ProviderConnections — replaced placeholder with real table (user_id, status chip, scopes, expires, last_refresh, disconnect); refresh/disconnect actions toast; filters by current provider client-side from /admin/vault/connections

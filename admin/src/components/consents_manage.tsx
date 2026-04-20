@@ -23,10 +23,9 @@ export function Consents() {
   const [query, setQuery] = React.useState('');
   const [revokeModal, setRevokeModal] = React.useState(null);
 
-  const { data: raw, loading, error, refresh } = useAPI('/auth/consents');
+  const { data: raw, loading, error, refresh } = useAPI('/admin/oauth/consents');
   const consents = raw?.data || [];
 
-  // Treat 401/403 or any auth-shaped error as "endpoint not available to admin key"
   const authMismatch = !!error && /unauthorized|forbidden|401|403/i.test(error);
   const showFallback = authMismatch || (!loading && !error && consents.length === 0);
 
@@ -178,7 +177,7 @@ export function Consents() {
         <span className="faint">CLI parity:</span>
         <span className="mono faint">shark consent list</span>
         <div style={{flex:1}}/>
-        <span className="faint mono">DELETE /api/v1/auth/consents/{'{id}'}</span>
+        <span className="faint mono">DELETE /api/v1/admin/oauth/consents/{'{id}'}</span>
       </div>
 
       {revokeModal && (
@@ -252,7 +251,7 @@ function RevokeConsentModal({ consent, onClose, onSuccess }) {
     setWorking(true);
     setError(null);
     try {
-      await API.del('/auth/consents/' + consent.id);
+      await API.del('/admin/oauth/consents/' + consent.id);
       toast.success(`Revoked consent for "${consent.agent_name || consent.client_id}"`);
       onSuccess();
     } catch (e) {

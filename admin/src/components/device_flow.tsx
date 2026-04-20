@@ -3,6 +3,7 @@ import React from 'react'
 import { Icon } from './shared'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
+import { API, useAPI } from './api'
 
 // Device Flow page — user-code entry that hands off to the server-rendered
 // approval page at /oauth/device/verify (session-authenticated).
@@ -189,6 +190,9 @@ export function DeviceFlow() {
             </div>
           </div>
 
+          {/* Admin pending queue */}
+          <PendingDeviceQueue/>
+
           {/* Secondary card — How device flow works */}
           <div className="card">
             <div className="card-header">
@@ -285,6 +289,83 @@ function Step({ n, title, body, code }) {
           >
             {code}
           </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// PendingDeviceQueue — admin override surface. Lists pending device codes,
+// 5s polling, with approve/deny actions. Bypasses the user-facing verify
+// flow when the user can't reach the verify URL themselves.
+function PendingDeviceQueue() {
+  const toast = useToast();
+  const { data, loading, error, refresh } = useAPI('/admin/oauth/device-codes');
+
+  React.useEffect(() => {
+    const id = setInterval(refresh, 5000);
+    return () => clearInterval(id);
+  }, [refresh]);
+
+  const pending = data?.data || [];
+
+  const decide = async (userCode, decision) => {
+    try {
+      await API.post(`/admin/oauth/device-codes/${encodeURIComponent(userCode)}/${decision}`);
+      toast?.success?.(`${userCode} ${decision}`);
+      refresh();
+    } catch (e) {
+      toast?.error?.(e.message || `${decision} failed`);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <span>Pending device codes</span>
+        <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>
+          5s poll · admin override
+        </span>
+      </div>
+      <div style={{ padding: 12 }}>
+        {loading && pending.length === 0 ? (
+          <div className="faint" style={{ padding: 16, fontSize: 12, textAlign: 'center' }}>Loading…</div>
+        ) : error ? (
+          <div style={{ padding: 12, color: 'var(--danger)', fontSize: 12 }}>Failed to load: {error}</div>
+        ) : pending.length === 0 ? (
+          <div className="faint" style={{ padding: 16, fontSize: 12, textAlign: 'center' }}>
+            No pending device codes.
+          </div>
+        ) : (
+          <table className="tbl" style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>User code</th>
+                <th style={{ textAlign: 'left' }}>Agent</th>
+                <th style={{ textAlign: 'left' }}>Scope</th>
+                <th style={{ textAlign: 'left' }}>Expires</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pending.map(dc => (
+                <tr key={dc.user_code}>
+                  <td className="mono" style={{ fontWeight: 600, fontSize: 13, letterSpacing: '0.08em' }}>{dc.user_code}</td>
+                  <td>{dc.agent_name || <span className="mono faint" style={{ fontSize: 10.5 }}>{dc.client_id}</span>}</td>
+                  <td className="mono faint" style={{ fontSize: 10.5 }}>{dc.scope || '—'}</td>
+                  <td className="mono faint" style={{ fontSize: 10.5 }}>
+                    {new Date(dc.expires_at).toLocaleTimeString()}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn primary sm" style={{ marginRight: 4 }}
+                            onClick={() => decide(dc.user_code, 'approve')}>Approve</button>
+                    <button className="btn ghost sm danger"
+                            onClick={() => decide(dc.user_code, 'deny')}>Deny</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>

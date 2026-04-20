@@ -536,6 +536,18 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/vault/connections", s.handleAdminListVaultConnections)
 			r.Delete("/vault/connections/{id}", s.handleAdminDeleteVaultConnection)
 
+			// Cross-user OAuth consents (admin scope). The /auth/consents
+			// endpoint is session-scoped; the dashboard needs a tenant view.
+			r.Get("/oauth/consents", s.handleAdminListConsents)
+			r.Delete("/oauth/consents/{id}", s.handleAdminRevokeConsent)
+
+			// Admin device-code queue + override decision endpoints. Used by
+			// the dashboard to triage pending device flows when the user
+			// can't reach the verify URL themselves.
+			r.Get("/oauth/device-codes", s.handleAdminListDeviceCodes)
+			r.Post("/oauth/device-codes/{user_code}/approve", s.handleAdminApproveDeviceCode)
+			r.Post("/oauth/device-codes/{user_code}/deny", s.handleAdminDenyDeviceCode)
+
 			// Admin organization endpoints (admin key auth, not session auth).
 			// User-facing /api/v1/organizations/{id} requires a session cookie
 			// + RBAC permissions; the dashboard uses admin-key auth, so we
