@@ -2,10 +2,10 @@
 
 Live snapshot of execution state. Derived from STATUS.json + PROGRESS.md. Regenerate when plan advances.
 
-**Last updated:** 2026-04-20T20:10Z
+**Last updated:** 2026-04-20T21:00Z
 **Branch:** claude/admin-vendor-assets-fix
 **PR:** #77
-**Latest sha:** a4a47b6 (pre-dispatch)
+**Latest sha:** 80ee0cf (Wave-β complete)
 
 ---
 
@@ -32,11 +32,12 @@ TTHW target: <2 min (Champion). Current estimate: ~5 min (down from ~7-10). Magi
 
 ```
 Wave-α (solo, done):          T01 T02 T03 T07 T08 T12 T13 T14 T17 T18 T19 T22 T23
-Wave-β (dispatched, running): T04 (subagent-A) T09 T10 T11 (subagent-B) T20 (subagent-C)
-Wave-γ (pending):             T05 T06 T15 T16 T21 T24
+Wave-β (parallel, done):      T04 T09 T10 T11 T20
+Wave-γ (dispatched, running): T05 (subagent-D) T15 (subagent-E) T21 (subagent-F)
+Wave-δ (pending):             T06 T16 T24
 ```
 
-Blocked chain: T05 needs T04. T06 needs T05. T24 waits on all.
+Blocked chain: T06 needs T05 (landing in γ). T24 waits on all.
 
 ---
 
@@ -52,8 +53,17 @@ Blocked chain: T05 needs T04. T06 needs T05. T24 waits on all.
 | e5215b2 | T14 | phase-gate stubs hidden behind Preview toggle |
 | 8338c55 | — | sha backfill |
 | a4a47b6 | T13-fix | compliance export shape + smoke section 69 |
+| 7b34ba3 | T09 | overview magical-moment hero tile |
+| 9d067b1 | T20 | webhook delivery retry + toast error surface |
+| 5d17375 | — | progress summary + subagent briefs |
+| b922c0c | T04 | backend POST /admin/users + smoke section 70 |
+| 342198f | — | sha backfill |
+| 6660911 | T10 | proxy empty-state onboarding wizard |
+| 0a49a21 | — | sha backfill |
+| 7e49e4f | T11 | get-started page + first-login redirect |
+| 80ee0cf | — | Wave-β complete, T10+T11 backfill |
 
-PR #77 tip on remote: a4a47b6. Post-dispatch commits will arrive from subagents A/B/C.
+PR #77 tip on remote: 80ee0cf. Wave-γ dispatch in flight (T05, T15, T21).
 
 ---
 
