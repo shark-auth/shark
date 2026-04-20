@@ -618,6 +618,280 @@ function RulesEmpty() {
   );
 }
 
+// ---- Override Rules (Wave D / DB-backed CRUD) ----
+
+// blankRule shapes a fresh row for the create modal. Keep field names
+// aligned with the wire payload so the modal can submit the state object as-is.
+const blankRule = () => ({
+  name: '',
+  pattern: '',
+  methods: '',         // comma-separated input; serialized to array on submit
+  require: 'authenticated',
+  allow: '',
+  scopes: '',          // comma-separated input
+  enabled: true,
+  priority: 0,
+});
+
+// REQUIRE_OPTIONS lists the canonical require strings for the datalist hint.
+const REQUIRE_OPTIONS = [
+  { value: 'authenticated', label: 'authenticated (any user/agent)' },
+  { value: 'agent', label: 'agent (any agent)' },
+  { value: 'role:', label: 'role:<name>' },
+  { value: 'permission:', label: 'permission:<resource>:<action>' },
+  { value: 'scope:', label: 'scope:<name>' },
+];
+
+function csvToArr(s) {
+  if (!s) return [];
+  return String(s).split(',').map(x => x.trim()).filter(Boolean);
+}
+function arrToCsv(a) {
+  if (!a || !a.length) return '';
+  return a.join(', ');
+}
+
+function ruleToFormState(r) {
+  return {
+    name: r?.name || '',
+    pattern: r?.pattern || '',
+    methods: arrToCsv(r?.methods),
+    require: r?.require || (r?.allow ? '' : 'authenticated'),
+    allow: r?.allow || '',
+    scopes: arrToCsv(r?.scopes),
+    enabled: r?.enabled !== false,
+    priority: typeof r?.priority === 'number' ? r.priority : 0,
+  };
+}
+
+function formToPayload(state) {
+  const payload = {
+    name: state.name.trim(),
+    pattern: state.pattern.trim(),
+    methods: csvToArr(state.methods),
+    scopes: csvToArr(state.scopes),
+    enabled: !!state.enabled,
+    priority: Number(state.priority) || 0,
+  };
+  // Allow takes precedence when set (and require is blank). Otherwise send
+  // require + clear allow so PATCH semantics drop any prior allow value.
+  const allow = state.allow.trim();
+  const require = state.require.trim();
+  if (allow) {
+    payload.allow = allow;
+    payload.require = '';
+  } else {
+    payload.require = require;
+    payload.allow = '';
+  }
+  return payload;
+}
+
+const INPUT_STYLE = {
+  height: 32, padding: '0 10px',
+  background: 'var(--surface-2)',
+  border: '1px solid var(--hairline-strong)',
+  borderRadius: 4,
+  color: 'var(--fg)',
+  fontSize: 12.5,
+  outline: 'none',
+};
+
+function Field({ label, hint, children }) {
+  return (
+    <label className="col" style={{ gap: 4 }}>
+      <span style={{ fontSize: 11, color: 'var(--fg-dim)', fontWeight: 500 }}>{label}</span>
+      {children}
+      {hint && <span className="faint" style={{ fontSize: 10.5 }}>{hint}</span>}
+    </label>
+  );
+}
+
+function RuleEditor({ initial, onCancel, onSave, busy, error }) {
+  const [state, setState] = React.useState(() => ruleToFormState(initial));
+  const set = (k, v) => setState(s => ({ ...s, [k]: v }));
+  const isEdit = !!initial?.id;
+
+  return (
+    <div role="dialog" style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      background: 'rgba(0,0,0,0.45)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 20,
+    }} onClick={onCancel}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxWidth: 560,
+        background: 'var(--surface-1)',
+        border: HAIRLINE,
+        borderRadius: 8,
+        padding: 22,
+        maxHeight: '92vh', overflow: 'auto',
+      }}>
+        <div className="row" style={{ marginBottom: 14 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+            {isEdit ? 'Edit override rule' : 'New override rule'}
+          </h2>
+          <div style={{ flex: 1 }}/>
+          <button className="btn ghost sm" onClick={onCancel}>
+            <Icon.X width={11} height={11}/>
+          </button>
+        </div>
+
+        <div className="col" style={{ gap: 12 }}>
+          <Field label="Name" hint="Shown in the rule list. e.g. 'Org admins write access'">
+            <input value={state.name} onChange={e => set('name', e.target.value)}
+              placeholder="My override" style={INPUT_STYLE}/>
+          </Field>
+
+          <Field label="Path pattern" hint="chi-style: /api/orgs/{id}, /v1/public/*, /webhooks">
+            <input value={state.pattern} onChange={e => set('pattern', e.target.value)}
+              placeholder="/api/orgs/{id}"
+              className="mono" style={{ ...INPUT_STYLE, fontFamily: 'var(--font-mono)' }}/>
+          </Field>
+
+          <Field label="Methods" hint="Comma-separated. Empty = any method.">
+            <input value={state.methods} onChange={e => set('methods', e.target.value)}
+              placeholder="GET, POST, DELETE"
+              className="mono" style={{ ...INPUT_STYLE, fontFamily: 'var(--font-mono)' }}/>
+          </Field>
+
+          <Field label="Allow (alternative to Require)" hint='Currently only "anonymous" is supported.'>
+            <select value={state.allow} onChange={e => set('allow', e.target.value)}
+              style={INPUT_STYLE}>
+              <option value="">— (use Require instead)</option>
+              <option value="anonymous">anonymous</option>
+            </select>
+          </Field>
+
+          {!state.allow && (
+            <Field label="Require" hint="One of: authenticated, agent, role:NAME, permission:RES:ACT, scope:NAME">
+              <input value={state.require} onChange={e => set('require', e.target.value)}
+                placeholder="authenticated" list="proxy-require-presets"
+                className="mono" style={{ ...INPUT_STYLE, fontFamily: 'var(--font-mono)' }}/>
+              <datalist id="proxy-require-presets">
+                {REQUIRE_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </datalist>
+            </Field>
+          )}
+
+          <Field label="Additional scopes (AND)" hint="Comma-separated scope strings.">
+            <input value={state.scopes} onChange={e => set('scopes', e.target.value)}
+              placeholder="webhooks:write, audit:read"
+              className="mono" style={{ ...INPUT_STYLE, fontFamily: 'var(--font-mono)' }}/>
+          </Field>
+
+          <div className="row" style={{ gap: 14 }}>
+            <Field label="Priority" hint="Higher = evaluated first">
+              <input type="number" value={state.priority}
+                onChange={e => set('priority', e.target.value)}
+                style={{ ...INPUT_STYLE, width: 100 }}/>
+            </Field>
+            <label className="row" style={{ gap: 6, alignSelf: 'flex-end', cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!state.enabled}
+                onChange={e => set('enabled', e.target.checked)}/>
+              <span style={{ fontSize: 12 }}>Enabled</span>
+            </label>
+          </div>
+
+          {error && (
+            <div style={{
+              padding: 10, borderRadius: 4,
+              border: '1px solid color-mix(in oklch, var(--danger) 35%, var(--hairline-strong))',
+              background: 'color-mix(in oklch, var(--danger) 8%, var(--surface-2))',
+              color: 'var(--danger)', fontSize: 12,
+            }}>{error}</div>
+          )}
+        </div>
+
+        <div className="row" style={{ marginTop: 18, gap: 8 }}>
+          <div style={{ flex: 1 }}/>
+          <button className="btn ghost" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button className="btn primary" disabled={busy}
+            onClick={() => onSave(formToPayload(state))}>
+            {busy ? 'Saving…' : (isEdit ? 'Save changes' : 'Create rule')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OverrideRulesTable({ rules, loading, onCreate, onEdit, onDelete, onToggle }) {
+  return (
+    <div style={{ padding: '0 20px 20px' }}>
+      <div className="row" style={{ marginBottom: 8 }}>
+        <div style={SECTION_LABEL}>Override rules (DB)</div>
+        <div style={{ flex: 1 }}/>
+        <span className="faint" style={{ fontSize: 11, marginRight: 10 }}>
+          {rules.length} {rules.length === 1 ? 'override' : 'overrides'} · take precedence over YAML
+        </span>
+        <button className="btn primary sm" onClick={onCreate}>
+          <Icon.Plus width={10} height={10}/>
+          New override
+        </button>
+      </div>
+
+      {loading && rules.length === 0 ? (
+        <div className="faint" style={{ fontSize: 11.5, padding: '8px 0' }}>Loading…</div>
+      ) : rules.length === 0 ? (
+        <div style={{
+          padding: '24px 16px', textAlign: 'center',
+          border: HAIRLINE, borderRadius: 5, background: 'var(--surface-1)',
+        }}>
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
+            No DB-backed overrides yet. Add one to layer rules on top of the YAML config without restarting.
+          </div>
+        </div>
+      ) : (
+        <div style={{ border: HAIRLINE, borderRadius: 5, overflow: 'hidden', background: 'var(--surface-1)' }}>
+          <table className="tbl" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ width: 36 }}></th>
+                <th>Name</th>
+                <th>Pattern</th>
+                <th style={{ width: 130 }}>Methods</th>
+                <th style={{ width: 140 }}>Require / Allow</th>
+                <th style={{ width: 70 }}>Priority</th>
+                <th style={{ width: 130, textAlign: 'right' }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map(r => (
+                <tr key={r.id} style={{ height: 40, opacity: r.enabled ? 1 : 0.55 }}>
+                  <td>
+                    <input type="checkbox" checked={!!r.enabled}
+                      onChange={() => onToggle(r)}
+                      title={r.enabled ? 'Disable rule' : 'Enable rule'}/>
+                  </td>
+                  <td style={{ fontSize: 12.5 }}>{r.name}</td>
+                  <td>
+                    <span className="mono" style={{ fontSize: 11.5 }}>{r.pattern}</span>
+                  </td>
+                  <td>{methodChips(r.methods)}</td>
+                  <td>
+                    {r.allow
+                      ? <span className="chip ghost" style={{ height: 18, fontSize: 10 }}>allow:{r.allow}</span>
+                      : requireChip(r.require)}
+                  </td>
+                  <td className="mono faint" style={{ fontSize: 11 }}>{r.priority}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn ghost sm" onClick={() => onEdit(r)}>Edit</button>
+                    <button className="btn ghost sm" onClick={() => onDelete(r)}
+                      style={{ marginLeft: 4, color: 'var(--danger)' }}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---- Proxy-disabled empty state ----
 
 function ProxyDisabledEmpty() {
@@ -684,6 +958,9 @@ export function Proxy() {
   const toast = useToast();
   const { stats, status, loading, refresh, probing } = useProxyStats();
   const { data: rulesData, loading: rulesLoading } = useAPI(status === 404 ? null : '/admin/proxy/rules');
+  // DB-backed override rules (Wave D). Always loaded — independent of proxy
+  // enable state — so admins can stage rules before flipping the proxy on.
+  const { data: dbRulesData, loading: dbRulesLoading, refresh: refreshDBRules } = useAPI('/admin/proxy/rules/db');
 
   const [method, setMethod] = React.useState('GET');
   const [path, setPath] = React.useState('');
@@ -691,7 +968,74 @@ export function Proxy() {
   const [result, setResult] = React.useState(null);
   const [running, setRunning] = React.useState(false);
 
-  if (status === 404) return <ProxyDisabledEmpty/>;
+  // Override-rule editor modal state.
+  const [editorOpen, setEditorOpen] = React.useState(false);
+  const [editorRule, setEditorRule] = React.useState(null);
+  const [editorBusy, setEditorBusy] = React.useState(false);
+  const [editorError, setEditorError] = React.useState(null);
+
+  const dbRules = dbRulesData?.data || [];
+
+  const openCreate = () => { setEditorRule(null); setEditorError(null); setEditorOpen(true); };
+  const openEdit = (r) => { setEditorRule(r); setEditorError(null); setEditorOpen(true); };
+  const closeEditor = () => { if (!editorBusy) { setEditorOpen(false); setEditorError(null); } };
+
+  const saveRule = async (payload) => {
+    setEditorBusy(true); setEditorError(null);
+    try {
+      if (editorRule?.id) {
+        await API.patch(`/admin/proxy/rules/db/${editorRule.id}`, payload);
+        toast?.success?.('Override rule updated');
+      } else {
+        await API.post('/admin/proxy/rules/db', payload);
+        toast?.success?.('Override rule created');
+      }
+      setEditorOpen(false);
+      refreshDBRules();
+    } catch (e) {
+      setEditorError(e.message || 'Save failed');
+    } finally {
+      setEditorBusy(false);
+    }
+  };
+
+  const toggleRule = async (r) => {
+    try {
+      await API.patch(`/admin/proxy/rules/db/${r.id}`, { enabled: !r.enabled });
+      refreshDBRules();
+    } catch (e) {
+      toast?.error?.('Toggle failed: ' + (e.message || 'unknown'));
+    }
+  };
+
+  const deleteRule = async (r) => {
+    if (!window.confirm(`Delete override rule "${r.name}"?`)) return;
+    try {
+      await API.del(`/admin/proxy/rules/db/${r.id}`);
+      toast?.success?.('Rule deleted');
+      refreshDBRules();
+    } catch (e) {
+      toast?.error?.('Delete failed: ' + (e.message || 'unknown'));
+    }
+  };
+
+  if (status === 404) {
+    // Even when the proxy is disabled we still show the override-rule editor
+    // so admins can author rules ahead of enabling it. Render the disabled
+    // banner above the table.
+    return (
+      <div className="col" style={{ height: '100%', overflow: 'auto' }}>
+        <ProxyDisabledEmpty/>
+        <OverrideRulesTable
+          rules={dbRules} loading={dbRulesLoading}
+          onCreate={openCreate} onEdit={openEdit} onDelete={deleteRule} onToggle={toggleRule}/>
+        {editorOpen && (
+          <RuleEditor initial={editorRule} onCancel={closeEditor}
+            onSave={saveRule} busy={editorBusy} error={editorError}/>
+        )}
+      </div>
+    );
+  }
 
   if (loading && !stats) {
     return (
@@ -760,6 +1104,13 @@ export function Proxy() {
       <RulesTable rules={rules} onTest={onTestRule}/>
       {rulesLoading && rules.length === 0 && (
         <div className="faint" style={{ padding: '0 20px 12px', fontSize: 11.5 }}>Loading rules…</div>
+      )}
+      <OverrideRulesTable
+        rules={dbRules} loading={dbRulesLoading}
+        onCreate={openCreate} onEdit={openEdit} onDelete={deleteRule} onToggle={toggleRule}/>
+      {editorOpen && (
+        <RuleEditor initial={editorRule} onCancel={closeEditor}
+          onSave={saveRule} busy={editorBusy} error={editorError}/>
       )}
       <div style={{ marginTop: 'auto' }}>
         <CLIFooter command={`shark serve --proxy-upstream ${upstream || 'http://your-api'}`}/>

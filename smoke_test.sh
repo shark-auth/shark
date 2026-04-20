@@ -2022,6 +2022,116 @@ TOTAL_BOGUS=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?org_
 PAGE1=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?page=1&per_page=2" | jq -r '.users | length')
 [ "$PAGE1" -le 2 ] && pass "per_page=2 limits results ($PAGE1)" || fail "per_page not honored (got $PAGE1)"
 
+# --- 67: proxy rules CRUD (Wave D) -------------------------------------------
+# DB-backed proxy rule overrides. Endpoints are always available regardless of
+# proxy enable state — admins must be able to stage rules before flipping the
+# proxy on. Proxy is disabled in this smoke environment, so we exercise the
+# CRUD surface without an engine refresh side-effect.
+section "67: proxy rules CRUD (Wave D)"
+
+# 1. List initially returns the documented {data:[],total:N} shape.
+RESP=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/proxy/rules/db)
+SHAPE=$(echo "$RESP" | jq -r '.data | type // "missing"')
+[ "$SHAPE" = "array" ] && pass "GET /admin/proxy/rules/db -> {data:[]}" || fail "list shape: $SHAPE -- $RESP"
+INITIAL_TOTAL=$(echo "$RESP" | jq -r '.total // 0')
+
+# 2. Create a rule.
+RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"name":"Smoke Override","pattern":"/api/smoke/{id}","methods":["GET","PATCH"],"require":"role:admin","scopes":["webhooks:write"],"enabled":true,"priority":50}' \
+  $BASE/api/v1/admin/proxy/rules/db)
+CODE=$(echo "$RESP" | tail -1)
+BODY=$(echo "$RESP" | sed '$d')
+[ "$CODE" = 201 ] && pass "POST create -> 201" || fail "create -> $CODE: $BODY"
+PXR_ID=$(echo "$BODY" | jq -r '.data.id')
+{ [ -n "$PXR_ID" ] && [ "$PXR_ID" != "null" ] ; } && pass "rule id returned ($PXR_ID)" || fail "no rule id"
+
+# Validate created shape — methods uppercased + normalized, pattern + require + scopes round-trip.
+METHODS=$(echo "$BODY" | jq -r '.data.methods | join(",")')
+[ "$METHODS" = "GET,PATCH" ] && pass "methods normalized to GET,PATCH" || fail "methods wrong: $METHODS"
+REQUIRE=$(echo "$BODY" | jq -r '.data.require')
+[ "$REQUIRE" = "role:admin" ] && pass "require persisted (role:admin)" || fail "require wrong: $REQUIRE"
+
+# 3. Validation: missing name → 400.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"pattern":"/x","require":"authenticated"}' $BASE/api/v1/admin/proxy/rules/db)
+[ "$CODE" = 400 ] && pass "missing name -> 400" || fail "missing name accepted: $CODE"
+
+# 4. Validation: pattern without leading slash → 400.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"name":"Bad","pattern":"api/foo","require":"authenticated"}' $BASE/api/v1/admin/proxy/rules/db)
+[ "$CODE" = 400 ] && pass "pattern missing slash -> 400" || fail "bad pattern accepted: $CODE"
+
+# 5. Validation: both require + allow → 400.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"name":"Bad","pattern":"/x","require":"authenticated","allow":"anonymous"}' $BASE/api/v1/admin/proxy/rules/db)
+[ "$CODE" = 400 ] && pass "require+allow both set -> 400" || fail "require+allow accepted: $CODE"
+
+# 6. Validation: unknown require kind → 400.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X POST \
+  -d '{"name":"Bad","pattern":"/x","require":"bogus_kind"}' $BASE/api/v1/admin/proxy/rules/db)
+[ "$CODE" = 400 ] && pass "unknown require kind -> 400" || fail "unknown require accepted: $CODE"
+
+# 7. List shows the new rule.
+RESP=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/proxy/rules/db)
+NEW_TOTAL=$(echo "$RESP" | jq -r '.total // 0')
+[ "$NEW_TOTAL" -gt "$INITIAL_TOTAL" ] && pass "list reflects new rule ($INITIAL_TOTAL -> $NEW_TOTAL)" || fail "list missing rule"
+FOUND=$(echo "$RESP" | jq -r --arg id "$PXR_ID" '.data[] | select(.id==$id) | .id')
+[ "$FOUND" = "$PXR_ID" ] && pass "new rule visible by id" || fail "rule not in list"
+
+# 8. GET by id.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/proxy/rules/db/$PXR_ID)
+[ "$CODE" = 200 ] && pass "GET /admin/proxy/rules/db/{id} -> 200" || fail "get rule -> $CODE"
+
+# 9. PATCH enabled flag.
+RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X PATCH \
+  -d '{"enabled":false}' $BASE/api/v1/admin/proxy/rules/db/$PXR_ID)
+CODE=$(echo "$RESP" | tail -1)
+BODY=$(echo "$RESP" | sed '$d')
+[ "$CODE" = 200 ] && pass "PATCH enabled=false -> 200" || fail "patch -> $CODE: $BODY"
+ENABLED=$(echo "$BODY" | jq -r '.data.enabled')
+[ "$ENABLED" = "false" ] && pass "enabled flag toggled" || fail "enabled flag not toggled (got $ENABLED)"
+
+# 10. PATCH back to enabled, change priority + name.
+RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X PATCH \
+  -d '{"enabled":true,"priority":99,"name":"Smoke Override v2"}' $BASE/api/v1/admin/proxy/rules/db/$PXR_ID)
+CODE=$(echo "$RESP" | tail -1)
+BODY=$(echo "$RESP" | sed '$d')
+[ "$CODE" = 200 ] && pass "PATCH multi-field -> 200" || fail "multi patch -> $CODE: $BODY"
+PRIORITY=$(echo "$BODY" | jq -r '.data.priority')
+NAME=$(echo "$BODY" | jq -r '.data.name')
+[ "$PRIORITY" = "99" ] && [ "$NAME" = "Smoke Override v2" ] && pass "priority+name updated" || fail "patch field mismatch: prio=$PRIORITY name=$NAME"
+
+# 11. PATCH unknown id → 404.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" -X PATCH \
+  -d '{"enabled":false}' $BASE/api/v1/admin/proxy/rules/db/pxr_does_not_exist)
+[ "$CODE" = 404 ] && pass "PATCH unknown id -> 404" || fail "missing id -> $CODE"
+
+# 12. DELETE.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -X DELETE $BASE/api/v1/admin/proxy/rules/db/$PXR_ID)
+[ "$CODE" = 204 ] && pass "DELETE -> 204" || fail "delete -> $CODE"
+
+# 13. Verify gone.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/proxy/rules/db/$PXR_ID)
+[ "$CODE" = 404 ] && pass "GET deleted id -> 404" || fail "deleted id still reachable: $CODE"
+
+# 14. DELETE again → 404 (idempotent on missing id).
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  -X DELETE $BASE/api/v1/admin/proxy/rules/db/$PXR_ID)
+[ "$CODE" = 404 ] && pass "DELETE missing -> 404" || fail "delete missing -> $CODE"
+
+# 15. No auth -> 401.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/admin/proxy/rules/db)
+[ "$CODE" = 401 ] && pass "no auth -> 401" || fail "unauth -> $CODE"
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"

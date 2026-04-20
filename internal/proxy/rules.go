@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // RuleSpec is the raw, pre-compile shape of a rule. It mirrors the
@@ -140,11 +141,13 @@ type Decision struct {
 	Reason      string
 }
 
-// Engine is the compiled rule set. It is goroutine-safe after
-// construction because no field is mutated by Evaluate; callers that
-// need to reload config must build a new Engine and swap the pointer
-// atomically on their ReverseProxy.
+// Engine is the compiled rule set. The rules slice is guarded by a RWMutex
+// so SetRules can atomically swap the entire compiled list under a write
+// lock while Evaluate continues serving readers. Reads take a brief read
+// lock and snapshot the slice header (not its contents) so the per-request
+// hot path avoids contention with mutators.
 type Engine struct {
+	mu          sync.RWMutex
 	rules       []*Rule
 	defaultDeny bool
 }
@@ -155,6 +158,37 @@ type Engine struct {
 // cascade. defaultDeny is always true in the MVP — kept as a field so
 // future work can expose it if a truly permissive mode is ever needed.
 func NewEngine(raw []RuleSpec) (*Engine, error) {
+	compiled, err := compileSpecs(raw)
+	if err != nil {
+		return nil, err
+	}
+	return &Engine{rules: compiled, defaultDeny: true}, nil
+}
+
+// SetRules atomically replaces the engine's compiled rule set. Called by the
+// admin proxy-rules CRUD endpoints (Wave D) after every mutation so DB rows
+// take effect without restarting the server. The compile step runs before
+// the write lock is taken so a partially-compiled set is never visible to
+// concurrent Evaluate calls.
+//
+// On compile failure the previous rule set remains in place — the caller
+// gets the error and is expected to surface it; the proxy keeps serving
+// the last-known-good configuration rather than returning blanket denies.
+func (e *Engine) SetRules(raw []RuleSpec) error {
+	compiled, err := compileSpecs(raw)
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	e.rules = compiled
+	e.mu.Unlock()
+	return nil
+}
+
+// compileSpecs is the shared compile loop used by NewEngine + SetRules.
+// Extracted so both paths produce identical error wrapping ("proxy: rule N
+// (path): <inner>").
+func compileSpecs(raw []RuleSpec) ([]*Rule, error) {
 	compiled := make([]*Rule, 0, len(raw))
 	for i, spec := range raw {
 		rule, err := compileRule(spec)
@@ -163,14 +197,19 @@ func NewEngine(raw []RuleSpec) (*Engine, error) {
 		}
 		compiled = append(compiled, rule)
 	}
-	return &Engine{rules: compiled, defaultDeny: true}, nil
+	return compiled, nil
 }
 
-// Rules returns the compiled rules. Intended for diagnostics and the
-// simulator API (P4). The returned slice shares storage with the
-// engine — callers must not mutate it.
+// Rules returns a snapshot of the compiled rules. Intended for diagnostics
+// and the simulator API. The returned slice header is a fresh copy so
+// callers can iterate safely while SetRules races; the *Rule values inside
+// are immutable post-compilation so sharing them is safe.
 func (e *Engine) Rules() []*Rule {
-	return e.rules
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	out := make([]*Rule, len(e.rules))
+	copy(out, e.rules)
+	return out
 }
 
 // Evaluate finds the first rule whose path + method matches the inbound
@@ -178,14 +217,18 @@ func (e *Engine) Rules() []*Rule {
 // behavior is deny with a clear reason so the operator's logs explain
 // the 403.
 func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
-	for _, rule := range e.rules {
+	e.mu.RLock()
+	rules := e.rules
+	defaultDeny := e.defaultDeny
+	e.mu.RUnlock()
+	for _, rule := range rules {
 		if !rule.Matches(r.Method, r.URL.Path) {
 			continue
 		}
 		allow, reason := e.evaluateRequirement(rule.Require, rule.Scopes, id)
 		return Decision{Allow: allow, MatchedRule: rule, Reason: reason}
 	}
-	return Decision{Allow: !e.defaultDeny, Reason: "no rule matched"}
+	return Decision{Allow: !defaultDeny, Reason: "no rule matched"}
 }
 
 // evaluateRequirement runs the predicate for req plus the AND-combined

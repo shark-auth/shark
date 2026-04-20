@@ -581,6 +581,16 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/proxy/rules", s.handleProxyRules)
 			r.Post("/proxy/simulate", s.handleProxySimulate)
 
+			// Phase 6.6 / Wave D — DB-backed proxy rule overrides. Always
+			// available regardless of proxy enable state so admins can
+			// stage rules before flipping the proxy on; mutations refresh
+			// the live engine via Engine.SetRules when the engine exists.
+			r.Get("/proxy/rules/db", s.handleListProxyRules)
+			r.Post("/proxy/rules/db", s.handleCreateProxyRule)
+			r.Get("/proxy/rules/db/{id}", s.handleGetProxyRule)
+			r.Patch("/proxy/rules/db/{id}", s.handleUpdateProxyRule)
+			r.Delete("/proxy/rules/db/{id}", s.handleDeleteProxyRule)
+
 			// Phase 6 F3: Auth flow CRUD + dry-run + history. Mounted under
 			// the admin group so admin-key auth gates everything.
 			r.Route("/flows", func(r chi.Router) {
@@ -673,6 +683,14 @@ func (s *Server) initProxy() {
 		panic("proxy: compiling rules: " + err.Error())
 	}
 	s.ProxyEngine = engine
+
+	// Wave D: layer DB-backed override rules on top of the YAML bootstrap.
+	// Best-effort — if the table doesn't exist yet (first run before the
+	// migration applied) or load fails, the proxy keeps the YAML-only set
+	// and we surface the error in logs rather than panicking.
+	if err := s.refreshProxyEngineFromDB(context.Background()); err != nil {
+		logger.Warn("proxy: failed to load DB rule overrides", "err", err)
+	}
 
 	breakerCfg := proxy.BreakerConfig{
 		HealthURL:        cfg.Server.BaseURL + "/api/v1/admin/health",

@@ -311,6 +311,14 @@ type Store interface {
 	// Auth Flow Runs (history for the Flow Builder dashboard)
 	CreateAuthFlowRun(ctx context.Context, run *AuthFlowRun) error
 	ListAuthFlowRunsByFlowID(ctx context.Context, flowID string, limit int) ([]*AuthFlowRun, error)
+
+	// Proxy Rules (Phase 6.6 / Wave D — runtime override layer for the
+	// reverse proxy rule engine; YAML stays the bootstrap source).
+	CreateProxyRule(ctx context.Context, rule *ProxyRule) error
+	GetProxyRuleByID(ctx context.Context, id string) (*ProxyRule, error)
+	ListProxyRules(ctx context.Context) ([]*ProxyRule, error)
+	UpdateProxyRule(ctx context.Context, rule *ProxyRule) error
+	DeleteProxyRule(ctx context.Context, id string) error
 }
 
 // --- Entity types ---
