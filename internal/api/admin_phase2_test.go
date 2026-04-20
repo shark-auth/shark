@@ -17,11 +17,13 @@ func TestAdminStatsBasicCounts(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	// Seed 3 users, 2 with MFA.
+	// Seed 3 users, 2 with MFA enrolled AND verified. CountMFAEnabled
+	// requires mfa_enabled=1 AND mfa_verified=1 (tightened in Wave 2 so
+	// pending enrollments don't inflate adoption) — seed both flags.
 	for i, mfa := range []bool{false, true, true} {
 		u := &storage.User{
 			ID: "usr_s" + string(rune('a'+i)), Email: "s" + string(rune('a'+i)) + "@x.io",
-			HashType: "argon2id", Metadata: "{}", MFAEnabled: mfa,
+			HashType: "argon2id", Metadata: "{}", MFAEnabled: mfa, MFAVerified: mfa,
 			CreatedAt: now.Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
 		}
 		if err := ts.Store.CreateUser(ctx, u); err != nil {
@@ -49,6 +51,7 @@ func TestAdminStatsBasicCounts(t *testing.T) {
 			Active int `json:"active"`
 		} `json:"sessions"`
 		MFA struct {
+			Total       int     `json:"total"`
 			Enabled     int     `json:"enabled"`
 			AdoptionPct float64 `json:"adoption_pct"`
 		} `json:"mfa"`
@@ -59,6 +62,9 @@ func TestAdminStatsBasicCounts(t *testing.T) {
 	}
 	if body.Sessions.Active != 1 {
 		t.Errorf("sessions.active: got %d", body.Sessions.Active)
+	}
+	if body.MFA.Total != 3 {
+		t.Errorf("mfa.total: got %d, want 3", body.MFA.Total)
 	}
 	if body.MFA.Enabled != 2 {
 		t.Errorf("mfa.enabled: got %d", body.MFA.Enabled)
@@ -118,6 +124,74 @@ func TestAdminStatsTrendsFillsGaps(t *testing.T) {
 	}
 	if totalToday != 1 {
 		t.Errorf("today bucket: got %d", totalToday)
+	}
+}
+
+func TestAdminStatsTrendsShape(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Seed 2 signups across two different days.
+	if err := ts.Store.CreateUser(ctx, &storage.User{
+		ID: "usr_ts1", Email: "ts1@x.io", HashType: "argon2id", Metadata: "{}",
+		CreatedAt: now.Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.Store.CreateUser(ctx, &storage.User{
+		ID: "usr_ts2", Email: "ts2@x.io", HashType: "argon2id", Metadata: "{}",
+		CreatedAt: now.AddDate(0, 0, -1).Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Seed a session with auth_method so auth_methods breakdown is non-empty.
+	if err := ts.Store.CreateSession(ctx, &storage.Session{
+		ID: "sess_ts", UserID: "usr_ts1", AuthMethod: "password",
+		ExpiresAt: now.Add(time.Hour).Format(time.RFC3339),
+		CreatedAt: now.Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := ts.GetWithAdminKey("/api/v1/admin/stats/trends?days=14")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var body struct {
+		Days         int `json:"days"`
+		SignupsByDay []struct {
+			Date  string `json:"date"`
+			Count int    `json:"count"`
+		} `json:"signups_by_day"`
+		AuthMethods []struct {
+			AuthMethod string `json:"auth_method"`
+			Count      int    `json:"count"`
+		} `json:"auth_methods"`
+	}
+	ts.DecodeJSON(resp, &body)
+
+	// signups_by_day must be an array with 14 filled buckets.
+	if len(body.SignupsByDay) != 14 {
+		t.Errorf("signups_by_day: got %d buckets, want 14", len(body.SignupsByDay))
+	}
+	for _, b := range body.SignupsByDay {
+		if b.Date == "" {
+			t.Errorf("signups_by_day entry missing date field: %+v", b)
+		}
+	}
+
+	// auth_methods must be an array of {auth_method, count} objects.
+	if len(body.AuthMethods) == 0 {
+		t.Errorf("auth_methods: expected at least one entry, got empty")
+	}
+	for _, m := range body.AuthMethods {
+		if m.AuthMethod == "" {
+			t.Errorf("auth_methods entry missing auth_method key: %+v", m)
+		}
+		if m.Count <= 0 {
+			t.Errorf("auth_methods entry has non-positive count: %+v", m)
+		}
 	}
 }
 

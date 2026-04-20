@@ -371,8 +371,30 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -b cj.txt $BASE/api/v1/auth/sessio
 
 # --- 17: Admin sessions -------------------------------------------------------
 section "admin sessions"
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/sessions)
-[ "$CODE" = 200 ] && pass "GET /admin/sessions 200" || fail "GET /admin/sessions $CODE"
+SESS_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/sessions)
+SESS_CODE=$(echo "$SESS_RESP" | tail -1)
+SESS_BODY=$(echo "$SESS_RESP" | sed '$d')
+[ "$SESS_CODE" = 200 ] && pass "GET /admin/sessions 200" || fail "GET /admin/sessions $SESS_CODE"
+
+# Assert response shape uses .data (not .sessions) and has has_more-equivalent (next_cursor or absent)
+SESS_DATA_TYPE=$(echo "$SESS_BODY" | jq -r '.data | type' 2>/dev/null)
+[ "$SESS_DATA_TYPE" = "array" ] && pass "GET /admin/sessions body has .data array" || fail "GET /admin/sessions missing .data array (got type=$SESS_DATA_TYPE)"
+
+# Assert no .sessions key (old wrong key) at the top level
+SESS_BAD_KEY=$(echo "$SESS_BODY" | jq 'has("sessions")' 2>/dev/null)
+[ "$SESS_BAD_KEY" = "false" ] && pass "GET /admin/sessions body has no legacy .sessions key" || fail "GET /admin/sessions still exposes .sessions key"
+
+# If any session row exists, assert last_activity_at is present and non-empty
+FIRST_LAA=$(echo "$SESS_BODY" | jq -r '.data[0].last_activity_at // "absent"' 2>/dev/null)
+if [ "$FIRST_LAA" != "absent" ] && [ "$FIRST_LAA" != "null" ] && [ -n "$FIRST_LAA" ]; then
+  pass "session[0].last_activity_at present: $FIRST_LAA"
+else
+  note "GET /admin/sessions: no active sessions in DB; last_activity_at check skipped"
+fi
+
+# Assert GET /audit-logs?limit=5 returns 200 (endpoint used by AppEvents in dashboard)
+AL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/audit-logs?limit=5")
+[ "$AL_CODE" = 200 ] && pass "GET /audit-logs?limit=5 -> 200" || fail "GET /audit-logs?limit=5 -> $AL_CODE"
 
 # --- 18: Stats + Trends -------------------------------------------------------
 section "stats + trends"
@@ -381,6 +403,21 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" 
 
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/stats/trends?days=7")
 [ "$CODE" = 200 ] && pass "GET /admin/stats/trends 200" || fail "GET /admin/stats/trends $CODE"
+
+# Shape assertions (Bug fix: mfa.total, signups_by_day, auth_methods array)
+STATS_BODY=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/stats)
+MFA_TOTAL=$(echo "$STATS_BODY" | jq -r '.mfa.total // "missing"')
+if echo "$MFA_TOTAL" | grep -qE '^[0-9]+$'; then
+  pass "GET /admin/stats — mfa.total is a number ($MFA_TOTAL)"
+else
+  fail "GET /admin/stats — mfa.total not a number: $MFA_TOTAL"
+fi
+
+TRENDS_BODY=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/stats/trends?days=14")
+SBD_TYPE=$(echo "$TRENDS_BODY" | jq -r '(.signups_by_day | type) // "null"')
+[ "$SBD_TYPE" = "array" ] && pass "GET /admin/stats/trends — signups_by_day is array" || fail "signups_by_day type: $SBD_TYPE"
+AM_TYPE=$(echo "$TRENDS_BODY" | jq -r '(.auth_methods | type) // "null"')
+[ "$AM_TYPE" = "array" ] && pass "GET /admin/stats/trends — auth_methods is array" || fail "auth_methods type: $AM_TYPE"
 
 # --- 19: Webhooks CRUD --------------------------------------------------------
 section "webhooks CRUD"
@@ -478,6 +515,10 @@ if [ -n "$USERID" ]; then
 
   LLA_GET=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/users/$USERID | jq -r '.last_login_at // empty')
   [ -n "$LLA_GET" ] && pass "user get includes last_login_at" || fail "user get missing last_login_at (got empty)"
+
+  # Response shape: keys must be snake_case (email_verified not emailVerified).
+  EVKEY=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?limit=1" | jq 'has("users") and (.users | length > 0) and (.users[0] | has("email_verified"))')
+  [ "$EVKEY" = "true" ] && pass "user list response has snake_case email_verified key" || fail "user list missing email_verified key (camelCase leak?)"
 fi
 
 # --- 22: Dev Inbox -------------------------------------------------------------
@@ -1629,6 +1670,42 @@ GONE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" 
 # Cleanup org.
 curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/organizations/$INV_ORG
 
+# --- 57b: admin GET org roles + invitations (Phase 2 Task A + B) --------------
+# GET /admin/organizations/{id}/roles and /invitations were 404 before this fix.
+# Dashboard organizations.tsx:138 (Roles tab) and :608 (Invitations tab) both
+# call these endpoints; without them both tabs silently showed zero.
+section "57b: admin GET org roles + invitations list"
+
+RL_SLUG="roles-inv-smoke-$RANDOM"
+RL_ORG=$(curl -s -b cj.txt -X POST $BASE/api/v1/organizations -H "Content-Type: application/json" \
+  -d "{\"name\":\"RolesInvSmoke\",\"slug\":\"$RL_SLUG\"}" | jq -r '.id // empty')
+[ -n "$RL_ORG" ] && pass "org seeded for roles+inv smoke: $RL_ORG" || fail "org seed failed"
+
+# GET roles -> 200 with .roles array (may be empty on fresh org).
+RL_RESP=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/organizations/$RL_ORG/roles)
+RL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  $BASE/api/v1/admin/organizations/$RL_ORG/roles)
+[ "$RL_CODE" = 200 ] && pass "GET admin org roles -> 200" || fail "GET admin org roles -> $RL_CODE"
+echo "$RL_RESP" | jq -e '.roles | arrays' > /dev/null 2>&1 \
+  && pass "GET admin org roles .roles is array" || fail "GET admin org roles .roles not array: $RL_RESP"
+
+# GET invitations -> 200 with .invitations array.
+INV_LIST_RESP=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/admin/organizations/$RL_ORG/invitations)
+INV_LIST_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  $BASE/api/v1/admin/organizations/$RL_ORG/invitations)
+[ "$INV_LIST_CODE" = 200 ] && pass "GET admin org invitations -> 200" || fail "GET admin org invitations -> $INV_LIST_CODE"
+echo "$INV_LIST_RESP" | jq -e '.invitations | arrays' > /dev/null 2>&1 \
+  && pass "GET admin org invitations .invitations is array" || fail "GET admin org invitations .invitations not array: $INV_LIST_RESP"
+
+# Both 401 without admin key.
+RL_UNAUTH=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/admin/organizations/$RL_ORG/roles)
+[ "$RL_UNAUTH" = 401 ] && pass "GET org roles no key -> 401" || fail "GET org roles no key -> $RL_UNAUTH"
+INV_UNAUTH=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/admin/organizations/$RL_ORG/invitations)
+[ "$INV_UNAUTH" = 401 ] && pass "GET org invitations no key -> 401" || fail "GET org invitations no key -> $INV_UNAUTH"
+
+# Cleanup.
+curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/organizations/$RL_ORG
+
 # --- 58: admin MFA disable (Wave 1 A7) ----------------------------------------
 # Admin-only DELETE /users/{id}/mfa wipes MFA without requiring the user's
 # current TOTP code. Used by support to recover lost-device accounts. The
@@ -2131,6 +2208,33 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" 
 # 15. No auth -> 401.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE/api/v1/admin/proxy/rules/db)
 [ "$CODE" = 401 ] && pass "no auth -> 401" || fail "unauth -> $CODE"
+
+# --- 68: proxy status snake_case shape assertion --------------------------------
+# When the proxy is enabled, GET /admin/proxy/status must return 200 and the
+# response payload must contain a top-level "state" key (snake_case, not
+# PascalCase). This catches regressions where the JSON struct tags drift from
+# what the dashboard expects.
+# In the default smoke environment the proxy is disabled and the endpoint
+# returns 404 — that is expected and we skip the shape assertion in that case.
+section "68: proxy status response shape (snake_case)"
+PROXY_STATUS_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" \
+  $BASE/api/v1/admin/proxy/status)
+PROXY_STATUS_CODE=$(echo "$PROXY_STATUS_RESP" | tail -1)
+PROXY_STATUS_BODY=$(echo "$PROXY_STATUS_RESP" | sed '$d')
+if [ "$PROXY_STATUS_CODE" = "404" ]; then
+  pass "proxy disabled (404) — shape check skipped"
+elif [ "$PROXY_STATUS_CODE" = "200" ]; then
+  # Assert .data.state key exists (snake_case) and is not null/missing.
+  STATE_VAL=$(echo "$PROXY_STATUS_BODY" | jq -r '.data.state // "MISSING"')
+  [ "$STATE_VAL" != "MISSING" ] && pass "proxy status .data.state present (snake_case): $STATE_VAL" \
+    || fail "proxy status .data.state missing — got: $PROXY_STATUS_BODY"
+  # Assert the old PascalCase key is NOT present (regression guard).
+  PASCAL_VAL=$(echo "$PROXY_STATUS_BODY" | jq -r '.data.State // "ABSENT"')
+  [ "$PASCAL_VAL" = "ABSENT" ] && pass ".data.State (PascalCase) absent — no regression" \
+    || fail ".data.State key present — backend JSON tags regressed"
+else
+  fail "proxy status unexpected code: $PROXY_STATUS_CODE"
+fi
 
 # --- Summary ------------------------------------------------------------------
 section "summary"
