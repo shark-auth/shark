@@ -424,11 +424,6 @@ func (s *FositeStore) getTokenSession(ctx context.Context, signature, tokenType 
 		return nil, fosite.ErrNotFound.WithDebugf("token type mismatch: wanted %s, got %s", tokenType, token.TokenType)
 	}
 
-	// Check if revoked.
-	if token.RevokedAt != nil {
-		return nil, fosite.ErrInactiveToken.WithDebug("token has been revoked")
-	}
-
 	client, err := s.GetClient(ctx, token.ClientID)
 	if err != nil {
 		// Client may have been deactivated; still return the request for
@@ -469,6 +464,13 @@ func (s *FositeStore) getTokenSession(ctx context.Context, signature, tokenType 
 		GrantedScope:   fosite.Arguments(strings.Split(token.Scope, " ")),
 		Session:        session,
 		Form:           tokenForm,
+	}
+
+	// Revoked tokens still return the requester so fosite's refresh-token
+	// reuse detector can call req.GetID() to revoke the rest of the family
+	// (flow_refresh.go:190 panics on nil requester).
+	if token.RevokedAt != nil {
+		return req, fosite.ErrInactiveToken.WithDebug("token has been revoked")
 	}
 
 	return req, nil
