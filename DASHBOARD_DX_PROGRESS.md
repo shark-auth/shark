@@ -19,3 +19,10 @@ Append-only. Every task state change = one row. Never edit prior rows.
 | 2026-04-20T18:34:00Z | T12 | claim | claude-opus-4-7 | Session Debugger client-side JWT decode + JWKS validate |
 | 2026-04-20T18:45:00Z | T12 | done | claude-opus-4-7 | session_debugger.tsx new file: decode header+payload, JWKS fetch, SubtleCrypto verify (RS256/384/512, ES256/384), exp/nbf status pills, claim annotation w/ ISO timestamps, copy buttons, CLIFooter. Wired into App.tsx, removed from empty_shell, ph:5 dropped from NAV. Typecheck pass. |
 | 2026-04-20T18:45:00Z | T22,T02 | done | claude-opus-4-7 | verified-by-inspection: shipped in prior commits |
+| 2026-04-20T19:00:00Z | T08 | claim | claude-opus-4-7 | verify 6 org silent-404 routes + fix error handling |
+| 2026-04-20T19:00:00Z | T13 | claim | claude-opus-4-7 | Compliance page demote (audit export + GDPR stub) |
+| 2026-04-20T19:00:00Z | T17 | claim | claude-opus-4-7 | Help menu + floating ? + Cmd+K help commands |
+| 2026-04-20T19:00:00Z | T18 | claim | claude-opus-4-7 | Feedback button (bundled with T17) |
+| 2026-04-20T19:18:00Z | T08 | done | claude-opus-4-7 | verified-by-inspection: router.go:578-588 all 6 admin org routes shipped (c3609db). organizations.tsx catches at 244/468/565/617/627 all surface errors via setErr or toast.error. No silent 404s. |
+| 2026-04-20T19:18:00Z | T13 | done | claude-opus-4-7 | compliance.tsx new file: Audit Export tab (presets + date range + csv/json download from /audit-logs/export), GDPR stub tab (CLI-backed erasure + export), Access Review snapshot (non-MFA users + failed-login signal). Wired into App.tsx, removed from empty_shell, ph:9 dropped from NAV. Typecheck pass. |
+| 2026-04-20T19:18:00Z | T17,T18 | done | claude-opus-4-7 | HelpButton.tsx new file: floating ? bottom-right (Cmd+/ opens), help menu (Docs, Changelog, GitHub, Report bug), FeedbackModal w/ auto-fill page+version+recent console errors, submit via GitHub issue prefill or mailto. CommandPalette: added 4 Help actions (Docs/Changelog/GitHub/Report bug) dispatched via window.__shark_help. Typecheck pass. |

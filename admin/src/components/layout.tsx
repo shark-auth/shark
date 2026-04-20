@@ -47,7 +47,7 @@ export const NAV = [
   ]},
   { group: 'ENTERPRISE', items: [
     { id: 'impersonation', label: 'Impersonation', icon: 'Impersonate', ph: 9 },
-    { id: 'compliance', label: 'Compliance', icon: 'Compliance', ph: 9 },
+    { id: 'compliance', label: 'Compliance', icon: 'Compliance' },
     { id: 'migrations', label: 'Migrations', icon: 'Migration', ph: 9 },
     { id: 'branding', label: 'Branding', icon: 'Brand', ph: 9 },
     { id: 'flow', label: 'Flow Builder', icon: 'Flow' },

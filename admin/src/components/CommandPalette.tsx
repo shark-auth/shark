@@ -46,6 +46,13 @@ const ACTIONS = [
   { label: 'Create Role',          icon: 'Plus', target: 'rbac' },
 ];
 
+const HELP_ACTIONS = [
+  { label: 'Help: Documentation',    icon: 'Audit',    run: 'openDocs' },
+  { label: 'Help: Changelog',        icon: 'Clock',    run: 'openChangelog' },
+  { label: 'Help: GitHub',           icon: 'Terminal', run: 'openGitHub' },
+  { label: 'Help: Report a bug',     icon: 'Warn',     run: 'openBug' },
+];
+
 // Hook: debounced entity search across users / agents / apps / orgs
 function useEntitySearch(query) {
   const [results, setResults] = React.useState({ users: [], agents: [], apps: [], orgs: [] });
@@ -123,6 +130,7 @@ export function CommandPalette({ open, onClose, setPage }) {
   const q = query.toLowerCase();
   const filteredPages = q ? PAGES.filter(p => p.label.toLowerCase().includes(q)) : PAGES;
   const filteredActions = q ? ACTIONS.filter(a => a.label.toLowerCase().includes(q)) : ACTIONS;
+  const filteredHelp = q ? HELP_ACTIONS.filter(h => h.label.toLowerCase().includes(q)) : [];
 
   const entityItems = [
     ...results.users.map(u => ({
@@ -155,12 +163,14 @@ export function CommandPalette({ open, onClose, setPage }) {
     ...entityItems,
     ...filteredPages.map(p => ({ ...p, type: 'page' })),
     ...filteredActions.map(a => ({ ...a, type: 'action' })),
+    ...filteredHelp.map(h => ({ ...h, type: 'help' })),
   ];
 
   function execute(item) {
     if (item.type === 'page') setPage(item.id);
     else if (item.type === 'action') setPage(item.target, { new: '1' });
     else if (item.type === 'entity') setPage(item.target, item.params);
+    else if (item.type === 'help') window.__shark_help?.[item.run]?.();
     onClose();
   }
 

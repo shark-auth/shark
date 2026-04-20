@@ -21,12 +21,14 @@ import { SigningKeys } from './signing_keys'
 import { Settings } from './settings'
 import { Consents } from './consents_manage'
 import { Vault } from './vault_manage'
-import { Tokens, APIExplorer, EventSchemas, OIDCProvider, Impersonation, CompliancePage, Migrations, Branding } from './empty_shell'
+import { Tokens, APIExplorer, EventSchemas, OIDCProvider, Impersonation, Migrations, Branding } from './empty_shell'
 import { SessionDebugger } from './session_debugger'
+import { CompliancePage } from './compliance'
 import { FlowBuilder } from './flow_builder'
 import { Proxy } from './proxy_config'
 import { useKeyboardShortcuts, KeyboardCheatsheet } from './useKeyboardShortcuts'
 import { CommandPalette } from './CommandPalette'
+import { HelpButton } from './HelpButton'
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "sidebarCollapsed": false,
@@ -193,6 +195,7 @@ export function App() {
 
       {cheatsheetOpen && <KeyboardCheatsheet onClose={() => setCheatsheetOpen(false)}/>}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} setPage={setPage}/>
+      <HelpButton/>
 
       {tweaksOpen && (
         <div className="tweaks-panel">
