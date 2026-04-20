@@ -8,6 +8,56 @@ export function Login({ onLogin }) {
   const [key, setKey] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [hintOpen, setHintOpen] = React.useState(false);
+  // Bootstrap-consume attempted? Used to suppress the "Invalid token"
+  // error turning into a re-try loop on re-renders.
+  const bootstrapTried = React.useRef(false);
+
+  // T15: if the URL carries ?bootstrap=<tok>, auto-POST to consume and log
+  // the operator in without them ever seeing the key. On success we drop
+  // the param, stash the minted key, and hand off to onLogin. On failure
+  // we show the error inline and keep the password input visible so the
+  // operator can fall back to pasting their key manually.
+  React.useEffect(() => {
+    if (bootstrapTried.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const tok = params.get('bootstrap');
+    if (!tok) return;
+    bootstrapTried.current = true;
+    setLoading(true);
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/admin/bootstrap/consume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: tok }),
+        });
+        // Strip the token from the URL regardless of outcome so it isn't
+        // replayed on reload and doesn't leak into referrer headers.
+        params.delete('bootstrap');
+        const clean = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+        window.history.replaceState(null, '', clean);
+        if (res.ok) {
+          const body = await res.json();
+          const minted = body?.api_key;
+          if (minted) {
+            sessionStorage.setItem('shark_admin_key', minted);
+            onLogin(minted);
+            return;
+          }
+          setError('Bootstrap response missing api_key.');
+        } else if (res.status === 401) {
+          setError('Bootstrap link is invalid, expired, or already used. Paste your admin key instead.');
+        } else {
+          setError('Bootstrap failed: ' + res.status + ' ' + res.statusText);
+        }
+      } catch (e) {
+        setError(e.message || 'Network error during bootstrap.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [onLogin]);
 
   const submit = async () => {
     const trimmed = key.trim();
@@ -85,6 +135,60 @@ export function Login({ onLogin }) {
             <span style={{ color: 'var(--danger)', fontSize: 12, lineHeight: 1.4 }}>
               {error}
             </span>
+          )}
+
+          {/* T15: always-visible "Where is my key?" expander. Teaches new
+              operators the exact CLI to run on the host that's running
+              `shark serve`, so a forgotten key never blocks login. */}
+          <button
+            type="button"
+            onClick={() => setHintOpen(v => !v)}
+            style={{
+              alignSelf: 'flex-start',
+              padding: 0,
+              marginTop: 2,
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--fg-dim)',
+              fontSize: 11,
+              fontFamily: 'var(--font-sans)',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              textUnderlineOffset: 2,
+            }}
+          >
+            [?] Where is my key?
+          </button>
+          {hintOpen && (
+            <div style={{
+              marginTop: 4,
+              padding: '8px 10px',
+              borderRadius: 5,
+              border: '1px solid var(--hairline)',
+              background: 'var(--surface-1)',
+              fontSize: 11,
+              color: 'var(--fg-dim)',
+              lineHeight: 1.5,
+            }}>
+              <div style={{ marginBottom: 4 }}>
+                In the terminal running <code>shark serve</code>, run:
+              </div>
+              <code style={{
+                display: 'block',
+                padding: '6px 8px',
+                borderRadius: 4,
+                background: 'var(--bg)',
+                color: 'var(--fg)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                userSelect: 'all',
+              }}>
+                shark admin-key show
+              </code>
+              <div style={{ marginTop: 6, color: 'var(--fg-faint)' }}>
+                Or restart the server to get a one-time bootstrap URL.
+              </div>
+            </div>
           )}
         </div>
 

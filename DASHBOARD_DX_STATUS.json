@@ -24,7 +24,7 @@
     "T18": {"status": "done", "commit": "dc3cef2", "blocked_by": []},
     "T19": {"status": "done", "commit": "prior", "blocked_by": [], "notes": "scope picker shipped at api_keys.tsx:602-614 with 8 scopes + checkboxes + danger badges"},
     "T20": {"status": "done", "commit": "9d067b1", "blocked_by": [], "notes": "backend list/replay shipped prior; T20 frontend polish + A1 gap: inline retry, toast surface, list refresh, empty-state coaching"},
-    "T21": {"status": "pending", "commit": null, "blocked_by": []},
+    "T21": {"status": "done", "commit": "77920c3", "blocked_by": [], "notes": "Matrix view in rbac.tsx toggled via ?view=matrix; grid with checkbox cells, col-header bulk toggle w/ confirm, filter input, per-row usage count via batch-usage. Matrix extracted to rbac_matrix.tsx. Backend routes all pre-existing; no backend work."},
     "T22": {"status": "done", "commit": "prior", "blocked_by": []},
     "T23": {"status": "done", "commit": "8406b78", "blocked_by": []},
     "T24": {"status": "pending", "commit": null, "blocked_by": ["T04", "T05", "T06", "T09", "T10", "T11", "T15", "T16", "T20", "T21"]}
