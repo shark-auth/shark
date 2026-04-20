@@ -208,24 +208,30 @@ Phase 6 — Proxy + Visual Flow Builder — Done
 - ✅ Flow dashboard: palette + canvas + config + Preview dry-run + History tab
 - ✅ Smoke tests sections 49-54 (proxy disabled admin 404s, flow CRUD, dry-run timeline, signup block/disable/runs) — 244 PASS, 0 FAIL
 
-Phase 6.5 — Dashboard Gap Fix (2-4 days)
+Phase 6.5 — Dashboard Gap Fix — Done
 
 **Spec:** `DASHBOARD_GAPS.md` — full audit + ranked plan + wave breakdown
 
-Backend smoke passes (244) but dashboard ~10% mocked/stubbed. Top gaps:
-- Proxy rules read-only (YAML-only edit) — needs CRUD endpoints + UI
-- Vault Connections tab is placeholder — needs admin cross-user endpoint + table
-- Overview agent metrics + sparklines + attention panel still pull from MOCK
-- Signing-key rotate button disabled despite backend endpoint shipped
-- Consents page 401s in admin (session-only endpoint) — needs admin-scoped variant
-- Device flow has no admin pending queue (handoff-only)
-- `last_login_at` exists in DB but not in admin user response
-- User filters missing `?auth_method=`, `?org=`
-- RBAC reverse lookup endpoints missing
+Backend smoke 375 PASS. Dashboard ~90% wired after Waves A-G. All closed.
 
-Wave plan: A (UI-only quick wins) → B (tiny backend extends) → C (vault connections)
-→ D (proxy rules CRUD) → E (admin consents + device queue) → F (RBAC + email preview).
-Wave A alone removes 80% of "broken-feeling" UX.
+Phase 6.6 — Dashboard Deep Audit + Shape Fixes — Done (2026-04-20)
+
+**Trigger:** Smoke green but user reported "malfunctioning." Deep investigation via parallel Sonnet subagents found 24 real bugs (P0/P1/P2) spanning shape mismatches, routing 404s, crashes, hardcoded lies, mock residue. All 24 shipped.
+
+Highlights:
+- 3 routing 404s fixed (`/admin/audit`, `/admin/orgs/{id}/roles`, `/admin/orgs/{id}/invitations`)
+- 5 JSON shape mismatches fixed (sessions.data, users camelCase→snake_case, proxy PascalCase→snake_case, overview stats triple-bug, orgs members/metadata)
+- 1 crash fixed (organizations.tsx ReferenceError)
+- 3 authflow stubs wired (assign_role, add_to_org, require_mfa_challenge + new POST /auth/flow/mfa/verify)
+- adminConfigSummary expanded (passkey/password_policy/jwt/magic_link/session_mode/social_providers)
+- Real CSV audit export + pagination + date-range UI
+- 8 new API endpoints (revoke-all sessions, rotate agent secret, batch permission usage, webhook events, delete org member, dev-mode gate, etc.)
+- New migration `00002_audit_logs_extended_filters.sql`
+- 8 swallowed `_ = store.X` errors now `slog.Warn`
+- Dead `agents.tsx` stub deleted
+
+Full detail: `CHANGELOG.internal.md` → Phase 6.6.
+Handoff: `HANDOFF.md`.
 
 Phase 7 — SDK (5-7 days)
 

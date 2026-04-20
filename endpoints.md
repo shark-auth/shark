@@ -333,3 +333,53 @@ shark keys generate-jwt --rotate     # retire active key(s) and generate a new o
 ```
 
 `shark app create` prints `client_id` and `client_secret` once on creation — save the secret, it is not retrievable after. `shark keys generate-jwt` is optional at startup; `shark serve` calls `EnsureActiveKey` automatically.
+
+---
+
+## Phase 6.6 additions (2026-04-20) — Dashboard completeness
+
+```
+# Admin orgs (completes CRUD surface the dashboard needs)
+GET    /api/v1/admin/organizations/{id}/roles                        # list org-scoped custom roles
+GET    /api/v1/admin/organizations/{id}/invitations                  # pending invitations only
+DELETE /api/v1/admin/organizations/{id}/members/{uid}                # admin-key remove (prevents last-owner removal)
+
+# Admin sessions
+DELETE /api/v1/admin/sessions                                        # revoke all active; returns {revoked: N}
+
+# Agent identity
+POST   /api/v1/agents/{id}/rotate-secret                             # returns new plaintext secret ONCE
+
+# RBAC batch lookup
+GET    /api/v1/admin/permissions/batch-usage?ids=a,b,c,...           # {[id]: {roles, users}}
+DELETE /api/v1/permissions/{id}                                      # used by create+attach rollback
+
+# Webhooks
+GET    /api/v1/webhooks/events                                       # canonical sorted KnownWebhookEvents
+
+# Authflow MFA challenge (paired with require_mfa_challenge step)
+POST   /api/v1/auth/flow/mfa/verify                                  # body: {flow_run_id, challenge_id, code}
+
+# New filters (existing endpoints)
+GET    /api/v1/admin/oauth/consents?user_id=<id>                     # filter to one user's consents
+GET    /api/v1/admin/vault/connections?provider_id=<id>              # filter by provider
+GET    /api/v1/audit-logs?org_id=&session_id=&resource_type=&resource_id=   # extended filters
+```
+
+### Audit log export — now CSV
+
+`POST /api/v1/audit-logs/export` with body `{"from": "ISO8601", "to": "ISO8601"}` now returns real CSV (header row + 15 columns: id, action, actor_type, actor_id, target_type, target_id, org_id, session_id, resource_type, resource_id, ip_address, user_agent, metadata, success, created_at). Missing `from`/`to` returns 400 with error body (no longer writes error JSON as `.csv`).
+
+### `adminConfigSummary` expanded
+
+`GET /api/v1/admin/config` now returns nested objects:
+- `passkey`: `enabled`, `rp_id`, `rp_name`, `origin`, `user_verification`, `attestation`
+- `password_policy`: `min_length`, `require_upper`, `require_lower`, `require_digit`, `require_symbol`, `lockout_attempts`, `lockout_duration`
+- `jwt`: `algorithm` (resolved live from active JWKS), `lifetime`, `active_keys`
+- `magic_link`: `ttl`
+- `session_mode`: `"cookie"` or `"jwt"`
+- `session_lifetime`: duration string
+- `social_providers`: array of configured provider names
+- `dev_mode`: bool (dashboard uses this to gate Dev Inbox)
+
+Self-hosters can inspect exact config via this endpoint without reading YAML.

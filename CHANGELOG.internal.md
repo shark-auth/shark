@@ -2,6 +2,80 @@
 
 > Not for public consumption. Technical notes on what shipped, why it shipped that way, and what trade-offs were made. Cross-reference with commit SHAs in repo.
 
+## Phase 6.6 — Dashboard Deep Audit + P0/P1/P2 Fixes
+Shipped: 2026-04-20
+Branch: `claude/admin-vendor-assets-fix` (session extension)
+
+### Trigger
+Dashboard passed 375 smoke assertions but user reported "malfunctioning." Deep investigation via 3 parallel Sonnet subagents surfaced 24 real bugs spanning shape mismatches, 404s, crashes, hardcoded lies, mock residue. All 24 shipped. Full test suite 17/17 green.
+
+### New API surface
+
+- `GET /api/v1/admin/organizations/{id}/roles` — lists org-scoped custom roles
+- `GET /api/v1/admin/organizations/{id}/invitations` — pending, non-expired, non-accepted
+- `DELETE /api/v1/admin/organizations/{id}/members/{uid}` — admin-key auth, prevents last-owner removal
+- `DELETE /api/v1/admin/sessions` — revoke all active sessions, returns `{revoked: N}`, audit logged
+- `POST /api/v1/agents/{id}/rotate-secret` — generates 32-byte secret, returns plaintext once
+- `GET /api/v1/admin/permissions/batch-usage?ids=a,b,c,...` — `{[id]: {roles, users}}` in single query
+- `DELETE /api/v1/permissions/{id}` — used by RBAC rollback path when create+attach fails
+- `GET /api/v1/webhooks/events` — canonical sorted `KnownWebhookEvents` list
+- `POST /api/v1/auth/flow/mfa/verify` — consumes authflow MFA challenge, validates TOTP, returns `{verified: true}`
+- `?user_id=` filter on `GET /api/v1/admin/oauth/consents`
+- `?provider_id=` filter on `GET /api/v1/admin/vault/connections`
+- `?org_id=`, `?session_id=`, `?resource_type=`, `?resource_id=` on `GET /api/v1/audit-logs`
+
+### Store interface additions
+- `DeleteAllActiveSessions(ctx) (int64, error)`
+- `UpdateAgentSecret(ctx, id, secretHash string) error`
+- `DeletePermission(ctx, id string) error`
+- `BatchCountRolesByPermissionIDs(ctx, ids) (map[string]int, error)`
+- `BatchCountUsersByPermissionIDs(ctx, ids) (map[string]int, error)`
+
+### Migrations
+- `migrations/00002_audit_logs_extended_filters.sql` — adds `org_id`, `session_id`, `resource_type`, `resource_id` columns + indexes to `audit_logs`. No backfill; filters apply forward only.
+- `internal/testutil/migrations/00015_audit_logs_extended_filters.sql` mirror.
+
+### P0 fixes (features broken by default)
+
+1. **sessions.tsx empty page.** Backend returns `{data:[]}` not `{sessions:[]}`. Fixed frontend. Added `LastActivityAt` populated from `se.CreatedAt` (session table has no last-seen column; honest fallback beats fake).
+2. **proxy_config.tsx all gauges N/A.** Frontend reads PascalCase; Go emits snake_case. Fixed every access (`state`, `cache_size`, `neg_cache_size`, `failures`, `last_check`, `last_status`, `last_latency_ms`). Renamed `formatLatency(ns)` → `formatLatencyMs(ms)` removing the double-divide-by-1000 bug. Fixed `onTestRule` to use `rule.path || rule.pattern || '/'` so DB override rules populate the simulator. Routed `useProxyStats` raw fetch through `shark-auth-expired` dispatch on 401 instead of silently polling forever.
+3. **overview.tsx MFA%/sparkline/donut broken.** Added `Total` to `statsResponse.MFA` (reused `CountUsers` result). Frontend swap `t?.signups` → `t?.signups_by_day`. Rewrote `mapAuthBreakdown` for `[]methodBreakdown` array shape. Removed hardcoded health fallback; replaced with loading skeleton + error state. Wired AttentionPanel Refresh to `useAPI.refresh`.
+4. **organizations.tsx ReferenceError crash.** Removed `disabled={deleting}` (undeclared var). Fixed members `m.user_name || m.name`, `m.user_email || m.email` (backend tags). Parse `org.metadata` JSON string before `Object.entries`.
+5. **users.tsx camelCase.** `adminUserResponse` JSON tags flipped camelCase → snake_case. Every user row was showing "pending"/"—" because frontend reads snake_case.
+6. **applications.tsx /admin/audit 404.** Swapped to `/audit-logs?limit=20`, response key `.events` → `.data`.
+7. **GET /admin/orgs/{id}/roles** — new handler.
+8. **GET /admin/orgs/{id}/invitations** — new handler.
+9. **TestAdminStatsBasicCounts.** Test seeded `MFAEnabled=true` but not `MFAVerified`. Wave 2 tightened `CountMFAEnabled` to require both. Fix: seed both flags.
+
+### P1 fixes
+
+10. **Audit log filters + real CSV export + pagination.** Schema migration adds 4 columns. `handleExportAuditLogs` now emits text/csv (15-column header) instead of JSON envelope. Frontend export modal gets datetime-local pickers + preset chips. Pagination via `next_cursor` + "Load more" (was hard-capped at 100 with silent truncation).
+11. **Settings DB chip + delete-all-users.** `health.db.status` comparison was `=== 'healthy'` but backend returns `'ok'`. Fixed. Removed type-to-confirm danger-zone UI for bulk user delete (was a stub); replaced with "Bulk deletion is CLI-only: `shark users delete --all`". `smtpConfigured` reads `config?.smtp_configured` (real field) not `config?.smtp_host` (nonexistent).
+12. **authentication.tsx hardcoded lies.** Expanded `adminConfigSummary` with nested `passkey`, `password_policy`, `jwt`, `magic_link`, `session_mode`, `session_lifetime`, `social_providers`. JWT algorithm resolved live from active JWKS. Frontend reads real values. iframe `sandbox=""` → `sandbox="allow-same-origin"` for email preview.
+13. **Dev-mode gate.** `adminConfigSummary.dev_mode` already existed. Frontend: `layout.tsx` filters `devOnly: true` entries when false; `App.tsx` fetches `/admin/config` after login and redirects dev-inbox away; `dev_inbox.tsx` shows friendly 404 fallback.
+14. **Sessions JTI + last_seen + revoke-all + mock tabs.** Added `JTI` field (omitempty since current sessions are cookie-mode only). `DELETE /admin/sessions` route. SessionEventsTab fetches real `/audit-logs?actor_id=<user_id>`. SessionClaimsTab shows real JTI or "Cookie session — no JWT claims".
+15. **Agents rotate-secret + tokens refresh + consents.** New rotate-secret endpoint. `AgentDetail` tracks `tokensVersion` state passed as useAPI dep so AgentTokens refreshes after revoke-all. AgentConsents fetches `/admin/oauth/consents?client_id=<client_id>`.
+16. **User tabs: real Consents/Roles/Orgs.** `?user_id=` filter on admin consents. RolesTab uses existing `/users/{id}/permissions` (RBAC.GetEffectivePermissions dedupes). OrgsTab Remove wired to new delete-org-member endpoint. Bulk Export-CSV works client-side; Bulk Delete + Assign/Add-to-org disabled with CLI-only tooltips.
+
+### P2 fixes
+
+17. **Webhook events endpoint** + `whsec_` prefix strip in SigVerifyTab + silent create/update/delete now toast.
+18. **Vault `?provider_id=` filter** + OAuth Connect button (opens new tab, polls close) + Test Token modal showing metadata without raw token.
+19. **RBAC batch permission usage.** `PermissionsTab` was firing N*2 parallel requests per tab render; now 1 batch request. All `alert()` → `toast.error`. `handleCreateAttach` now rolls back orphan permission via `DELETE /permissions/{id}` on attach failure.
+20. **Authflow 3 stubs wired.** `assign_role`, `add_to_org` (idempotent via `INSERT OR IGNORE` / existing-member check), `require_mfa_challenge`. MFA challenges stored in-memory via `internal/authflow/mfa_challenges.go` (TTL 5min, single-instance only — Cloud Phase will migrate per CLOUD.md §1). New `POST /auth/flow/mfa/verify` handler consumes challenge, decrypts user MFA secret, validates TOTP. Deferred stubs (`set_metadata`, `custom_check`, `delay`) tagged `deferred: true` in `flow_builder.tsx` palette with "v0.2" chip.
+21. **Swallowed error audit.** 8 `_ = store.X` callsites now `slog.Warn` with context. Legitimate silences (prune ops, idempotent creates) left alone.
+22. **Dead `agents.tsx` deleted.** `agents_manage.tsx` is the live page; `agents.tsx` was MOCK stub from Phase 4. No imports.
+23-24. Covered above.
+
+### Lessons
+
+1. **`// @ts-nocheck` masks every field mismatch.** Most P0 bugs were backend/frontend schema drift invisible to TypeScript. Follow-up: generate TS types from Go structs + drop nocheck selectively.
+2. **Response envelope drift.** Admin endpoints use `{data}`, `{users}`, bare arrays, `{items}` inconsistently. Standardize `{data, has_more?, next_cursor?}` on admin endpoints over time.
+3. **LSP stale after multi-file subagent edits.** Compiler diagnostics showed "missing method" errors after Store interface grew, but `go build` was clean. Editor cache lag. Trust `go build` + `go test` output.
+4. **Subagents preserve main-thread context.** 9 Sonnet subagents dispatched this session via general-purpose agent type with `model: sonnet`. Atomic file scopes, tests between batches locked in green state. Average batch: 3-7 files + tests + smoke + `npm run build`.
+
+---
+
 ## Phase 3 — JWT, Org RBAC, Applications, Redirect Allowlist
 Shipped: 2026-04-17
 Commits: 835fe2a, cb38f10, 3985961, 555f4f6, 68fa1c7, 59fca66, 4ac4aa3

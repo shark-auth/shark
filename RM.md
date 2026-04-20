@@ -17,7 +17,7 @@
 
 ---
 
-Shark is a single Go binary that replaces Auth0, Clerk, and WorkOS. Password auth, OAuth, passkeys, magic links, MFA, SSO, RBAC, organizations, audit logs, AI agent auth, and a built-in admin dashboard — all embedded in one ~20MB file with SQLite. No external dependencies. No containers. No infrastructure.
+Shark is the first open-source identity platform built for AI agents as first-class citizens. MCP-native OAuth 2.1. DPoP-bound tokens. Agent-to-agent delegation with `act` chains. A managed Token Vault so agents never touch raw third-party credentials. Plus every human-auth primitive you expect: password, passkeys, magic links, MFA, SSO, RBAC, organizations, audit logs, webhooks, admin dashboard. One Go binary. ~20MB. SQLite. No external dependencies.
 
 Self-hosted is free forever with zero feature gates. [Shark Cloud](https://sharkauth.com/pricing) starts at $0.
 
@@ -33,12 +33,14 @@ Open `http://localhost:8080/admin` and you're running.
 
 ## Why Shark
 
-Auth shouldn't cost $1,000/mo, require a PhD to self-host, or lock you into one framework.
+Every other OSS auth system was built before AI agents existed. We built for agents first, then made sure humans got the same polish.
 
-- **One binary, zero config.** `shark serve` gives you a full auth system with an admin dashboard. No Postgres, no Redis, no Docker compose files.
-- **Every feature, free forever.** SSO, organizations, agent auth, audit logs, webhooks — all in the binary. No enterprise paywalls.
-- **Any language, any framework.** REST API + auth proxy. Go, Python, Ruby, PHP, Java, Rust — if it speaks HTTP, it works with Shark.
-- **Built for 2026.** First-class AI agent identities, MCP-native OAuth 2.1, token vault. Not an afterthought or a paid add-on.
+- **Agents as first-class identities.** `agent_` entities with their own lifecycle, audit trail, consent grants, and delegation chains. Not an add-on, not a paid feature. [Auth0 charges 50% extra for this](https://auth0.com/ai). We include it.
+- **MCP-native OAuth 2.1.** `/.well-known/oauth-authorization-server`, dynamic client registration (RFC 7591), resource indicators (RFC 8707), device flow (RFC 8628), DPoP (RFC 9449), token exchange (RFC 8693). MCP clients auto-discover everything.
+- **Token Vault.** Managed OAuth tokens for Google, Slack, GitHub, Notion, Linear, Jira, Microsoft. Agents request fresh tokens via bearer delegation. Shark handles refresh, encryption (AES-256-GCM), rotation. Agents never see a refresh token.
+- **One binary, zero config.** `shark serve` boots a full auth system with an admin dashboard. No Postgres, no Redis, no Docker compose files.
+- **Every feature, free forever.** SSO (SAML + OIDC), organizations, webhooks, RBAC, audit logs, impersonation, migration tools — all in the binary. No enterprise paywalls.
+- **Any language, any framework.** REST API + auth proxy with agent scope enforcement. Go, Python, Ruby, PHP, Java, Rust. If it speaks HTTP, it works with Shark.
 
 ---
 
