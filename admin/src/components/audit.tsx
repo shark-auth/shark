@@ -68,13 +68,38 @@ export function Audit() {
   }, [filters.actorType, filters.actionPrefix, filters.timeRange]);
 
   const { data, loading, error, refresh } = useAPI(apiPath);
+  const [extraPages, setExtraPages] = React.useState([]);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+
+  // Reset extra pages whenever the filter changes
+  React.useEffect(() => { setExtraPages([]); }, [apiPath]);
+
+  const nextCursor = data?.next_cursor;
+  const hasMore = data?.has_more && nextCursor;
+
+  const loadMore = async () => {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const key = sessionStorage.getItem('shark_admin_key');
+      const url = `/api/v1${apiPath}&cursor=${encodeURIComponent(nextCursor)}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${key}` } });
+      if (res.ok) {
+        const d = await res.json();
+        const items = d?.data || d?.items || d?.audit_logs || (Array.isArray(d) ? d : []);
+        setExtraPages(prev => [...prev, ...items]);
+      }
+    } catch {}
+    setLoadingMore(false);
+  };
 
   usePageActions({ onRefresh: refresh });
 
   const events = React.useMemo(() => {
     const raw = data?.items || data?.audit_logs || data?.data || (Array.isArray(data) ? data : []);
-    return raw.map(normalizeEvent);
-  }, [data]);
+    const all = [...raw, ...extraPages];
+    return all.map(normalizeEvent);
+  }, [data, extraPages]);
 
   // Live tail: poll every 5s
   React.useEffect(() => {
@@ -129,20 +154,59 @@ export function Audit() {
 
   const maxBucket = Math.max(1, ...buckets.map(b => b.info + b.warn + b.danger));
 
+  // Derive the export date range from the active timeRange filter.
+  // Falls back to "last 24h" when timeRange is 'all' or unrecognised.
+  const exportRange = React.useMemo(() => {
+    const now = new Date();
+    const hoursMap = { '1h': 1, '24h': 24, '7d': 168 };
+    const hours = hoursMap[filters.timeRange] ?? 24;
+    const from = new Date(now.getTime() - hours * 3600_000);
+    return { from: from.toISOString(), to: now.toISOString() };
+  }, [filters.timeRange]);
+
+  const [exportRange2, setExportRange2] = React.useState(null);
+  const [showExportModal, setShowExportModal] = React.useState(false);
+  const [exportFrom, setExportFrom] = React.useState('');
+  const [exportTo, setExportTo] = React.useState('');
+  const [exportErr, setExportErr] = React.useState('');
+  const [exporting, setExporting] = React.useState(false);
+
+  const openExport = () => {
+    setExportFrom(exportRange.from.slice(0, 16)); // YYYY-MM-DDTHH:mm (for datetime-local input)
+    setExportTo(exportRange.to.slice(0, 16));
+    setExportErr('');
+    setShowExportModal(true);
+  };
+
   const handleExport = async () => {
-    const key = sessionStorage.getItem('shark_admin_key');
-    const res = await fetch('/api/v1/audit-logs/export', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setExportErr('');
+    if (!exportFrom || !exportTo) { setExportErr('Both dates are required.'); return; }
+    setExporting(true);
+    try {
+      const key = sessionStorage.getItem('shark_admin_key');
+      const res = await fetch('/api/v1/audit-logs/export', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: new Date(exportFrom).toISOString(), to: new Date(exportTo).toISOString() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+        setExportErr(err.message || err.error || `Server error ${res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-log-${exportFrom.slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch (e) {
+      setExportErr(e.message || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const savedViews = [
@@ -170,7 +234,7 @@ export function Audit() {
               <span className={"dot " + (liveTail ? 'warn pulse' : '')} style={{background: liveTail ? undefined : 'var(--fg-faint)'}}/>
               {liveTail ? 'Streaming' : 'Live tail'}
             </button>
-            <button className="btn ghost" onClick={handleExport}>
+            <button className="btn ghost" onClick={openExport}>
               <Icon.Copy width={11} height={11}/> Export CSV
             </button>
             <button className="btn ghost">
@@ -321,6 +385,13 @@ export function Audit() {
           {filtered.length === 0 && events.length > 0 && (
             <div style={{padding: '60px 20px', textAlign: 'center'}} className="faint">No events match these filters.</div>
           )}
+          {hasMore && (
+            <div style={{ padding: '12px 20px', textAlign: 'center' }}>
+              <button className="btn ghost" onClick={loadMore} disabled={loadingMore} style={{ minWidth: 120 }}>
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -336,6 +407,50 @@ export function Audit() {
       </div>
 
       {selected && <EventDetail event={selected} allEvents={events} onClose={() => setSelected(null)}/>}
+
+      {/* Export modal */}
+      {showExportModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }} onClick={() => setShowExportModal(false)}>
+          <div style={{
+            background: 'var(--surface-0)', border: '1px solid var(--hairline)', borderRadius: 6,
+            padding: 24, minWidth: 340, maxWidth: 420,
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600 }}>Export Audit Logs (CSV)</h3>
+            <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+              <label style={{ fontSize: 12 }}>
+                From
+                <input type="datetime-local" value={exportFrom} onChange={e => setExportFrom(e.target.value)}
+                  style={{ display: 'block', width: '100%', marginTop: 4, padding: '4px 8px', fontSize: 12, border: '1px solid var(--hairline-strong)', borderRadius: 3, background: 'var(--surface-1)', color: 'var(--fg)' }}/>
+              </label>
+              <label style={{ fontSize: 12 }}>
+                To
+                <input type="datetime-local" value={exportTo} onChange={e => setExportTo(e.target.value)}
+                  style={{ display: 'block', width: '100%', marginTop: 4, padding: '4px 8px', fontSize: 12, border: '1px solid var(--hairline-strong)', borderRadius: 3, background: 'var(--surface-1)', color: 'var(--fg)' }}/>
+              </label>
+              <div className="row" style={{ gap: 6 }}>
+                {[['Last 1h','1h'],['Last 24h','24h'],['Last 7d','7d']].map(([label, key]) => (
+                  <button key={key} className="chip" style={{ cursor: 'pointer', fontSize: 11 }} onClick={() => {
+                    const h = key === '1h' ? 1 : key === '24h' ? 24 : 168;
+                    const now = new Date();
+                    setExportTo(now.toISOString().slice(0,16));
+                    setExportFrom(new Date(now - h*3600_000).toISOString().slice(0,16));
+                  }}>{label}</button>
+                ))}
+              </div>
+            </div>
+            {exportErr && <div style={{ color: 'var(--danger)', fontSize: 11.5, marginBottom: 10 }}>{exportErr}</div>}
+            <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn ghost" onClick={() => setShowExportModal(false)}>Cancel</button>
+              <button className="btn primary" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'Exporting…' : 'Download CSV'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -494,8 +494,8 @@ function SevDot({ sev }) {
 }
 
 function AppEvents({ app }) {
-  const { data, loading } = useAPI('/admin/audit?limit=20');
-  const events = (data?.events || []).filter(e => e.action && (e.action.startsWith('app.') || e.action.startsWith('oauth.'))).slice(0, 10);
+  const { data, loading } = useAPI('/audit-logs?limit=20');
+  const events = (data?.data || []).filter(e => e.action && (e.action.startsWith('app.') || e.action.startsWith('oauth.'))).slice(0, 10);
   return (
     <div style={{padding: 16}}>
       {loading ? (

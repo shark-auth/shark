@@ -31,7 +31,7 @@ export const NAV = [
   { group: 'OPERATIONS', items: [
     { id: 'audit', label: 'Audit Log', icon: 'Audit' },
     { id: 'webhooks', label: 'Webhooks', icon: 'Webhook' },
-    { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', badge: 'dev' },
+    { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', badge: 'dev', devOnly: true },
     { id: 'signing', label: 'Signing Keys', icon: 'Signing' },
     { id: 'settings', label: 'Settings', icon: 'Settings' },
   ]},
@@ -53,7 +53,7 @@ export const NAV = [
   ]},
 ];
 
-export function Sidebar({ page, setPage, collapsed, setCollapsed }) {
+export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode }) {
   return (
     <aside style={{
       width: collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)',
@@ -117,7 +117,7 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed }) {
               }}>{section.group}</div>
             )}
             {section.group && collapsed && <div style={{ height: 8 }}/>}
-            {section.items.map(item => {
+            {section.items.filter(item => !item.devOnly || devMode).map(item => {
               const IconEl = Icon[item.icon] || Icon.Home;
               const active = page === item.id;
               // Phase gating: items with ph > CURRENT_PHASE are visibly disabled.

@@ -21,7 +21,18 @@ const thStyle = {
 const tdStyle = { padding: '7px 16px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'middle' };
 
 export function DevInbox() {
+  // Guard: if dev_mode is off the route returns 404. Detect via error and show
+  // a helpful message rather than a red "Unauthorized" / "Not Found" banner.
   const { data, loading, error, refresh } = useAPI('/admin/dev/emails');
+  if (!loading && error && (error.includes('404') || error.includes('Not Found') || error.includes('HTTP 404'))) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8 }}>
+        <Icon.Mail width={32} height={32} style={{ opacity: 0.25 }}/>
+        <p style={{ color: 'var(--fg-dim)', fontSize: 13 }}>Dev Inbox is only available in <strong>dev mode</strong>.</p>
+        <p style={{ color: 'var(--fg-faint)', fontSize: 12 }}>Set <code>server.dev_mode = true</code> in your config to enable it.</p>
+      </div>
+    );
+  }
   const [selected, setSelected] = React.useState(null);
   const [clearing, setClearing] = React.useState(false);
 

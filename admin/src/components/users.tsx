@@ -131,12 +131,26 @@ export function Users() {
             display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
           }}>
             <span style={{ fontSize: 13, color: 'var(--fg-muted)', lineHeight: 1.5 }}>{checked.size} selected</span>
-            <button className="btn sm">Assign role</button>
-            <button className="btn sm">Add to org</button>
-            <button className="btn sm">Export CSV</button>
-            {/* Hairline divider before destructive action */}
+            {/* v0.2: Assign role / Add to org require a picker modal — deferred */}
+            <button className="btn sm" disabled title="v0.2 — use CLI: shark users assign-role">Assign role</button>
+            <button className="btn sm" disabled title="v0.2 — use CLI: shark users add-to-org">Add to org</button>
+            <button className="btn sm" onClick={async () => {
+              // Export selected users as CSV (client-side from already-loaded list)
+              const selectedUsers = users.filter(u => checked.has(u.id));
+              const header = 'id,email,name,email_verified,mfa_enabled,created_at';
+              const rows = selectedUsers.map(u =>
+                [u.id, u.email, u.name || '', u.email_verified ? 'true' : 'false', (u.mfa_enabled || u.mfa) ? 'true' : 'false', u.created_at || ''].join(',')
+              );
+              const csv = [header, ...rows].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url; a.download = 'users-export.csv'; a.click();
+              URL.revokeObjectURL(url);
+            }}>Export CSV</button>
+            {/* Delete-bulk: CLI-only for safety */}
             <span style={{ width: 1, height: 16, background: 'var(--hairline-strong)', marginLeft: 4 }}/>
-            <button className="btn sm danger">Delete</button>
+            <button className="btn sm danger" disabled title="Bulk delete is CLI-only for safety: shark users delete --ids …">Delete</button>
             <div style={{ flex: 1 }}/>
             <button className="btn ghost sm" onClick={() => setChecked(new Set())}>Clear</button>
           </div>
@@ -240,11 +254,11 @@ export function Users() {
                       {u.created_at ? MOCK.relativeTime(new Date(u.created_at).getTime()) : (u.created ? MOCK.relativeTime(u.created) : '—')}
                     </td>
                     <td className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: (() => {
-                      const ts = u.last_active_at ? new Date(u.last_active_at).getTime() : u.lastActive;
+                      const ts = u.last_login_at ? new Date(u.last_login_at).getTime() : null;
                       return ts && (Date.now() - ts < 60*60*1000) ? 'var(--success)' : 'var(--fg-muted)';
                     })() }}>
                       {(() => {
-                        const ts = u.last_active_at ? new Date(u.last_active_at).getTime() : u.lastActive;
+                        const ts = u.last_login_at ? new Date(u.last_login_at).getTime() : null;
                         return ts ? MOCK.relativeTime(ts) : '—';
                       })()}
                     </td>
@@ -323,7 +337,7 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
     { id: 'security', label: 'Security' },
     { id: 'rbac', label: 'Roles' },
     { id: 'orgs', label: 'Orgs' },
-    { id: 'agents', label: 'Agents', chip: '3' },
+    { id: 'agents', label: 'Agents' },
     { id: 'activity', label: 'Activity' },
   ];
 
@@ -571,7 +585,7 @@ function SecurityTab({ user }) {
   const { data: sessionsData, refresh: refreshSessions } = useAPI(
     user ? `/users/${user.id}/sessions` : null
   );
-  const sessions = sessionsData?.sessions || sessionsData || [];
+  const sessions = sessionsData?.data || [];
 
   const handleRevokeSession = async (sessionId) => {
     await API.del('/admin/sessions/' + sessionId);
@@ -637,12 +651,14 @@ function RolesTab({ user }) {
   );
   const roles = rolesData?.roles || rolesData || user.roles || [];
 
+  // Fetch effective permissions — flat deduped list from all assigned roles.
+  const { data: permsData } = useAPI(user ? `/users/${user.id}/permissions` : null);
+  const perms = Array.isArray(permsData) ? permsData : (permsData?.data || permsData?.permissions || []);
+
   const handleRemoveRole = async (roleId) => {
     await API.del('/users/' + user.id + '/roles/' + roleId);
     refreshRoles();
   };
-
-  const perms = ['users:read', 'users:write', 'agents:manage', 'billing:read', 'audit:export'];
 
   return (
     <>
@@ -662,15 +678,20 @@ function RolesTab({ user }) {
         </div>
       </Field>
       <div style={{ marginTop: 24 }}>
-        <Field label="Effective permissions" hint="Flattened from all roles">
+        <Field label="Effective permissions" hint="Flattened from all assigned roles">
           <div className="col" style={{ gap: 4, marginTop: 4 }}>
-            {perms.map(p => (
-              <div key={p} className="row" style={{ padding: '5px 8px', background: 'var(--surface-1)', borderRadius: 3 }}>
-                <Icon.Check width={11} height={11} style={{ color: 'var(--success)' }}/>
-                <span className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{p}</span>
-                <span className="faint" style={{ marginLeft: 'auto', fontSize: 11, lineHeight: 1.5 }}>from <span className="mono">admin</span></span>
-              </div>
-            ))}
+            {perms.length === 0 && (
+              <span className="faint" style={{ fontSize: 12 }}>No permissions via any role</span>
+            )}
+            {perms.map((p, i) => {
+              const label = typeof p === 'string' ? p : (p.action && p.resource ? `${p.action}:${p.resource}` : (p.action || p.id || String(i)));
+              return (
+                <div key={p.id || i} className="row" style={{ padding: '5px 8px', background: 'var(--surface-1)', borderRadius: 3 }}>
+                  <Icon.Check width={11} height={11} style={{ color: 'var(--success)' }}/>
+                  <span className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{label}</span>
+                </div>
+              );
+            })}
           </div>
         </Field>
       </div>
@@ -687,11 +708,32 @@ function RolesTab({ user }) {
 }
 
 function OrgsTab({ user }) {
+  const toast = useToast();
   const orgs = user.orgs || [];
+  const [removing, setRemoving] = React.useState(null);
+
+  const handleRemove = async (orgId, orgName) => {
+    if (!confirm(`Remove ${user.email} from "${orgName}"?`)) return;
+    setRemoving(orgId);
+    try {
+      await API.del(`/admin/organizations/${orgId}/members/${user.id}`);
+      toast.success(`Removed from ${orgName}`);
+      // The user object came from the list — refresh the page-level list so the
+      // orgs chip count updates. Since we don't own onRefreshList here, a
+      // full page reload is the safest option for now.
+      window.location.reload();
+    } catch (e) {
+      toast.error('Remove failed: ' + (e?.message || 'unknown error'));
+    } finally {
+      setRemoving(null);
+    }
+  };
+
   return (
     <div className="col" style={{ gap: 6 }}>
       {orgs.map((o, i) => {
         const name = typeof o === 'string' ? o : (o.name || o.slug || o.id);
+        const orgId = typeof o === 'object' ? (o.id || o.organization_id) : null;
         const role = typeof o === 'object' ? (o.role || 'member') : 'member';
         return (
           <div key={i} style={{ padding: 10, border: '1px solid var(--hairline-strong)', borderRadius: 5, background: 'var(--surface-1)' }}>
@@ -699,10 +741,18 @@ function OrgsTab({ user }) {
               <div className="avatar" style={{ width: 24, height: 24, fontSize: 11, background: hashColor(name) }}>{name[0]}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{name}</div>
-                <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>member</div>
+                <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{role}</div>
               </div>
               <span className="chip">{role}</span>
-              <button className="btn ghost sm">Remove</button>
+              {orgId && (
+                <button
+                  className="btn ghost sm danger"
+                  disabled={removing === orgId}
+                  onClick={() => handleRemove(orgId, name)}
+                >
+                  {removing === orgId ? '…' : 'Remove'}
+                </button>
+              )}
             </div>
           </div>
         );
@@ -714,11 +764,31 @@ function OrgsTab({ user }) {
 }
 
 function AgentsConsentsTab({ user }) {
-  const consents = [
-    { agent: 'Cursor', scopes: ['openid','profile','email','repos:read'], granted: '12d ago', tokens: 3 },
-    { agent: 'Claude CLI', scopes: ['openid','profile','workspace:read','workspace:write'], granted: '4d ago', tokens: 2 },
-    { agent: 'Zapier MCP', scopes: ['workspace:read','webhooks:rw'], granted: '2mo ago', tokens: 1 },
-  ];
+  const toast = useToast();
+  const { data: consentsData, loading, refresh } = useAPI(
+    user ? `/admin/oauth/consents?user_id=${user.id}` : null
+  );
+  const consents = consentsData?.data || consentsData?.consents || [];
+  const [revoking, setRevoking] = React.useState(null);
+
+  const handleRevoke = async (consentId, agentName) => {
+    if (!confirm(`Revoke access for "${agentName}"? All tied tokens will be invalidated.`)) return;
+    setRevoking(consentId);
+    try {
+      await API.del(`/admin/oauth/consents/${consentId}`);
+      toast.success(`Revoked access for ${agentName}`);
+      refresh();
+    } catch (e) {
+      toast.error('Revoke failed: ' + (e?.message || 'unknown error'));
+    } finally {
+      setRevoking(null);
+    }
+  };
+
+  if (loading) {
+    return <div className="faint" style={{ fontSize: 13, padding: '16px 0' }}>Loading consents…</div>;
+  }
+
   return (
     <>
       <div style={{
@@ -729,24 +799,38 @@ function AgentsConsentsTab({ user }) {
         fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
       }}>
         <Icon.Info width={12} height={12} style={{ verticalAlign: 'middle', marginRight: 6, opacity: 0.7 }}/>
-        User has granted {consents.length} agents access to their account. Revoking a consent invalidates all tied tokens.
+        User has granted {consents.length} agent{consents.length !== 1 ? 's' : ''} access to their account. Revoking a consent invalidates all tied tokens.
       </div>
+      {consents.length === 0 && (
+        <div className="faint" style={{ fontSize: 13, padding: '16px 0' }}>No active agent consents.</div>
+      )}
       <div className="col" style={{ gap: 6 }}>
-        {consents.map((c, i) => (
-          <div key={i} style={{ padding: 10, border: '1px solid var(--hairline-strong)', borderRadius: 5, background: 'var(--surface-1)' }}>
-            <div className="row" style={{ marginBottom: 6 }}>
-              <Avatar name={c.agent} agent size={22}/>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{c.agent}</div>
-                <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>granted {c.granted} · {c.tokens} live tokens</div>
+        {consents.map((c, i) => {
+          const agentName = c.agent_name || c.client_id;
+          const scopes = typeof c.scope === 'string' ? c.scope.split(' ') : (c.scopes || []);
+          const grantedAt = c.granted_at ? MOCK.relativeTime(new Date(c.granted_at).getTime()) : '—';
+          return (
+            <div key={c.id || i} style={{ padding: 10, border: '1px solid var(--hairline-strong)', borderRadius: 5, background: 'var(--surface-1)' }}>
+              <div className="row" style={{ marginBottom: 6 }}>
+                <Avatar name={agentName} agent size={22}/>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{agentName}</div>
+                  <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>granted {grantedAt}</div>
+                </div>
+                <button
+                  className="btn ghost sm danger"
+                  disabled={revoking === c.id}
+                  onClick={() => handleRevoke(c.id, agentName)}
+                >
+                  {revoking === c.id ? '…' : 'Revoke'}
+                </button>
               </div>
-              <button className="btn ghost sm danger">Revoke</button>
+              <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                {scopes.filter(Boolean).map(s => <span key={s} className="chip mono" style={{ height: 17, fontSize: 11 }}>{s}</span>)}
+              </div>
             </div>
-            <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-              {c.scopes.map(s => <span key={s} className="chip mono" style={{ height: 17, fontSize: 11 }}>{s}</span>)}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

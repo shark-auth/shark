@@ -121,6 +121,25 @@ export function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Fetch admin config to gate dev-only features.
+  // Defaults to null (unknown) until fetched; devMode gates render after first load.
+  const [adminConfig, setAdminConfig] = React.useState(null);
+  React.useEffect(() => {
+    if (!apiKey) return;
+    fetch('/api/v1/admin/config', { headers: { Authorization: `Bearer ${apiKey}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAdminConfig(d); })
+      .catch(() => {});
+  }, [apiKey]);
+  const devMode = adminConfig?.dev_mode ?? false;
+
+  // If user navigates to dev-inbox but dev_mode is known-false, redirect to overview.
+  React.useEffect(() => {
+    if (adminConfig !== null && !devMode && page === 'dev-inbox') {
+      setPage('overview');
+    }
+  }, [adminConfig, devMode, page]);
+
   if (!apiKey) {
     return <Login onLogin={(k) => setApiKey(k)} />;
   }
@@ -161,7 +180,8 @@ export function App() {
     <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)' }}>
       <Sidebar page={page} setPage={setPage}
         collapsed={tweaks.sidebarCollapsed}
-        setCollapsed={(v) => setTweak('sidebarCollapsed', v)}/>
+        setCollapsed={(v) => setTweak('sidebarCollapsed', v)}
+        devMode={devMode}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}
            data-screen-label={'01 ' + page}>
         <TopBar page={page} setTweaksOpen={setTweaksOpen} onOpenPalette={() => setPaletteOpen(true)} setPage={setPage}/>

@@ -221,6 +221,7 @@ function RoleDetail({ role, onRefresh, onDelete }) {
 }
 
 function RoleDetailHeader({ role, onRefresh, onDelete }) {
+  const toast = useToast();
   const [editName, setEditName] = React.useState(false);
   const [editDesc, setEditDesc] = React.useState(false);
   const [name, setName] = React.useState(role.name || '');
@@ -241,7 +242,7 @@ function RoleDetailHeader({ role, onRefresh, onDelete }) {
       await API.put('/roles/' + role.id, { name: name.trim(), description: desc });
       onRefresh();
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast.error('Save failed: ' + e.message);
       setName(role.name || '');
     } finally {
       setSaving(false);
@@ -256,15 +257,13 @@ function RoleDetailHeader({ role, onRefresh, onDelete }) {
       await API.put('/roles/' + role.id, { name: role.name, description: desc });
       onRefresh();
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast.error('Save failed: ' + e.message);
       setDesc(role.description || '');
     } finally {
       setSaving(false);
       setEditDesc(false);
     }
   }
-
-  const toast = useToast();
   function handleDelete() {
     toast.undo(`Deleted role "${role.name}"`, async () => {
       try {
@@ -351,11 +350,20 @@ function RoleDetailHeader({ role, onRefresh, onDelete }) {
 /* ---- Permissions Tab ---- */
 
 function PermissionsTab({ role, onRefresh }) {
+  const toast = useToast();
   const { data: roleData, loading: loadingRole, refresh: refreshRole } = useAPI('/roles/' + role.id);
   const { data: allPermsRaw, loading: loadingPerms } = useAPI('/permissions');
 
   const permissions = roleData?.permissions || roleData?.role?.permissions || [];
   const allPerms = allPermsRaw?.permissions || (Array.isArray(allPermsRaw) ? allPermsRaw : []);
+
+  // Batch usage fetch — one call replaces N×2 per-row calls from PermissionRow.
+  const permIds = permissions.map(p => p.id);
+  const batchPath = permIds.length > 0
+    ? '/admin/permissions/batch-usage?ids=' + permIds.join(',')
+    : null;
+  const { data: usageRaw, refresh: refreshUsage } = useAPI(batchPath, [permIds.join(',')]);
+  const usageMap = usageRaw || {};
 
   const [detaching, setDetaching] = React.useState(null);
   const [attachId, setAttachId] = React.useState('');
@@ -379,7 +387,7 @@ function PermissionsTab({ role, onRefresh }) {
       refreshRole();
       onRefresh();
     } catch (e) {
-      alert('Detach failed: ' + e.message);
+      toast.error('Detach failed: ' + e.message);
     } finally {
       setDetaching(null);
     }
@@ -407,16 +415,25 @@ function PermissionsTab({ role, onRefresh }) {
     if (!caAction.trim() || !caResource.trim()) return;
     setCreating(true);
     setCreateErr(null);
+    let permId = null;
     try {
       const perm = await API.post('/permissions', { action: caAction.trim(), resource: caResource.trim() });
-      const permId = perm?.id || perm?.permission?.id;
-      if (permId) {
+      permId = perm?.id || perm?.permission?.id;
+      if (!permId) throw new Error('Permission created but no ID returned');
+
+      try {
         await API.post('/roles/' + role.id + '/permissions', { permission_id: permId });
+      } catch (attachErr) {
+        // Attach failed — roll back the newly created permission to avoid an orphan.
+        try { await API.del('/permissions/' + permId); } catch { /* best-effort */ }
+        throw new Error('Attach failed: ' + (attachErr.message || 'unknown error'));
       }
+
       setCaAction('');
       setCaResource('');
       setShowCreate(false);
       refreshRole();
+      refreshUsage();
       onRefresh();
     } catch (ex) {
       setCreateErr(ex.message);
@@ -447,7 +464,14 @@ function PermissionsTab({ role, onRefresh }) {
           </thead>
           <tbody>
             {permissions.map(p => (
-              <PermissionRow key={p.id} p={p} onDetach={handleDetach} detaching={detaching === p.id}/>
+              <PermissionRow
+                key={p.id}
+                p={p}
+                onDetach={handleDetach}
+                detaching={detaching === p.id}
+                roleCount={usageMap[p.id]?.roles ?? null}
+                userCount={usageMap[p.id]?.users ?? null}
+              />
             ))}
             {permissions.length === 0 && (
               <tr>
@@ -649,14 +673,14 @@ function PermissionChecker() {
   );
 }
 
-// PermissionRow — single row in the attached-permissions table. Lazy-loads
-// the reverse-lookup counts (roles + users that have this permission) on
-// first render via the new /permissions/{id}/roles and /users endpoints.
-function PermissionRow({ p, onDetach, detaching }) {
-  const { data: rolesData } = useAPI('/permissions/' + p.id + '/roles');
-  const { data: usersData } = useAPI('/permissions/' + p.id + '/users');
-  const roleCount = rolesData?.total ?? (rolesData?.data?.length ?? 0);
-  const userCount = usersData?.total ?? (usersData?.data?.length ?? 0);
+// PermissionRow — single row in the attached-permissions table. Counts are
+// passed as props from PermissionsTab which fetches them in one batch call
+// (GET /admin/permissions/batch-usage?ids=…) instead of 2 calls per row.
+function PermissionRow({ p, onDetach, detaching, roleCount, userCount }) {
+  // Use prop counts when available; fall back to '…' while the batch request
+  // is in-flight (roleCount/userCount === null means not yet received).
+  const roles = roleCount !== null ? roleCount : '…';
+  const users = userCount !== null ? userCount : '…';
 
   return (
     <tr>
@@ -667,7 +691,7 @@ function PermissionRow({ p, onDetach, detaching }) {
         <div>
           <span className="mono faint" style={{ fontSize: 12 }}>{p.resource}</span>
           <div className="faint" style={{ fontSize: 10.5, marginTop: 2 }}>
-            Used by {roleCount} role{roleCount !== 1 ? 's' : ''} · {userCount} user{userCount !== 1 ? 's' : ''}
+            Used by {roles} role{roles !== 1 ? 's' : ''} · {users} user{users !== 1 ? 's' : ''}
           </div>
         </div>
       </td>

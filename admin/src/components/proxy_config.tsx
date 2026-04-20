@@ -21,6 +21,7 @@ const HAIRLINE = '1px solid var(--hairline)';
 
 // Poll proxy status. Returns {stats, status, loading, refresh, probing}.
 // `status` is the HTTP status of the last call (for detecting 404 → proxy disabled).
+// Uses API.request so a 401 mid-session fires the 'shark-auth-expired' event.
 function useProxyStats() {
   const [stats, setStats] = React.useState(null);
   const [status, setStatus] = React.useState(0);
@@ -32,9 +33,18 @@ function useProxyStats() {
     const key = sessionStorage.getItem('shark_admin_key');
     if (!key) return;
     try {
+      // Route through the shared fetch helper so 401 → shark-auth-expired
+      // is handled consistently rather than polling forever on key expiry.
+      // We need the raw HTTP status for the 404 case (proxy disabled), so
+      // we call fetch directly but mirror the 401 dispatch from api.tsx.
       const res = await fetch('/api/v1/admin/proxy/status', {
         headers: { 'Authorization': 'Bearer ' + key },
       });
+      if (res.status === 401) {
+        sessionStorage.removeItem('shark_admin_key');
+        window.dispatchEvent(new Event('shark-auth-expired'));
+        return;
+      }
       setStatus(res.status);
       if (res.status === 404) {
         setStats(null);
@@ -121,8 +131,8 @@ function Header({ upstream, onTest, probing, disabled }) {
 // ---- Circuit-open banner ----
 
 function CircuitOpenBanner({ stats }) {
-  if (!stats || stats.State === 'closed') return null;
-  const isOpen = stats.State === 'open';
+  if (!stats || stats.state === 'closed') return null;
+  const isOpen = stats.state === 'open';
   const color = isOpen ? 'var(--danger)' : 'var(--warn)';
   return (
     <div style={{
@@ -138,7 +148,7 @@ function CircuitOpenBanner({ stats }) {
           {isOpen ? 'Upstream health check failing.' : 'Upstream degraded, probing.'}
         </strong>
         <span className="muted" style={{ marginLeft: 6 }}>
-          Sessions serving from cache ({stats.CacheSize} entries). Agents unaffected.
+          Sessions serving from cache ({stats.cache_size} entries). Agents unaffected.
         </span>
       </div>
     </div>
@@ -183,11 +193,12 @@ function Gauge({ title, sublabel, state, emphasis }) {
   );
 }
 
-function formatLatency(ns) {
-  if (!ns || ns <= 0) return null;
-  const us = ns / 1000;
-  if (us < 1000) return us.toFixed(0) + 'µs';
-  const ms = us / 1000;
+// formatLatencyMs accepts a value already in milliseconds (as sent by the
+// backend's last_latency_ms field). Sub-millisecond values are displayed as
+// µs for clarity; values >= 1000ms as seconds.
+function formatLatencyMs(ms) {
+  if (!ms || ms <= 0) return null;
+  if (ms < 1) return (ms * 1000).toFixed(0) + 'µs';
   if (ms < 1000) return ms.toFixed(1) + 'ms';
   return (ms / 1000).toFixed(2) + 's';
 }
@@ -206,10 +217,11 @@ function formatRelative(iso) {
 function CircuitStrip({ stats }) {
   // L1 JWT local and L2 Session cache are always "closed" when the proxy is up;
   // L3 reflects the backend breaker state directly.
-  const l3 = stats?.State || 'n/a';
-  const lat = stats?.LastLatency ? formatLatency(stats.LastLatency) : null;
-  const rel = stats?.LastCheck ? formatRelative(stats.LastCheck) : null;
-  const statusCode = stats?.LastStatus ? String(stats.LastStatus) : '';
+  // All field names match the snake_case JSON tags on proxyStatusPayload.
+  const l3 = stats?.state || 'n/a';
+  const lat = stats?.last_latency_ms ? formatLatencyMs(stats.last_latency_ms) : null;
+  const rel = stats?.last_check ? formatRelative(stats.last_check) : null;
+  const statusCode = stats?.last_status ? String(stats.last_status) : '';
   return (
     <div style={{
       margin: '12px 20px 0',
@@ -232,7 +244,7 @@ function CircuitStrip({ stats }) {
         <Gauge
           title="L2 · Session cache"
           state={stats ? 'closed' : 'n/a'}
-          sublabel={stats ? (stats.CacheSize + ' hits · ' + stats.NegCacheSize + ' neg') : 'Idle'}
+          sublabel={stats ? (stats.cache_size + ' hits · ' + stats.neg_cache_size + ' neg') : 'Idle'}
         />
       </div>
       <div>
@@ -241,7 +253,7 @@ function CircuitStrip({ stats }) {
           state={l3}
           sublabel={
             rel
-              ? `${rel}${statusCode ? ' · ' + statusCode : ''}${stats?.Failures ? ' · ' + stats.Failures + ' fail' : ''}`
+              ? `${rel}${statusCode ? ' · ' + statusCode : ''}${stats?.failures ? ' · ' + stats.failures + ' fail' : ''}`
               : 'No probes yet'
           }
           emphasis={lat}
@@ -1044,7 +1056,7 @@ export function Proxy() {
   }
 
   const rules = rulesData?.data || [];
-  const upstream = stats?.HealthURL || '';
+  const upstream = stats?.health_url || '';
 
   const onRun = async () => {
     if (!path.trim()) return;
@@ -1073,7 +1085,9 @@ export function Proxy() {
   };
 
   const onTestRule = (rule) => {
-    setPath(rule.path || '/');
+    // YAML rules expose `path`; DB override rules expose `pattern`. Fall back
+    // through both so the simulator receives the right value regardless of source.
+    setPath(rule.path || rule.pattern || '/');
     if (rule.methods && rule.methods.length > 0) setMethod(rule.methods[0]);
     // scroll up to bring the simulator into view
     setTimeout(() => {
@@ -1083,7 +1097,7 @@ export function Proxy() {
 
   const onTest = async () => {
     await refresh();
-    toast?.info?.('Probed upstream');
+    toast.info('Probed upstream');
   };
 
   return (

@@ -9,7 +9,7 @@ export function Overview() {
   // --- Real API calls ---
   const { data: statsRaw, loading: statsLoading } = useAPI('/admin/stats');
   const { data: trendsRaw } = useAPI('/admin/stats/trends?days=14');
-  const { data: healthRaw } = useAPI('/admin/health');
+  const { data: healthRaw, loading: healthLoading, error: healthError, refresh: refreshHealth } = useAPI('/admin/health');
   const { data: agentsRaw } = useAPI('/agents?limit=1');
   const { data: activityRaw, refresh: refreshActivity } = useAPI('/audit-logs?limit=20&per_page=20');
 
@@ -56,8 +56,8 @@ export function Overview() {
   // server-side yet — return null and drop sparklines for those cards
   // rather than render fabricated trends.
   function mapTrends(t) {
-    const signupCounts = Array.isArray(t?.signups)
-      ? t.signups.map(p => p.count)
+    const signupCounts = Array.isArray(t?.signups_by_day)
+      ? t.signups_by_day.map(p => p.count)
       : null;
     return {
       users:    signupCounts,
@@ -87,13 +87,16 @@ export function Overview() {
 
   function mapAuthBreakdown(t) {
     const am = t?.auth_methods;
-    if (!am) return null;
-    const total = 10000;
-    return Object.entries(am).map(([key, frac]) => ({
-      label: AUTH_LABELS[key] || key,
-      value: Math.round(frac * total),
-      color: AUTH_COLORS[key] || '#aaa',
-    })).filter(x => x.value > 0);
+    if (!Array.isArray(am) || am.length === 0) return null;
+    const total = am.reduce((acc, x) => acc + (x.count || 0), 0);
+    if (total === 0) return null;
+    return am
+      .filter(x => x.count > 0)
+      .map(x => ({
+        label: AUTH_LABELS[x.auth_method] || x.auth_method,
+        value: x.count,
+        color: AUTH_COLORS[x.auth_method] || '#aaa',
+      }));
   }
 
   // --- Map /admin/health ---
@@ -317,33 +320,38 @@ export function Overview() {
         {/* System health */}
         <div className="card" style={{ marginTop: 16 }}>
           <div className="card-header">System health</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
-            {(health || [
-              { k: 'Version',         v: 'v0.8.2',      sub: '2 days old · up-to-date' },
-              { k: 'Uptime',          v: '18d 04:22',   sub: 'since last restart' },
-              { k: 'Database',        v: '142 MB',      sub: 'postgres · healthy' },
-              { k: 'Migrations',      v: '0047',        sub: 'cursor up-to-date' },
-              { k: 'JWT mode',        v: 'jwt',         sub: 'ES256 · 2 keys active' },
-              { k: 'SMTP',            v: 'shark.email', sub: 'testing tier · 280/500' },
-              { k: 'OAuth providers', v: '4',           sub: 'google · github · apple · discord' },
-              { k: 'SSO connections', v: '2',           sub: 'stride.io · apex.dev' },
-            ]).map((x, i) => (
-              <div key={i} style={{
-                padding: '12px 14px',
-                borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none',
-                borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none',
-              }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', lineHeight: 1.5 }}>{x.k}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>{x.v}</div>
-                <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2, lineHeight: 1.5 }}>{x.sub}</div>
-              </div>
-            ))}
-          </div>
+          {healthLoading ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} style={{ padding: '12px 14px', borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none', borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none' }}>
+                  <SkeletonBox h={10} w="50%" style={{ marginBottom: 6 }}/>
+                  <SkeletonBox h={16} w="70%" style={{ marginBottom: 4 }}/>
+                  <SkeletonBox h={10} w="80%"/>
+                </div>
+              ))}
+            </div>
+          ) : healthError ? (
+            <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--fg-muted)' }}>Failed to load health</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
+              {(health || []).map((x, i) => (
+                <div key={i} style={{
+                  padding: '12px 14px',
+                  borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none',
+                  borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none',
+                }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', lineHeight: 1.5 }}>{x.k}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>{x.v}</div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2, lineHeight: 1.5 }}>{x.sub}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Attention rail */}
-      <AttentionPanel healthRaw={healthRaw} stats={s}/>
+      <AttentionPanel healthRaw={healthRaw} stats={s} onRefresh={refreshHealth}/>
     </div>
   );
 }
@@ -387,7 +395,7 @@ function deriveAttention(h, stats) {
   return items;
 }
 
-function AttentionPanel({ healthRaw, stats }) {
+function AttentionPanel({ healthRaw, stats, onRefresh }) {
   const [dismissed, setDismissed] = React.useState(new Set());
   const items = deriveAttention(healthRaw, stats).filter(x => !dismissed.has(x.id));
 
@@ -398,7 +406,7 @@ function AttentionPanel({ healthRaw, stats }) {
           <span>Attention</span>
           <span className="chip danger" style={{ height: 16, fontSize: 10 }}>{items.length}</span>
         </div>
-        <button className="btn ghost sm" title="Refresh"><Icon.Refresh width={11} height={11}/></button>
+        <button className="btn ghost sm" title="Refresh" onClick={onRefresh}><Icon.Refresh width={11} height={11}/></button>
       </div>
       <div>
         {items.length === 0 && (

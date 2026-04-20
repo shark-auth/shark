@@ -5,6 +5,7 @@ import { API, useAPI } from './api'
 import { MOCK } from './mock'
 import { CLIFooter } from './CLIFooter'
 import { useURLParam } from './useURLParams'
+import { useToast } from './toast'
 
 // Sessions — live header strip + geo view + table + detail slideover
 
@@ -52,7 +53,7 @@ function normalizeSession(s) {
     mfa,
     dev: s.user_agent || s.dev || '—',
     created: toMs(s.created_at || s.created),
-    last: toMs(s.last_seen_at || s.last_activity_at || s.last || s.updated_at),
+    last: toMs(s.last_activity_at || s.last_seen_at || s.last || s.updated_at),
     expires: toMs(s.expires_at || s.expires),
     city: s.city || '',
     country: s.country || '',
@@ -64,6 +65,8 @@ function normalizeSession(s) {
     blocked: s.blocked || s.is_blocked || false,
     suspicious: s.suspicious || s.suspicious_reason || null,
     current: s.current || s.is_current || false,
+    // JTI from backend (only present for JWT-mode sessions)
+    jti: s.jti || null,
   };
 }
 
@@ -76,9 +79,10 @@ export function Sessions() {
   const [liveTail, setLiveTail] = React.useState(true);
   const [pulse, setPulse] = React.useState(0);
   const [jtiInput, setJtiInput] = React.useState('');
+  const toast = useToast();
 
   const { data: sessionsRaw, loading, refresh } = useAPI('/admin/sessions');
-  const sessions = (sessionsRaw?.sessions || []).map(normalizeSession);
+  const sessions = (sessionsRaw?.data || []).map(normalizeSession);
 
   // Live polling: refresh every 5s when liveTail is on
   React.useEffect(() => {
@@ -107,7 +111,18 @@ export function Sessions() {
       setJtiInput('');
       refresh();
     } catch (e) {
-      // silently fail for now
+      toast.error(e?.message || 'Failed to revoke JTI');
+    }
+  };
+
+  const handleRevokeAll = async () => {
+    if (!window.confirm('Revoke ALL active sessions? This will log out every user immediately.')) return;
+    try {
+      const r = await API.del('/admin/sessions');
+      toast.success(`Revoked ${r?.revoked ?? 0} sessions`);
+      refresh();
+    } catch (e) {
+      toast.error(e?.message || 'Failed to revoke all sessions');
     }
   };
 
@@ -236,7 +251,7 @@ export function Sessions() {
           </div>
 
           <button className="btn sm">Export</button>
-          <button className="btn sm danger">Revoke all</button>
+          <button className="btn sm danger" onClick={handleRevokeAll}>Revoke all</button>
         </div>
 
         {/* Content */}
@@ -878,37 +893,48 @@ function SessionOverviewTab({ s }) {
       </FieldGroup>
 
       {/* ── Token references ── */}
-      <div style={{ padding: 10, border: '1px solid var(--hairline)', borderRadius: 4, background: 'var(--surface-1)' }}>
-        <div style={{ ...sectionHeadingStyle, marginBottom: 8 }}>Token refs</div>
-        <div className="col" style={{ gap: 6 }}>
-          <div className="row" style={{ fontSize: 13 }}>
-            <span style={{ width: 90, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>Refresh token</span>
-            <CopyField value="rtk_01HMK2P8Q9W4T6X"/>
-          </div>
-          <div className="row" style={{ fontSize: 13 }}>
-            <span style={{ width: 90, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>Access JTI</span>
-            <CopyField value="jti_8f4a2c9e1b7d"/>
+      {s.jti && (
+        <div style={{ padding: 10, border: '1px solid var(--hairline)', borderRadius: 4, background: 'var(--surface-1)' }}>
+          <div style={{ ...sectionHeadingStyle, marginBottom: 8 }}>Token refs</div>
+          <div className="col" style={{ gap: 6 }}>
+            <div className="row" style={{ fontSize: 13 }}>
+              <span style={{ width: 90, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>Access JTI</span>
+              <CopyField value={s.jti}/>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
     </div>
   );
 }
 
 function SessionClaimsTab({ s }) {
+  // If there's no JTI, this is a pure cookie session — no JWT was issued.
+  if (!s.jti) {
+    return (
+      <div style={{
+        padding: 16, border: '1px dashed var(--hairline-strong)', borderRadius: 5,
+        background: 'var(--surface-1)', textAlign: 'center',
+      }}>
+        <div style={{ fontSize: 12, marginBottom: 6 }}>Cookie session — no JWT claims</div>
+        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+          This session was created without a bearer token. Token claims are only available for JWT-mode sessions.
+        </div>
+      </div>
+    );
+  }
   const claims = {
-    iss: 'https://auth.shark.sh',
-    sub: (s.user || '').startsWith('unknown') || !s.user ? '—' : (s.user_id ? s.user_id : 'usr_' + s.id.slice(-8)),
-    aud: ['https://api.nimbus.sh'],
+    iss: window.location.origin,
+    sub: s.user_id || ('usr_' + s.id.slice(-8)),
+    sid: s.id,
+    jti: s.jti,
     iat: Math.floor(s.created / 1000),
     exp: Math.floor(Math.abs(s.expires) / 1000),
-    jti: 'jti_8f4a2c9e1b7d',
-    sid: s.id,
     amr: [s.method, s.mfa].filter(Boolean),
     acr: s.mfa ? 'urn:shark:mfa' : 'urn:shark:single',
     scope: s.client === 'agent' ? 'openid profile workspace:read workspace:write' : 'openid profile email',
-    ...(s.client === 'agent' || s.client === 'api' ? { cnf: { 'jkt': 'RHgQ_x...dPoP' } } : {}),
+    ...(s.client === 'agent' || s.client === 'api' ? { cnf: { 'jkt': '(DPoP key thumbprint)' } } : {}),
   };
   return (
     <pre className="mono" style={{
@@ -923,20 +949,30 @@ function SessionClaimsTab({ s }) {
 }
 
 function SessionEventsTab({ s }) {
-  const events = [
-    { t: Date.now() - (Date.now() - s.last), action: 'token.refresh', meta: 'ok' },
-    { t: s.last + 60_000, action: 'api.request', meta: 'GET /v1/workspaces' },
-    { t: s.last + 120_000, action: 'api.request', meta: 'GET /v1/orgs/nimbus' },
-    { t: s.created + 5_000, action: 'mfa.challenge', meta: s.mfa || 'skipped' },
-    { t: s.created, action: 'session.created', meta: `via ${s.method}` },
-  ];
+  // Fetch real audit logs scoped to this user. A session_id filter would be
+  // ideal, but audit logs are keyed by user_id — this is accurate (scoped to
+  // the right user) though not session-isolated.
+  const { data, loading } = useAPI(
+    s.user_id ? `/audit-logs?actor_id=${s.user_id}&limit=30` : null,
+    [s.user_id]
+  );
+  const events = data?.data || [];
+
+  if (loading) {
+    return <div className="faint" style={{ fontSize: 11, padding: 8 }}>Loading events…</div>;
+  }
+  if (events.length === 0) {
+    return <div className="faint" style={{ fontSize: 11, padding: 8 }}>No audit events found for this user.</div>;
+  }
   return (
     <div className="col" style={{ gap: 0 }}>
       {events.map((e, i) => (
-        <div key={i} className="row" style={{ padding: '7px 0', borderBottom: '1px solid var(--hairline)', gap: 10 }}>
-          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', width: 70 }}>{relTime(e.t)}</span>
+        <div key={e.id || i} className="row" style={{ padding: '7px 0', borderBottom: '1px solid var(--hairline)', gap: 10 }}>
+          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', width: 70 }}>
+            {relTime(new Date(e.created_at).getTime())}
+          </span>
           <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, width: 160 }}>{e.action}</span>
-          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{e.meta}</span>
+          <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{e.status || ''}</span>
         </div>
       ))}
     </div>

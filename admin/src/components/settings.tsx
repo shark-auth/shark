@@ -13,9 +13,6 @@ export function Settings() {
   const [purgingSession, setPurgingSession] = React.useState(false);
   const [purgingAudit, setPurgingAudit] = React.useState(false);
   const [auditBefore, setAuditBefore] = React.useState('');
-  const [deleteConfirmInput, setDeleteConfirmInput] = React.useState('');
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
-
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -73,16 +70,10 @@ export function Settings() {
     }
   }
 
-  function handleDeleteAllUsers() {
-    setDeleteConfirmOpen(false);
-    setDeleteConfirmInput('');
-    showToast('Not implemented yet', 'warn');
-  }
-
   const baseUrl = config?.base_url || window.location.origin;
   const corsOrigins = config?.cors_origins || [];
   const isDevMode = config?.dev_mode === true || config?.environment === 'development';
-  const smtpConfigured = !!(config?.smtp_host || health?.smtp?.host);
+  const smtpConfigured = !!(config?.smtp_configured || health?.smtp?.configured);
 
   // Row helper for read-only config display
   function ConfigRow({ label, children }) {
@@ -146,8 +137,8 @@ export function Settings() {
                   <div className="row" style={{ gap: 8 }}>
                     <span className="mono" style={{ fontSize: 12 }}>{formatBytes(health?.db?.size_mb)}</span>
                     {health?.db?.status && (
-                      <span className={"chip" + (health.db.status === 'healthy' ? ' success' : ' warn')} style={{ height: 16, fontSize: 10 }}>
-                        <span className={"dot" + (health.db.status === 'healthy' ? ' success' : ' warn')} style={{ width: 5, height: 5 }}/>
+                      <span className={"chip" + (health.db.status === 'ok' ? ' success' : ' warn')} style={{ height: 16, fontSize: 10 }}>
+                        <span className={"dot" + (health.db.status === 'ok' ? ' success' : ' warn')} style={{ width: 5, height: 5 }}/>
                         {health.db.status}
                       </span>
                     )}
@@ -191,7 +182,7 @@ export function Settings() {
                       {config?.jwt_mode ? 'JWT' : 'Cookie'}
                     </span>
                     {config?.jwt_mode && (
-                      <span className="mono faint" style={{ fontSize: 11 }}>{config?.jwt_algorithm || 'ES256'}</span>
+                      <span className="mono faint" style={{ fontSize: 11 }}>{config?.jwt?.algorithm || '—'}</span>
                     )}
                     {!config?.jwt_mode && (
                       <span className="faint" style={{ fontSize: 11 }}>server-side sessions</span>
@@ -332,88 +323,18 @@ export function Settings() {
             background: 'color-mix(in oklch, var(--danger) 4%, var(--surface-1))',
           }}>
             <div style={{ padding: '12px 14px' }}>
-              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--fg)' }}>Delete all users</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--fg-dim)', marginTop: 2 }}>
-                    Permanently removes every user account, session, and associated data from the database.
-                  </div>
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--fg)' }}>Bulk user deletion</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-dim)', marginTop: 4, lineHeight: 1.6 }}>
+                  Bulk user deletion is a CLI-only operation to prevent accidental data loss from the dashboard.
+                  Run <span className="mono" style={{ fontSize: 11, background: 'var(--surface-3)', padding: '1px 5px', borderRadius: 3 }}>shark users delete --all</span> from the server.
                 </div>
-                <button
-                  className="btn sm danger"
-                  onClick={() => setDeleteConfirmOpen(true)}
-                >
-                  <Icon.X width={11} height={11}/>
-                  Delete all users
-                </button>
               </div>
             </div>
           </div>
         </section>
 
       </div>
-
-      {/* ── Confirm modal — Delete all users ── */}
-      {deleteConfirmOpen && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 50,
-          background: 'rgba(0,0,0,0.7)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }} onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmInput(''); }}>
-          <div
-            className="card"
-            style={{ width: 400, padding: 20, animation: 'slideIn 120ms ease-out' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: 6, flexShrink: 0,
-                background: 'var(--danger-bg)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Icon.Warn width={14} height={14} style={{ color: 'var(--danger)' }}/>
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>Delete all users</div>
-                <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 1 }}>This action is permanent and cannot be undone.</div>
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginBottom: 12, lineHeight: 1.5 }}>
-              Type <span className="mono" style={{ color: 'var(--danger)', background: 'var(--danger-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>DELETE ALL USERS</span> to confirm.
-            </div>
-
-            <input
-              autoFocus
-              type="text"
-              value={deleteConfirmInput}
-              onChange={e => setDeleteConfirmInput(e.target.value)}
-              placeholder="DELETE ALL USERS"
-              style={{
-                width: '100%', height: 32, padding: '0 10px',
-                background: 'var(--surface-2)',
-                border: '1px solid var(--hairline-strong)',
-                borderRadius: 5,
-                color: 'var(--fg)',
-                fontSize: 12,
-                marginBottom: 14,
-              }}
-            />
-
-            <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
-              <button className="btn sm ghost" onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmInput(''); }}>Cancel</button>
-              <button
-                className="btn sm danger"
-                disabled={deleteConfirmInput !== 'DELETE ALL USERS'}
-                onClick={handleDeleteAllUsers}
-                style={{ opacity: deleteConfirmInput !== 'DELETE ALL USERS' ? 0.45 : 1 }}
-              >
-                Delete all users
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Toast ── */}
       {toast && (

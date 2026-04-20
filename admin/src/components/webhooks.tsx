@@ -30,9 +30,9 @@ function statusCodeChip(code) {
   return <span className={'chip ' + cls} style={{height:16, fontSize:10, padding:'0 5px'}}>{code}</span>;
 }
 
-// Aligned with backend KnownWebhookEvents (internal/api/webhook_handlers.go).
-// Backend uses canonical `organization.*` and `session.revoked` names.
-const COMMON_EVENTS = [
+// Static fallback used before the /admin/webhooks/events response arrives so
+// the event pickers render immediately on slow connections.
+const FALLBACK_EVENTS = [
   'user.created',
   'user.updated',
   'user.deleted',
@@ -42,7 +42,16 @@ const COMMON_EVENTS = [
   'organization.created',
   'organization.member_added',
   'organization.deleted',
+  'webhook.test',
 ];
+
+// useWebhookEvents fetches the canonical event list from the backend and
+// merges it with the static fallback so pickers never render empty.
+function useWebhookEvents() {
+  const { data } = useAPI('/webhooks/events');
+  const fetched = Array.isArray(data?.events) ? data.events : null;
+  return fetched && fetched.length > 0 ? fetched : FALLBACK_EVENTS;
+}
 
 const wThStyle = { textAlign:'left', padding:'8px 14px', fontSize:10, fontWeight:500, color:'var(--fg-dim)', borderBottom:'1px solid var(--hairline)', background:'var(--surface-0)', position:'sticky', top:0, textTransform:'uppercase', letterSpacing:'0.05em' };
 const wTdStyle = { padding:'9px 14px', borderBottom:'1px solid var(--hairline)', verticalAlign:'middle' };
@@ -91,27 +100,41 @@ export function Webhooks() {
   };
 
   const handleCreate = async (form) => {
-    const result = await API.post('/webhooks', {
-      url: form.url,
-      events: form.events,
-      description: form.description || undefined,
-    });
-    if (result?.secret) setRevealSecret(result.secret);
-    refresh();
+    try {
+      const result = await API.post('/webhooks', {
+        url: form.url,
+        events: form.events,
+        description: form.description || undefined,
+      });
+      if (result?.secret) setRevealSecret(result.secret);
+      refresh();
+    } catch (e) {
+      showToast(e?.message || 'Failed to create webhook', 'danger');
+      throw e; // re-throw so CreateWebhookModal can surface localised error
+    }
   };
 
   const handleDelete = async (id) => {
-    await API.del('/webhooks/' + id);
-    if (selected?.id === id) setSelected(null);
-    refresh();
+    try {
+      await API.del('/webhooks/' + id);
+      if (selected?.id === id) setSelected(null);
+      refresh();
+    } catch (e) {
+      showToast(e?.message || 'Failed to delete webhook', 'danger');
+    }
   };
 
   const handleUpdate = async (id, updates) => {
-    const result = await API.patch('/webhooks/' + id, updates);
-    // Refresh selected with updated data
-    if (selected?.id === id) setSelected(prev => ({ ...prev, ...updates }));
-    refresh();
-    showToast('Webhook updated');
+    try {
+      await API.patch('/webhooks/' + id, updates);
+      // Refresh selected with updated data
+      if (selected?.id === id) setSelected(prev => ({ ...prev, ...updates }));
+      refresh();
+      showToast('Webhook updated');
+    } catch (e) {
+      showToast(e?.message || 'Failed to update webhook', 'danger');
+      throw e;
+    }
   };
 
   const handleTest = async (id) => {
@@ -419,6 +442,7 @@ function WebhookConfigTab({ w, onUpdate, onDelete }) {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState(null);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const knownEvents = useWebhookEvents();
 
   const toggleEvent = (ev) => {
     setEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev]);
@@ -449,7 +473,7 @@ function WebhookConfigTab({ w, onUpdate, onDelete }) {
     await onDelete(w.id);
   };
 
-  const customEvents = events.filter(e => !COMMON_EVENTS.includes(e));
+  const customEvents = events.filter(e => !knownEvents.includes(e));
 
   return (
     <div style={{padding: 16, display:'flex', flexDirection:'column', gap:16}}>
@@ -471,7 +495,7 @@ function WebhookConfigTab({ w, onUpdate, onDelete }) {
       <div>
         <label style={labelStyle}>Events · {events.length} selected</label>
         <div style={{border:'1px solid var(--hairline)', borderRadius:3, overflow:'hidden'}}>
-          {COMMON_EVENTS.map(ev => (
+          {knownEvents.map(ev => (
             <label key={ev} className="row" style={{padding:'6px 10px', borderBottom:'1px solid var(--hairline)', gap:10, cursor:'pointer'}}>
               <input type="checkbox" checked={events.includes(ev)} onChange={() => toggleEvent(ev)}/>
               <span className="mono" style={{fontSize:11}}>{ev}</span>
@@ -690,8 +714,7 @@ function WebhookTestFireTab({ webhookId }) {
   const [firing, setFiring] = React.useState(false);
   const [result, setResult] = React.useState(null);
 
-  // Aligned with backend KnownWebhookEvents.
-  const events = ['user.created','user.updated','user.deleted','session.created','session.revoked','mfa.enabled','organization.created','organization.member_added','organization.deleted','webhook.test'];
+  const events = useWebhookEvents();
 
   const handleFire = async () => {
     setFiring(true); setResult(null);
@@ -743,7 +766,10 @@ function WebhookSigVerifyTab() {
     if (!payload || !signature || !secret) return;
     try {
       const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      // Strip whsec_ prefix if the user pastes the full secret from the
+      // "copy now" banner. The raw bytes (not the prefix) are the HMAC key.
+      const rawSecret = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret;
+      const key = await crypto.subtle.importKey('raw', enc.encode(rawSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
       const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
       const computed = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
       const inputSig = signature.replace(/^sha256=/, '').toLowerCase();
@@ -761,8 +787,11 @@ function WebhookSigVerifyTab() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div>
           <label style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Webhook secret</label>
-          <input value={secret} onChange={e => setSecret(e.target.value)} placeholder="whsec_..."
+          <input value={secret} onChange={e => setSecret(e.target.value)} placeholder="whsec_... or raw hex"
             style={{ width: '100%', height: 28, padding: '0 8px', background: 'var(--surface-2)', border: '1px solid var(--hairline-strong)', borderRadius: 4, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--fg)' }}/>
+          <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>
+            Paste with or without the <span className="mono">whsec_</span> prefix — it will be stripped automatically.
+          </div>
         </div>
         <div>
           <label style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Payload body</label>
@@ -793,6 +822,7 @@ function CreateWebhookModal({ onClose, onCreate }) {
   const [customEvents, setCustomEvents] = React.useState([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
+  const knownEvents = useWebhookEvents();
 
   const toggleEvent = (ev) => {
     const next = new Set(selectedEvents);
@@ -848,7 +878,7 @@ function CreateWebhookModal({ onClose, onCreate }) {
         <div style={{marginTop:14}}>
           <label style={labelStyle}>Events · {allSelectedEvents.length} selected</label>
           <div style={{border:'1px solid var(--hairline)', borderRadius:3, maxHeight:220, overflow:'auto'}}>
-            {COMMON_EVENTS.map(ev => (
+            {knownEvents.map(ev => (
               <label key={ev} className="row" style={{padding:'6px 10px', borderBottom:'1px solid var(--hairline)', gap:10, cursor:'pointer'}}>
                 <input type="checkbox" checked={selectedEvents.has(ev)} onChange={() => toggleEvent(ev)}/>
                 <span className="mono" style={{fontSize:11, flex:1}}>{ev}</span>

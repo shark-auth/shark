@@ -515,9 +515,14 @@ function ProviderConfig({ provider, onUpdate }) {
 
 function ProviderConnections({ provider }) {
   const toast = useToast();
-  const { data, loading, error, refresh } = useAPI('/admin/vault/connections');
-  const allConns = data?.data || [];
-  const conns = allConns.filter(c => c.provider_id === provider.id);
+  // Pass provider.id as dep so the hook re-fetches when the selected provider
+  // changes, and use the ?provider_id filter to avoid a full-table scan.
+  const { data, loading, error, refresh } = useAPI(
+    '/admin/vault/connections?provider_id=' + encodeURIComponent(provider.id),
+    [provider.id],
+  );
+  const conns = data?.data || [];
+  const [testModal, setTestModal] = React.useState(null); // {userId, connId} | null
 
   const handleDisconnect = async (id) => {
     if (!confirm('Disconnect this user from ' + (provider.display_name || provider.name) + '? They will need to re-authorise.')) return;
@@ -540,13 +545,35 @@ function ProviderConnections({ provider }) {
     return <span className="chip success" style={{ height: 16, fontSize: 10 }}>active</span>;
   };
 
+  const handleConnect = () => {
+    // Open the OAuth connect flow in a new tab. When the callback completes
+    // the dashboard will re-fetch on next refresh (or user clicks Refresh).
+    const win = window.open('/api/v1/vault/connect/' + encodeURIComponent(provider.name), '_blank', 'noopener,noreferrer');
+    // Poll after the new tab closes to auto-refresh the connection list.
+    if (win) {
+      const poll = setInterval(() => {
+        if (win.closed) { clearInterval(poll); refresh(); }
+      }, 800);
+    }
+  };
+
   return (
     <div style={{ padding: 16 }}>
+      {testModal && (
+        <VaultTestTokenModal
+          provider={provider}
+          userId={testModal.userId}
+          onClose={() => setTestModal(null)}
+        />
+      )}
       <div className="row" style={{ marginBottom: 10, gap: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 500 }}>
           {conns.length} connection{conns.length !== 1 ? 's' : ''} to {provider.display_name || provider.name}
         </div>
         <div style={{ flex: 1 }}/>
+        <button className="btn ghost sm" onClick={handleConnect} disabled={!provider.active} title={!provider.active ? 'Provider is inactive' : 'Start OAuth flow'}>
+          <Icon.Plus width={11} height={11}/>Connect
+        </button>
         <button className="btn ghost sm" onClick={refresh} disabled={loading}>
           <Icon.Refresh width={11} height={11}/>Refresh
         </button>
@@ -588,9 +615,14 @@ function ProviderConnections({ provider }) {
                   {c.last_refreshed_at ? new Date(c.last_refreshed_at).toLocaleString() : '—'}
                 </td>
                 <td>
-                  <button className="btn ghost sm danger" onClick={() => handleDisconnect(c.id)}>
-                    Disconnect
-                  </button>
+                  <div className="row" style={{ gap: 4 }}>
+                    <button className="btn ghost sm" onClick={() => setTestModal({ userId: c.user_id, connId: c.id })} title="Test token retrieval">
+                      Test
+                    </button>
+                    <button className="btn ghost sm danger" onClick={() => handleDisconnect(c.id)}>
+                      Disconnect
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -693,6 +725,88 @@ function RotateSecretModal({ provider, onClose, onConfirm }) {
           <button className="btn primary" onClick={go} disabled={working || !secret.trim()}>
             {working ? 'Rotating…' : 'Rotate secret'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Test token modal ---------------------------------------------------------
+// Shows metadata (expiry) for a user's vault connection token without
+// revealing the raw access token value. Admin-only diagnostic tool.
+
+function VaultTestTokenModal({ provider, userId, onClose }) {
+  const [result, setResult] = React.useState(null); // {ok, exp, error}
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const handleTest = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      // Use admin connection list to get the connection; the token endpoint
+      // itself requires a Bearer token so we just check the connection state.
+      const conns = await API.get('/admin/vault/connections?provider_id=' + encodeURIComponent(provider.id));
+      const data = conns?.data || [];
+      const conn = data.find(c => c.user_id === userId);
+      if (!conn) {
+        setResult({ ok: false, error: 'Connection not found for this user.' });
+        return;
+      }
+      const expired = conn.expires_at && new Date(conn.expires_at) < new Date();
+      const expiring = conn.expires_at && !expired && (new Date(conn.expires_at).getTime() - Date.now()) < 60 * 60 * 1000;
+      setResult({
+        ok: !expired && !conn.needs_reauth,
+        exp: conn.expires_at,
+        needsReauth: conn.needs_reauth,
+        expired,
+        expiring,
+      });
+    } catch (e) {
+      setResult({ ok: false, error: e.message || 'Request failed' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={modalBackdrop} onClick={onClose}>
+      <div style={{...modalCard, width: 440}} onClick={e => e.stopPropagation()}>
+        <h2 style={{margin: 0, fontSize: 15, fontWeight: 600}}>Test token — {provider.display_name || provider.name}</h2>
+        <p className="faint" style={{fontSize: 12, marginTop: 6, lineHeight: 1.5}}>
+          Checks the stored connection for user <span className="mono">{userId}</span>. No token value is shown.
+        </p>
+        <div style={{marginTop: 14}}>
+          {!result && !loading && (
+            <button className="btn primary sm" onClick={handleTest}>Run check</button>
+          )}
+          {loading && <div className="faint" style={{fontSize: 12}}>Checking…</div>}
+          {result && (
+            <div style={{display:'flex', flexDirection:'column', gap: 10}}>
+              {result.ok ? (
+                <div className="chip success" style={{height: 24, fontSize: 12, padding: '0 10px'}}>
+                  Token valid
+                  {result.exp && <span className="faint" style={{marginLeft: 8, fontSize: 11}}>
+                    exp: {new Date(result.exp).toLocaleString()}
+                  </span>}
+                  {result.expiring && <span className="chip warn" style={{height: 16, fontSize: 10, marginLeft: 6}}>expiring soon</span>}
+                </div>
+              ) : (
+                <div className="chip danger" style={{height: 24, fontSize: 12, padding: '0 10px'}}>
+                  {result.needsReauth ? 'Needs re-auth' : result.expired ? 'Token expired' : result.error || 'Invalid'}
+                </div>
+              )}
+              <button className="btn ghost sm" onClick={handleTest} disabled={loading}>Re-run</button>
+            </div>
+          )}
+        </div>
+        <div className="row" style={{marginTop: 18, justifyContent:'flex-end'}}>
+          <button className="btn ghost" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

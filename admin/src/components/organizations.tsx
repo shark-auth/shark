@@ -250,7 +250,7 @@ function OrgActions({ org, onRefresh }) {
 
   return (
     <div style={{ position: 'relative' }}>
-      <button className="btn ghost icon sm" onClick={() => setOpen(o => !o)} disabled={deleting}>
+      <button className="btn ghost icon sm" onClick={() => setOpen(o => !o)}>
         <Icon.More width={12} height={12}/>
       </button>
       {open && (
@@ -303,15 +303,15 @@ function OrgOverviewTab({ org, members }) {
             <button className="btn sm danger" style={{ justifyContent: 'flex-start', marginTop: 2 }}>Suspend org</button>
           </div>
         </Panel>
-        {org.metadata && Object.keys(org.metadata).length > 0 && (
+        {org.metadata && (() => { const meta = typeof org.metadata === 'string' ? (JSON.parse(org.metadata || '{}')) : (org.metadata || {}); return Object.keys(meta).length > 0 ? (
           <Panel title="Metadata">
             <div className="col" style={{ gap: 8, fontSize: 13 }}>
-              {Object.entries(org.metadata).map(([k, v]) => (
+              {Object.entries(meta).map(([k, v]) => (
                 <Row key={k} label={k} val={<span style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-dim)', fontSize: 11, lineHeight: 1.5 }}>{String(v)}</span>}/>
               ))}
             </div>
           </Panel>
-        )}
+        ) : null; })()}
       </div>
     </div>
   );
@@ -421,10 +421,10 @@ function OrgMembersTab({ org, members, loading, onRefresh }) {
               <tr key={m.user_id || m.email}>
                 <td style={{ paddingLeft: 16 }}>
                   <div className="row" style={{ gap: 8 }}>
-                    <Avatar name={m.name || m.email} email={m.email}/>
+                    <Avatar name={m.user_name || m.name || m.user_email || m.email} email={m.user_email || m.email}/>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)', lineHeight: 1.4 }}>{m.name || '—'}</div>
-                      <div style={{ fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.5 }}>{m.email}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)', lineHeight: 1.4 }}>{m.user_name || m.name || '—'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.5 }}>{m.user_email || m.email}</div>
                     </div>
                   </div>
                 </td>

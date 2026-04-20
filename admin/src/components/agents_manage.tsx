@@ -201,7 +201,7 @@ export function Agents() {
           <span className="faint">CLI parity:</span>
           <span className="mono faint">shark agent list</span>
           <div style={{flex:1}}/>
-          <span className="faint mono">POST /api/v1/agents</span>
+          <span className="faint mono">GET /api/v1/agents</span>
         </div>
       </div>
 
@@ -274,12 +274,16 @@ function shortGrant(g) {
 function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
   const toast = useToast();
   const [revoking, setRevoking] = React.useState(false);
+  const [tokensVersion, setTokensVersion] = React.useState(0);
+  const [rotateModalOpen, setRotateModalOpen] = React.useState(false);
 
   const revokeAll = async () => {
     setRevoking(true);
     try {
       const r = await API.post('/agents/' + agent.id + '/tokens/revoke-all');
       toast.success(r?.message || `Revoked ${r?.count ?? 0} tokens`);
+      // Bump version so AgentTokens re-fetches.
+      setTokensVersion(v => v + 1);
     } catch (e) {
       toast.error(`Failed to revoke: ${e.message}`);
     } finally {
@@ -343,17 +347,23 @@ function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {tab === 'config' && <AgentConfig agent={agent} onUpdate={onUpdate}/>}
-        {tab === 'tokens' && <AgentTokens agent={agent}/>}
+        {tab === 'config' && <AgentConfig agent={agent} onUpdate={onUpdate} onRotateSecret={() => setRotateModalOpen(true)}/>}
+        {tab === 'tokens' && <AgentTokens agent={agent} tokensVersion={tokensVersion}/>}
         {tab === 'consents' && <AgentConsents agent={agent}/>}
         {tab === 'audit' && <AgentAudit agent={agent}/>}
       </div>
+      {rotateModalOpen && (
+        <RotateSecretModal
+          agent={agent}
+          onClose={() => setRotateModalOpen(false)}
+        />
+      )}
       <CLIFooter command={`shark agent show ${agent.client_id || agent.id}`}/>
     </aside>
   );
 }
 
-function AgentConfig({ agent, onUpdate }) {
+function AgentConfig({ agent, onUpdate, onRotateSecret }) {
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState(null);
   const [saveOk, setSaveOk] = React.useState(false);
@@ -509,6 +519,17 @@ function AgentConfig({ agent, onUpdate }) {
         </div>
       </Section>
 
+      <Section label="Client secret">
+        <div className="row" style={{gap: 8}}>
+          <span className="faint" style={{fontSize: 11.5, flex: 1}}>
+            Rotate the client secret to invalidate the current one and reveal a new plaintext secret once.
+          </span>
+          <button className="btn ghost sm" onClick={onRotateSecret} style={{flexShrink: 0}}>
+            Rotate secret…
+          </button>
+        </div>
+      </Section>
+
       <Section label="Metadata">
         <div style={{display:'grid', gridTemplateColumns:'auto 1fr', gap:'8px 14px', fontSize: 11.5}}>
           <span className="faint">Agent ID</span>
@@ -529,8 +550,8 @@ function AgentConfig({ agent, onUpdate }) {
   );
 }
 
-function AgentTokens({ agent }) {
-  const { data, loading, refresh } = useAPI('/agents/' + agent.id + '/tokens?limit=50', [agent.id]);
+function AgentTokens({ agent, tokensVersion }) {
+  const { data, loading, refresh } = useAPI('/agents/' + agent.id + '/tokens?limit=50', [agent.id, tokensVersion]);
   const tokens = data?.data || [];
   const toast = useToast();
   const [revoking, setRevoking] = React.useState(false);
@@ -589,18 +610,41 @@ function AgentTokens({ agent }) {
 }
 
 function AgentConsents({ agent }) {
+  const clientId = agent.client_id;
+  const { data, loading } = useAPI(
+    clientId ? `/admin/oauth/consents?client_id=${encodeURIComponent(clientId)}&limit=50` : null,
+    [clientId]
+  );
+  const consents = data?.data || [];
+
   return (
     <div style={{padding: 16}}>
-      <div style={{
-        padding: 16, border: '1px dashed var(--hairline-strong)', borderRadius: 5,
-        background: 'var(--surface-1)', textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 12, marginBottom: 6 }}>Consents are managed per user.</div>
-        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-          Visit the <span className="mono">Consents</span> page to see which users have authorized{' '}
-          <b style={{color: 'var(--fg)'}}>{agent.name}</b>, and to revoke access on their behalf.
+      {loading ? (
+        <div className="faint" style={{fontSize: 11}}>Loading consents…</div>
+      ) : consents.length === 0 ? (
+        <div className="faint" style={{fontSize: 11.5, textAlign: 'center', padding: 20}}>
+          No users have authorized <b style={{color:'var(--fg)'}}>{agent.name}</b> yet.
         </div>
-      </div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+          <thead>
+            <tr>
+              <th style={appThStyle}>User ID</th>
+              <th style={appThStyle}>Scope</th>
+              <th style={appThStyle}>Granted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {consents.map((c, i) => (
+              <tr key={c.id || i}>
+                <td style={appTdStyle}><span className="mono faint" style={{fontSize:10.5}}>{c.user_id || '—'}</span></td>
+                <td style={appTdStyle}><span className="mono faint" style={{fontSize:10.5, maxWidth:180, display:'inline-block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.scope || '—'}</span></td>
+                <td style={appTdStyle}><span className="mono faint" style={{fontSize:10.5}}>{relativeTime(c.created_at || c.granted_at)}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -839,6 +883,84 @@ function CreateAgentSlideOver({ onClose, onCreate }) {
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function RotateSecretModal({ agent, onClose }) {
+  const toast = useToast();
+  const [confirm, setConfirm] = React.useState('');
+  const [working, setWorking] = React.useState(false);
+  const [newSecret, setNewSecret] = React.useState(null);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !newSecret) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, newSecret]);
+
+  const go = async () => {
+    setWorking(true);
+    setError(null);
+    try {
+      const r = await API.post('/agents/' + agent.id + '/rotate-secret', {});
+      setNewSecret(r.client_secret);
+      toast.success('Secret rotated successfully');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div style={modalBackdrop} onClick={!newSecret ? onClose : undefined}>
+      <div style={{...modalCard, width: 500}} onClick={e => e.stopPropagation()}>
+        {newSecret ? (
+          <>
+            <h2 style={{margin: 0, fontSize: 15, fontWeight: 600}}>New client secret</h2>
+            <p className="faint" style={{fontSize: 12, marginTop: 6, lineHeight: 1.5}}>
+              Copy it now — it won't be shown again.
+            </p>
+            <div style={{background:'#000', color:'#fff', padding: 14, borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak:'break-all', position:'relative', paddingRight: 80, marginTop: 12}}>
+              {newSecret}
+              <button className="btn ghost sm" style={{position:'absolute', top: 6, right: 6, color:'#fff', borderColor:'rgba(255,255,255,0.2)'}}
+                onClick={() => navigator.clipboard.writeText(newSecret)}>
+                <Icon.Copy width={10} height={10}/> Copy
+              </button>
+            </div>
+            <div className="row" style={{marginTop: 16, justifyContent:'flex-end'}}>
+              <button className="btn primary" onClick={onClose}>Done</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 style={{margin: 0, fontSize: 15, fontWeight: 600}}>Rotate client secret</h2>
+            <p className="faint" style={{fontSize: 12, marginTop: 6, lineHeight: 1.5}}>
+              This will invalidate the current secret for <b style={{color:'var(--fg)'}}>{agent.name}</b> immediately. Any services using the old secret will fail to authenticate.
+            </p>
+            <div style={{marginTop: 14}}>
+              <label style={{display:'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4}}>
+                Type <b style={{fontFamily:'var(--font-mono)'}}>{agent.name}</b> to confirm
+              </label>
+              <input
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                placeholder={agent.name}
+                style={{width:'100%', boxSizing:'border-box', fontSize:12, padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
+              />
+            </div>
+            {error && <div style={{color:'var(--danger)', fontSize: 11, marginTop: 8}}>{error}</div>}
+            <div className="row" style={{marginTop: 18, justifyContent:'flex-end', gap: 8}}>
+              <button className="btn ghost" onClick={onClose} disabled={working}>Cancel</button>
+              <button className="btn danger" onClick={go} disabled={working || confirm !== agent.name}>
+                {working ? 'Rotating…' : 'Rotate secret'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

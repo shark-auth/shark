@@ -33,15 +33,15 @@ const STEP_TYPES = {
   // Block — red dot
   require_email_verification: { family: 'block',  label: 'Require email verification', wired: true },
   require_mfa_enrollment:     { family: 'block',  label: 'Require MFA enrollment',     wired: true },
-  require_mfa_challenge:      { family: 'block',  label: 'Require MFA challenge',      wired: false },
+  require_mfa_challenge:      { family: 'block',  label: 'Require MFA challenge',      wired: true },
   require_password_strength:  { family: 'block',  label: 'Require password strength',  wired: true },
-  custom_check:               { family: 'block',  label: 'Custom check',               wired: false },
+  custom_check:               { family: 'block',  label: 'Custom check',               wired: false, deferred: true },
   // Side effect — amber dot
   webhook:                    { family: 'effect', label: 'Webhook',                    wired: true },
-  set_metadata:               { family: 'effect', label: 'Set metadata',               wired: false },
-  assign_role:                { family: 'effect', label: 'Assign role',                wired: false },
-  add_to_org:                 { family: 'effect', label: 'Add to org',                 wired: false },
-  delay:                      { family: 'effect', label: 'Delay',                      wired: false },
+  set_metadata:               { family: 'effect', label: 'Set metadata',               wired: false, deferred: true },
+  assign_role:                { family: 'effect', label: 'Assign role',                wired: true },
+  add_to_org:                 { family: 'effect', label: 'Add to org',                 wired: true },
+  delay:                      { family: 'effect', label: 'Delay',                      wired: false, deferred: true },
   // Branch — purple dot
   conditional:                { family: 'branch', label: 'Conditional',                wired: true },
   redirect:                   { family: 'branch', label: 'Redirect',                   wired: true },
@@ -686,25 +686,34 @@ function Palette({ onPick }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {section.items.map(type => {
               const meta = STEP_TYPES[type];
+              const isDeferred = !!meta.deferred;
               return (
-                <button key={type} onClick={() => onPick(type)}
-                  title={meta.label}
+                <button key={type}
+                  onClick={() => { if (!isDeferred) onPick(type); }}
+                  title={isDeferred ? 'Available in v0.2' : meta.label}
+                  disabled={isDeferred}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
                     padding: '6px 8px',
                     border: '1px solid var(--hairline)',
-                    background: 'var(--surface-1)',
-                    borderRadius: 4, cursor: 'pointer',
+                    background: isDeferred ? 'var(--surface-0, var(--bg))' : 'var(--surface-1)',
+                    borderRadius: 4,
+                    cursor: isDeferred ? 'not-allowed' : 'pointer',
                     textAlign: 'left',
+                    opacity: isDeferred ? 0.45 : 1,
                     transition: 'background 80ms ease-out, border-color 80ms ease-out',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.borderColor = 'var(--hairline-strong)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-1)'; e.currentTarget.style.borderColor = 'var(--hairline)'; }}
+                  onMouseEnter={e => { if (!isDeferred) { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.borderColor = 'var(--hairline-strong)'; } }}
+                  onMouseLeave={e => { if (!isDeferred) { e.currentTarget.style.background = 'var(--surface-1)'; e.currentTarget.style.borderColor = 'var(--hairline)'; } }}
                 >
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--fg)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span className="mono" style={{ fontSize: 10.5, color: isDeferred ? 'var(--fg-dim)' : 'var(--fg)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {type}
                   </span>
-                  {!meta.wired && (
+                  {isDeferred ? (
+                    <span className="chip" style={{ height: 14, padding: '0 4px', fontSize: 9, color: 'var(--fg-dim)', borderColor: 'var(--hairline)' }}>
+                      v0.2
+                    </span>
+                  ) : !meta.wired && (
                     <span className="chip" style={{ height: 14, padding: '0 4px', fontSize: 9, color: 'var(--warn)', borderColor: 'color-mix(in oklch, var(--warn) 35%, var(--hairline-strong))' }}>
                       preview
                     </span>

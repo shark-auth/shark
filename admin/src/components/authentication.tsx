@@ -40,9 +40,13 @@ export function Authentication() {
   }
 
   const cfg = config || {};
-  const oauthProviders = cfg.oauth_providers || [];
+  const oauthProviders = cfg.social_providers || cfg.oauth_providers || [];
   const smtpConfigured = cfg.smtp_configured === true;
   const jwtMode = cfg.jwt_mode === true;
+  const passkey = cfg.passkey || {};
+  const passwordPolicy = cfg.password_policy || {};
+  const jwt = cfg.jwt || {};
+  const magicLink = cfg.magic_link || {};
 
   const OAUTH_PROVIDERS = [
     { id: 'google',  label: 'Google',  initial: 'G' },
@@ -74,16 +78,25 @@ export function Authentication() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}>
             <AuthCell
               label="Minimum length"
-              value="8 characters"
+              value={passwordPolicy.min_length != null ? `${passwordPolicy.min_length} characters` : '8 characters'}
             />
             <AuthCell
               label="Complexity"
-              value="Uppercase + lowercase + digit"
+              value={[
+                passwordPolicy.require_upper && 'uppercase',
+                passwordPolicy.require_lower && 'lowercase',
+                passwordPolicy.require_digit && 'digit',
+                passwordPolicy.require_symbol && 'symbol',
+              ].filter(Boolean).join(' + ') || 'No requirements'}
               border="left"
             />
             <AuthCell
               label="Lockout"
-              value="5 attempts / 15 min cooldown"
+              value={
+                passwordPolicy.lockout_attempts
+                  ? `${passwordPolicy.lockout_attempts} attempts / ${passwordPolicy.lockout_duration || '15m'} cooldown`
+                  : 'Not configured'
+              }
               border="left"
             />
           </div>
@@ -160,7 +173,7 @@ export function Authentication() {
               />
               <AuthCell
                 label="Token lifetime"
-                value="15 minutes"
+                value={magicLink.ttl || '—'}
                 border="left"
               />
             </div>
@@ -182,18 +195,18 @@ export function Authentication() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}>
               <AuthCell
                 label="Status"
-                value="Enabled"
-                valueColor="var(--success)"
-                dot="success"
+                value={passkey.enabled ? 'Enabled' : 'Not configured'}
+                valueColor={passkey.enabled ? 'var(--success)' : 'var(--fg-dim)'}
+                dot={passkey.enabled ? 'success' : 'warn'}
               />
               <AuthCell
                 label="RP Name"
-                value={cfg.rp_name || 'Default'}
+                value={passkey.rp_name || '—'}
                 border="left"
               />
               <AuthCell
                 label="RP ID"
-                value={cfg.rp_id || 'Default'}
+                value={passkey.rp_id || '—'}
                 mono
                 border="left"
               />
@@ -201,17 +214,17 @@ export function Authentication() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, borderTop: '1px solid var(--hairline)' }}>
               <AuthCell
                 label="Origin"
-                value={cfg.passkey_origin || cfg.base_url || window.location.origin}
+                value={passkey.origin || cfg.base_url || window.location.origin}
                 mono
               />
               <AuthCell
                 label="User Verification"
-                value={cfg.passkey_uv || 'preferred'}
+                value={passkey.user_verification || 'preferred'}
                 border="left"
               />
               <AuthCell
                 label="Attestation"
-                value={cfg.passkey_attestation || 'none'}
+                value={passkey.attestation || 'none'}
                 border="left"
               />
             </div>
@@ -308,7 +321,7 @@ export function Authentication() {
               {jwtMode && (
                 <div className="row" style={{ gap: 8 }}>
                   <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)' }}>Algorithm</span>
-                  <span className="mono" style={{ fontSize: 12 }}>{cfg.jwt_algorithm || 'ES256'}</span>
+                  <span className="mono" style={{ fontSize: 12 }}>{jwt.algorithm || '—'}</span>
                 </div>
               )}
               <div style={{
@@ -391,7 +404,7 @@ export function Authentication() {
               ) : previewHTML == null ? (
                 <div className="faint" style={{ padding: 24, fontSize: 12 }}>Rendering…</div>
               ) : (
-                <iframe srcDoc={previewHTML} sandbox="" style={{
+                <iframe srcDoc={previewHTML} sandbox="allow-same-origin" style={{
                   width: '100%', height: 520, border: 0, background: '#fff',
                 }}/>
               )}
