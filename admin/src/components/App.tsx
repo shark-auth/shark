@@ -32,7 +32,8 @@ import { HelpButton } from './HelpButton'
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "sidebarCollapsed": false,
-  "font": "manrope"
+  "font": "manrope",
+  "showPreview": false
 }/*EDITMODE-END*/;
 
 function useTweaks() {
@@ -184,7 +185,8 @@ export function App() {
       <Sidebar page={page} setPage={setPage}
         collapsed={tweaks.sidebarCollapsed}
         setCollapsed={(v) => setTweak('sidebarCollapsed', v)}
-        devMode={devMode}/>
+        devMode={devMode}
+        showPreview={tweaks.showPreview}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}
            data-screen-label={'01 ' + page}>
         <TopBar page={page} setTweaksOpen={setTweaksOpen} onOpenPalette={() => setPaletteOpen(true)} setPage={setPage}/>
@@ -219,8 +221,15 @@ export function App() {
               <button className={tweaks.font === 'space' ? 'on' : ''} onClick={() => setTweak('font', 'space')}>Space</button>
             </div>
           </div>
+          <div className="tweak-row">
+            <label>Preview features</label>
+            <div className="seg">
+              <button className={!tweaks.showPreview ? 'on' : ''} onClick={() => setTweak('showPreview', false)}>Hidden</button>
+              <button className={tweaks.showPreview ? 'on' : ''} onClick={() => setTweak('showPreview', true)}>Shown</button>
+            </div>
+          </div>
           <div className="faint" style={{ fontSize: 10.5, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--hairline)' }}>
-            Dark theme, B&W palette. Dev preview.
+            Dark theme, B&W palette. Preview features show phase-gated pages that are not yet fully built.
           </div>
         </div>
       )}

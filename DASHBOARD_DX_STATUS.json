@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-04-20T19:18:00Z",
+  "updated_at": "2026-04-20T19:38:00Z",
   "branch": "claude/admin-vendor-assets-fix",
   "current_task": null,
   "current_agent": null,
@@ -11,27 +11,28 @@
     "T05": {"status": "pending", "commit": null, "blocked_by": ["T04"]},
     "T06": {"status": "pending", "commit": null, "blocked_by": ["T05"]},
     "T07": {"status": "done", "commit": "8406b78", "blocked_by": []},
-    "T08": {"status": "done", "commit": "prior", "blocked_by": [], "notes": "all 6 admin org routes shipped in c3609db; frontend catches all surface errors"},
+    "T08": {"status": "done", "commit": "prior", "blocked_by": []},
     "T09": {"status": "pending", "commit": null, "blocked_by": []},
     "T10": {"status": "pending", "commit": null, "blocked_by": ["T09"]},
     "T11": {"status": "pending", "commit": null, "blocked_by": ["T09", "T10"]},
     "T12": {"status": "done", "commit": "6380fba", "blocked_by": []},
-    "T13": {"status": "done", "commit": "pending-commit", "blocked_by": []},
-    "T14": {"status": "pending", "commit": null, "blocked_by": ["T13"]},
+    "T13": {"status": "done", "commit": "dc3cef2", "blocked_by": []},
+    "T14": {"status": "done", "commit": "pending-commit", "blocked_by": []},
     "T15": {"status": "pending", "commit": null, "blocked_by": []},
     "T16": {"status": "pending", "commit": null, "blocked_by": []},
-    "T17": {"status": "done", "commit": "pending-commit", "blocked_by": []},
-    "T18": {"status": "done", "commit": "pending-commit", "blocked_by": []},
-    "T19": {"status": "pending", "commit": null, "blocked_by": []},
+    "T17": {"status": "done", "commit": "dc3cef2", "blocked_by": []},
+    "T18": {"status": "done", "commit": "dc3cef2", "blocked_by": []},
+    "T19": {"status": "done", "commit": "prior", "blocked_by": [], "notes": "scope picker shipped at api_keys.tsx:602-614 with 8 scopes + checkboxes + danger badges"},
     "T20": {"status": "pending", "commit": null, "blocked_by": []},
     "T21": {"status": "pending", "commit": null, "blocked_by": []},
     "T22": {"status": "done", "commit": "prior", "blocked_by": []},
     "T23": {"status": "done", "commit": "8406b78", "blocked_by": []},
-    "T24": {"status": "pending", "commit": null, "blocked_by": ["T04", "T05", "T06", "T09", "T10", "T11", "T14", "T15", "T16", "T19", "T20", "T21"]}
+    "T24": {"status": "pending", "commit": null, "blocked_by": ["T04", "T05", "T06", "T09", "T10", "T11", "T15", "T16", "T20", "T21"]}
   },
   "notes": [
     "2026-04-20 Wave-α first burst: T01 + T07 + T23 shipped at 8406b78",
-    "2026-04-20 Wave-α second burst: T12 shipped. T02 + T22 verified done-by-inspection.",
-    "2026-04-20 Wave-α third burst: T13 + T17 + T18 shipped. T08 verified done-by-inspection."
+    "2026-04-20 Wave-α second burst: T12 shipped. T02 + T22 done-by-inspection.",
+    "2026-04-20 Wave-α third burst: T13 + T17 + T18 shipped at dc3cef2. T08 done-by-inspection.",
+    "2026-04-20 Wave-α fourth burst: T14 shipped. T19 done-by-inspection."
   ]
 }

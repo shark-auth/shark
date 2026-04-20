@@ -54,7 +54,7 @@ export const NAV = [
   ]},
 ];
 
-export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode }) {
+export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode, showPreview }) {
   const { data: health } = useAPI('/admin/health');
   const version = health?.version;
   const healthStatus = health?.db?.status === 'healthy' || health?.db?.status === 'ok' ? 'healthy' : (health?.db?.status || '—');
@@ -115,7 +115,12 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode }) {
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
-        {NAV.map((section, i) => (
+        {NAV.map((section, i) => {
+          const visibleItems = section.items
+            .filter(item => !item.devOnly || devMode)
+            .filter(item => !item.ph || item.ph <= CURRENT_PHASE || showPreview);
+          if (visibleItems.length === 0) return null;
+          return (
           <div key={i} style={{ marginBottom: 6 }}>
             {section.group && !collapsed && (
               <div style={{
@@ -125,7 +130,7 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode }) {
               }}>{section.group}</div>
             )}
             {section.group && collapsed && <div style={{ height: 8 }}/>}
-            {section.items.filter(item => !item.devOnly || devMode).map(item => {
+            {visibleItems.map(item => {
               const IconEl = Icon[item.icon] || Icon.Home;
               const active = page === item.id;
               // Phase gating: items with ph > CURRENT_PHASE are visibly disabled.
@@ -174,7 +179,8 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode }) {
               );
             })}
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Footer */}
