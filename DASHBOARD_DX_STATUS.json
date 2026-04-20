@@ -27,7 +27,7 @@
     "T21": {"status": "done", "commit": "77920c3", "blocked_by": [], "notes": "Matrix view in rbac.tsx toggled via ?view=matrix; grid with checkbox cells, col-header bulk toggle w/ confirm, filter input, per-row usage count via batch-usage. Matrix extracted to rbac_matrix.tsx. Backend routes all pre-existing; no backend work."},
     "T22": {"status": "done", "commit": "prior", "blocked_by": []},
     "T23": {"status": "done", "commit": "8406b78", "blocked_by": []},
-    "T24": {"status": "pending", "commit": null, "blocked_by": ["T04", "T05", "T06", "T09", "T10", "T11", "T15", "T16", "T20", "T21"]}
+    "T24": {"status": "pending", "commit": null, "blocked_by": ["T06", "T16"], "notes": "22 of 24 done. T06 + T16 remain. See DASHBOARD_DX_NEXT.md for resume plan."}
   },
   "notes": [
     "2026-04-20 Wave-α first burst: T01 + T07 + T23 shipped at 8406b78",
