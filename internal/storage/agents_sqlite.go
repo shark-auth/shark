@@ -125,6 +125,15 @@ func (s *SQLiteStore) UpdateAgent(ctx context.Context, agent *Agent) error {
 	return err
 }
 
+// UpdateAgentSecret replaces the client_secret_hash for an agent.
+func (s *SQLiteStore) UpdateAgentSecret(ctx context.Context, id, secretHash string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE agents SET client_secret_hash=?, updated_at=? WHERE id=?`,
+		secretHash, time.Now().UTC().Format(time.RFC3339), id,
+	)
+	return err
+}
+
 // DeactivateAgent sets active=0 for an agent.
 func (s *SQLiteStore) DeactivateAgent(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE agents SET active=0, updated_at=? WHERE id=?`,

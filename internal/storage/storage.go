@@ -40,6 +40,7 @@ type Store interface {
 	UpdateSessionMFAPassed(ctx context.Context, id string, mfaPassed bool) error
 	ListActiveSessions(ctx context.Context, opts ListSessionsOpts) ([]*SessionWithUser, error)
 	DeleteSessionsByUserID(ctx context.Context, userID string) ([]string, error)
+	DeleteAllActiveSessions(ctx context.Context) (int64, error)
 
 	// Stats / metrics
 	CountUsers(ctx context.Context) (int, error)
@@ -140,6 +141,7 @@ type Store interface {
 	GetPermissionByID(ctx context.Context, id string) (*Permission, error)
 	ListPermissions(ctx context.Context) ([]*Permission, error)
 	GetPermissionByActionResource(ctx context.Context, action, resource string) (*Permission, error)
+	DeletePermission(ctx context.Context, id string) error
 
 	// RolePermissions
 	AttachPermissionToRole(ctx context.Context, roleID, permissionID string) error
@@ -147,6 +149,10 @@ type Store interface {
 	GetPermissionsByRoleID(ctx context.Context, roleID string) ([]*Permission, error)
 	GetRolesByPermissionID(ctx context.Context, permissionID string) ([]*Role, error)
 	GetUsersByPermissionID(ctx context.Context, permissionID string) ([]*User, error)
+	// Batch variants return permission_id → count maps so the dashboard
+	// can request all counts in 2 SQL round-trips instead of 2N.
+	BatchCountRolesByPermissionIDs(ctx context.Context, permissionIDs []string) (map[string]int, error)
+	BatchCountUsersByPermissionIDs(ctx context.Context, permissionIDs []string) (map[string]int, error)
 
 	// UserRoles
 	AssignRoleToUser(ctx context.Context, userID, roleID string) error
@@ -232,6 +238,7 @@ type Store interface {
 	GetAgentByClientID(ctx context.Context, clientID string) (*Agent, error)
 	ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*Agent, int, error)
 	UpdateAgent(ctx context.Context, agent *Agent) error
+	UpdateAgentSecret(ctx context.Context, id, secretHash string) error
 	DeactivateAgent(ctx context.Context, id string) error
 
 	// OAuth Authorization Codes
@@ -460,17 +467,21 @@ type APIKey struct {
 
 // AuditLog represents an audit log entry.
 type AuditLog struct {
-	ID         string `json:"id"`
-	ActorID    string `json:"actor_id,omitempty"`
-	ActorType  string `json:"actor_type"`
-	Action     string `json:"action"`
-	TargetType string `json:"target_type,omitempty"`
-	TargetID   string `json:"target_id,omitempty"`
-	IP         string `json:"ip,omitempty"`
-	UserAgent  string `json:"user_agent,omitempty"`
-	Metadata   string `json:"metadata"`
-	Status     string `json:"status"`
-	CreatedAt  string `json:"created_at"`
+	ID           string  `json:"id"`
+	ActorID      string  `json:"actor_id,omitempty"`
+	ActorType    string  `json:"actor_type"`
+	Action       string  `json:"action"`
+	TargetType   string  `json:"target_type,omitempty"`
+	TargetID     string  `json:"target_id,omitempty"`
+	OrgID        *string `json:"org_id,omitempty"`
+	SessionID    *string `json:"session_id,omitempty"`
+	ResourceType *string `json:"resource_type,omitempty"`
+	ResourceID   *string `json:"resource_id,omitempty"`
+	IP           string  `json:"ip,omitempty"`
+	UserAgent    string  `json:"user_agent,omitempty"`
+	Metadata     string  `json:"metadata"`
+	Status       string  `json:"status"`
+	CreatedAt    string  `json:"created_at"`
 }
 
 // Migration represents an Auth0 import migration record.
@@ -649,16 +660,20 @@ type ListSessionsOpts struct {
 
 // AuditLogQuery configures audit log queries with cursor-based pagination.
 type AuditLogQuery struct {
-	Action    string // filter by event type
-	ActorID   string // filter by actor
-	ActorType string // filter by actor type (user|agent|system|admin)
-	TargetID  string // filter by target
-	Status    string // "success" or "failure"
-	IP        string // filter by IP
-	From      string // start of date range (RFC3339)
-	To        string // end of date range (RFC3339)
-	Limit     int    // page size (default 50, max 200)
-	Cursor    string // cursor-based pagination (ID of last item)
+	Action       string // filter by event type
+	ActorID      string // filter by actor
+	ActorType    string // filter by actor type (user|agent|system|admin)
+	TargetID     string // filter by target
+	OrgID        string // filter by organization
+	SessionID    string // filter by session
+	ResourceType string // filter by resource type
+	ResourceID   string // filter by resource id
+	Status       string // "success" or "failure"
+	IP           string // filter by IP
+	From         string // start of date range (RFC3339)
+	To           string // end of date range (RFC3339)
+	Limit        int    // page size (default 50, max 200)
+	Cursor       string // cursor-based pagination (ID of last item)
 }
 
 // SigningKey represents a JWT signing keypair stored in the database.

@@ -608,6 +608,11 @@ func (s *SQLiteStore) GetPermissionByActionResource(ctx context.Context, action,
 	return &p, nil
 }
 
+func (s *SQLiteStore) DeletePermission(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM permissions WHERE id = ?`, id)
+	return err
+}
+
 // --- RolePermissions ---
 
 func (s *SQLiteStore) AttachPermissionToRole(ctx context.Context, roleID, permissionID string) error {
@@ -763,6 +768,76 @@ func (s *SQLiteStore) GetUsersByPermissionID(ctx context.Context, permissionID s
 		users = append(users, u)
 	}
 	return users, rows.Err()
+}
+
+// BatchCountRolesByPermissionIDs returns a permission_id → role-count map for
+// the given permission IDs using a single SQL query. Missing IDs are not
+// included in the result (callers should initialise defaults).
+func (s *SQLiteStore) BatchCountRolesByPermissionIDs(ctx context.Context, permissionIDs []string) (map[string]int, error) {
+	if len(permissionIDs) == 0 {
+		return map[string]int{}, nil
+	}
+	placeholders := strings.Repeat("?,", len(permissionIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(permissionIDs))
+	for i, id := range permissionIDs {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx,
+		fmt.Sprintf(`SELECT permission_id, COUNT(DISTINCT role_id) AS cnt
+		             FROM role_permissions WHERE permission_id IN (%s)
+		             GROUP BY permission_id`, placeholders),
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int, len(permissionIDs))
+	for rows.Next() {
+		var permID string
+		var cnt int
+		if err := rows.Scan(&permID, &cnt); err != nil {
+			return nil, err
+		}
+		result[permID] = cnt
+	}
+	return result, rows.Err()
+}
+
+// BatchCountUsersByPermissionIDs returns a permission_id → user-count map for
+// the given permission IDs. Each user is counted once per permission even if
+// they hold it through multiple roles (DISTINCT user_id).
+func (s *SQLiteStore) BatchCountUsersByPermissionIDs(ctx context.Context, permissionIDs []string) (map[string]int, error) {
+	if len(permissionIDs) == 0 {
+		return map[string]int{}, nil
+	}
+	placeholders := strings.Repeat("?,", len(permissionIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(permissionIDs))
+	for i, id := range permissionIDs {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx,
+		fmt.Sprintf(`SELECT rp.permission_id, COUNT(DISTINCT ur.user_id) AS cnt
+		             FROM role_permissions rp
+		             INNER JOIN user_roles ur ON ur.role_id = rp.role_id
+		             WHERE rp.permission_id IN (%s)
+		             GROUP BY rp.permission_id`, placeholders),
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int, len(permissionIDs))
+	for rows.Next() {
+		var permID string
+		var cnt int
+		if err := rows.Scan(&permID, &cnt); err != nil {
+			return nil, err
+		}
+		result[permID] = cnt
+	}
+	return result, rows.Err()
 }
 
 // --- SSOConnections ---
@@ -980,9 +1055,10 @@ func (s *SQLiteStore) CountActiveAPIKeysByScope(ctx context.Context, scope strin
 
 func (s *SQLiteStore) CreateAuditLog(ctx context.Context, l *AuditLog) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.ActorID, l.ActorType, l.Action, l.TargetType, l.TargetID,
+		l.OrgID, l.SessionID, l.ResourceType, l.ResourceID,
 		l.IP, l.UserAgent, l.Metadata, l.Status, l.CreatedAt,
 	)
 	return err
@@ -991,9 +1067,10 @@ func (s *SQLiteStore) CreateAuditLog(ctx context.Context, l *AuditLog) error {
 func (s *SQLiteStore) GetAuditLogByID(ctx context.Context, id string) (*AuditLog, error) {
 	var l AuditLog
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at
+		`SELECT id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at
 		 FROM audit_logs WHERE id = ?`, id,
 	).Scan(&l.ID, &l.ActorID, &l.ActorType, &l.Action, &l.TargetType, &l.TargetID,
+		&l.OrgID, &l.SessionID, &l.ResourceType, &l.ResourceID,
 		&l.IP, &l.UserAgent, &l.Metadata, &l.Status, &l.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -1034,6 +1111,22 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 		conditions = append(conditions, "target_id = ?")
 		args = append(args, opts.TargetID)
 	}
+	if opts.OrgID != "" {
+		conditions = append(conditions, "org_id = ?")
+		args = append(args, opts.OrgID)
+	}
+	if opts.SessionID != "" {
+		conditions = append(conditions, "session_id = ?")
+		args = append(args, opts.SessionID)
+	}
+	if opts.ResourceType != "" {
+		conditions = append(conditions, "resource_type = ?")
+		args = append(args, opts.ResourceType)
+	}
+	if opts.ResourceID != "" {
+		conditions = append(conditions, "resource_id = ?")
+		args = append(args, opts.ResourceID)
+	}
 	if opts.Status != "" {
 		conditions = append(conditions, "status = ?")
 		args = append(args, opts.Status)
@@ -1057,7 +1150,7 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 		args = append(args, opts.Cursor, opts.Cursor)
 	}
 
-	query := "SELECT id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at FROM audit_logs"
+	query := "SELECT id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at FROM audit_logs"
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ") //#nosec G202 -- conditions are compile-time constant predicates; user values pass through ? placeholders in args
 	}
@@ -1074,6 +1167,7 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 	for rows.Next() {
 		var l AuditLog
 		if err := rows.Scan(&l.ID, &l.ActorID, &l.ActorType, &l.Action, &l.TargetType, &l.TargetID,
+			&l.OrgID, &l.SessionID, &l.ResourceType, &l.ResourceID,
 			&l.IP, &l.UserAgent, &l.Metadata, &l.Status, &l.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -1393,6 +1487,16 @@ func (s *SQLiteStore) DeleteSessionsByUserID(ctx context.Context, userID string)
 		return nil, err
 	}
 	return ids, nil
+}
+
+// DeleteAllActiveSessions removes every non-expired session and returns the count deleted.
+func (s *SQLiteStore) DeleteAllActiveSessions(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at > datetime('now')`)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 // --- Dev inbox ---
