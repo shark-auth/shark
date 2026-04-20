@@ -1,8 +1,7 @@
 // @ts-nocheck
 import React from 'react'
-import { Icon, Avatar, Sparkline, Donut, CopyField } from './shared'
+import { Icon, Sparkline, Donut } from './shared'
 import { useAPI } from './api'
-import { MOCK } from './mock'
 
 // Overview page — metrics, attention panel, activity, auth breakdown
 
@@ -11,6 +10,7 @@ export function Overview() {
   const { data: statsRaw, loading: statsLoading } = useAPI('/admin/stats');
   const { data: trendsRaw } = useAPI('/admin/stats/trends?days=14');
   const { data: healthRaw } = useAPI('/admin/health');
+  const { data: agentsRaw } = useAPI('/agents?limit=1');
   const { data: activityRaw, refresh: refreshActivity } = useAPI('/audit-logs?limit=20&per_page=20');
 
   // 10-second polling for activity feed
@@ -22,7 +22,7 @@ export function Overview() {
   // --- Map /admin/stats to metric cards ---
   // API shape: { users:{total,created_last_7d}, sessions:{active}, mfa:{enabled,total},
   //              failed_logins_24h, api_keys:{active,expiring_7d}, sso_connections:{total,enabled} }
-  function mapStats(s) {
+  function mapStats(s, agentsTotal) {
     if (!s) return null;
     return {
       users: {
@@ -45,24 +45,27 @@ export function Overview() {
         count: s.api_keys?.active ?? 0,
         expiring: s.api_keys?.expiring_7d ?? 0,
       },
-      // No agent-specific endpoint yet — fall back to MOCK
-      agents: MOCK.stats.agents,
+      agents: {
+        count: agentsTotal ?? 0,
+      },
     };
   }
 
   // --- Map /admin/stats/trends to sparkline arrays ---
-  // API shape: { signups:[{date,count},...], auth_methods:{password,oauth,passkey,magic_link} }
+  // Only the signups series is real. Other sparkline data isn't tracked
+  // server-side yet — return null and drop sparklines for those cards
+  // rather than render fabricated trends.
   function mapTrends(t) {
     const signupCounts = Array.isArray(t?.signups)
       ? t.signups.map(p => p.count)
       : null;
     return {
-      users:    signupCounts || MOCK.trends.users,
-      sessions: MOCK.trends.sessions, // not in API
-      mfa:      MOCK.trends.mfa,       // not in API
-      failed:   MOCK.trends.failed,    // not in API
-      keys:     MOCK.trends.keys,      // not in API
-      agents:   MOCK.trends.agents,    // not in API
+      users:    signupCounts,
+      sessions: null,
+      mfa:      null,
+      failed:   null,
+      keys:     null,
+      agents:   null,
     };
   }
 
@@ -152,23 +155,31 @@ export function Overview() {
   }
 
   // Resolve data with fallbacks
-  const stats    = mapStats(statsRaw);
+  const agentsTotal = agentsRaw?.total ?? null;
+  const stats    = mapStats(statsRaw, agentsTotal);
   const trends   = mapTrends(trendsRaw);
-  const authData = mapAuthBreakdown(trendsRaw) || MOCK.authBreakdown;
+  const authData = mapAuthBreakdown(trendsRaw);
   const health   = mapHealth(healthRaw);
-  const activity = mapActivity(activityRaw) || MOCK.activity;
+  const activity = mapActivity(activityRaw);
 
-  // Use real stats if available, otherwise fall through to MOCK
-  const s = stats || MOCK.stats;
+  // If real stats aren't loaded yet, render zeros — never MOCK fallbacks.
+  const s = stats || {
+    users: { total: 0, delta7d: 0 },
+    sessions: { active: 0 },
+    mfa: { pct: 0, enabled: 0, total: 0 },
+    failedLogins24h: { count: 0, deltaPct: 0 },
+    apiKeys: { count: 0, expiring: 0 },
+    agents: { count: 0 },
+  };
   const t = trends;
 
   const metrics = [
     { k: 'Users',            v: s.users.total.toLocaleString(),                       sub: `+${s.users.delta7d} last 7d`,                                    trend: t.users },
     { k: 'Active sessions',  v: s.sessions.active.toLocaleString(),                   sub: '—',                                                               trend: t.sessions },
     { k: 'MFA adoption',     v: Math.round(s.mfa.pct * 100) + '%',                   sub: `${s.mfa.enabled.toLocaleString()} of ${s.mfa.total.toLocaleString()}`, trend: t.mfa },
-    { k: 'Failed logins 24h',v: s.failedLogins24h.count,                              sub: `${Math.round(s.failedLogins24h.deltaPct * 100)}% vs prev`,       trend: t.failed, good: true },
+    { k: 'Failed logins 24h',v: s.failedLogins24h.count,                              sub: '—',                                                               trend: t.failed, good: true },
     { k: 'API keys active',  v: s.apiKeys.count,                                      sub: `${s.apiKeys.expiring} expiring · 7d`,                             trend: t.keys, warn: true },
-    { k: 'Agents active',    v: s.agents.count,                                       sub: `${s.agents.tokensLive.toLocaleString()} tokens live`,             trend: t.agents, agent: true },
+    { k: 'Agents active',    v: s.agents.count,                                       sub: '—',                                                               trend: t.agents, agent: true },
   ];
 
   // Skeleton helpers
@@ -210,9 +221,11 @@ export function Overview() {
                   </div>
                   <div style={{ fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', lineHeight: 1.15, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
                   <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 1, lineHeight: 1.5 }}>{m.sub}</div>
-                  <div style={{ marginTop: 8, marginLeft: -4, marginRight: -4 }}>
-                    <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>
-                  </div>
+                  {m.trend && m.trend.length > 0 && (
+                    <div style={{ marginTop: 8, marginLeft: -4, marginRight: -4 }}>
+                      <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>
+                    </div>
+                  )}
                 </div>
               ))
           }
@@ -224,25 +237,33 @@ export function Overview() {
             <div className="card-header">
               Auth method · 30d
               <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
-                {authData.reduce((a, x) => a + x.value, 0).toLocaleString()} sessions
+                {(authData || []).reduce((a, x) => a + x.value, 0).toLocaleString()} sessions
               </span>
             </div>
             <div className="card-body" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <Donut segments={authData} size={100} thickness={16}/>
-              <div className="col" style={{ flex: 1, gap: 5 }}>
-                {authData.map((b, i) => {
-                  const total = authData.reduce((a, x) => a + x.value, 0);
-                  const pct = (b.value / total * 100).toFixed(0);
-                  return (
-                    <div key={i} className="row" style={{ fontSize: 13, gap: 8 }}>
-                      <span style={{ width: 8, height: 8, background: b.color, borderRadius: 2, flexShrink: 0 }}/>
-                      <span style={{ flex: 1 }}>{b.label}</span>
-                      <span className="mono muted" style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{b.value.toLocaleString()}</span>
-                      <span className="mono" style={{ fontSize: 11, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
-                    </div>
-                  );
-                })}
-              </div>
+              {authData && authData.length > 0 ? (
+                <>
+                  <Donut segments={authData} size={100} thickness={16}/>
+                  <div className="col" style={{ flex: 1, gap: 5 }}>
+                    {authData.map((b, i) => {
+                      const total = authData.reduce((a, x) => a + x.value, 0);
+                      const pct = (b.value / total * 100).toFixed(0);
+                      return (
+                        <div key={i} className="row" style={{ fontSize: 13, gap: 8 }}>
+                          <span style={{ width: 8, height: 8, background: b.color, borderRadius: 2, flexShrink: 0 }}/>
+                          <span style={{ flex: 1 }}>{b.label}</span>
+                          <span className="mono muted" style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{b.value.toLocaleString()}</span>
+                          <span className="mono" style={{ fontSize: 11, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="faint" style={{ padding: 24, textAlign: 'center', flex: 1, fontSize: 12 }}>
+                  No sessions yet.
+                </div>
+              )}
             </div>
           </div>
 
@@ -269,7 +290,7 @@ export function Overview() {
                           <td><SkeletonBox h={10} w={160}/></td>
                         </tr>
                       ))
-                    : activity.slice(0, 9).map((a, i) => (
+                    : (activity || []).slice(0, 9).map((a, i) => (
                         <tr key={i}>
                           <td style={{ width: 60, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5 }}>{relTime(a.t)}</td>
                           <td style={{ width: 90 }}>
@@ -290,44 +311,6 @@ export function Overview() {
               <span className="faint">Streaming from /admin/audit-logs · 10s poll</span>
               <button className="btn ghost sm">View full log <Icon.ChevronRight width={10} height={10}/></button>
             </div>
-          </div>
-        </div>
-
-        {/* Agent activity highlights — compact list (no nested cards) */}
-        <div className="card" style={{ marginTop: 16 }}>
-          <div className="card-header">
-            <span>Agent activity · 24h</span>
-            <div className="row" style={{ gap: 8 }}>
-              <span className="chip agent" style={{ height: 18, fontSize: 11 }}>phase 6</span>
-              <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>1,284 live tokens · 8 agents</span>
-            </div>
-          </div>
-          <div style={{ padding: '4px 0' }}>
-            {MOCK.agents.slice(0, 4).map((a, i) => (
-              <div key={a.id} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '8px 14px',
-                borderBottom: i < 3 ? '1px solid var(--hairline)' : 'none',
-              }}>
-                <Avatar name={a.name} agent size={22}/>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13, fontFamily: 'var(--font-display)' }}>{a.name}</span>
-                    {a.dpop && <span className="chip" style={{ height: 14, fontSize: 10, padding: '0 4px' }} title="DPoP bound">DPoP</span>}
-                    <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{MOCK.relativeTime(a.lastUsed)}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 2, alignItems: 'center' }}>
-                    <span className="mono" style={{ fontSize: 11, color: 'var(--fg)', lineHeight: 1.5 }}>{a.tokensActive}</span>
-                    <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>tokens</span>
-                    <span className="faint" style={{ fontSize: 11 }}>·</span>
-                    <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{a.scopes.length} scopes</span>
-                  </div>
-                </div>
-                <div style={{ width: 80, flexShrink: 0 }}>
-                  <Sparkline data={[12,18,14,22,28,24,31,29,42,38,45,52,48,a.tokensActive/10]} height={16} color="var(--agent)"/>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -360,14 +343,53 @@ export function Overview() {
       </div>
 
       {/* Attention rail */}
-      <AttentionPanel/>
+      <AttentionPanel healthRaw={healthRaw} stats={s}/>
     </div>
   );
 }
 
-function AttentionPanel() {
+// Derive attention items from real /admin/health + stats data.
+// Returns warnings for: SMTP not configured, no JWT signing keys when JWT mode on,
+// no OAuth providers configured, expiring API keys, and DB error status.
+function deriveAttention(h, stats) {
+  const items = [];
+  if (!h) return items;
+  if (h.smtp && !h.smtp.configured) {
+    items.push({ id: 'smtp', kind: 'config', severity: 'warn',
+      title: 'SMTP not configured',
+      sub: 'Email delivery is disabled — magic links and verification will fail in production.',
+      action: 'Configure', href: 'authentication' });
+  }
+  if (h.jwt && h.jwt.mode === 'jwt' && (h.jwt.active_keys ?? 0) === 0) {
+    items.push({ id: 'jwt-keys', kind: 'key', severity: 'danger',
+      title: 'No active JWT signing keys',
+      sub: 'JWT mode is enabled but no signing keys are present. Token issuance will fail.',
+      action: 'Rotate', href: 'signing-keys' });
+  }
+  if (h.db && h.db.status && h.db.status !== 'ok') {
+    items.push({ id: 'db', kind: 'anomaly', severity: 'danger',
+      title: 'Database health check failed',
+      sub: `Driver ${h.db.driver || 'unknown'} reported status: ${h.db.status}.`,
+      action: 'Investigate', href: 'overview' });
+  }
+  if (Array.isArray(h.oauth_providers) && h.oauth_providers.length === 0) {
+    items.push({ id: 'oauth', kind: 'config', severity: 'info',
+      title: 'No OAuth providers configured',
+      sub: 'Add Google, GitHub, Apple, or Discord to enable social login.',
+      action: 'Set up', href: 'authentication' });
+  }
+  if (stats?.apiKeys?.expiring > 0) {
+    items.push({ id: 'keys-expiring', kind: 'key', severity: 'warn',
+      title: `${stats.apiKeys.expiring} API key${stats.apiKeys.expiring !== 1 ? 's' : ''} expiring in 7 days`,
+      sub: 'Rotate before expiry to avoid client disruption.',
+      action: 'Review', href: 'api-keys' });
+  }
+  return items;
+}
+
+function AttentionPanel({ healthRaw, stats }) {
   const [dismissed, setDismissed] = React.useState(new Set());
-  const items = MOCK.attention.filter(x => !dismissed.has(x.id));
+  const items = deriveAttention(healthRaw, stats).filter(x => !dismissed.has(x.id));
 
   return (
     <div className="card" style={{ alignSelf: 'start', position: 'sticky', top: 0 }}>
@@ -382,7 +404,7 @@ function AttentionPanel() {
         {items.length === 0 && (
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-muted)' }}>
             <Icon.Check width={20} height={20} style={{ color: 'var(--success)', marginBottom: 6 }}/>
-            <div style={{ fontSize: 13 }}>All clear. Nothing needs your attention.</div>
+            <div style={{ fontSize: 13 }}>All systems healthy.</div>
           </div>
         )}
         {items.map(item => (
@@ -416,9 +438,8 @@ function AttentionPanel() {
           </div>
         ))}
       </div>
-      <div style={{ padding: '10px 12px', fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.5, display: 'flex', justifyContent: 'space-between' }}>
-        <span>Auto-triaged 4 low-severity items</span>
-        <button className="btn ghost sm" style={{ height: 20, padding: 0, fontSize: 11 }}>Show</button>
+      <div style={{ padding: '10px 12px', fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
+        <span>Sourced from /admin/health · refresh to recheck</span>
       </div>
     </div>
   );

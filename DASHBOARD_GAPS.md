@@ -438,6 +438,11 @@ User flagged additional findings from smoke test review. These predate dashboard
 - A1–A7 from Round 2
 - **NEW: smoke section per route**: webhook replay, admin org CRUD, admin org invitations, admin user MFA disable
 
+**Wave A — Frontend-only polish** ✅ DONE (smoke 315 → 315, 0 FAIL)
+- A-1 ✅ signing_keys.tsx rotate button already wired (pre-existing) — confirmed live
+- A-2 ✅ overview.tsx — removed mock sparklines (sessions/mfa/failed/keys/agents), removed MOCK.stats fallback, agent count derived from `/agents?limit=1` total, removed mock "Agent activity 24h" card
+- A-3 ✅ overview.tsx — replaced MOCK.attention with `deriveAttention()` from `/admin/health` (smtp_unconfigured, jwt_no_keys, db_status, no_oauth_providers, expiring_keys); empty-state shows "All systems healthy"
+
 **Wave 2 — Silent fail polish** ✅ DONE (smoke 303 → 315, 0 FAIL)
 - B1 ✅ webhooks.tsx replay catch — surfaces err inline + "Replay queued" success
 - B2 ✅ organizations.tsx invitation revoke + resend catches — toast.success/error
