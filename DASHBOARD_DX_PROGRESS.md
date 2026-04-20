@@ -12,3 +12,10 @@ Append-only. Every task state change = one row. Never edit prior rows.
 | 2026-04-20T18:22:00Z | T07 | done | claude-opus-4-7 | signing_keys.tsx:90/96 + dev_inbox.tsx:58 alert()→toast. Only users.tsx:65 remains (blocked by T04). Typecheck pass. |
 | 2026-04-20T18:22:00Z | T23 | done | claude-opus-4-7 | CLIFooter added to dev_inbox, consents_manage, settings, authentication. vault_manage+proxy_config already had it (audit drift). Typecheck pass. |
 | 2026-04-20T18:25:00Z | T01,T07,T23 | committed | claude-opus-4-7 | 8406b78 — feat(dx): Wave-α T01+T07+T23 |
+| 2026-04-20T18:30:00Z | T22 | claim | claude-opus-4-7 | vault silent catch → toast |
+| 2026-04-20T18:30:00Z | T02 | claim | claude-opus-4-7 | overview MOCK residue purge |
+| 2026-04-20T18:33:00Z | T22 | done | claude-opus-4-7 | verified-by-inspection: all 7 catches in vault_manage.tsx already toast or setError (358,533,685,770,834,965,973). Audit was wrong. |
+| 2026-04-20T18:33:00Z | T02 | done | claude-opus-4-7 | verified-by-inspection: overview.tsx no MOCK import, comments confirm "never MOCK fallbacks", AttentionPanel derives from /admin/health. Shipped in recent commits (989c319 / 7d464da). |
+| 2026-04-20T18:34:00Z | T12 | claim | claude-opus-4-7 | Session Debugger client-side JWT decode + JWKS validate |
+| 2026-04-20T18:45:00Z | T12 | done | claude-opus-4-7 | session_debugger.tsx new file: decode header+payload, JWKS fetch, SubtleCrypto verify (RS256/384/512, ES256/384), exp/nbf status pills, claim annotation w/ ISO timestamps, copy buttons, CLIFooter. Wired into App.tsx, removed from empty_shell, ph:5 dropped from NAV. Typecheck pass. |
+| 2026-04-20T18:45:00Z | T22,T02 | done | claude-opus-4-7 | verified-by-inspection: shipped in prior commits |

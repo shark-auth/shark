@@ -38,7 +38,7 @@ export const NAV = [
   ]},
   { group: 'DEVELOPERS', items: [
     { id: 'explorer', label: 'API Explorer', icon: 'Explorer', ph: 5 },
-    { id: 'debug', label: 'Session Debugger', icon: 'Debug', ph: 5 },
+    { id: 'debug', label: 'Session Debugger', icon: 'Debug' },
     { id: 'schemas', label: 'Event Schemas', icon: 'Schema', ph: 5 },
   ]},
   { group: 'INFRASTRUCTURE', items: [
