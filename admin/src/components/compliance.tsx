@@ -63,7 +63,6 @@ function AuditExport() {
     return d.toISOString().slice(0, 10);
   });
   const [until, setUntil] = React.useState(() => new Date().toISOString().slice(0, 10));
-  const [format, setFormat] = React.useState('csv');
   const [loading, setLoading] = React.useState(false);
 
   const presets = [
@@ -89,15 +88,22 @@ function AuditExport() {
     setLoading(true);
     try {
       const key = sessionStorage.getItem('shark_admin_key');
-      const res = await fetch(`/api/v1/audit-logs/export?format=${format}&from=${since}&to=${until}`, {
-        headers: { 'Authorization': 'Bearer ' + key },
+      const fromISO = new Date(since + 'T00:00:00Z').toISOString();
+      const toISO = new Date(until + 'T23:59:59Z').toISOString();
+      const res = await fetch(`/api/v1/audit-logs/export`, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + key,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from: fromISO, to: toISO }),
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `audit-${since}-to-${until}.${format}`;
+      a.download = `audit-${since}-to-${until}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -129,16 +135,9 @@ function AuditExport() {
             <DateField label="From" value={since} onChange={setSince}/>
             <DateField label="To" value={until} onChange={setUntil}/>
           </div>
-          <div className="row" style={{ gap: 10 }}>
-            <label style={fieldLabel}>Format</label>
-            <select value={format} onChange={e => setFormat(e.target.value)} style={selectStyle}>
-              <option value="csv">CSV</option>
-              <option value="json">JSON</option>
-            </select>
-          </div>
           <button className="btn primary" onClick={download} disabled={loading} style={{ width: 'fit-content' }}>
             <Icon.Audit width={12} height={12}/>
-            {loading ? 'Exporting…' : 'Download export'}
+            {loading ? 'Exporting…' : 'Download CSV export'}
           </button>
         </div>
       </div>
@@ -234,4 +233,3 @@ const inputStyle = {
   fontFamily: 'var(--font-mono)',
   outline: 'none',
 };
-const selectStyle = { ...inputStyle, cursor: 'pointer' };

@@ -2236,6 +2236,48 @@ else
   fail "proxy status unexpected code: $PROXY_STATUS_CODE"
 fi
 
+# --- 69: audit log CSV export (Compliance page dependency) ---------------------
+# Compliance page (admin/src/components/compliance.tsx) POSTs {from,to} as JSON
+# to /audit-logs/export and expects text/csv back. Guard the contract so
+# dashboard download button doesn't silently break.
+section "69: audit log CSV export (Compliance page)"
+
+EXPORT_FROM=$(date -u -d "7 days ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+EXPORT_TO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Empty body → 400 invalid_request (guards against accidental "export everything")
+EMPTY_EXPORT_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -X POST --data '{}' \
+  $BASE/api/v1/audit-logs/export)
+[ "$EMPTY_EXPORT_CODE" = "400" ] && pass "POST /audit-logs/export {} -> 400" \
+  || fail "POST /audit-logs/export {} -> $EMPTY_EXPORT_CODE (expected 400)"
+
+# Dated export → 200 + text/csv (same request shape dashboard produces)
+EXPORT_HEADERS=$(curl -s -D - -o /dev/null \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -X POST --data "{\"from\":\"$EXPORT_FROM\",\"to\":\"$EXPORT_TO\"}" \
+  $BASE/api/v1/audit-logs/export)
+EXPORT_CODE=$(echo "$EXPORT_HEADERS" | awk 'NR==1 {print $2}')
+[ "$EXPORT_CODE" = "200" ] && pass "POST /audit-logs/export {from,to} -> 200" \
+  || fail "POST /audit-logs/export {from,to} -> $EXPORT_CODE (expected 200)"
+echo "$EXPORT_HEADERS" | grep -i '^Content-Type:' | grep -qi 'text/csv' \
+  && pass "audit export returns text/csv" \
+  || fail "audit export content-type not text/csv: $(echo "$EXPORT_HEADERS" | grep -i '^Content-Type:')"
+echo "$EXPORT_HEADERS" | grep -i '^Content-Disposition:' | grep -qi '\.csv' \
+  && pass "audit export Content-Disposition names .csv" \
+  || fail "audit export Content-Disposition missing .csv"
+
+# Unauthorized → 401 (guards admin-key requirement on export route)
+EXPORT_UNAUTH=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Content-Type: application/json" \
+  -X POST --data "{\"from\":\"$EXPORT_FROM\",\"to\":\"$EXPORT_TO\"}" \
+  $BASE/api/v1/audit-logs/export)
+[ "$EXPORT_UNAUTH" = "401" ] && pass "POST /audit-logs/export no key -> 401" \
+  || fail "POST /audit-logs/export no key -> $EXPORT_UNAUTH"
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
