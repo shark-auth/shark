@@ -46,3 +46,6 @@ Append-only. Every task state change = one row. Never edit prior rows.
 | 2026-04-20T20:32:00Z | T10 | done | subagent-B | 6660911 — ProxyWizard 3-step stepper in proxy_wizard.tsx, wired into proxy_config when /admin/proxy/status=404, autofocus on ?new=1 |
 | 2026-04-20T20:33:00Z | T11 | claim | subagent-B | get-started page + first-login redirect |
 | 2026-04-20T20:48:00Z | T11 | done | subagent-B | 7e49e4f — get_started.tsx (hero + ProxyWizard + checklist), route wired in App.tsx, first-login auto-redirect when users=0 AND !shark_admin_onboarded, not in sidebar nav |
+| 2026-04-20T21:30:00Z | T21 | claim | subagent-F | rbac permission matrix grid — backend verified (all routes present) |
+| 2026-04-20T21:35:00Z | T05 | claim | subagent-D | create-user slide-over frontend |
+| 2026-04-20T21:42:00Z | T05 | done | subagent-D | 2b4d649 — CreateUserSlideover wired into users.tsx: email/password/name/email_verified/roles/orgs, HTML5 email validation, password reveal toggle + 12-char min, 409→email-field red + exact backend message toast, 400→inline error under first invalid field, ?new=1 auto-open + strip, ESC + backdrop close w/ discard confirm, auto-select new row on 201. Typecheck clean. |
