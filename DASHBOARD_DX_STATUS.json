@@ -18,7 +18,7 @@
     "T12": {"status": "done", "commit": "6380fba", "blocked_by": []},
     "T13": {"status": "done", "commit": "dc3cef2", "blocked_by": []},
     "T14": {"status": "done", "commit": "e5215b2", "blocked_by": []},
-    "T15": {"status": "pending", "commit": null, "blocked_by": []},
+    "T15": {"status": "done", "commit": "eaa528f", "blocked_by": [], "notes": "backend handler+router+startup print at eaa528f; frontend login.tsx consume + 'Where is my key?' link landed in c2dd599 (bundled); smoke section 71 in T15-smoke commit"},
     "T16": {"status": "pending", "commit": null, "blocked_by": []},
     "T17": {"status": "done", "commit": "dc3cef2", "blocked_by": []},
     "T18": {"status": "done", "commit": "dc3cef2", "blocked_by": []},

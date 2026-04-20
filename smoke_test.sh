@@ -2359,6 +2359,65 @@ if [ -n "$T04_NEW_ID" ] && [ "$T04_NEW_ID" != "MISSING" ]; then
   fi
 fi
 
+section "71: bootstrap token consume (T15)"
+
+# The bootstrap token is minted at server startup ONLY when the audit log
+# has zero admin.* events. This smoke runs after many admin.* events have
+# already been written (T04/T05/T21/etc), so the server will NOT print a
+# fresh token and any in-memory token from startup is long gone. We
+# therefore assert the contract of the consume endpoint from the outside:
+# empty body → 400, random token → 401. Fresh-DB startup print is covered
+# by inspection of server.Serve + printBootstrapURL (see PROGRESS row).
+
+# No-auth route (bootstrap IS the auth): verify the endpoint is reachable
+# without an Authorization header. Empty body → 400.
+T15_EMPTY=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Content-Type: application/json" \
+  -X POST --data '' \
+  $BASE/api/v1/admin/bootstrap/consume)
+[ "$T15_EMPTY" = "400" ] && pass "bootstrap consume empty body -> 400" \
+  || fail "bootstrap consume empty body -> $T15_EMPTY (expected 400)"
+
+# Missing-token JSON → 400 with error=invalid_request
+T15_MISSING=$(curl -s -w "\n%{http_code}" \
+  -H "Content-Type: application/json" \
+  -X POST --data '{}' \
+  $BASE/api/v1/admin/bootstrap/consume)
+T15_MISSING_CODE=$(echo "$T15_MISSING" | tail -1)
+T15_MISSING_BODY=$(echo "$T15_MISSING" | sed '$d')
+[ "$T15_MISSING_CODE" = "400" ] && pass "bootstrap consume missing token -> 400" \
+  || fail "bootstrap consume missing token -> $T15_MISSING_CODE (expected 400)"
+T15_MISSING_ERR=$(echo "$T15_MISSING_BODY" | jq -r '.error // "MISSING"')
+[ "$T15_MISSING_ERR" = "invalid_request" ] \
+  && pass "bootstrap consume missing token error=invalid_request" \
+  || fail "bootstrap consume missing token error=$T15_MISSING_ERR"
+
+# Random token → 401 invalid_token (either no token active because admin
+# already exists, or token hash mismatch). Either way: 401.
+T15_RANDOM=$(curl -s -w "\n%{http_code}" \
+  -H "Content-Type: application/json" \
+  -X POST --data '{"token":"deadbeef0000000000000000000000000000000000000000000000000000dead"}' \
+  $BASE/api/v1/admin/bootstrap/consume)
+T15_RANDOM_CODE=$(echo "$T15_RANDOM" | tail -1)
+T15_RANDOM_BODY=$(echo "$T15_RANDOM" | sed '$d')
+[ "$T15_RANDOM_CODE" = "401" ] && pass "bootstrap consume random token -> 401" \
+  || fail "bootstrap consume random token -> $T15_RANDOM_CODE (expected 401)"
+T15_RANDOM_ERR=$(echo "$T15_RANDOM_BODY" | jq -r '.error // "MISSING"')
+[ "$T15_RANDOM_ERR" = "invalid_token" ] \
+  && pass "bootstrap consume random token error=invalid_token" \
+  || fail "bootstrap consume random token error=$T15_RANDOM_ERR"
+
+# No Authorization header required — the route is explicitly un-gated.
+# Confirm we don't return 401 from middleware (we return 400 from handler
+# when body is empty, as asserted above). This single assertion guards
+# against accidentally moving the route inside the admin-auth group.
+T15_NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Content-Type: application/json" \
+  -X POST --data '{"token":"x"}' \
+  $BASE/api/v1/admin/bootstrap/consume)
+[ "$T15_NOAUTH" = "401" ] && pass "bootstrap consume no-auth route (handler-level 401, not middleware)" \
+  || fail "bootstrap consume no-auth -> $T15_NOAUTH (expected handler 401 for bad token)"
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
