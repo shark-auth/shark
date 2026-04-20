@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/rand"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -783,6 +784,88 @@ func (s *Server) handleDeleteVaultConnection(w http.ResponseWriter, r *http.Requ
 
 	s.auditVault(r, "user", auditVaultConnectionDeleted, "vault_connection", connID, map[string]any{
 		"provider_id": target.ProviderID,
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// adminVaultConnectionResponse is the admin view of a vault connection. Adds
+// user_id (cross-user listing context) on top of the user-facing fields. Token
+// material is never serialized — both the underlying VaultConnection columns
+// and this struct hide it.
+type adminVaultConnectionResponse struct {
+	vaultConnectionResponse
+	UserID string `json:"user_id"`
+}
+
+// handleAdminListVaultConnections handles GET /api/v1/admin/vault/connections.
+// Admin-scope listing of every vault connection across all users, enriched
+// with provider display metadata. Used by the dashboard connections tab.
+func (s *Server) handleAdminListVaultConnections(w http.ResponseWriter, r *http.Request) {
+	conns, err := s.Store.ListAllVaultConnections(r.Context())
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	providerCache := make(map[string]*storage.VaultProvider, len(conns))
+	out := make([]adminVaultConnectionResponse, 0, len(conns))
+	for _, c := range conns {
+		p, ok := providerCache[c.ProviderID]
+		if !ok {
+			p, _ = s.Store.GetVaultProviderByID(r.Context(), c.ProviderID)
+			providerCache[c.ProviderID] = p
+		}
+		row := adminVaultConnectionResponse{
+			vaultConnectionResponse: vaultConnectionResponse{
+				ID:              c.ID,
+				ProviderID:      c.ProviderID,
+				Scopes:          c.Scopes,
+				ExpiresAt:       c.ExpiresAt,
+				NeedsReauth:     c.NeedsReauth,
+				LastRefreshedAt: c.LastRefreshedAt,
+				CreatedAt:       c.CreatedAt,
+				UpdatedAt:       c.UpdatedAt,
+			},
+			UserID: c.UserID,
+		}
+		if row.Scopes == nil {
+			row.Scopes = []string{}
+		}
+		if p != nil {
+			row.ProviderName = p.Name
+			row.ProviderDisplayName = p.DisplayName
+			row.ProviderIconURL = p.IconURL
+		}
+		out = append(out, row)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": out, "total": len(out)})
+}
+
+// handleAdminDeleteVaultConnection handles DELETE /api/v1/admin/vault/connections/{id}.
+// Cross-user revoke — admin can disconnect any vault connection without owning
+// the session. Audited as admin-actor for traceability.
+func (s *Server) handleAdminDeleteVaultConnection(w http.ResponseWriter, r *http.Request) {
+	connID := chi.URLParam(r, "id")
+	conn, err := s.Store.GetVaultConnectionByID(r.Context(), connID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Vault connection not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	if err := s.VaultManager.Disconnect(r.Context(), connID); err != nil {
+		if errors.Is(err, vault.ErrConnectionNotFound) {
+			writeJSON(w, http.StatusNotFound, errPayload("not_found", "Vault connection not found"))
+			return
+		}
+		internal(w, err)
+		return
+	}
+	s.auditVault(r, "admin", auditVaultConnectionDeleted, "vault_connection", connID, map[string]any{
+		"provider_id": conn.ProviderID,
+		"user_id":     conn.UserID,
 	})
 	w.WriteHeader(http.StatusNoContent)
 }

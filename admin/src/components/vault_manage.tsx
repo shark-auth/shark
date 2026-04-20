@@ -501,40 +501,89 @@ function ProviderConfig({ provider, onUpdate }) {
 }
 
 function ProviderConnections({ provider }) {
+  const toast = useToast();
+  const { data, loading, error, refresh } = useAPI('/admin/vault/connections');
+  const allConns = data?.data || [];
+  const conns = allConns.filter(c => c.provider_id === provider.id);
+
+  const handleDisconnect = async (id) => {
+    if (!confirm('Disconnect this user from ' + (provider.display_name || provider.name) + '? They will need to re-authorise.')) return;
+    try {
+      await API.del('/admin/vault/connections/' + id);
+      toast.success('Connection disconnected');
+      refresh();
+    } catch (e) {
+      toast.error(e.message || 'Disconnect failed');
+    }
+  };
+
+  const statusChip = (c) => {
+    if (c.needs_reauth) return <span className="chip warn" style={{ height: 16, fontSize: 10 }}>needs_reauth</span>;
+    if (c.expires_at) {
+      const ms = new Date(c.expires_at).getTime() - Date.now();
+      if (ms < 0) return <span className="chip danger" style={{ height: 16, fontSize: 10 }}>expired</span>;
+      if (ms < 60 * 60 * 1000) return <span className="chip warn" style={{ height: 16, fontSize: 10 }}>expiring</span>;
+    }
+    return <span className="chip success" style={{ height: 16, fontSize: 10 }}>active</span>;
+  };
+
   return (
-    <div style={{padding: 16}}>
-      <div style={{
-        padding: 16, border: '1px dashed var(--hairline-strong)', borderRadius: 5,
-        background: 'var(--surface-1)',
-      }}>
-        <div className="row" style={{ gap: 8, marginBottom: 6 }}>
-          <Icon.Users width={12} height={12} style={{color:'var(--fg-muted)'}}/>
-          <div style={{ fontSize: 12, fontWeight: 500 }}>User connections</div>
+    <div style={{ padding: 16 }}>
+      <div className="row" style={{ marginBottom: 10, gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 500 }}>
+          {conns.length} connection{conns.length !== 1 ? 's' : ''} to {provider.display_name || provider.name}
         </div>
-        <div className="faint" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
-          Admin view of connections across users is coming in Phase 6.
-          Users manage their own connections to <b style={{color:'var(--fg)'}}>{provider.display_name || provider.name}</b>{' '}
-          via <span className="mono">/account/vault</span>.
-        </div>
-        <div style={{
-          marginTop: 12, padding: 10, borderRadius: 3,
-          background: 'var(--surface-2)', border: '1px solid var(--hairline)',
-          fontSize: 11, lineHeight: 1.5,
-        }}>
-          <div className="row" style={{ gap: 6, marginBottom: 4 }}>
-            <span className="chip success" style={{ height: 15, fontSize: 9 }}>active</span>
-            <span className="faint">Connected, refresh token healthy</span>
-          </div>
-          <div className="row" style={{ gap: 6, marginBottom: 4 }}>
-            <span className="chip warn" style={{ height: 15, fontSize: 9 }}>needs_reauth</span>
-            <span className="faint">Refresh failed — user must reconnect</span>
-          </div>
-          <div className="row" style={{ gap: 6 }}>
-            <span className="chip danger" style={{ height: 15, fontSize: 9 }}>no-refresh-token</span>
-            <span className="faint">Provider did not issue a refresh_token</span>
-          </div>
-        </div>
+        <div style={{ flex: 1 }}/>
+        <button className="btn ghost sm" onClick={refresh} disabled={loading}>
+          <Icon.Refresh width={11} height={11}/>Refresh
+        </button>
       </div>
+
+      {loading ? (
+        <div className="faint" style={{ padding: 24, textAlign: 'center', fontSize: 12 }}>Loading…</div>
+      ) : error ? (
+        <div style={{ padding: 12, color: 'var(--danger)', fontSize: 12 }}>Failed to load: {error}</div>
+      ) : conns.length === 0 ? (
+        <div className="faint" style={{ padding: 24, textAlign: 'center', fontSize: 12 }}>
+          No users have connected to {provider.display_name || provider.name} yet.
+        </div>
+      ) : (
+        <table className="tbl" style={{ fontSize: 12 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>User</th>
+              <th style={{ textAlign: 'left' }}>Status</th>
+              <th style={{ textAlign: 'left' }}>Scopes</th>
+              <th style={{ textAlign: 'left' }}>Expires</th>
+              <th style={{ textAlign: 'left' }}>Last refresh</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {conns.map(c => (
+              <tr key={c.id}>
+                <td className="mono" style={{ fontSize: 11 }}>{c.user_id}</td>
+                <td>{statusChip(c)}</td>
+                <td className="mono" style={{ fontSize: 10.5, color: 'var(--fg-muted)' }}>
+                  {(c.scopes || []).slice(0, 3).join(' ')}
+                  {c.scopes && c.scopes.length > 3 ? ` +${c.scopes.length - 3}` : ''}
+                </td>
+                <td className="mono faint" style={{ fontSize: 11 }}>
+                  {c.expires_at ? new Date(c.expires_at).toLocaleString() : '—'}
+                </td>
+                <td className="mono faint" style={{ fontSize: 11 }}>
+                  {c.last_refreshed_at ? new Date(c.last_refreshed_at).toLocaleString() : '—'}
+                </td>
+                <td>
+                  <button className="btn ghost sm danger" onClick={() => handleDisconnect(c.id)}>
+                    Disconnect
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

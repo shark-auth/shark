@@ -290,6 +290,7 @@ type Store interface {
 	GetVaultConnection(ctx context.Context, providerID, userID string) (*VaultConnection, error)
 	ListVaultConnectionsByUserID(ctx context.Context, userID string) ([]*VaultConnection, error)
 	ListVaultConnectionsByProviderID(ctx context.Context, providerID string) ([]*VaultConnection, error)
+	ListAllVaultConnections(ctx context.Context) ([]*VaultConnection, error)
 	UpdateVaultConnection(ctx context.Context, c *VaultConnection) error
 	UpdateVaultConnectionTokens(ctx context.Context, id, accessEnc, refreshEnc string, expiresAt *time.Time) error
 	MarkVaultConnectionNeedsReauth(ctx context.Context, id string, needs bool) error

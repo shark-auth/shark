@@ -248,6 +248,31 @@ func (s *SQLiteStore) ListVaultConnectionsByUserID(ctx context.Context, userID s
 	return out, rows.Err()
 }
 
+// ListAllVaultConnections returns every vault connection across all users.
+// Admin-scope view used by the dashboard connections tab. Encrypted token
+// columns are still loaded but never serialized (json:"-" on the struct).
+func (s *SQLiteStore) ListAllVaultConnections(ctx context.Context) ([]*VaultConnection, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, provider_id, user_id, access_token_enc, refresh_token_enc,
+		        token_type, scopes, expires_at, metadata, needs_reauth,
+		        last_refreshed_at, created_at, updated_at
+		 FROM vault_connections ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*VaultConnection
+	for rows.Next() {
+		c, err := s.scanVaultConnectionFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) ListVaultConnectionsByProviderID(ctx context.Context, providerID string) ([]*VaultConnection, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, provider_id, user_id, access_token_enc, refresh_token_enc,

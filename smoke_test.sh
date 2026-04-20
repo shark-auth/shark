@@ -1785,6 +1785,63 @@ else
   fail "could not seed metadata test flow"
 fi
 
+# --- 64: Admin vault connections (C Wave) -------------------------------------
+section "64: admin vault connections"
+
+# Empty case: shape contract.
+EMPTY_AVC=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/vault/connections")
+EMPTY_TYPE=$(echo "$EMPTY_AVC" | jq -r '.data | type // "missing"')
+[ "$EMPTY_TYPE" = "array" ] && pass "/admin/vault/connections empty .data is array" || fail "shape: $EMPTY_AVC"
+
+# Seed: create a vault provider via API, then insert a connection row directly.
+SEED_PROV=$(curl -s -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" -X POST \
+  -d '{"template":"slack","client_id":"smoke-c","client_secret":"smoke-s-abc"}' \
+  $BASE/api/v1/vault/providers)
+SEED_PID=$(echo "$SEED_PROV" | jq -r '.id // empty')
+if [ -n "$SEED_PID" ]; then
+  pass "seed vault provider: $SEED_PID"
+  NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  sqlite3 $DB "INSERT INTO vault_connections
+    (id, provider_id, user_id, access_token_enc, refresh_token_enc, token_type,
+     scopes, expires_at, metadata, needs_reauth, last_refreshed_at, created_at, updated_at)
+    VALUES ('vc_smoke_admin', '$SEED_PID', '$USERID', 'enc::abc', 'enc::xyz', 'Bearer',
+     '[\"openid\",\"profile\"]', NULL, '{}', 0, NULL, '$NOW', '$NOW');"
+
+  AVC=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/vault/connections")
+  echo "$AVC" | jq -e --arg pid "$SEED_PID" '.data[] | select(.provider_id==$pid)' >/dev/null \
+    && pass "seeded connection appears in /admin/vault/connections" \
+    || fail "seeded connection not found: $AVC"
+
+  # user_id present in admin response (cross-user view)
+  echo "$AVC" | jq -e --arg uid "$USERID" '.data[] | select(.user_id==$uid)' >/dev/null \
+    && pass "admin response includes user_id" \
+    || fail "user_id missing from admin connection rows"
+
+  # Token material never serialized
+  echo "$AVC" | jq -e '[.data[] | (has("access_token_enc") or has("refresh_token_enc"))] | any | not' >/dev/null \
+    && pass "no token material in admin response" \
+    || fail "token material leaked into admin response"
+
+  # Admin DELETE cross-user works
+  AVC_DEL=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+    -X DELETE "$BASE/api/v1/admin/vault/connections/vc_smoke_admin")
+  [ "$AVC_DEL" = 204 ] && pass "DELETE /admin/vault/connections/{id} -> 204" || fail "admin delete -> $AVC_DEL"
+
+  # 404 on missing
+  AVC_404=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+    -X DELETE "$BASE/api/v1/admin/vault/connections/vc_does_not_exist")
+  [ "$AVC_404" = 404 ] && pass "DELETE missing -> 404" || fail "delete missing -> $AVC_404"
+
+  # No-auth blocked
+  AVC_NA=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/admin/vault/connections")
+  [ "$AVC_NA" = 401 ] && pass "no auth -> 401" || fail "no-auth -> $AVC_NA"
+
+  # cleanup
+  curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE "$BASE/api/v1/vault/providers/$SEED_PID"
+else
+  fail "could not seed vault provider for connections test"
+fi
+
 # --- 63: User list filters (B Wave) -------------------------------------------
 section "63: user list filters (auth_method, org_id)"
 

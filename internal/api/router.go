@@ -490,7 +490,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		// per-user token retrieval endpoint accepts an OAuth 2.1 bearer from
 		// an agent acting on the user's behalf.
 		r.Route("/vault", func(r chi.Router) {
-			// Admin provider CRUD + template discovery.
+			// Admin provider CRUD + template discovery + cross-user connections.
 			r.Group(func(r chi.Router) {
 				r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 				r.Post("/providers", s.handleCreateVaultProvider)
@@ -530,6 +530,11 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/audit-logs/purge", s.handlePurgeAuditLogs)
 			r.Post("/test-email", s.handleAdminTestEmail)
 			r.Post("/auth/rotate-signing-key", s.handleAdminRotateSigningKey)
+
+			// Cross-user vault connections (admin scope). The /vault/connections
+			// endpoint above is session-scoped to the calling user.
+			r.Get("/vault/connections", s.handleAdminListVaultConnections)
+			r.Delete("/vault/connections/{id}", s.handleAdminDeleteVaultConnection)
 
 			// Admin organization endpoints (admin key auth, not session auth).
 			// User-facing /api/v1/organizations/{id} requires a session cookie
