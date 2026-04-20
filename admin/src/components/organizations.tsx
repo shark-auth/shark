@@ -6,12 +6,16 @@ import { MOCK } from './mock'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
 import { TeachEmptyState } from './TeachEmptyState'
+import { useTabParam } from './useURLParams'
+import { usePageActions } from './useKeyboardShortcuts'
 
 // Organizations — split-pane browser (list left, persistent detail right)
 
 export function Organizations() {
   const { data: orgsRaw, loading, refresh } = useAPI('/admin/organizations');
   const orgs = orgsRaw?.organizations || [];
+
+  usePageActions({ onRefresh: refresh });
 
   const [selectedId, setSelectedId] = React.useState(() => localStorage.getItem('org-selected') || '');
   const [query, setQuery] = React.useState('');
@@ -128,7 +132,7 @@ function OrgListItem({ org, active, onClick }) {
 /* ---------------- DETAIL ---------------- */
 
 function OrgDetail({ org, onRefresh }) {
-  const [tab, setTab] = React.useState('overview');
+  const [tab, setTab] = useTabParam('overview');
 
   const { data: membersRaw, loading: membersLoading, refresh: membersRefresh } = useAPI('/admin/organizations/' + org.id + '/members');
   const { data: rolesRaw, loading: rolesLoading, refresh: rolesRefresh } = useAPI('/admin/organizations/' + org.id + '/roles');

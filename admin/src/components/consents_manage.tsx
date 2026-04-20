@@ -3,6 +3,7 @@ import React from 'react'
 import { Icon } from './shared'
 import { API, useAPI } from './api'
 import { useToast } from './toast'
+import { usePageActions } from './useKeyboardShortcuts'
 
 // Consents page — per-user OAuth consent grants
 // Self-service consent view (session-authenticated endpoint). Admin-wide consent
@@ -25,6 +26,8 @@ export function Consents() {
 
   const { data: raw, loading, error, refresh } = useAPI('/admin/oauth/consents');
   const consents = raw?.data || [];
+
+  usePageActions({ onRefresh: refresh });
 
   const authMismatch = !!error && /unauthorized|forbidden|401|403/i.test(error);
   const showFallback = authMismatch || (!loading && !error && consents.length === 0);

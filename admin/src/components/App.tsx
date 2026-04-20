@@ -49,15 +49,34 @@ function useTweaks() {
 export function App() {
   const [apiKey, setApiKey] = React.useState(() => sessionStorage.getItem('shark_admin_key') || '');
 
+  // Page id is the FIRST path segment under /admin/. Anything after (e.g.
+  // /admin/users/usr_abc/security) is preserved in the URL and exposed to
+  // the page via window.location.pathname so deep-link routing works.
   const getPageFromURL = () => {
     const path = window.location.pathname.replace(/^\/admin\/?/, '').replace(/\/$/, '');
-    return path || 'overview';
+    if (!path) return 'overview';
+    return path.split('/')[0] || 'overview';
   };
 
   const [page, setPageState] = React.useState(getPageFromURL);
 
-  const setPage = (p) => {
-    window.history.pushState(null, '', '/admin/' + p);
+  // setPage(id, paramsOrSubpath?)
+  //   - id: page key (e.g. 'users')
+  //   - second arg, when an object, becomes ?key=value query params
+  //   - when a string, is appended as a sub-path (e.g. '/usr_abc/security')
+  const setPage = (p, extra) => {
+    let url = '/admin/' + p;
+    if (typeof extra === 'string' && extra) {
+      url += extra.startsWith('/') ? extra : '/' + extra;
+    } else if (extra && typeof extra === 'object') {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(extra)) {
+        if (v != null && v !== '') qs.set(k, String(v));
+      }
+      const s = qs.toString();
+      if (s) url += '?' + s;
+    }
+    window.history.pushState(null, '', url);
     setPageState(p);
   };
 
@@ -145,7 +164,7 @@ export function App() {
         setCollapsed={(v) => setTweak('sidebarCollapsed', v)}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}
            data-screen-label={'01 ' + page}>
-        <TopBar page={page} setTweaksOpen={setTweaksOpen} onOpenPalette={() => setPaletteOpen(true)}/>
+        <TopBar page={page} setTweaksOpen={setTweaksOpen} onOpenPalette={() => setPaletteOpen(true)} setPage={setPage}/>
         <div style={{ flex: 1, overflow: 'hidden', animation: 'fadeIn 160ms ease-out' }}>
           <Page/>
         </div>

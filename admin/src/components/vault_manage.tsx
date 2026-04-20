@@ -4,6 +4,8 @@ import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
+import { useTabParam } from './useURLParams'
+import { usePageActions } from './useKeyboardShortcuts'
 
 // Token Vault — manage third-party OAuth providers (Google, Slack, GitHub, …)
 // whose tokens are refreshed on behalf of users so agents can request them.
@@ -19,7 +21,7 @@ const inputStyle = { width:'100%', boxSizing:'border-box', fontSize:12, padding:
 
 export function Vault() {
   const [selected, setSelected] = React.useState(null);
-  const [tab, setTab] = React.useState('config');
+  const [tab, setTab] = useTabParam('config');
   const [filter, setFilter] = React.useState('all'); // all | active | inactive
   const [query, setQuery] = React.useState('');
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -27,6 +29,17 @@ export function Vault() {
 
   const { data: listRaw, loading, refresh } = useAPI('/vault/providers');
   const providers = listRaw?.data || [];
+
+  React.useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('new') === '1') {
+      setCreateOpen(true);
+      p.delete('new');
+      const s = p.toString();
+      window.history.replaceState(null, '', window.location.pathname + (s ? '?' + s : ''));
+    }
+  }, []);
+  usePageActions({ onNew: () => setCreateOpen(true), onRefresh: refresh });
 
   const filtered = providers.filter(p => {
     if (filter === 'active' && !p.active) return false;

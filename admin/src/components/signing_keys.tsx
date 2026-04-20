@@ -3,6 +3,8 @@ import React from 'react'
 import { Icon, CopyField } from './shared'
 import { API } from './api'
 import { CLIFooter } from './CLIFooter'
+import { usePageActions } from './useKeyboardShortcuts'
+import { TeachEmptyState } from './TeachEmptyState'
 
 // Signing Keys page — JWKS / JWT signing key management
 
@@ -53,6 +55,8 @@ export function SigningKeys() {
   }, [refreshTick]);
 
   const refresh = () => setRefreshTick(t => t + 1);
+
+  usePageActions({ onRefresh: refresh });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -130,13 +134,12 @@ export function SigningKeys() {
             <span>Failed to load JWKS: {error}</span>
           </div>
         ) : keys.length === 0 ? (
-          <div style={{ padding: 60, textAlign: 'center' }}>
-            <Icon.Key width={28} height={28} style={{ opacity: 0.2, display: 'block', margin: '0 auto 12px' }}/>
-            <div className="faint" style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>No signing keys</div>
-            <div className="faint" style={{ fontSize: 12 }}>
-              No signing keys configured. JWT mode may not be enabled.
-            </div>
-          </div>
+          <TeachEmptyState
+            icon="Key"
+            title="No signing keys"
+            description="No signing keys configured. JWT mode may not be enabled, or initial key generation has not run."
+            cliSnippet="shark keys rotate"
+          />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>

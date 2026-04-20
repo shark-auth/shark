@@ -7,6 +7,9 @@ const NAV_KEYS = {
   h: 'overview',
 };
 
+// Pages opt in by listening for `shark-page-action` with detail.action of
+// 'new' (open create modal) or 'refresh' (refetch data).
+
 export function useKeyboardShortcuts(setPage) {
   const [cheatsheetOpen, setCheatsheetOpen] = React.useState(false);
   const gPending = React.useRef(false);
@@ -44,6 +47,20 @@ export function useKeyboardShortcuts(setPage) {
         return;
       }
 
+      // n — new (page opens its create modal)
+      if (e.key === 'n' && !gPending.current) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('shark-page-action', { detail: { action: 'new' } }));
+        return;
+      }
+
+      // r — refresh (page refetches)
+      if (e.key === 'r' && !gPending.current && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('shark-page-action', { detail: { action: 'refresh' } }));
+        return;
+      }
+
       // g prefix
       if (e.key === 'g' && !gPending.current) {
         gPending.current = true;
@@ -71,6 +88,19 @@ export function useKeyboardShortcuts(setPage) {
   return { cheatsheetOpen, setCheatsheetOpen };
 }
 
+// Helper hook: subscribe a list page to the n/r global shortcuts.
+export function usePageActions({ onNew, onRefresh } = {}) {
+  React.useEffect(() => {
+    const handler = (e) => {
+      const action = e.detail?.action;
+      if (action === 'new' && typeof onNew === 'function') onNew();
+      else if (action === 'refresh' && typeof onRefresh === 'function') onRefresh();
+    };
+    window.addEventListener('shark-page-action', handler);
+    return () => window.removeEventListener('shark-page-action', handler);
+  }, [onNew, onRefresh]);
+}
+
 const SHORTCUT_GROUPS = [
   { title: 'Navigation', items: [
     ['g h', 'Overview'], ['g u', 'Users'], ['g o', 'Organizations'],
@@ -79,6 +109,7 @@ const SHORTCUT_GROUPS = [
     ['g t', 'Tokens'], ['g s', 'Settings'],
   ]},
   { title: 'Actions', items: [
+    ['n', 'New (on list pages)'], ['r', 'Refresh page data'],
     ['/', 'Focus search'], ['?', 'This cheatsheet'],
     ['Esc', 'Close panel'], ['⌘ K', 'Command palette'],
   ]},

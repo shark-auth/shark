@@ -1,6 +1,9 @@
 // @ts-nocheck
 import React from 'react'
 import { Icon, Avatar, Kbd, CopyField, sharkyGlyphPng, sharkyWordmarkPng } from './shared'
+import { QuickCreateMenu } from './QuickCreate'
+import { NotificationBell } from './Notifications'
+import { CURRENT_PHASE } from './PhaseGate'
 
 // Sidebar + topbar + layout shell
 
@@ -117,29 +120,35 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed }) {
             {section.items.map(item => {
               const IconEl = Icon[item.icon] || Icon.Home;
               const active = page === item.id;
+              // Phase gating: items with ph > CURRENT_PHASE are visibly disabled.
+              const gated = item.ph && item.ph > CURRENT_PHASE;
+              const disabled = item.disabled || gated;
+              const tip = gated
+                ? `${item.label} ships in Phase ${item.ph}`
+                : (collapsed ? item.label : undefined);
               return (
                 <button
                   key={item.id}
-                  onClick={() => !item.disabled && setPage(item.id)}
-                  title={collapsed ? item.label : undefined}
-                  disabled={item.disabled}
+                  onClick={() => !disabled && setPage(item.id)}
+                  title={tip}
+                  disabled={disabled}
                   style={{
                     width: '100%',
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: collapsed ? '0' : '0 14px',
                     justifyContent: collapsed ? 'center' : 'flex-start',
                     height: 28,
-                    color: active ? 'var(--fg)' : item.disabled ? 'var(--fg-faint)' : 'var(--fg-muted)',
+                    color: active ? 'var(--fg)' : disabled ? 'var(--fg-faint)' : 'var(--fg-muted)',
                     background: active ? 'var(--surface-3)' : 'transparent',
                     borderLeft: active ? '2px solid #fff' : '2px solid transparent',
                     paddingLeft: collapsed ? 0 : 12,
                     fontSize: 12.5,
                     fontWeight: active ? 500 : 400,
-                    cursor: item.disabled ? 'default' : 'pointer',
-                    opacity: item.disabled ? 0.55 : 1,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.5 : 1,
                     transition: 'background 60ms',
                   }}
-                  onMouseEnter={e => !active && !item.disabled && (e.currentTarget.style.background = 'var(--surface-2)')}
+                  onMouseEnter={e => !active && !disabled && (e.currentTarget.style.background = 'var(--surface-2)')}
                   onMouseLeave={e => !active && (e.currentTarget.style.background = 'transparent')}
                 >
                   <IconEl width={14} height={14} style={{ flexShrink: 0 }}/>
@@ -151,7 +160,7 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed }) {
                         {item.badge}
                       </span>
                     )}
-                    {item.ph && <span className="mono" style={{ fontSize: 9, color: 'var(--fg-faint)' }}>P{item.ph}</span>}
+                    {item.ph && <span className="mono" style={{ fontSize: 9, color: gated ? 'var(--warn)' : 'var(--fg-faint)' }}>P{item.ph}</span>}
                   </>}
                 </button>
               );
@@ -188,7 +197,9 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed }) {
   );
 }
 
-export function TopBar({ page, setTweaksOpen, onOpenPalette }) {
+export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
+  const [quickOpen, setQuickOpen] = React.useState(false);
+  const quickRef = React.useRef(null);
   const pageTitle = {
     overview: 'Overview',
     users: 'Users',
@@ -252,20 +263,19 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette }) {
         <Kbd keys="⌘ K"/>
       </button>
 
-      <button className="btn">
+      <button ref={quickRef} className="btn" onClick={() => setQuickOpen(v => !v)}>
         <Icon.Plus width={12} height={12}/>
         Quick create
         <Icon.ChevronDown width={10} height={10} style={{opacity:0.5}}/>
       </button>
+      <QuickCreateMenu
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        setPage={setPage}
+        anchorRef={quickRef}
+      />
 
-      <button className="btn ghost icon" title="Notifications" style={{ position: 'relative' }}>
-        <Icon.Bell width={14} height={14}/>
-        <span style={{
-          position: 'absolute', top: 6, right: 6,
-          width: 6, height: 6, borderRadius: 99,
-          background: 'var(--danger)',
-        }}/>
-      </button>
+      <NotificationBell setPage={setPage}/>
 
       <div style={{ width: 1, height: 18, background: 'var(--hairline-strong)' }}/>
 

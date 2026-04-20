@@ -4,6 +4,9 @@ import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
+import { usePageActions } from './useKeyboardShortcuts'
+import { TeachEmptyState } from './TeachEmptyState'
+import { useTabParam } from './useURLParams'
 
 // Agents page — OAuth 2.1 client registrations for autonomous/agent workloads
 // Table view → slide-over detail → create flow with one-time secret reveal
@@ -19,7 +22,7 @@ const ALL_GRANTS = ['authorization_code', 'client_credentials', 'refresh_token',
 
 export function Agents() {
   const [selected, setSelected] = React.useState(null);
-  const [tab, setTab] = React.useState('config');
+  const [tab, setTab] = useTabParam('config');
   const [filter, setFilter] = React.useState('all'); // all | active | inactive
   const [query, setQuery] = React.useState('');
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -27,6 +30,22 @@ export function Agents() {
 
   const { data: listRaw, loading, refresh } = useAPI('/agents?limit=200');
   const agents = listRaw?.data || [];
+
+  // Auto-open create modal when arriving with ?new=1, then strip the param.
+  React.useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('new') === '1') {
+      setCreateOpen(true);
+      p.delete('new');
+      const s = p.toString();
+      window.history.replaceState(null, '', window.location.pathname + (s ? '?' + s : ''));
+    }
+    const s = p.get('search');
+    if (s && !query) setQuery(s);
+  }, []);
+
+  // n=new, r=refresh
+  usePageActions({ onNew: () => setCreateOpen(true), onRefresh: refresh });
 
   const filtered = agents.filter(a => {
     if (filter === 'active' && !a.active) return false;
@@ -97,9 +116,18 @@ export function Agents() {
         <div style={{ flex: 1, overflow: 'auto' }}>
           {loading ? (
             <div className="faint" style={{padding: 20, fontSize: 12}}>Loading agents…</div>
+          ) : filtered.length === 0 && agents.length === 0 ? (
+            <TeachEmptyState
+              icon="Agent"
+              title="No agents registered"
+              description="Agents are OAuth 2.1 clients for autonomous workloads. Create one to issue tokens with scoped, time-bound access."
+              createLabel="New Agent"
+              onCreate={() => setCreateOpen(true)}
+              cliSnippet="shark agent create --name 'my-agent'"
+            />
           ) : filtered.length === 0 ? (
             <div className="faint" style={{padding: 40, fontSize: 12, textAlign: 'center'}}>
-              {agents.length === 0 ? 'No agents registered yet. Create one to get started.' : 'No agents match your filters.'}
+              No agents match your filters.
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>

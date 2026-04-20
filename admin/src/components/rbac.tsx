@@ -4,12 +4,16 @@ import { Icon, CopyField, hashColor } from './shared'
 import { API, useAPI } from './api'
 import { useToast } from './toast'
 import { TeachEmptyState } from './TeachEmptyState'
+import { useTabParam } from './useURLParams'
+import { usePageActions } from './useKeyboardShortcuts'
 
 // Roles & Permissions — two-pane RBAC manager
 
 export function RBAC() {
   const { data: rolesRaw, loading, refresh } = useAPI('/roles');
   const roles = rolesRaw?.roles || (Array.isArray(rolesRaw) ? rolesRaw : []);
+
+  usePageActions({ onNew: () => setCreating(true), onRefresh: refresh });
 
   const [selectedId, setSelectedId] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
@@ -177,7 +181,7 @@ function RoleListItem({ role, active, onClick }) {
 /* ---- Role Detail ---- */
 
 function RoleDetail({ role, onRefresh, onDelete }) {
-  const [tab, setTab] = React.useState('permissions');
+  const [tab, setTab] = useTabParam('permissions');
 
   return (
     <div>

@@ -60,6 +60,9 @@ debug_admin.sh
 shark-*.exe
 shark-stripped
 
+# Smoke test scratch / helper scripts
+scratch/
+
 # Docker
 .docker/
 

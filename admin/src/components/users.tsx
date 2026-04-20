@@ -6,6 +6,7 @@ import { MOCK } from './mock'
 import { CLIFooter } from './CLIFooter'
 import { useURLParam } from './useURLParams'
 import { useToast } from './toast'
+import { usePageActions } from './useKeyboardShortcuts'
 
 // Users page — table + detail slide-over
 
@@ -48,6 +49,21 @@ export function Users() {
   const rawUsers = usersData?.users || [];
   const total = usersData?.total || 0;
   const totalPages = Math.ceil(total / perPage) || 1;
+
+  // Deep link: /admin/users/<id> selects that user once data loads.
+  React.useEffect(() => {
+    const m = window.location.pathname.match(/^\/admin\/users\/([^\/]+)/);
+    if (m && rawUsers.length > 0 && !selected) {
+      const u = rawUsers.find(x => x.id === m[1]);
+      if (u) setSelected(u);
+    }
+  }, [rawUsers]);
+
+  // r=refresh; n surfaces a hint since we don't yet have a create modal here.
+  usePageActions({
+    onRefresh: refresh,
+    onNew: () => alert('Create user from the dashboard ships in a later phase. Use the CLI: shark users create --email <email>'),
+  });
 
   // Server now applies all filters. Pass-through.
   const users = rawUsers;
@@ -267,7 +283,11 @@ export function Users() {
       {selected && (
         <UserSlideover
           user={selected}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null);
+            const search = window.location.search;
+            window.history.replaceState(null, '', '/admin/users' + search);
+          }}
           onDelete={handleDelete}
           onRefreshList={refresh}
         />
@@ -277,7 +297,27 @@ export function Users() {
 }
 
 function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
-  const [tab, setTab] = React.useState('profile');
+  // Initialize tab from URL sub-path /admin/users/<id>/<tab> when present.
+  const initialTab = (() => {
+    const m = window.location.pathname.match(/^\/admin\/users\/[^\/]+\/([^\/?]+)/);
+    return m ? m[1] : 'profile';
+  })();
+  const [tab, setTabState] = React.useState(initialTab);
+  // Keep URL in sync as user clicks tabs (replaceState — no history pollution).
+  const setTab = (t) => {
+    setTabState(t);
+    const search = window.location.search;
+    const url = `/admin/users/${user.id}` + (t && t !== 'profile' ? `/${t}` : '') + search;
+    window.history.replaceState(null, '', url);
+  };
+  // When opened (or switching user), sync URL to /admin/users/<id>.
+  React.useEffect(() => {
+    const search = window.location.search;
+    const url = `/admin/users/${user.id}` + (tab && tab !== 'profile' ? `/${tab}` : '') + search;
+    if (window.location.pathname !== url.split('?')[0]) {
+      window.history.replaceState(null, '', url);
+    }
+  }, [user.id]);
   const tabs = [
     { id: 'profile', label: 'Profile' },
     { id: 'security', label: 'Security' },

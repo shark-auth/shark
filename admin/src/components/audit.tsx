@@ -4,6 +4,8 @@ import { Icon, CopyField, Kbd, Avatar } from './shared'
 import { useAPI } from './api'
 import { MOCK } from './mock'
 import { useURLParam } from './useURLParams'
+import { usePageActions } from './useKeyboardShortcuts'
+import { TeachEmptyState } from './TeachEmptyState'
 
 // Audit log page — live-tail event stream w/ filters, event detail, CSV export
 
@@ -66,6 +68,8 @@ export function Audit() {
   }, [filters.actorType, filters.actionPrefix, filters.timeRange]);
 
   const { data, loading, error, refresh } = useAPI(apiPath);
+
+  usePageActions({ onRefresh: refresh });
 
   const events = React.useMemo(() => {
     const raw = data?.items || data?.audit_logs || data?.data || (Array.isArray(data) ? data : []);
@@ -306,7 +310,15 @@ export function Audit() {
               ))}
             </tbody>
           </table>
-          {filtered.length === 0 && (
+          {filtered.length === 0 && events.length === 0 && !loading && (
+            <TeachEmptyState
+              icon="Audit"
+              title="No audit events"
+              description="Audit logs capture every authentication, RBAC change, and admin action. Once activity occurs they will appear here in real time."
+              cliSnippet="shark audit tail"
+            />
+          )}
+          {filtered.length === 0 && events.length > 0 && (
             <div style={{padding: '60px 20px', textAlign: 'center'}} className="faint">No events match these filters.</div>
           )}
         </div>

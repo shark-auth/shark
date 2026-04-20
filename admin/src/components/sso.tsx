@@ -4,6 +4,7 @@ import { Icon } from './shared'
 import { API, useAPI } from './api'
 import { useToast } from './toast'
 import { TeachEmptyState } from './TeachEmptyState'
+import { usePageActions } from './useKeyboardShortcuts'
 
 // SSO Connections page — SAML + OIDC enterprise single sign-on
 
@@ -30,6 +31,18 @@ export function SSO() {
 
   const { data, loading, refresh } = useAPI('/sso/connections');
   const connections = data?.connections || data || [];
+
+  React.useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('new') === '1') {
+      setSlideOver({ mode: 'create' });
+      p.delete('new');
+      const s = p.toString();
+      window.history.replaceState(null, '', window.location.pathname + (s ? '?' + s : ''));
+    }
+  }, []);
+
+  usePageActions({ onNew: () => setSlideOver({ mode: 'create' }), onRefresh: refresh });
 
   const toast = useToast();
   const handleDelete = (conn) => {

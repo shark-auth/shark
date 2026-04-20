@@ -4,6 +4,8 @@ import { Icon, CopyField, Sparkline } from './shared'
 import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useURLParam } from './useURLParams'
+import { usePageActions } from './useKeyboardShortcuts'
+import { TeachEmptyState } from './TeachEmptyState'
 
 // API Keys page — M2M credential management
 // Table + detail w/ rotation timeline + create/rotate modals + scope matrix
@@ -29,6 +31,18 @@ export function ApiKeys() {
 
   const { data: keysRaw, loading, refresh } = useAPI('/api-keys');
   const keys = keysRaw?.api_keys || [];
+
+  React.useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('new') === '1') {
+      setCreateOpen(true);
+      p.delete('new');
+      const s = p.toString();
+      window.history.replaceState(null, '', window.location.pathname + (s ? '?' + s : ''));
+    }
+  }, []);
+
+  usePageActions({ onNew: () => setCreateOpen(true), onRefresh: refresh });
 
   const isExpiringSoon = (k) => {
     if (!k.expires_at || k.revoked_at) return false;
@@ -171,6 +185,15 @@ export function ApiKeys() {
           <div style={{ flex: 1, overflow: 'auto' }}>
             {loading ? (
               <div className="faint" style={{ padding: 40, textAlign: 'center', fontSize: 12 }}>Loading…</div>
+            ) : keys.length === 0 ? (
+              <TeachEmptyState
+                icon="Key"
+                title="No API keys"
+                description="API keys are M2M credentials for service-to-service authentication. Each key is scoped, rotatable, and can have an expiry."
+                createLabel="New API Key"
+                onCreate={() => setCreateOpen(true)}
+                cliSnippet="shark keys create --name 'ci-deploy' --scope 'admin'"
+              />
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>

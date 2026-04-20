@@ -4,6 +4,9 @@ import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
+import { usePageActions } from './useKeyboardShortcuts'
+import { TeachEmptyState } from './TeachEmptyState'
+import { useTabParam } from './useURLParams'
 
 // Applications page — OAuth/OIDC client registrations
 // Table view → slide-over detail → live consent-screen preview
@@ -16,7 +19,7 @@ const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpac
 
 export function Applications() {
   const [selected, setSelected] = React.useState(null);
-  const [tab, setTab] = React.useState('config');
+  const [tab, setTab] = useTabParam('config');
   const [filter, setFilter] = React.useState('all');
   const [query, setQuery] = React.useState('');
   const [rotateModal, setRotateModal] = React.useState(null);
@@ -24,6 +27,20 @@ export function Applications() {
 
   const { data: appsRaw, loading, refresh } = useAPI('/admin/apps');
   const apps = appsRaw?.applications || [];
+
+  React.useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('new') === '1') {
+      setCreateOpen(true);
+      p.delete('new');
+      const s = p.toString();
+      window.history.replaceState(null, '', window.location.pathname + (s ? '?' + s : ''));
+    }
+    const s = p.get('search');
+    if (s && !query) setQuery(s);
+  }, []);
+
+  usePageActions({ onNew: () => setCreateOpen(true), onRefresh: refresh });
 
   const filtered = apps.filter(a => {
     if (query && !(a.name.toLowerCase().includes(query.toLowerCase()) || a.client_id.includes(query))) return false;
@@ -76,6 +93,19 @@ export function Applications() {
         <div style={{ flex: 1, overflow: 'auto' }}>
           {loading ? (
             <div className="faint" style={{padding: 20, fontSize: 12}}>Loading applications…</div>
+          ) : apps.length === 0 ? (
+            <TeachEmptyState
+              icon="App"
+              title="No applications registered"
+              description="Applications are OAuth/OIDC clients (web apps, mobile, SPAs) that authenticate users via Shark."
+              createLabel="New Application"
+              onCreate={() => setCreateOpen(true)}
+              cliSnippet="shark apps create --name 'My Web App'"
+            />
+          ) : filtered.length === 0 ? (
+            <div className="faint" style={{padding: 40, fontSize: 12, textAlign: 'center'}}>
+              No applications match your filters.
+            </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>

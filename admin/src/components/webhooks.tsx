@@ -3,6 +3,8 @@ import React from 'react'
 import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
 import { TeachEmptyState } from './TeachEmptyState'
+import { usePageActions } from './useKeyboardShortcuts'
+import { useTabParam } from './useURLParams'
 
 // Webhooks page — endpoint management + delivery history
 // Table + create slide-over + detail slide-over w/ config/deliveries tabs
@@ -64,6 +66,18 @@ export function Webhooks() {
   const webhooks = Array.isArray(raw?.data) ? raw.data
     : Array.isArray(raw?.webhooks) ? raw.webhooks
     : Array.isArray(raw) ? raw : [];
+
+  React.useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('new') === '1') {
+      setCreateOpen(true);
+      p.delete('new');
+      const s = p.toString();
+      window.history.replaceState(null, '', window.location.pathname + (s ? '?' + s : ''));
+    }
+  }, []);
+
+  usePageActions({ onNew: () => setCreateOpen(true), onRefresh: refresh });
 
   const filtered = webhooks.filter(w => {
     if (!query) return true;
@@ -343,7 +357,7 @@ function WebhookRow({ w, selected, onSelect, onTest, onDelete }) {
 }
 
 function WebhookDetail({ w, onClose, onUpdate, onDelete, onTest }) {
-  const [tab, setTab] = React.useState('config');
+  const [tab, setTab] = useTabParam('config');
 
   return (
     <aside style={{

@@ -23,3 +23,10 @@ export function useURLParam(key, defaultValue = '') {
 
   return [value, setValue];
 }
+
+// useTabParam — convenience wrapper for tab state persisted in ?tab=
+// Pages call this instead of React.useState('tab1') so refresh keeps the tab.
+// Default is the first tab; setting back to default removes the param.
+export function useTabParam(defaultTab) {
+  return useURLParam('tab', defaultTab);
+}
