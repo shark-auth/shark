@@ -41,7 +41,7 @@ export const NAV = [
     { id: 'schemas', label: 'Event Schemas', icon: 'Schema', ph: 5 },
   ]},
   { group: 'INFRASTRUCTURE', items: [
-    { id: 'proxy', label: 'Proxy', icon: 'Proxy', ph: 7 },
+    { id: 'proxy', label: 'Proxy', icon: 'Proxy' },
     { id: 'oidc', label: 'OIDC Provider', icon: 'Globe', ph: 8 },
   ]},
   { group: 'ENTERPRISE', items: [
@@ -49,7 +49,7 @@ export const NAV = [
     { id: 'compliance', label: 'Compliance', icon: 'Compliance', ph: 9 },
     { id: 'migrations', label: 'Migrations', icon: 'Migration', ph: 9 },
     { id: 'branding', label: 'Branding', icon: 'Brand', ph: 9 },
-    { id: 'flow', label: 'Flow Builder', icon: 'Flow', ph: 10 },
+    { id: 'flow', label: 'Flow Builder', icon: 'Flow' },
   ]},
 ];
 
