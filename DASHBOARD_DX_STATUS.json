@@ -4,13 +4,13 @@
   "current_task": null,
   "current_agent": null,
   "tasks": {
-    "T01": {"status": "done", "commit": "pending-commit", "blocked_by": []},
+    "T01": {"status": "done", "commit": "8406b78", "blocked_by": []},
     "T02": {"status": "pending", "commit": null, "blocked_by": []},
-    "T03": {"status": "done", "commit": "pending-commit", "blocked_by": [], "notes": "merged into T07 — rotate button was already wired, only alert() remained"},
+    "T03": {"status": "done", "commit": "8406b78", "blocked_by": [], "notes": "merged into T07 — rotate button was already wired, only alert() remained"},
     "T04": {"status": "pending", "commit": null, "blocked_by": []},
     "T05": {"status": "pending", "commit": null, "blocked_by": ["T04"]},
     "T06": {"status": "pending", "commit": null, "blocked_by": ["T05"]},
-    "T07": {"status": "done", "commit": "pending-commit", "blocked_by": [], "notes": "users.tsx:65 deferred to T05 (backend blocker)"},
+    "T07": {"status": "done", "commit": "8406b78", "blocked_by": [], "notes": "users.tsx:65 deferred to T05 (backend blocker)"},
     "T08": {"status": "pending", "commit": null, "blocked_by": []},
     "T09": {"status": "pending", "commit": null, "blocked_by": ["T01", "T02"]},
     "T10": {"status": "pending", "commit": null, "blocked_by": ["T09"]},
@@ -26,7 +26,7 @@
     "T20": {"status": "pending", "commit": null, "blocked_by": []},
     "T21": {"status": "pending", "commit": null, "blocked_by": []},
     "T22": {"status": "pending", "commit": null, "blocked_by": []},
-    "T23": {"status": "done", "commit": "pending-commit", "blocked_by": [], "notes": "added to 4 pages (dev_inbox, consents_manage, settings, authentication); vault_manage + proxy_config already had footer"},
+    "T23": {"status": "done", "commit": "8406b78", "blocked_by": [], "notes": "added to 4 pages (dev_inbox, consents_manage, settings, authentication); vault_manage + proxy_config already had footer"},
     "T24": {"status": "pending", "commit": null, "blocked_by": ["T02", "T04", "T05", "T06", "T08", "T09", "T10", "T11", "T12", "T13", "T14", "T15", "T16", "T17", "T18", "T19", "T20", "T21", "T22"]}
   },
   "notes": [
