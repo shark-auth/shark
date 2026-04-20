@@ -438,6 +438,11 @@ User flagged additional findings from smoke test review. These predate dashboard
 - A1–A7 from Round 2
 - **NEW: smoke section per route**: webhook replay, admin org CRUD, admin org invitations, admin user MFA disable
 
+**Wave B — Tiny backend + users page filters** ✅ DONE (smoke 315 → 320, 0 FAIL)
+- B-1 ✅ ListUsersOpts.AuthMethod + OrgID added; sqlite WHERE plumbed (password = users.password_hash, others via sessions.auth_method); org via organization_members
+- B-2 ✅ users.tsx — sends all filters as query params; reset page on filter change; backend now also returns `{users:[], total:N}` shape and accepts page/per_page (was previously plain array, dashboard always saw 0)
+- B-3 ✅ Smoke section 63 added: response shape contract, auth_method=password narrows, auth_method=passkey applied, org_id=bogus → 0, per_page=2 limits
+
 **Wave A — Frontend-only polish** ✅ DONE (smoke 315 → 315, 0 FAIL)
 - A-1 ✅ signing_keys.tsx rotate button already wired (pre-existing) — confirmed live
 - A-2 ✅ overview.tsx — removed mock sparklines (sessions/mfa/failed/keys/agents), removed MOCK.stats fallback, agent count derived from `/agents?limit=1` total, removed mock "Agent activity 24h" card

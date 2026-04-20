@@ -32,26 +32,25 @@ export function Users() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // Reset page to 1 when search changes
-  React.useEffect(() => { setPage(1); }, [debouncedQuery]);
+  // Reset page to 1 when search or any filter changes
+  React.useEffect(() => { setPage(1); }, [debouncedQuery, filterVerified, filterMfa, filterMethod]);
 
-  const searchParam = debouncedQuery ? `&search=${encodeURIComponent(debouncedQuery)}` : '';
-  const { data: usersData, loading, refresh } = useAPI(
-    `/users?page=${page}&per_page=${perPage}${searchParam}`
-  );
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('per_page', String(perPage));
+  if (debouncedQuery) params.set('search', debouncedQuery);
+  if (filterVerified === 'yes') params.set('email_verified', 'true');
+  if (filterVerified === 'no') params.set('email_verified', 'false');
+  if (filterMfa === 'on') params.set('mfa_enabled', 'true');
+  if (filterMfa === 'off') params.set('mfa_enabled', 'false');
+  if (filterMethod) params.set('auth_method', filterMethod);
+  const { data: usersData, loading, refresh } = useAPI(`/users?${params.toString()}`);
   const rawUsers = usersData?.users || [];
   const total = usersData?.total || 0;
   const totalPages = Math.ceil(total / perPage) || 1;
 
-  // Client-side filters on loaded page
-  const users = rawUsers.filter(u => {
-    if (filterVerified === 'yes' && !(u.email_verified ?? u.verified)) return false;
-    if (filterVerified === 'no' && (u.email_verified ?? u.verified)) return false;
-    if (filterMfa === 'on' && !u.mfa_enabled && !u.mfa_method && !u.mfa) return false;
-    if (filterMfa === 'off' && (u.mfa_enabled || u.mfa_method || u.mfa)) return false;
-    if (filterMethod && (u.auth_method || u.method || '') !== filterMethod) return false;
-    return true;
-  });
+  // Server now applies all filters. Pass-through.
+  const users = rawUsers;
 
   const handleDelete = async (userId) => {
     await API.del('/users/' + userId);

@@ -114,6 +114,21 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 		conditions = append(conditions, `email_verified = ?`)
 		args = append(args, boolToInt(*opts.EmailVerified))
 	}
+	if opts.AuthMethod != "" {
+		// `password` is special-cased to "user has a password set" since
+		// fresh accounts never logged in still register as password users.
+		// All other methods derive from the sessions table.
+		if opts.AuthMethod == "password" {
+			conditions = append(conditions, `password_hash IS NOT NULL AND password_hash != ''`)
+		} else {
+			conditions = append(conditions, `id IN (SELECT DISTINCT user_id FROM sessions WHERE auth_method = ?)`)
+			args = append(args, opts.AuthMethod)
+		}
+	}
+	if opts.OrgID != "" {
+		conditions = append(conditions, `id IN (SELECT user_id FROM organization_members WHERE organization_id = ?)`)
+		args = append(args, opts.OrgID)
+	}
 
 	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at FROM users`
 	if len(conditions) > 0 {

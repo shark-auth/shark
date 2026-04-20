@@ -45,25 +45,34 @@ func adminUserToResponse(u *storage.User) adminUserResponse {
 
 // handleListUsers handles GET /api/v1/users
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	search := r.URL.Query().Get("search")
+	q := r.URL.Query()
 
+	// Accept both limit/offset and dashboard's page/per_page.
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	if perPage, _ := strconv.Atoi(q.Get("per_page")); perPage > 0 {
+		limit = perPage
+	}
+	if page, _ := strconv.Atoi(q.Get("page")); page > 0 && limit > 0 {
+		offset = (page - 1) * limit
+	}
 	if limit <= 0 {
 		limit = 50
 	}
 
 	opts := storage.ListUsersOpts{
-		Limit:  limit,
-		Offset: offset,
-		Search: search,
-		RoleID: r.URL.Query().Get("role_id"),
+		Limit:      limit,
+		Offset:     offset,
+		Search:     q.Get("search"),
+		RoleID:     q.Get("role_id"),
+		AuthMethod: q.Get("auth_method"),
+		OrgID:      q.Get("org_id"),
 	}
-	if v := r.URL.Query().Get("mfa_enabled"); v == "true" || v == "false" {
+	if v := q.Get("mfa_enabled"); v == "true" || v == "false" {
 		b := v == "true"
 		opts.MFAEnabled = &b
 	}
-	if v := r.URL.Query().Get("email_verified"); v == "true" || v == "false" {
+	if v := q.Get("email_verified"); v == "true" || v == "false" {
 		b := v == "true"
 		opts.EmailVerified = &b
 	}
@@ -77,11 +86,24 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Total count uses the same filters but ignores limit/offset.
+	totalOpts := opts
+	totalOpts.Limit = 1000000
+	totalOpts.Offset = 0
+	allUsers, err := s.Store.ListUsers(r.Context(), totalOpts)
+	total := 0
+	if err == nil {
+		total = len(allUsers)
+	}
+
 	resp := make([]adminUserResponse, len(users))
 	for i, u := range users {
 		resp[i] = adminUserToResponse(u)
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users": resp,
+		"total": total,
+	})
 }
 
 // handleGetUser handles GET /api/v1/users/{id}

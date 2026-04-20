@@ -473,7 +473,7 @@ if [ -n "$USERID" ]; then
   [ "$CODE" = 200 ] && pass "user update 200" || fail "user update $CODE"
 
   # last_login_at populated after login (multiple relogin calls happened earlier)
-  LLA_LIST=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?search=$EMAIL" | jq -r '.[0].last_login_at // empty')
+  LLA_LIST=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?search=$EMAIL" | jq -r '.users[0].last_login_at // empty')
   [ -n "$LLA_LIST" ] && pass "user list includes last_login_at" || fail "user list missing last_login_at (got empty)"
 
   LLA_GET=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/users/$USERID | jq -r '.last_login_at // empty')
@@ -1784,6 +1784,36 @@ if [ -n "$META_FLOW" ]; then
 else
   fail "could not seed metadata test flow"
 fi
+
+# --- 63: User list filters (B Wave) -------------------------------------------
+section "63: user list filters (auth_method, org_id)"
+
+# Response shape now is {users:[...], total:N}.
+SHAPE=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?limit=5" | jq -r '.users | type // "missing"')
+[ "$SHAPE" = "array" ] && pass "user list response has .users array" || fail "user list .users missing (got $SHAPE)"
+
+TOTAL_ANY=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?limit=1000" | jq -r '.total // 0')
+TOTAL_PWD=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?limit=1000&auth_method=password" | jq -r '.total // 0')
+TOTAL_PASSKEY=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?limit=1000&auth_method=passkey" | jq -r '.total // 0')
+# Smoke users use password — auth_method=password should match many; passkey should match fewer/none.
+if [ "$TOTAL_PWD" -gt 0 ] && [ "$TOTAL_PWD" -le "$TOTAL_ANY" ]; then
+  pass "auth_method=password filter narrows list ($TOTAL_PWD <= $TOTAL_ANY)"
+else
+  fail "auth_method=password filter wrong: pwd=$TOTAL_PWD all=$TOTAL_ANY"
+fi
+if [ "$TOTAL_PASSKEY" -le "$TOTAL_ANY" ]; then
+  pass "auth_method=passkey filter applied ($TOTAL_PASSKEY <= $TOTAL_ANY)"
+else
+  fail "auth_method=passkey filter wrong: pk=$TOTAL_PASSKEY all=$TOTAL_ANY"
+fi
+
+# org_id filter — bogus org returns 0
+TOTAL_BOGUS=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?org_id=org_does_not_exist_zzz" | jq -r '.total // 0')
+[ "$TOTAL_BOGUS" = "0" ] && pass "org_id=bogus filter returns 0" || fail "org_id filter not applied (got $TOTAL_BOGUS)"
+
+# page/per_page pagination
+PAGE1=$(curl -s -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/users?page=1&per_page=2" | jq -r '.users | length')
+[ "$PAGE1" -le 2 ] && pass "per_page=2 limits results ($PAGE1)" || fail "per_page not honored (got $PAGE1)"
 
 # --- Summary ------------------------------------------------------------------
 section "summary"

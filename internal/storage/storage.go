@@ -613,6 +613,8 @@ type ListUsersOpts struct {
 	MFAEnabled    *bool  // filter by mfa_enabled
 	EmailVerified *bool  // filter by email_verified
 	RoleID        string // filter by role assignment
+	AuthMethod    string // filter by auth_method (password|oauth|passkey|magic_link|sso)
+	OrgID         string // filter by organization membership
 }
 
 // ListSessionsOpts configures admin session list queries with cursor pagination.
