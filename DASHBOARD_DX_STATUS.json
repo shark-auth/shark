@@ -7,7 +7,7 @@
     "T01": {"status": "done", "commit": "8406b78", "blocked_by": []},
     "T02": {"status": "done", "commit": "prior", "blocked_by": []},
     "T03": {"status": "done", "commit": "8406b78", "blocked_by": []},
-    "T04": {"status": "done", "commit": "PENDING_SHA", "blocked_by": []},
+    "T04": {"status": "done", "commit": "b922c0c", "blocked_by": []},
     "T05": {"status": "pending", "commit": null, "blocked_by": ["T04"]},
     "T06": {"status": "pending", "commit": null, "blocked_by": ["T05"]},
     "T07": {"status": "done", "commit": "8406b78", "blocked_by": []},

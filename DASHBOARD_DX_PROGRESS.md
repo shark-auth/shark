@@ -41,3 +41,4 @@ Append-only. Every task state change = one row. Never edit prior rows.
 | 2026-04-20T20:15:00Z | T09 | done | subagent-B | 7b34ba3 — overview hero tile replaces metric strip when users=0 AND proxy 404 |
 | 2026-04-20T20:16:00Z | T10 | claim | subagent-B | proxy empty-state onboarding wizard (extract ProxyWizard) |
 | 2026-04-20T21:22:00Z | T04 | claim | subagent-A | backend POST /admin/users handler + router wire + smoke test |
+| 2026-04-20T21:23:00Z | T04 | done | subagent-A | b922c0c — POST /admin/users admin-key handler: email-required 400, duplicate 409 email_exists, bcrypt-style argon2id hash on create, admin.user.create audit row, smoke section 70 + Go unit test |
