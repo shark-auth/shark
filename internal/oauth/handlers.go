@@ -262,8 +262,11 @@ func (s *Server) HandleAuthorizeDecision(w http.ResponseWriter, r *http.Request)
 		Scope:     scopeStr,
 		GrantedAt: time.Now().UTC(),
 	}
-	// Ignore error if consent already exists (idempotent).
-	_ = s.RawStore.CreateOAuthConsent(ctx, consent)
+	// Ignore duplicate consent (idempotent); log non-duplicate failures so audit
+	// drift is visible — the user already consented so we still complete the flow.
+	if err := s.RawStore.CreateOAuthConsent(ctx, consent); err != nil {
+		slog.Warn("oauth: failed to persist consent record", "user_id", userID, "client_id", clientID, "err", err)
+	}
 
 	s.completeAuthorize(w, r, ar, userID)
 }

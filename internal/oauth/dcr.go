@@ -260,7 +260,7 @@ func dcrResponseFromDCRClient(dcr *storage.OAuthDCRClient, regClientURI string) 
 // logDCRAudit records an audit log entry for DCR operations.
 func (s *Server) logDCRAudit(ctx context.Context, action, clientID, ip string) {
 	id, _ := gonanoid.New()
-	_ = s.RawStore.CreateAuditLog(ctx, &storage.AuditLog{
+	if err := s.RawStore.CreateAuditLog(ctx, &storage.AuditLog{
 		ID:         "aud_" + id,
 		ActorType:  "client",
 		Action:     action,
@@ -270,7 +270,9 @@ func (s *Server) logDCRAudit(ctx context.Context, action, clientID, ip string) {
 		Status:     "success",
 		Metadata:   "{}",
 		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
-	})
+	}); err != nil {
+		slog.Warn("dcr: audit log write failed", "action", action, "client_id", clientID, "err", err)
+	}
 }
 
 // HandleDCRRegister handles POST /oauth/register (RFC 7591).
@@ -396,7 +398,9 @@ func (s *Server) HandleDCRRegister(w http.ResponseWriter, r *http.Request) {
 	if err := s.RawStore.CreateDCRClient(ctx, dcrClient); err != nil {
 		slog.Error("dcr: creating dcr client record", "error", err)
 		// Best-effort: deactivate the agent we just created to avoid orphans.
-		_ = s.RawStore.DeactivateAgent(ctx, agent.ID)
+		if deactivateErr := s.RawStore.DeactivateAgent(ctx, agent.ID); deactivateErr != nil {
+			slog.Warn("dcr: rollback deactivate agent failed", "agent_id", agent.ID, "err", deactivateErr)
+		}
 		writeDCRError(w, http.StatusInternalServerError, "server_error", "failed to store DCR record")
 		return
 	}

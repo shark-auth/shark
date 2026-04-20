@@ -39,10 +39,11 @@ type Outcome string
 
 // Outcome values.
 const (
-	Continue Outcome = "continue" // flow completed, allow normal flow to proceed
-	Block    Outcome = "block"    // flow blocked execution (e.g., email unverified)
-	Redirect Outcome = "redirect" // flow requests a redirect to RedirectURL
-	Error    Outcome = "error"    // runtime error (webhook timeout, etc.)
+	Continue Outcome = "continue"    // flow completed, allow normal flow to proceed
+	Block    Outcome = "block"       // flow blocked execution (e.g., email unverified)
+	Redirect Outcome = "redirect"    // flow requests a redirect to RedirectURL
+	Error    Outcome = "error"       // runtime error (webhook timeout, etc.)
+	AwaitMFA Outcome = "awaiting_mfa" // flow paused — MFA challenge issued, waiting for TOTP code
 )
 
 // Context carries per-execution state into each step.
@@ -68,6 +69,7 @@ type StepResult struct {
 	Reason        string         // human readable; populates Result.Reason on Block/Error
 	RedirectURL   string         // populated when Outcome == Redirect
 	MetadataPatch map[string]any // merged into Context.Metadata + surfaced in Result
+	ChallengeID   string         // populated when Outcome == AwaitMFA
 }
 
 // Result is the aggregate of a whole flow run.
@@ -75,6 +77,7 @@ type Result struct {
 	Outcome       Outcome             `json:"outcome"`
 	Reason        string              `json:"reason,omitempty"`
 	RedirectURL   string              `json:"redirect_url,omitempty"`
+	ChallengeID   string              `json:"challenge_id,omitempty"` // set when Outcome == AwaitMFA
 	BlockedAtStep *int                `json:"blocked_at_step,omitempty"`
 	Metadata      map[string]any      `json:"metadata"`
 	Timeline      []StepTimelineEntry `json:"timeline"`
@@ -250,6 +253,7 @@ func (e *Engine) runSteps(ctx context.Context, steps []storage.FlowStep, fc *Con
 			result.Outcome = sub.Outcome
 			result.Reason = sub.Reason
 			result.RedirectURL = sub.RedirectURL
+			result.ChallengeID = sub.ChallengeID
 			idx := i
 			result.BlockedAtStep = &idx
 			return

@@ -3,7 +3,11 @@ package authflow
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -222,12 +226,45 @@ func (e *Engine) executeConditional(ctx context.Context, step *storage.FlowStep,
 // Each returns Continue + logs a warning so flows referencing a planned
 // step type don't crash today. Removed once F2.1 lands the real behavior.
 
-// TODO(F2.1): wire require_mfa_challenge (needs a session-bound challenge store
-// the step can consult — MVP just continues so pre-existing flows don't break).
-func (e *Engine) requireMFAChallenge(_ context.Context, _ *storage.FlowStep, fc *Context) StepResult {
-	fc.Logger.Warn("require_mfa_challenge not yet fully implemented",
-		"step", "require_mfa_challenge")
-	return StepResult{Outcome: Continue}
+// requireMFAChallenge pauses the flow for an MFA TOTP challenge.
+//
+// If the user already has MFA enrolled (MFAEnabled && MFAVerified), a challenge
+// entry is minted in GlobalChallengeStore and the step returns AwaitMFA with
+// the challenge ID. The HTTP layer converts that outcome to a 401 with
+// mfa_required: true so the client can call POST /api/v1/auth/flow/mfa/verify.
+//
+// If MFA is not enrolled: the step errors with "mfa_required_but_not_enrolled".
+// Wrap the step in a conditional if you want a soft-fail path.
+//
+// Config:
+//
+//	allow_recovery (bool, default true) — no-op placeholder for v0.2 when
+//	recovery-code bypass is wired; kept in the schema now so existing configs
+//	don't break when the feature lands.
+func (e *Engine) requireMFAChallenge(_ context.Context, step *storage.FlowStep, fc *Context) StepResult {
+	if fc.User == nil {
+		return StepResult{Outcome: Error, Reason: "require_mfa_challenge: no user context"}
+	}
+
+	enrolled := fc.User.MFAEnabled && fc.User.MFAVerified
+	if !enrolled {
+		return StepResult{Outcome: Error, Reason: "mfa_required_but_not_enrolled"}
+	}
+
+	// _ = boolFromConfig(step.Config, "allow_recovery", true) // reserved for v0.2
+	_ = step // config read reserved for v0.2
+
+	challengeID := GlobalChallengeStore.Issue(fc.User.ID, "")
+
+	fc.Logger.Info("require_mfa_challenge: challenge issued",
+		"user_id", fc.User.ID,
+		"challenge_id", challengeID)
+
+	return StepResult{
+		Outcome:     AwaitMFA,
+		Reason:      "mfa_challenge_required",
+		ChallengeID: challengeID,
+	}
 }
 
 // TODO(F2.1): wire set_metadata to persist via store.UpdateUser; today we
@@ -243,17 +280,108 @@ func (e *Engine) executeSetMetadata(_ context.Context, step *storage.FlowStep, f
 	return StepResult{Outcome: Continue, MetadataPatch: map[string]any{key: value}}
 }
 
-// TODO(F2.1): wire assign_role to call store.AssignRoleToUser once the
-// engine owns a transactional boundary for queued effects.
-func (e *Engine) executeAssignRole(_ context.Context, _ *storage.FlowStep, fc *Context) StepResult {
-	fc.Logger.Warn("assign_role not yet fully implemented", "step", "assign_role")
+// executeAssignRole attaches a global role to the running user.
+//
+// Config:
+//
+//	role_id  (string, required) — ID of the role to assign.
+//	org_id   (string, optional) — reserved for v0.2 org-scoped assignment;
+//	                               ignored today because AssignRoleToUserInOrg
+//	                               is not yet in the storage interface.
+//
+// Idempotency: the underlying INSERT OR IGNORE means assigning an already-held
+// role is a no-op at the DB level and returns Continue.
+//
+// Failure: role not found → Error; store failure → Error.
+func (e *Engine) executeAssignRole(ctx context.Context, step *storage.FlowStep, fc *Context) StepResult {
+	if fc.User == nil {
+		return StepResult{Outcome: Error, Reason: "assign_role: no user context"}
+	}
+
+	roleID := strFromConfig(step.Config, "role_id", "")
+	if roleID == "" {
+		return StepResult{Outcome: Error, Reason: "assign_role: missing role_id in config"}
+	}
+
+	// Validate the role exists before assigning.
+	if _, err := e.store.GetRoleByID(ctx, roleID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return StepResult{Outcome: Error, Reason: fmt.Sprintf("assign_role: role %q not found", roleID)}
+		}
+		return StepResult{Outcome: Error, Reason: "assign_role: store error: " + err.Error()}
+	}
+
+	if err := e.store.AssignRoleToUser(ctx, fc.User.ID, roleID); err != nil {
+		return StepResult{Outcome: Error, Reason: "assign_role: " + err.Error()}
+	}
+
+	_ = e.emitAuditLog(ctx, fc, "authflow.step.assign_role", map[string]any{
+		"role_id": roleID,
+		"user_id": fc.User.ID,
+	})
+
+	fc.Logger.Info("assign_role: role assigned",
+		"user_id", fc.User.ID,
+		"role_id", roleID)
+
 	return StepResult{Outcome: Continue}
 }
 
-// TODO(F2.1): wire add_to_org to call store.CreateOrganizationMember once
-// we have a story for invite-vs-direct-add.
-func (e *Engine) executeAddToOrg(_ context.Context, _ *storage.FlowStep, fc *Context) StepResult {
-	fc.Logger.Warn("add_to_org not yet fully implemented", "step", "add_to_org")
+// executeAddToOrg adds the running user to an organization.
+//
+// Config:
+//
+//	org_id   (string, required) — ID of the target organization.
+//	role_id  (string, optional) — org role to assign; defaults to "viewer".
+//	                               Note: this maps to OrganizationMember.Role,
+//	                               not the global roles table.
+//
+// Idempotency: if the user is already a member the step returns Continue
+// without error (idempotent add).
+func (e *Engine) executeAddToOrg(ctx context.Context, step *storage.FlowStep, fc *Context) StepResult {
+	if fc.User == nil {
+		return StepResult{Outcome: Error, Reason: "add_to_org: no user context"}
+	}
+
+	orgID := strFromConfig(step.Config, "org_id", "")
+	if orgID == "" {
+		return StepResult{Outcome: Error, Reason: "add_to_org: missing org_id in config"}
+	}
+
+	roleID := strFromConfig(step.Config, "role_id", "viewer")
+
+	// Idempotency check: already a member → succeed silently.
+	existing, err := e.store.GetOrganizationMember(ctx, orgID, fc.User.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return StepResult{Outcome: Error, Reason: "add_to_org: store error: " + err.Error()}
+	}
+	if existing != nil {
+		fc.Logger.Info("add_to_org: user already member (idempotent)",
+			"user_id", fc.User.ID, "org_id", orgID)
+		return StepResult{Outcome: Continue}
+	}
+
+	member := &storage.OrganizationMember{
+		OrganizationID: orgID,
+		UserID:         fc.User.ID,
+		Role:           roleID,
+		JoinedAt:       time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := e.store.CreateOrganizationMember(ctx, member); err != nil {
+		return StepResult{Outcome: Error, Reason: "add_to_org: " + err.Error()}
+	}
+
+	_ = e.emitAuditLog(ctx, fc, "authflow.step.add_to_org", map[string]any{
+		"org_id":  orgID,
+		"role_id": roleID,
+		"user_id": fc.User.ID,
+	})
+
+	fc.Logger.Info("add_to_org: member added",
+		"user_id", fc.User.ID,
+		"org_id", orgID,
+		"role", roleID)
+
 	return StepResult{Outcome: Continue}
 }
 
@@ -269,6 +397,37 @@ func (e *Engine) executeCustomCheck(_ context.Context, _ *storage.FlowStep, fc *
 func (e *Engine) executeDelay(_ context.Context, _ *storage.FlowStep, fc *Context) StepResult {
 	fc.Logger.Warn("delay not yet fully implemented", "step", "delay")
 	return StepResult{Outcome: Continue}
+}
+
+// emitAuditLog persists a single audit entry for a step side effect. Errors
+// are logged but not propagated — a dropped audit row must never block auth.
+func (e *Engine) emitAuditLog(ctx context.Context, fc *Context, action string, meta map[string]any) error {
+	metaJSON, _ := json.Marshal(meta)
+
+	buf := make([]byte, 8)
+	_, _ = rand.Read(buf)
+	id := "al_" + hex.EncodeToString(buf)
+
+	actorID := ""
+	if fc.User != nil {
+		actorID = fc.User.ID
+	}
+
+	entry := &storage.AuditLog{
+		ID:        id,
+		ActorID:   actorID,
+		ActorType: "user",
+		Action:    action,
+		Metadata:  string(metaJSON),
+		Status:    "success",
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := e.store.CreateAuditLog(ctx, entry); err != nil {
+		e.logger.Warn("authflow: audit log write failed",
+			"action", action, "err", err)
+		return err
+	}
+	return nil
 }
 
 // containsSpecial reports whether s has at least one non-alphanumeric
