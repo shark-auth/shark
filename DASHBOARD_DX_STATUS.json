@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-04-20T21:22:00Z",
+  "updated_at": "2026-04-20T20:48:00Z",
   "branch": "claude/admin-vendor-assets-fix",
   "current_task": null,
   "current_agent": null,
@@ -13,8 +13,8 @@
     "T07": {"status": "done", "commit": "8406b78", "blocked_by": []},
     "T08": {"status": "done", "commit": "prior", "blocked_by": []},
     "T09": {"status": "done", "commit": "7b34ba3", "blocked_by": []},
-    "T10": {"status": "pending", "commit": null, "blocked_by": ["T09"]},
-    "T11": {"status": "pending", "commit": null, "blocked_by": ["T09", "T10"]},
+    "T10": {"status": "done", "commit": "6660911", "blocked_by": ["T09"]},
+    "T11": {"status": "done", "commit": "7e49e4f", "blocked_by": ["T09", "T10"]},
     "T12": {"status": "done", "commit": "6380fba", "blocked_by": []},
     "T13": {"status": "done", "commit": "dc3cef2", "blocked_by": []},
     "T14": {"status": "done", "commit": "e5215b2", "blocked_by": []},

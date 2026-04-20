@@ -44,3 +44,5 @@ Append-only. Every task state change = one row. Never edit prior rows.
 | 2026-04-20T21:23:00Z | T04 | done | subagent-A | b922c0c — POST /admin/users admin-key handler: email-required 400, duplicate 409 email_exists, bcrypt-style argon2id hash on create, admin.user.create audit row, smoke section 70 + Go unit test |
 | 2026-04-20T21:25:00Z | T20 | done | subagent-C | 9d067b1 — webhooks.tsx: inline per-row retry button, toast on replay success/failure (A1 gap fix at L646), refresh after replay, ?limit=20, coaching empty state. Backend GET /deliveries + POST /replay already shipped prior (webhook_handlers.go:278,309 + router.go:465-466). Typecheck pass. |
 | 2026-04-20T20:32:00Z | T10 | done | subagent-B | 6660911 — ProxyWizard 3-step stepper in proxy_wizard.tsx, wired into proxy_config when /admin/proxy/status=404, autofocus on ?new=1 |
+| 2026-04-20T20:33:00Z | T11 | claim | subagent-B | get-started page + first-login redirect |
+| 2026-04-20T20:48:00Z | T11 | done | subagent-B | 7e49e4f — get_started.tsx (hero + ProxyWizard + checklist), route wired in App.tsx, first-login auto-redirect when users=0 AND !shark_admin_onboarded, not in sidebar nav |
