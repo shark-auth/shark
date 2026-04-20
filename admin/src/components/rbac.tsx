@@ -4,12 +4,14 @@ import { Icon, CopyField, hashColor } from './shared'
 import { API, useAPI } from './api'
 import { useToast } from './toast'
 import { TeachEmptyState } from './TeachEmptyState'
-import { useTabParam } from './useURLParams'
+import { useTabParam, useURLParam } from './useURLParams'
 import { usePageActions } from './useKeyboardShortcuts'
+import { PermissionMatrix } from './rbac_matrix'
 
 // Roles & Permissions — two-pane RBAC manager
 
 export function RBAC() {
+  const [view, setView] = useURLParam('view', 'roles');
   const { data: rolesRaw, loading, refresh } = useAPI('/roles');
   const roles = rolesRaw?.roles || (Array.isArray(rolesRaw) ? rolesRaw : []);
 
@@ -53,7 +55,38 @@ export function RBAC() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Top-level view switch: Roles list/detail vs Matrix grid */}
+      <div style={{
+        display: 'flex', gap: 2, padding: '0 20px',
+        borderBottom: '1px solid var(--hairline)',
+        background: 'var(--surface-0)',
+        flexShrink: 0,
+      }}>
+        {[
+          { id: 'roles', label: 'Roles' },
+          { id: 'matrix', label: 'Matrix' },
+        ].map(v => (
+          <button key={v.id} onClick={() => setView(v.id)} style={{
+            padding: '10px 14px', fontSize: 12.5,
+            color: view === v.id ? 'var(--fg)' : 'var(--fg-muted)',
+            fontWeight: view === v.id ? 500 : 400,
+            borderBottom: view === v.id ? '1.5px solid var(--fg)' : '1.5px solid transparent',
+            marginBottom: -1,
+            background: 'transparent',
+            cursor: 'pointer',
+          }}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'matrix' ? (
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <PermissionMatrix onSwitchToRoles={() => setView('roles')}/>
+        </div>
+      ) : (
+    <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
       {/* LEFT: Role list */}
       <div style={{
         width: 300, flexShrink: 0,
@@ -142,6 +175,8 @@ export function RBAC() {
           )
         }
       </div>
+    </div>
+      )}
     </div>
   );
 }
