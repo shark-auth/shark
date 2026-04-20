@@ -2,6 +2,7 @@
 import React from 'react'
 import { Icon } from './shared'
 import { API, useAPI } from './api'
+import { CLIFooter } from './CLIFooter'
 
 // Authentication Config page — read-only display of auth method configuration
 
@@ -412,6 +413,7 @@ export function Authentication() {
           </div>
         </div>
       )}
+      <CLIFooter command="shark auth config show"/>
     </div>
   );
 }

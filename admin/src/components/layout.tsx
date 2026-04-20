@@ -4,6 +4,7 @@ import { Icon, Avatar, Kbd, CopyField, sharkyGlyphPng, sharkyWordmarkPng } from 
 import { QuickCreateMenu } from './QuickCreate'
 import { NotificationBell } from './Notifications'
 import { CURRENT_PHASE } from './PhaseGate'
+import { useAPI } from './api'
 
 // Sidebar + topbar + layout shell
 
@@ -17,9 +18,9 @@ export const NAV = [
   { group: 'AGENTS', items: [
     { id: 'agents', label: 'Agents', icon: 'Agent', badge: 'new' },
     { id: 'consents', label: 'Consents', icon: 'Consent' },
-    { id: 'tokens', label: 'Tokens', icon: 'Token', badge: '1.2k' },
+    { id: 'tokens', label: 'Tokens', icon: 'Token' },
     { id: 'vault', label: 'Vault', icon: 'Vault' },
-    { id: 'device-flow', label: 'Device Flow', icon: 'Device', badge: '4', live: true },
+    { id: 'device-flow', label: 'Device Flow', icon: 'Device', live: true },
   ]},
   { group: 'ACCESS', items: [
     { id: 'apps', label: 'Applications', icon: 'App' },
@@ -54,6 +55,11 @@ export const NAV = [
 ];
 
 export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode }) {
+  const { data: health } = useAPI('/admin/health');
+  const version = health?.version;
+  const healthStatus = health?.db?.status === 'healthy' || health?.db?.status === 'ok' ? 'healthy' : (health?.db?.status || '—');
+  const healthDotClass = healthStatus === 'healthy' ? 'success' : (healthStatus === '—' ? '' : 'warn');
+  const envLabel = devMode ? 'dev' : 'prod';
   return (
     <aside style={{
       width: collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)',
@@ -94,13 +100,15 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode }) {
                 style={{ display: 'block', height: 18, width: 'auto', flexShrink: 0 }}
               />
             </div>
-            <span style={{
-              height: 18, fontSize: 10, padding: '0 6px',
-              display: 'inline-flex', alignItems: 'center',
-              border: '1px solid rgba(255,255,255,0.25)', borderRadius: 3,
-              color: 'rgba(255,255,255,0.7)', fontVariantNumeric: 'tabular-nums',
-              flexShrink: 0,
-            }}>v0.8.2</span>
+            {version && (
+              <span style={{
+                height: 18, fontSize: 10, padding: '0 6px',
+                display: 'inline-flex', alignItems: 'center',
+                border: '1px solid rgba(255,255,255,0.25)', borderRadius: 3,
+                color: 'rgba(255,255,255,0.7)', fontVariantNumeric: 'tabular-nums',
+                flexShrink: 0,
+              }}>{version.startsWith('v') ? version : 'v' + version}</span>
+            )}
           </>
         )}
       </div>
@@ -179,10 +187,10 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode }) {
       }}>
         {!collapsed && (
           <div className="row" style={{ flex: 1, gap: 6 }}>
-            <span className="dot success"/>
-            <span className="mono">healthy</span>
+            <span className={"dot " + healthDotClass}/>
+            <span className="mono">{healthStatus}</span>
             <span className="faint">·</span>
-            <span className="mono">dev</span>
+            <span className="mono">{envLabel}</span>
           </div>
         )}
         <button
@@ -278,12 +286,6 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
       <NotificationBell setPage={setPage}/>
 
       <div style={{ width: 1, height: 18, background: 'var(--hairline-strong)' }}/>
-
-      <button className="btn ghost" style={{ padding: '0 4px 0 8px', height: 28 }}>
-        <span className="faint" style={{fontSize: 11}}>env</span>
-        <span className="mono" style={{fontSize: 11}}>nimbus-prod</span>
-        <Icon.ChevronDown width={10} height={10} style={{opacity:0.5}}/>
-      </button>
 
       <button
         onClick={() => setTweaksOpen(v => !v)}

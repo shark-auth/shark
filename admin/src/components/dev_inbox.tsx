@@ -2,6 +2,8 @@
 import React from 'react'
 import { Icon } from './shared'
 import { API, useAPI } from './api'
+import { useToast } from './toast'
+import { CLIFooter } from './CLIFooter'
 
 // Dev Inbox — captures all outgoing mail in dev mode
 
@@ -33,6 +35,7 @@ export function DevInbox() {
       </div>
     );
   }
+  const toast = useToast();
   const [selected, setSelected] = React.useState(null);
   const [clearing, setClearing] = React.useState(false);
 
@@ -55,7 +58,7 @@ export function DevInbox() {
       setSelected(null);
       refresh();
     } catch (e) {
-      alert('Failed to clear emails: ' + e.message);
+      toast?.error('Failed to clear emails: ' + (e?.message || 'unknown error'));
     } finally {
       setClearing(false);
     }
@@ -163,6 +166,7 @@ export function DevInbox() {
           <EmailDetail email={selected} onClose={() => setSelected(null)}/>
         )}
       </div>
+      <CLIFooter command="shark dev inbox tail"/>
     </div>
   );
 }

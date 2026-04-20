@@ -4,6 +4,7 @@ import { Icon } from './shared'
 import { API, useAPI } from './api'
 import { useToast } from './toast'
 import { usePageActions } from './useKeyboardShortcuts'
+import { CLIFooter } from './CLIFooter'
 
 // Consents page — per-user OAuth consent grants
 // Self-service consent view (session-authenticated endpoint). Admin-wide consent
@@ -193,6 +194,7 @@ export function Consents() {
           }}
         />
       )}
+      <CLIFooter command="shark consents list --user <user-id>"/>
     </div>
   );
 }

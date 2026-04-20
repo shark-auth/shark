@@ -1,0 +1,35 @@
+{
+  "updated_at": "2026-04-20T18:22:00Z",
+  "branch": "claude/admin-vendor-assets-fix",
+  "current_task": null,
+  "current_agent": null,
+  "tasks": {
+    "T01": {"status": "done", "commit": "pending-commit", "blocked_by": []},
+    "T02": {"status": "pending", "commit": null, "blocked_by": []},
+    "T03": {"status": "done", "commit": "pending-commit", "blocked_by": [], "notes": "merged into T07 — rotate button was already wired, only alert() remained"},
+    "T04": {"status": "pending", "commit": null, "blocked_by": []},
+    "T05": {"status": "pending", "commit": null, "blocked_by": ["T04"]},
+    "T06": {"status": "pending", "commit": null, "blocked_by": ["T05"]},
+    "T07": {"status": "done", "commit": "pending-commit", "blocked_by": [], "notes": "users.tsx:65 deferred to T05 (backend blocker)"},
+    "T08": {"status": "pending", "commit": null, "blocked_by": []},
+    "T09": {"status": "pending", "commit": null, "blocked_by": ["T01", "T02"]},
+    "T10": {"status": "pending", "commit": null, "blocked_by": ["T09"]},
+    "T11": {"status": "pending", "commit": null, "blocked_by": ["T09", "T10"]},
+    "T12": {"status": "pending", "commit": null, "blocked_by": []},
+    "T13": {"status": "pending", "commit": null, "blocked_by": []},
+    "T14": {"status": "pending", "commit": null, "blocked_by": ["T12", "T13"]},
+    "T15": {"status": "pending", "commit": null, "blocked_by": []},
+    "T16": {"status": "pending", "commit": null, "blocked_by": ["T01", "T02"]},
+    "T17": {"status": "pending", "commit": null, "blocked_by": []},
+    "T18": {"status": "pending", "commit": null, "blocked_by": []},
+    "T19": {"status": "pending", "commit": null, "blocked_by": []},
+    "T20": {"status": "pending", "commit": null, "blocked_by": []},
+    "T21": {"status": "pending", "commit": null, "blocked_by": []},
+    "T22": {"status": "pending", "commit": null, "blocked_by": []},
+    "T23": {"status": "done", "commit": "pending-commit", "blocked_by": [], "notes": "added to 4 pages (dev_inbox, consents_manage, settings, authentication); vault_manage + proxy_config already had footer"},
+    "T24": {"status": "pending", "commit": null, "blocked_by": ["T02", "T04", "T05", "T06", "T08", "T09", "T10", "T11", "T12", "T13", "T14", "T15", "T16", "T17", "T18", "T19", "T20", "T21", "T22"]}
+  },
+  "notes": [
+    "2026-04-20: Wave-α first burst completed T01 + T07 + T23 in ~22 min. Typecheck passes on admin package."
+  ]
+}

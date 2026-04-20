@@ -2,6 +2,7 @@
 import React from 'react'
 import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
+import { CLIFooter } from './CLIFooter'
 
 // Settings page — server info, email, session management, audit retention, danger zone
 
@@ -362,6 +363,7 @@ export function Settings() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
+      <CLIFooter command="shark admin config dump"/>
     </div>
   );
 }

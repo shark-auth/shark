@@ -5,6 +5,7 @@ import { API } from './api'
 import { CLIFooter } from './CLIFooter'
 import { usePageActions } from './useKeyboardShortcuts'
 import { TeachEmptyState } from './TeachEmptyState'
+import { useToast } from './toast'
 
 // Signing Keys page — JWKS / JWT signing key management
 
@@ -28,6 +29,7 @@ const skTdStyle = {
 };
 
 export function SigningKeys() {
+  const toast = useToast();
   const [keys, setKeys] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -87,13 +89,13 @@ export function SigningKeys() {
             if (!confirm('Rotate signing key? Clients caching JWKS may see transient failures within cache TTL.')) return;
             try {
               const res = await API.post('/admin/auth/rotate-signing-key');
-              alert('Key rotated. New KID: ' + (res?.kid || 'unknown'));
+              toast?.success('Key rotated. New KID: ' + (res?.kid || 'unknown'));
               setLoading(true);
               const jwks = await fetch('/.well-known/jwks.json').then(r => r.json());
               setKeys(jwks.keys || []);
               setLoading(false);
             } catch (e) {
-              alert('Rotation failed: ' + (e?.message || 'unknown error'));
+              toast?.error('Rotation failed: ' + (e?.message || 'unknown error'));
             }
           }}>
             <Icon.Signing width={11} height={11}/>
