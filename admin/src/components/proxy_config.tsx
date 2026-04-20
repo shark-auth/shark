@@ -4,6 +4,7 @@ import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
+import { ProxyWizard } from './proxy_wizard'
 
 // Phase 6 P5 — Proxy Config dashboard UI.
 // Read-only circuit breaker strip, URL simulator (POST /admin/proxy/simulate),
@@ -1032,12 +1033,25 @@ export function Proxy() {
   };
 
   if (status === 404) {
-    // Even when the proxy is disabled we still show the override-rule editor
-    // so admins can author rules ahead of enabling it. Render the disabled
-    // banner above the table.
+    // Proxy is not enabled in the running binary. Show an onboarding wizard
+    // that lets admins create their first override rule and get a one-line
+    // CLI flag to flip the proxy on. Override-rule editor still available
+    // below for advanced staging.
+    const sp = new URLSearchParams(window.location.search);
+    const isNewFlow = sp.get('new') === '1';
     return (
       <div className="col" style={{ height: '100%', overflow: 'auto' }}>
-        <ProxyDisabledEmpty/>
+        <div style={{ padding: '14px 20px', borderBottom: HAIRLINE }}>
+          <h1 style={{ fontSize: 18, margin: 0, fontWeight: 600, fontFamily: 'var(--font-display)' }}>
+            Proxy
+          </h1>
+          <div className="faint" style={{ marginTop: 4, fontSize: 11.5 }}>
+            Reverse proxy with header injection · not yet enabled
+          </div>
+        </div>
+        <div style={{ padding: 20, maxWidth: 720, width: '100%', margin: '0 auto' }}>
+          <ProxyWizard autofocus={isNewFlow} onComplete={() => refresh()}/>
+        </div>
         <OverrideRulesTable
           rules={dbRules} loading={dbRulesLoading}
           onCreate={openCreate} onEdit={openEdit} onDelete={deleteRule} onToggle={toggleRule}/>
@@ -1045,6 +1059,9 @@ export function Proxy() {
           <RuleEditor initial={editorRule} onCancel={closeEditor}
             onSave={saveRule} busy={editorBusy} error={editorError}/>
         )}
+        <div style={{ marginTop: 'auto' }}>
+          <CLIFooter command="shark proxy rules list"/>
+        </div>
       </div>
     );
   }
