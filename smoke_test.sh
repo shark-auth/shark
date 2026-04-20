@@ -2278,6 +2278,87 @@ EXPORT_UNAUTH=$(curl -s -o /dev/null -w "%{http_code}" \
 [ "$EXPORT_UNAUTH" = "401" ] && pass "POST /audit-logs/export no key -> 401" \
   || fail "POST /audit-logs/export no key -> $EXPORT_UNAUTH"
 
+# --- 70: POST /admin/users admin-key user creation (T04) ----------------------
+# Dashboard create-user slide-over posts to /admin/users. Endpoint enforces
+# admin-key auth, requires email, hashes password when provided, rejects
+# duplicate emails, and writes an admin.user.create audit row.
+section "70: POST /admin/users admin user creation (T04)"
+
+# Unauthenticated → 401
+T04_UNAUTH=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Content-Type: application/json" \
+  -X POST --data '{"email":"t04-noauth@example.com"}' \
+  $BASE/api/v1/admin/users)
+[ "$T04_UNAUTH" = "401" ] && pass "POST /admin/users no key -> 401" \
+  || fail "POST /admin/users no key -> $T04_UNAUTH (expected 401)"
+
+# Empty body → 400 (JSON decodes to zero-value, email missing)
+T04_EMPTY=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -X POST --data '{}' \
+  $BASE/api/v1/admin/users)
+[ "$T04_EMPTY" = "400" ] && pass "POST /admin/users {} -> 400" \
+  || fail "POST /admin/users {} -> $T04_EMPTY (expected 400)"
+
+# Missing email (name-only body) → 400
+T04_NO_EMAIL=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -X POST --data '{"name":"no email"}' \
+  $BASE/api/v1/admin/users)
+[ "$T04_NO_EMAIL" = "400" ] && pass "POST /admin/users no email -> 400" \
+  || fail "POST /admin/users no email -> $T04_NO_EMAIL (expected 400)"
+
+# Valid email+password → 201 + returned user has id + matching email
+T04_EMAIL="t04-admin-created@example.com"
+T04_CREATE_RESP=$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -X POST --data "{\"email\":\"$T04_EMAIL\",\"password\":\"SuperSecret123!\",\"name\":\"T04 Admin\"}" \
+  $BASE/api/v1/admin/users)
+T04_CREATE_CODE=$(echo "$T04_CREATE_RESP" | tail -1)
+T04_CREATE_BODY=$(echo "$T04_CREATE_RESP" | sed '$d')
+[ "$T04_CREATE_CODE" = "201" ] && pass "POST /admin/users valid -> 201" \
+  || fail "POST /admin/users valid -> $T04_CREATE_CODE (body: $T04_CREATE_BODY)"
+
+T04_NEW_ID=$(echo "$T04_CREATE_BODY" | jq -r '.id // "MISSING"')
+[ "$T04_NEW_ID" != "MISSING" ] && [ -n "$T04_NEW_ID" ] \
+  && pass "created user has id: $T04_NEW_ID" \
+  || fail "created user missing id (body: $T04_CREATE_BODY)"
+T04_NEW_EMAIL=$(echo "$T04_CREATE_BODY" | jq -r '.email // "MISSING"')
+[ "$T04_NEW_EMAIL" = "$T04_EMAIL" ] \
+  && pass "created user email matches input" \
+  || fail "created user email mismatch: want $T04_EMAIL got $T04_NEW_EMAIL"
+
+# Duplicate email → 409 + {"error":"email_exists"}
+T04_DUP_RESP=$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -X POST --data "{\"email\":\"$T04_EMAIL\",\"password\":\"SuperSecret123!\"}" \
+  $BASE/api/v1/admin/users)
+T04_DUP_CODE=$(echo "$T04_DUP_RESP" | tail -1)
+T04_DUP_BODY=$(echo "$T04_DUP_RESP" | sed '$d')
+[ "$T04_DUP_CODE" = "409" ] && pass "duplicate email -> 409" \
+  || fail "duplicate email -> $T04_DUP_CODE (expected 409)"
+T04_DUP_ERR=$(echo "$T04_DUP_BODY" | jq -r '.error // "MISSING"')
+[ "$T04_DUP_ERR" = "email_exists" ] \
+  && pass "duplicate error code=email_exists" \
+  || fail "duplicate error code=$T04_DUP_ERR (expected email_exists)"
+
+# Audit log entry with action=admin.user.create for new user id
+if [ -n "$T04_NEW_ID" ] && [ "$T04_NEW_ID" != "MISSING" ]; then
+  T04_AUDIT=$(curl -s -H "Authorization: Bearer $ADMIN" \
+    "$BASE/api/v1/audit-logs?action=admin.user.create&limit=50")
+  T04_AUDIT_HIT=$(echo "$T04_AUDIT" | jq -r --arg id "$T04_NEW_ID" \
+    '.logs // .audit_logs // [] | map(select(.target_id == $id and .action == "admin.user.create")) | length')
+  if [ "${T04_AUDIT_HIT:-0}" -gt 0 ] 2>/dev/null; then
+    pass "audit log admin.user.create for $T04_NEW_ID present"
+  else
+    fail "audit log admin.user.create for $T04_NEW_ID missing (got: $T04_AUDIT)"
+  fi
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"

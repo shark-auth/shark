@@ -575,6 +575,12 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// duplicate the CRUD surface here under /admin/organizations to
 			// avoid muddying the per-user permission model. Mirrors the
 			// /admin/sessions, /admin/apps, /admin/flows pattern.
+			// Admin user creation (T04). Other /users/* admin routes live under
+			// the /api/v1/users group (admin-key auth) above — this endpoint
+			// is mounted under /admin to match the dashboard's admin-key URL
+			// convention and keep create distinct from the list/patch flow.
+			r.Post("/users", s.handleAdminCreateUser)
+
 			r.Get("/organizations", s.handleAdminListOrganizations)
 			r.Get("/organizations/{id}", s.handleAdminGetOrganization)
 			r.Patch("/organizations/{id}", s.handleAdminUpdateOrganization)

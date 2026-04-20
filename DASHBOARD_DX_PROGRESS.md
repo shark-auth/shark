@@ -18,6 +18,7 @@ Append-only. Every task state change = one row. Never edit prior rows.
 | 2026-04-20T18:33:00Z | T02 | done | claude-opus-4-7 | verified-by-inspection: overview.tsx no MOCK import, comments confirm "never MOCK fallbacks", AttentionPanel derives from /admin/health. Shipped in recent commits (989c319 / 7d464da). |
 | 2026-04-20T18:34:00Z | T12 | claim | claude-opus-4-7 | Session Debugger client-side JWT decode + JWKS validate |
 | 2026-04-20T18:45:00Z | T12 | done | claude-opus-4-7 | session_debugger.tsx new file: decode header+payload, JWKS fetch, SubtleCrypto verify (RS256/384/512, ES256/384), exp/nbf status pills, claim annotation w/ ISO timestamps, copy buttons, CLIFooter. Wired into App.tsx, removed from empty_shell, ph:5 dropped from NAV. Typecheck pass. |
+| 2026-04-20T21:20:08Z | T20 | claim | subagent-C | webhook delivery history panel + retry polish |
 | 2026-04-20T18:45:00Z | T22,T02 | done | claude-opus-4-7 | verified-by-inspection: shipped in prior commits |
 | 2026-04-20T19:00:00Z | T08 | claim | claude-opus-4-7 | verify 6 org silent-404 routes + fix error handling |
 | 2026-04-20T19:00:00Z | T13 | claim | claude-opus-4-7 | Compliance page demote (audit export + GDPR stub) |
@@ -33,3 +34,10 @@ Append-only. Every task state change = one row. Never edit prior rows.
 | 2026-04-20T19:38:00Z | T14 | done | claude-opus-4-7 | TWEAK_DEFAULTS adds showPreview:false. Tweaks panel adds Preview features toggle (Hidden/Shown). Sidebar filters section.items by ph<=CURRENT_PHASE||showPreview, hides empty groups. Default: 8 phase-gated stubs (tokens, explorer, schemas, oidc, impersonation, migrations, branding) hidden from new admins. Typecheck pass. |
 | 2026-04-20T19:50:00Z | T13 | bugfix | claude-opus-4-7 | compliance.tsx was calling GET /audit-logs/export?format=X&from=Y&to=Z but backend is POST JSON {from,to} returning text/csv (audit_handlers.go:23-28). Fixed to POST ISO-8601 from/to, dropped JSON format select (backend is CSV-only). |
 | 2026-04-20T19:52:00Z | T13-smoke | done | claude-opus-4-7 | smoke_test.sh section 69 added: 4 assertions on /audit-logs/export — empty body 400, dated 200, Content-Type text/csv, Content-Disposition .csv, unauth 401. Guards dashboard download contract. |
+| 2026-04-20T20:00:00Z | T04 | dispatch | subagent-A | backend POST /admin/users handler + router wire + smoke test |
+| 2026-04-20T20:00:00Z | T09,T10,T11 | dispatch | subagent-B | magical moment chain: Overview hero tile + proxy wizard + get_started |
+| 2026-04-20T20:00:00Z | T20 | dispatch | subagent-C | webhook last-5 deliveries panel + retry |
+| 2026-04-20T20:05:00Z | T09 | claim | subagent-B | overview magical-moment hero tile |
+| 2026-04-20T20:15:00Z | T09 | done | subagent-B | 7b34ba3 — overview hero tile replaces metric strip when users=0 AND proxy 404 |
+| 2026-04-20T20:16:00Z | T10 | claim | subagent-B | proxy empty-state onboarding wizard (extract ProxyWizard) |
+| 2026-04-20T21:22:00Z | T04 | claim | subagent-A | backend POST /admin/users handler + router wire + smoke test |
