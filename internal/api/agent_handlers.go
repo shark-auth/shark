@@ -396,6 +396,41 @@ func (s *Server) handleRevokeAgentTokens(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// POST /api/v1/agents/{id}/rotate-secret
+// Generates a fresh client secret, stores its hash, and returns the plaintext
+// exactly once. Requires admin key. Emits audit log entry.
+func (s *Server) handleAgentRotateSecret(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	agent, err := s.getAgentByIDOrClientID(r, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Agent not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	secret, secretHash, err := generateAgentSecret()
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	if err := s.Store.UpdateAgentSecret(r.Context(), agent.ID, secretHash); err != nil {
+		internal(w, err)
+		return
+	}
+
+	s.auditAgent(r, "agent.secret.rotated", agent.ID)
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"client_id":     agent.ClientID,
+		"client_secret": secret,
+		"message":       "Secret rotated. Copy it now — it will not be shown again.",
+	})
+}
+
 // GET /api/v1/agents/{id}/audit
 func (s *Server) handleAgentAuditLogs(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")

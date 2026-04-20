@@ -293,6 +293,11 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				})
 			})
 
+			// Flow-step MFA verify (public — called during paused flow before session exists)
+			r.Route("/flow", func(r chi.Router) {
+				r.Post("/mfa/verify", s.handleFlowMFAVerify)
+			})
+
 			// SSO auto-route
 			r.Get("/sso", s.SSOHandlers.SSOAutoRoute)
 
@@ -364,10 +369,12 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/", s.handleCreatePermission)
 			r.Get("/", s.handleListPermissions)
+			r.Delete("/{id}", s.handleDeletePermission)
 			// Reverse lookup — which roles/users have this permission?
 			r.Get("/{id}/roles", s.handleListRolesByPermission)
 			r.Get("/{id}/users", s.handleListUsersByPermission)
 		})
+
 
 		// Auth check (admin) — validates if a user has a specific permission
 		r.Group(func(r chi.Router) {
@@ -449,6 +456,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Post("/", s.handleCreateWebhook)
 			r.Get("/", s.handleListWebhooks)
+			// /events must come before /{id} so chi's trie routes it correctly.
+			r.Get("/events", s.handleListWebhookEvents)
 			r.Get("/{id}", s.handleGetWebhook)
 			r.Patch("/{id}", s.handleUpdateWebhook)
 			r.Delete("/{id}", s.handleDeleteWebhook)
@@ -467,6 +476,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Delete("/{id}", s.handleDeleteAgent)
 			r.Get("/{id}/tokens", s.handleListAgentTokens)
 			r.Post("/{id}/tokens/revoke-all", s.handleRevokeAgentTokens)
+			r.Post("/{id}/rotate-secret", s.handleAgentRotateSecret)
 			r.Get("/{id}/audit", s.handleAgentAuditLogs)
 		})
 
@@ -528,6 +538,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/stats", s.handleAdminStats)
 			r.Get("/stats/trends", s.handleAdminStatsTrends)
 			r.Get("/sessions", s.handleAdminListSessions)
+			r.Delete("/sessions", s.handleAdminRevokeAllSessions)
 			r.Delete("/sessions/{id}", s.handleAdminDeleteSession)
 			r.Post("/sessions/purge-expired", s.handlePurgeExpiredSessions)
 			r.Post("/audit-logs/purge", s.handlePurgeAuditLogs)
@@ -537,8 +548,14 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 			// Cross-user vault connections (admin scope). The /vault/connections
 			// endpoint above is session-scoped to the calling user.
+			// Accepts optional ?provider_id=<id> to filter by provider.
 			r.Get("/vault/connections", s.handleAdminListVaultConnections)
 			r.Delete("/vault/connections/{id}", s.handleAdminDeleteVaultConnection)
+
+			// Batch permission usage — replaces 2×N per-row API calls from
+			// the PermissionsTab with a single request. Kept in /admin group
+			// so the same AdminAPIKeyFromStore middleware gate applies.
+			r.Get("/permissions/batch-usage", s.handlePermissionsBatchUsage)
 
 			// Cross-user OAuth consents (admin scope). The /auth/consents
 			// endpoint is session-scoped; the dashboard needs a tenant view.
@@ -563,7 +580,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Patch("/organizations/{id}", s.handleAdminUpdateOrganization)
 			r.Delete("/organizations/{id}", s.handleAdminDeleteOrganization)
 			r.Get("/organizations/{id}/members", s.handleAdminListOrgMembers)
+			r.Delete("/organizations/{id}/members/{uid}", s.handleAdminRemoveOrgMember)
+			r.Get("/organizations/{id}/roles", s.handleAdminListOrgRoles)
 			r.Post("/organizations/{id}/roles", s.handleAdminCreateOrgRole)
+			r.Get("/organizations/{id}/invitations", s.handleAdminListOrgInvitations)
 			r.Delete("/organizations/{id}/invitations/{invitationId}", s.handleAdminDeleteOrgInvitation)
 			r.Post("/organizations/{id}/invitations/{invitationId}/resend", s.handleAdminResendOrgInvitation)
 

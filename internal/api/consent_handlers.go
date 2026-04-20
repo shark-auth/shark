@@ -129,9 +129,16 @@ type adminConsentResponse struct {
 // handleAdminListConsents handles GET /api/v1/admin/oauth/consents.
 // Returns every active OAuth consent across all users (admin scope). The
 // per-user /auth/consents endpoint above is session-scoped to the caller.
+// Accepts optional ?user_id=<id> to filter to a single user's consents.
 func (s *Server) handleAdminListConsents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	consents, err := s.Store.ListAllConsents(ctx)
+	var consents []*storage.OAuthConsent
+	var err error
+	if uid := r.URL.Query().Get("user_id"); uid != "" {
+		consents, err = s.Store.ListConsentsByUserID(ctx, uid)
+	} else {
+		consents, err = s.Store.ListAllConsents(ctx)
+	}
 	if err != nil {
 		internal(w, err)
 		return

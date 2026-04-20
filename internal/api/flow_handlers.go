@@ -477,6 +477,17 @@ func (s *Server) runAuthFlow(w http.ResponseWriter, r *http.Request, trigger str
 		w.Header().Set("Location", result.RedirectURL)
 		writeJSON(w, http.StatusFound, map[string]string{"redirect_url": result.RedirectURL})
 		return true
+	case authflow.AwaitMFA:
+		// Flow paused at require_mfa_challenge step. Return 401 with challenge_id
+		// so the SDK can prompt the user for their TOTP code and then call
+		// POST /api/v1/auth/flow/mfa/verify to resume.
+		writeJSON(w, http.StatusUnauthorized, map[string]any{
+			"error":        "mfa_required",
+			"mfa_required": true,
+			"challenge_id": result.ChallengeID,
+			"message":      "MFA verification required to continue",
+		})
+		return true
 	case authflow.Error:
 		// Degraded: log + continue so flow errors don't brick auth.
 		slog.Default().Error("auth flow errored", "trigger", trigger, "reason", result.Reason)

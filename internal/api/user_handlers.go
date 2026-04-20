@@ -18,13 +18,13 @@ import (
 type adminUserResponse struct {
 	ID            string  `json:"id"`
 	Email         string  `json:"email"`
-	EmailVerified bool    `json:"emailVerified"`
+	EmailVerified bool    `json:"email_verified"`
 	Name          *string `json:"name,omitempty"`
-	AvatarURL     *string `json:"avatarUrl,omitempty"`
-	MFAEnabled    bool    `json:"mfaEnabled"`
+	AvatarURL     *string `json:"avatar_url,omitempty"`
+	MFAEnabled    bool    `json:"mfa_enabled"`
 	Metadata      string  `json:"metadata"`
-	CreatedAt     string  `json:"createdAt"`
-	UpdatedAt     string  `json:"updatedAt"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
 	LastLoginAt   *string `json:"last_login_at,omitempty"`
 }
 

@@ -149,7 +149,66 @@ func (s *Server) handleAdminCreateOrgRole(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, orgRoleToResponse(role))
 }
 
+// handleAdminListOrgRoles handles GET /api/v1/admin/organizations/{id}/roles.
+// Returns all org-scoped RBAC roles (builtin and custom) for the given org.
+func (s *Server) handleAdminListOrgRoles(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+
+	if _, err := s.Store.GetOrganizationByID(r.Context(), orgID); errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
+		return
+	} else if err != nil {
+		internal(w, err)
+		return
+	}
+
+	roles, err := s.Store.GetOrgRolesByOrgID(r.Context(), orgID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	out := make([]orgRoleResponse, 0, len(roles))
+	for _, role := range roles {
+		out = append(out, orgRoleToResponse(role))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"roles": out})
+}
+
 // --- Invitations (admin) ---
+
+// handleAdminListOrgInvitations handles GET /api/v1/admin/organizations/{id}/invitations.
+// Returns pending (non-expired, non-accepted) invitations for the given org.
+func (s *Server) handleAdminListOrgInvitations(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+
+	if _, err := s.Store.GetOrganizationByID(r.Context(), orgID); errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
+		return
+	} else if err != nil {
+		internal(w, err)
+		return
+	}
+
+	all, err := s.Store.ListOrganizationInvitationsByOrgID(r.Context(), orgID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	now := time.Now().UTC()
+	pending := make([]*storage.OrganizationInvitation, 0, len(all))
+	for _, inv := range all {
+		if inv.AcceptedAt != nil {
+			continue
+		}
+		exp, err := time.Parse(time.RFC3339, inv.ExpiresAt)
+		if err == nil && exp.Before(now) {
+			continue
+		}
+		pending = append(pending, inv)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"invitations": pending})
+}
 
 // handleAdminDeleteOrgInvitation handles
 // DELETE /api/v1/admin/organizations/{id}/invitations/{invitationId}.
@@ -279,6 +338,37 @@ func (s *Server) sendAdminInvitationResend(parent context.Context, inv *storage.
 			HTML:    html,
 		})
 	}
+}
+
+// handleAdminRemoveOrgMember handles
+// DELETE /api/v1/admin/organizations/{id}/members/{uid}.
+// Admin override of the user-facing remove-member flow — no RBAC permission
+// check required (admin key is full-access). Prevents removing the last owner.
+func (s *Server) handleAdminRemoveOrgMember(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+	targetUserID := chi.URLParam(r, "uid")
+
+	target, err := s.Store.GetOrganizationMember(r.Context(), orgID, targetUserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Member not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	if target.Role == storage.OrgRoleOwner {
+		if err := s.refuseIfLastOwner(r.Context(), orgID); err != nil {
+			writeJSON(w, http.StatusConflict, errPayload("last_owner", err.Error()))
+			return
+		}
+	}
+	if err := s.Store.DeleteOrganizationMember(r.Context(), orgID, targetUserID); err != nil {
+		internal(w, err)
+		return
+	}
+	s.auditAdminOrg(r.Context(), "admin.org.member.remove", orgID, ipOf(r), uaOf(r))
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Member removed"})
 }
 
 // auditAdminOrg writes an admin-actor audit log row. ActorID is empty since

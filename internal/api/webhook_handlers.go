@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -107,6 +108,19 @@ func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
 		Secret:          secret,
 	}
 	writeJSON(w, http.StatusCreated, resp)
+}
+
+// handleListWebhookEvents returns the canonical set of known webhook event
+// names. The frontend uses this to populate the event picker without
+// hardcoding a list that can drift from the backend.
+func (s *Server) handleListWebhookEvents(w http.ResponseWriter, _ *http.Request) {
+	events := make([]string, 0, len(KnownWebhookEvents))
+	for ev := range KnownWebhookEvents {
+		events = append(events, ev)
+	}
+	// Sort for a stable response — maps iterate in random order.
+	slices.Sort(events)
+	writeJSON(w, http.StatusOK, map[string]any{"events": events})
 }
 
 func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {

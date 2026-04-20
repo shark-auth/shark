@@ -68,11 +68,52 @@ type healthSMTPSection struct {
 type adminConfigSummary struct {
 	DevMode             bool     `json:"dev_mode"`
 	JWTMode             bool     `json:"jwt_mode"`
+	SessionMode         string   `json:"session_mode"`
+	SessionLifetime     string   `json:"session_lifetime"`
 	SMTPConfigured      bool     `json:"smtp_configured"`
 	OAuthProviders      []string `json:"oauth_providers"`
+	SocialProviders     []string `json:"social_providers"`
 	SSOConnectionsCount int      `json:"sso_connections_count"`
 	BaseURL             string   `json:"base_url"`
 	CORSOrigins         []string `json:"cors_origins"`
+
+	Passkey        adminPasskeyConfig        `json:"passkey"`
+	PasswordPolicy adminPasswordPolicyConfig `json:"password_policy"`
+	JWT            adminJWTConfig            `json:"jwt"`
+	MagicLink      adminMagicLinkConfig      `json:"magic_link"`
+}
+
+// adminPasskeyConfig is the passkey/WebAuthn section of the config summary.
+type adminPasskeyConfig struct {
+	Enabled          bool   `json:"enabled"`
+	RPID             string `json:"rp_id"`
+	RPName           string `json:"rp_name"`
+	Origin           string `json:"origin"`
+	UserVerification string `json:"user_verification"`
+	Attestation      string `json:"attestation"`
+}
+
+// adminPasswordPolicyConfig is the password-policy section of the config summary.
+type adminPasswordPolicyConfig struct {
+	MinLength       int    `json:"min_length"`
+	RequireUpper    bool   `json:"require_upper"`
+	RequireLower    bool   `json:"require_lower"`
+	RequireDigit    bool   `json:"require_digit"`
+	RequireSymbol   bool   `json:"require_symbol"`
+	LockoutAttempts int    `json:"lockout_attempts"`
+	LockoutDuration string `json:"lockout_duration"`
+}
+
+// adminJWTConfig is the JWT section of the config summary.
+type adminJWTConfig struct {
+	Algorithm  string `json:"algorithm"`
+	Lifetime   string `json:"lifetime"`
+	ActiveKeys int    `json:"active_keys"`
+}
+
+// adminMagicLinkConfig is the magic-link section of the config summary.
+type adminMagicLinkConfig struct {
+	TTL string `json:"ttl"`
 }
 
 // resolveAppVersion returns the build-time or module version, falling back to "dev".
@@ -100,7 +141,7 @@ func dbSizeBytes(ctx context.Context, db *sql.DB) int64 {
 func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 	cfg := s.Config
 
-	// Detect configured OAuth providers (mirrors logic in oauth_handlers.go).
+	// Detect configured OAuth/social providers (mirrors logic in oauth_handlers.go).
 	var providers []string
 	if cfg.Social.Google.ClientID != "" && cfg.Social.Google.ClientSecret != "" {
 		providers = append(providers, "google")
@@ -131,14 +172,105 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 		cors = []string{}
 	}
 
+	// Session mode: "jwt" when JWT mode is explicitly non-session, else "cookie".
+	jwtMode := cfg.Auth.JWT.Enabled && cfg.Auth.JWT.Mode != "session"
+	sessionMode := "cookie"
+	if jwtMode {
+		sessionMode = "jwt"
+	}
+	sessionLifetime := cfg.Auth.SessionLifetime
+	if sessionLifetime == "" {
+		sessionLifetime = "30d"
+	}
+
+	// Passkey section — enabled when rp_id or rp_name is set (passkey feature
+	// is always compiled in; presence of config signals operator intent).
+	passkeyEnabled := cfg.Passkeys.RPID != "" || cfg.Passkeys.RPName != ""
+	passkeyOrigin := cfg.Passkeys.Origin
+	if passkeyOrigin == "" {
+		passkeyOrigin = cfg.Server.BaseURL
+	}
+	passkeyUV := cfg.Passkeys.UserVerification
+	if passkeyUV == "" {
+		passkeyUV = "preferred"
+	}
+	passkeyAttestation := cfg.Passkeys.Attestation
+	if passkeyAttestation == "" {
+		passkeyAttestation = "none"
+	}
+
+	// JWT section — read active signing key from JWKS store for algorithm/count.
+	jwtAlg := ""
+	jwtKeys := 0
+	jwtLifetime := cfg.Auth.JWT.AccessTokenTTL
+	if jwtLifetime == "" {
+		jwtLifetime = "15m"
+	}
+	if keys, err := s.Store.ListJWKSCandidates(ctx, true, time.Time{}); err == nil {
+		jwtKeys = len(keys)
+		if len(keys) > 0 {
+			jwtAlg = keys[0].Algorithm
+		}
+	}
+	// Fall back to oauth_server signing algorithm when no JWKS keys exist yet.
+	if jwtAlg == "" {
+		jwtAlg = cfg.OAuthServer.SigningAlgorithm
+	}
+	if jwtAlg == "" {
+		jwtAlg = "ES256"
+	}
+
+	// Magic link TTL.
+	magicLinkTTL := cfg.MagicLink.TokenLifetime
+	if magicLinkTTL == "" {
+		magicLinkTTL = "10m"
+	}
+
+	// Password policy — MinLength comes from auth.password_min_length.
+	// The rest (complexity, lockout) are not yet stored in config so we use
+	// sensible defaults that match the validator in internal/auth/password.go.
+	minLength := cfg.Auth.PasswordMinLength
+	if minLength == 0 {
+		minLength = 8
+	}
+
 	return adminConfigSummary{
 		DevMode:             cfg.Server.DevMode,
-		JWTMode:             cfg.Auth.JWT.Enabled && cfg.Auth.JWT.Mode != "session",
+		JWTMode:             jwtMode,
+		SessionMode:         sessionMode,
+		SessionLifetime:     sessionLifetime,
 		SMTPConfigured:      smtpConfigured,
 		OAuthProviders:      providers,
+		SocialProviders:     providers,
 		SSOConnectionsCount: ssoCount,
 		BaseURL:             cfg.Server.BaseURL,
 		CORSOrigins:         cors,
+
+		Passkey: adminPasskeyConfig{
+			Enabled:          passkeyEnabled,
+			RPID:             cfg.Passkeys.RPID,
+			RPName:           cfg.Passkeys.RPName,
+			Origin:           passkeyOrigin,
+			UserVerification: passkeyUV,
+			Attestation:      passkeyAttestation,
+		},
+		PasswordPolicy: adminPasswordPolicyConfig{
+			MinLength:       minLength,
+			RequireUpper:    false,
+			RequireLower:    false,
+			RequireDigit:    false,
+			RequireSymbol:   false,
+			LockoutAttempts: 0,
+			LockoutDuration: "",
+		},
+		JWT: adminJWTConfig{
+			Algorithm:  jwtAlg,
+			Lifetime:   jwtLifetime,
+			ActiveKeys: jwtKeys,
+		},
+		MagicLink: adminMagicLinkConfig{
+			TTL: magicLinkTTL,
+		},
 	}
 }
 

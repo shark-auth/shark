@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -105,7 +106,9 @@ func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		}
 		ownerRole, err := s.Store.GetOrgRoleByName(r.Context(), org.ID, "owner")
 		if err == nil {
-			_ = s.RBAC.GrantOrgRole(r.Context(), org.ID, userID, ownerRole.ID, userID)
+			if grantErr := s.RBAC.GrantOrgRole(r.Context(), org.ID, userID, ownerRole.ID, userID); grantErr != nil {
+				slog.Warn("org: grant owner role failed", "org_id", org.ID, "user_id", userID, "err", grantErr)
+			}
 		}
 	}
 
@@ -279,10 +282,14 @@ func (s *Server) handleUpdateOrganizationMemberRole(w http.ResponseWriter, r *ht
 	// Sync org RBAC role assignments (best-effort — do not revert the membership change on failure).
 	if s.RBAC != nil && oldRole != req.Role {
 		if oldOrgRole, err := s.Store.GetOrgRoleByName(r.Context(), orgID, oldRole); err == nil {
-			_ = s.RBAC.RevokeOrgRole(r.Context(), orgID, targetUserID, oldOrgRole.ID)
+			if revokeErr := s.RBAC.RevokeOrgRole(r.Context(), orgID, targetUserID, oldOrgRole.ID); revokeErr != nil {
+				slog.Warn("org: revoke old org role failed", "org_id", orgID, "user_id", targetUserID, "err", revokeErr)
+			}
 		}
 		if newOrgRole, err := s.Store.GetOrgRoleByName(r.Context(), orgID, req.Role); err == nil {
-			_ = s.RBAC.GrantOrgRole(r.Context(), orgID, targetUserID, newOrgRole.ID, actor)
+			if grantErr := s.RBAC.GrantOrgRole(r.Context(), orgID, targetUserID, newOrgRole.ID, actor); grantErr != nil {
+				slog.Warn("org: grant new org role failed", "org_id", orgID, "user_id", targetUserID, "err", grantErr)
+			}
 		}
 	}
 

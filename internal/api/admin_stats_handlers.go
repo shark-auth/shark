@@ -21,6 +21,7 @@ type statsResponse struct {
 		Active int `json:"active"`
 	} `json:"sessions"`
 	MFA struct {
+		Total        int     `json:"total"`
 		Enabled      int     `json:"enabled"`
 		AdoptionPct  float64 `json:"adoption_pct"`
 	} `json:"mfa"`
@@ -103,6 +104,7 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	resp.Users.Total = total
 	resp.Users.CreatedLast7d = recent
 	resp.Sessions.Active = active
+	resp.MFA.Total = total
 	resp.MFA.Enabled = mfa
 	if total > 0 {
 		resp.MFA.AdoptionPct = float64(mfa) / float64(total) * 100

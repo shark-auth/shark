@@ -799,9 +799,17 @@ type adminVaultConnectionResponse struct {
 
 // handleAdminListVaultConnections handles GET /api/v1/admin/vault/connections.
 // Admin-scope listing of every vault connection across all users, enriched
-// with provider display metadata. Used by the dashboard connections tab.
+// with provider display metadata. Accepts optional ?provider_id=<id> to
+// scope results to a single provider without a client-side full scan.
 func (s *Server) handleAdminListVaultConnections(w http.ResponseWriter, r *http.Request) {
-	conns, err := s.Store.ListAllVaultConnections(r.Context())
+	var conns []*storage.VaultConnection
+	var err error
+
+	if filterProviderID := r.URL.Query().Get("provider_id"); filterProviderID != "" {
+		conns, err = s.Store.ListVaultConnectionsByProviderID(r.Context(), filterProviderID)
+	} else {
+		conns, err = s.Store.ListAllVaultConnections(r.Context())
+	}
 	if err != nil {
 		internal(w, err)
 		return
