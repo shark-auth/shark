@@ -44,6 +44,54 @@ Every `admin/src/components/*.tsx` has `// @ts-nocheck` at the top. This is why 
 
 ## What's NOT shipped — open for next agent
 
+### Resume pointer (next session / next device)
+
+**State at handoff 2026-04-20 23:25 UTC-6:**
+- Branch: `claude/admin-vendor-assets-fix` (pushed to origin)
+- Binary: `bin/shark.exe` rebuilt at 23:23 (fresh bundle `index-DQ27xnNm.js` embedded)
+- **Sequence 1 quick-wins DONE** (see `FRONTEND_WIRING_STATUS.json`):
+  - **W17** `a71aa8e` — AGENT_AUTH.md status rewrite (launch trust gate)
+  - **W16** `6484b7a` — flow builder conditional branches survive save (UX deadlock fix, not data loss)
+  - **W01** `23f3bb7` + `76530ef` — orgs create slide-over + new `POST /admin/organizations` backend handler
+- **Phase A ready to start** (~4d, ~14 tasks):
+  - Plan: `docs/superpowers/plans/2026-04-20-branding-hosted-components-plan.md` — task-by-task with exact file paths + code + commit messages
+  - Spec: `docs/superpowers/specs/2026-04-20-branding-hosted-components-design.md` — bus-factor decision log at top (12 core decisions + 7 OQ answers). If this context is lost, everything else is re-derivable from that log.
+- **Next agent first actions:**
+  1. `git pull --ff-only` on `claude/admin-vendor-assets-fix`
+  2. Read spec bus-factor log (Section "Bus-factor log — every decision made in brainstorm")
+  3. Read plan (Phase A section, 14 tasks A1-A16)
+  4. Restart `bin/shark.exe serve` OR rebuild if dist changed since last checkout
+  5. Dogfood Sequence 1 deliverables in browser: orgs create button works, conditional flow branches survive refresh, AGENT_AUTH.md says "MVP shipping"
+  6. Begin Phase A with Task A1 (migration 00017 — branding + email_templates tables)
+
+### Phase 6.7 live-dogfood session (2026-04-20 night) — new bugs found + fixed + open gaps
+
+**Session trigger:** user built + ran binary, reported "dashboard malfunctioning." Gstack browse audit found **two ROOT CAUSE blockers** not visible from source-only review, both fixed this session:
+
+1. **Stale bundle** — `internal/admin/dist/assets/index-dA1pGHFH.js` was committed at `7d464da` (before Phase 6.6 DX session). 12 Dashboard DX commits edited `admin/src/*.tsx` with no `npm run build`. Bundle mtime matched source mtime because git-checkout restores commit timestamps, not build time — mtime heuristic was wrong. Fix: rebuilt via `npm --prefix admin run build` → bundle `index-D5lI6rqW.js`. T01/T05/T12/etc fixes now actually in the served JS.
+2. **Migration file in wrong directory** — `migrations/00002_audit_logs_extended_filters.sql` at project root. `cmd/shark` embeds `cmd/shark/migrations/` (goes 00001-00015). Migration never applied. `audit_logs` table missing `org_id, session_id, resource_type, resource_id`. `handleListAuditLogs` passes these into SQL → 500 on every call → whole app polled and errored. Fix: moved to `cmd/shark/migrations/00016_audit_logs_extended_filters.sql`.
+3. **Icon.User undefined** — `get_started.tsx:102` referenced `<Icon.User/>`. `shared.tsx` exports `Icon.Users` (plural). Minified React error #130 (element type undefined) → whole App tree crashed. On fresh DB shark auto-redirects to `/admin/get-started` (users=0, not onboarded) → blank screen on every page. Fix: `Icon.User` → `Icon.Users`.
+
+**Live gstack findings NOT yet fixed (next-agent scope):**
+
+- **Version tag overlaps with shark logo** in topbar (`layout.tsx`) — needs live inspection
+- **Flow builder not working** — user report, root cause not yet isolated. Likely missing step dispatcher OR API shape drift (`internal/authflow/engine.go` + `flow_builder.tsx`)
+- **Settings dashboard still read-only** — known, tracked as W11 in `FRONTEND_WIRING_GAPS.md`. Phase 8/9 scope.
+
+### FRONTEND_WIRING_GAPS.md — 14 tracked tasks (W01-W15, W14 deferred)
+
+Full task list with deps, worktree plan, commit conventions:
+- **P0:** W01 (orgs create button has no onClick — dead), W02 (impersonation — zero impl)
+- **P1:** W03 (drop unbuilt nav), W04 (drop tokens nav), W05 (apps tokens tab), W06 (consents admin listing), **W15 (multi-listener proxy — transparent protection on real app port)**
+- **P2:** W07 (flow 3 deferred steps), W08 (users bulk actions), W09 + W10 (silent-catch surfacing)
+- **P3:** W11 (settings note), W12 (rbac drill-in), W13 (drop migrate stub)
+
+Issue body for W15 written at `.github/ISSUE_W15_multi_listener_proxy.md` — paste into GitHub when `gh auth login` done.
+
+### Bundle-rebuild discipline (root-cause prevention)
+
+Add pre-commit hook OR CI check: if `admin/src/**/*.tsx` changed since last `internal/admin/dist/assets/index-*.js`, require rebuild. Current: zero enforcement, relies on human memory. Post-launch cleanup.
+
 ### Wave 4 smoke partials (same as prior handoff, not yet closed)
 - **G1 MFA TOTP full flow** — smoke covers toggle + admin disable; no end-to-end enroll→challenge→verify→recovery. Use `oathtool` or `python3 -c "import pyotp"` for code generation.
 - **G2 Passkey WebAuthn flow** — structural only. Use `go-webauthn` virtual authenticator OR canned attestation/assertion fixtures.

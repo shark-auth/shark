@@ -2,6 +2,38 @@
 
 > Not for public consumption. Technical notes on what shipped, why it shipped that way, and what trade-offs were made. Cross-reference with commit SHAs in repo.
 
+## Phase 6.7 — Live dogfood session: stale bundle + migration path + Icon.User crash
+
+Shipped: 2026-04-20 (night session)
+Branch: `claude/admin-vendor-assets-fix` (continued)
+
+### Trigger
+
+User built binary + ran `bin/shark.exe serve`. Reported 4 bugs post-Phase-6.6. Source-code audit said features worked. Gstack browse audit found two ROOT-CAUSE blockers source-only review couldn't see.
+
+### Fixed
+
+1. **Stale bundle (root cause of all 4 initial bug reports)** — `internal/admin/dist/assets/index-dA1pGHFH.js` was committed at `7d464da` (pre-Phase-6.6). 12 Dashboard DX commits edited `admin/src/**.tsx` without ever running `npm run build`. `git checkout` restores commit timestamps (not build time), so the mtime-matching heuristic I initially used was misleading — source and bundle had identical mtimes despite bundle being 12 commits behind. Fix: `npm --prefix admin run build` → bundle `index-D5lI6rqW.js` (678KB, was 628KB — +50KB of code from T01/T05/T09/T10/T11/T12/T13/T14/T15/T20/T21). Then rebuilt Go binary (41.73MB) to refresh `go:embed` bytes.
+2. **Migration path drift** — `migrations/00002_audit_logs_extended_filters.sql` at project root. `cmd/shark/main.go` `go:embed migrations/*.sql` reads from `cmd/shark/migrations/` — which goes 00001-00015. Migration never applied to any user DB. `audit_logs` table missing 4 columns (`org_id`, `session_id`, `resource_type`, `resource_id`). `handleListAuditLogs` still passed them into the query via `storage.AuditLogQuery`. 500 on every poll. Fix: moved to `cmd/shark/migrations/00016_audit_logs_extended_filters.sql`. On next `shark serve` startup, goose applies the migration, schema reaches 16.
+3. **React crash on first login** — `admin/src/components/get_started.tsx:102` referenced `<Icon.User/>`. `shared.tsx` exports `Icon.Users` (plural). Minified React error #130 (element type undefined) → entire App tree unmounts → blank screen. On fresh DB the admin auto-redirects to `/admin/get-started` (users=0 AND not onboarded, `App.tsx:151-162`) → every page blank. Fix: `Icon.User` → `Icon.Users`. One-line diff.
+
+### Lessons
+
+1. **Mtime-matching is not build-freshness proof.** Git stores commit timestamps and restores them on checkout. Source and bundle mtimes matching means "same commit modified both," not "bundle was freshly built." Real proof of freshness: `git log -- internal/admin/dist/assets/index-*.js` vs last `admin/src/**` commit SHA. If bundle commit is older than any `admin/src/**` commit, bundle is stale.
+2. **`go:embed` path is absolute-to-package-dir, not project-root.** New migration files dropped into repo root `migrations/` never reach the binary. Every migration must go under `cmd/shark/migrations/` with next-higher sequence number. Adding `migrations/` at project root is a silent no-op.
+3. **Minified React error #130 points at undefined component import.** When whole app unmounts post-rebuild, grep for every `<Icon.XXX/>` and cross-check against `shared.tsx` Icon object. Regex `^  [A-Z][a-zA-Z]+:` misses single-char keys like `X:`. Use `^  [A-Z][a-zA-Z]*:` or enumerate the literal object.
+4. **Gstack browse found what grep could not.** Source review said `Icon.User` compiled fine (it's a property access — TS can't catch). Only browser-runtime React crash surfaced the undefined. `/investigate` + live dogfood pipeline is how these land before users hit them.
+
+### Bundle rebuild discipline (still a gap)
+
+No pre-commit hook, no CI check. Every dev must remember to `npm run build` after touching `admin/src/**`. Already bit us once (all of Phase 6.6 DX shipped without rebuild). Post-launch fix: pre-commit hook that bails if any `admin/src/**` file is newer than the latest `dist/assets/index-*.js`.
+
+### New tracked task: W15 — multi-listener reverse proxy
+
+User asked why they must hit `:8080` instead of their real app port (`:3000`). Answer: embedded proxy is single-listener on main port; standalone proxy mode has dedicated port but no JWT verify (per `shark proxy --help`: "MVP scope… follow-up"). Scoped as W15 in `FRONTEND_WIRING_GAPS.md` + issue draft at `.github/ISSUE_W15_multi_listener_proxy.md`. Ship delivers on "one binary" pitch for the reverse-proxy use case.
+
+---
+
 ## Phase 6.6 — Dashboard Deep Audit + P0/P1/P2 Fixes
 Shipped: 2026-04-20
 Branch: `claude/admin-vendor-assets-fix` (session extension)
