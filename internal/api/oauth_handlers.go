@@ -167,7 +167,9 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 			if verr := redirect.Validate(&redirect.Application{
 				AllowedCallbackURLs: defaultApp.AllowedCallbackURLs,
 			}, redirect.KindCallback, requestedRedirect); verr != nil {
-				http.Error(w, "redirect_uri not allowed: "+verr.Error(), http.StatusBadRequest)
+				WriteError(w, http.StatusBadRequest,
+					NewError(CodeInvalidRequest, "redirect_uri not allowed: "+verr.Error()).
+						WithDocsURL(CodeInvalidRequest))
 				return
 			}
 			http.Redirect(w, r, requestedRedirect, http.StatusFound)

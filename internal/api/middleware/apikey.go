@@ -141,12 +141,19 @@ func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, requiredS
 	}
 }
 
-// writeJSONError writes a JSON error response.
+// writeJSONError writes a W18-shaped JSON error response. It mirrors
+// api.ErrorResponse but is duplicated here because middleware cannot import
+// its parent package (internal/api) without a cycle.
+//
+// Shape: {error, message, code, docs_url}. `code` defaults to `error` so
+// switching on `code` works even before callers fan out into finer slugs.
 func writeJSONError(w http.ResponseWriter, status int, errCode, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{ //#nosec G104 -- write to ResponseWriter; no actionable recovery
-		"error":   errCode,
-		"message": message,
+		"error":    errCode,
+		"message":  message,
+		"code":     errCode,
+		"docs_url": "https://docs.shark-auth.com/errors/" + errCode,
 	})
 }

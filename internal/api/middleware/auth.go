@@ -84,7 +84,7 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(ht
 				token := strings.TrimPrefix(authHeader, "Bearer ")
 				if jwtMgr == nil {
 					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
-					http.Error(w, `{"error":"unauthorized","message":"JWT not configured"}`, http.StatusUnauthorized)
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized", "JWT not configured")
 					return
 				}
 				claims, err := jwtMgr.Validate(r.Context(), token)
@@ -92,18 +92,18 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(ht
 					// Refresh token used as bearer credential — return actionable error (§2.3).
 					if errors.Is(err, jwtpkg.ErrRefreshToken) {
 						w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token",error_description="refresh token cannot be used as access credential"`)
-						http.Error(w, `{"error":"unauthorized","message":"refresh token cannot be used as access credential"}`, http.StatusUnauthorized)
+						writeJSONError(w, http.StatusUnauthorized, "unauthorized", "refresh token cannot be used as access credential")
 						return
 					}
 					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
-					http.Error(w, `{"error":"unauthorized","message":"Invalid token"}`, http.StatusUnauthorized)
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized", "Invalid token")
 					return
 				}
 				// Secondary check: belt-and-suspenders guard for any token_type not in {session, access}.
 				// In practice ErrRefreshToken above catches the refresh case before reaching here.
 				if claims.TokenType == "refresh" {
 					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token",error_description="refresh token cannot be used as access credential"`)
-					http.Error(w, `{"error":"unauthorized","message":"refresh token cannot be used as access credential"}`, http.StatusUnauthorized)
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized", "refresh token cannot be used as access credential")
 					return
 				}
 				// session token carries SessionID; access token does not
@@ -125,14 +125,14 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(ht
 			sessionID, err := sm.GetSessionFromRequest(r)
 			if err != nil {
 				w.Header().Set("WWW-Authenticate", "Bearer")
-				http.Error(w, `{"error":"unauthorized","message":"No valid session"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "No valid session")
 				return
 			}
 
 			sess, err := sm.ValidateSession(r.Context(), sessionID)
 			if err != nil {
 				w.Header().Set("WWW-Authenticate", "Bearer")
-				http.Error(w, `{"error":"unauthorized","message":"No valid session"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "No valid session")
 				return
 			}
 
@@ -208,7 +208,7 @@ func RequireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("shark_session")
 		if err != nil || cookie.Value == "" {
-			http.Error(w, `{"error":"unauthorized","message":"No valid session"}`, http.StatusUnauthorized)
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized", "No valid session")
 			return
 		}
 
@@ -225,20 +225,18 @@ func RequireEmailVerifiedFunc(isVerified func(ctx context.Context, userID string
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID := GetUserID(r.Context())
 			if userID == "" {
-				http.Error(w, `{"error":"unauthorized","message":"No valid session"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "No valid session")
 				return
 			}
 
 			verified, err := isVerified(r.Context(), userID)
 			if err != nil {
-				http.Error(w, `{"error":"internal_error","message":"Internal server error"}`, http.StatusInternalServerError)
+				writeJSONError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
 				return
 			}
 
 			if !verified {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(`{"error":"email_verification_required","message":"Please verify your email address before continuing"}`)) //#nosec G104 -- write to ResponseWriter; no actionable recovery //nolint:errcheck
+				writeJSONError(w, http.StatusForbidden, "email_verification_required", "Please verify your email address before continuing")
 				return
 			}
 
@@ -252,7 +250,7 @@ func RequireEmailVerifiedFunc(isVerified func(ctx context.Context, userID string
 func RequireMFA(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !GetMFAPassed(r.Context()) {
-			http.Error(w, `{"error":"mfa_required","message":"MFA verification required"}`, http.StatusForbidden)
+			writeJSONError(w, http.StatusForbidden, "mfa_required", "MFA verification required")
 			return
 		}
 		next.ServeHTTP(w, r)

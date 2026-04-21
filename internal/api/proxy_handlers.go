@@ -293,7 +293,8 @@ func (s *Server) handleProxyStatusStream(w http.ResponseWriter, r *http.Request)
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		WriteError(w, http.StatusInternalServerError,
+			NewError(CodeInternal, "streaming unsupported").WithDocsURL(CodeInternal))
 		return
 	}
 
