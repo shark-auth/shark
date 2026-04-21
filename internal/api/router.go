@@ -196,6 +196,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	// RFC 8414 OAuth Authorization Server Metadata (MCP discovery entrypoint)
 	r.Get("/.well-known/oauth-authorization-server", oauth.MetadataHandler(cfg.Server.BaseURL))
 
+	// Branding asset serve (A6). Public, content-addressed, immutable-cached.
+	// Mounted at root scope — NOT under /api/v1 or /admin — so logos can be
+	// embedded in outbound emails and external sites without auth. Must sit
+	// before the proxy catch-all at the bottom so chi's trie routes /assets/*
+	// here rather than forwarding it upstream.
+	r.Get("/assets/branding/*", s.handleBrandingAsset)
+
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Auth routes (public)
