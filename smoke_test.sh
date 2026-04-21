@@ -2639,7 +2639,7 @@ EOF
   # server mints (configured above in the main YAML: audience=shark-smoke,
   # issuer=http://localhost:8080 — which is $BASE).
   $BIN proxy --upstream http://127.0.0.1:9003 --port 9002 \
-    --auth $BASE --rules rules73.yaml \
+    --auth $BASE --insecure-auth-http --rules rules73.yaml \
     --audience shark-smoke --issuer $BASE > proxy73.log 2>&1 &
   PROXY73_PID=$!
 
