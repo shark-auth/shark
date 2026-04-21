@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -245,3 +246,45 @@ func TestJWKSCache_AudienceValidation(t *testing.T) {
 		}
 	})
 }
+
+// TestJWKSCache_OversizedBodyRejected ensures the proxy refuses JWKS
+// responses larger than the hardcoded 1 MiB limit. Without the cap the
+// proxy would happily buffer whatever the upstream streams, enabling a
+// DoS-by-memory via a malicious or compromised auth server. The assertion
+// is: refresh returns an error AND the cache's key map stays empty (no
+// partial/corrupt state).
+func TestJWKSCache_OversizedBodyRejected(t *testing.T) {
+	// Stream a body well past 1 MiB. Content doesn't matter — the limit
+	// check trips before we attempt JSON decoding.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/jwks.json" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		// 2 MiB of junk JSON so the decoder would also blow up if we got
+		// that far — but the size gate should trip first.
+		chunk := strings.Repeat("a", 64*1024)
+		for i := 0; i < 32; i++ {
+			_, _ = w.Write([]byte(chunk))
+		}
+	}))
+	defer srv.Close()
+
+	c := newJWKSCache(srv.URL, slog.Default())
+	err := c.refresh(context.Background())
+	if err == nil {
+		t.Fatalf("expected error for oversized JWKS body, got nil")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected 'too large' error, got %v", err)
+	}
+	// Cache must stay empty — no half-parsed state leaking in.
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if len(c.keys) != 0 {
+		t.Fatalf("expected empty key map after rejection, got %d keys", len(c.keys))
+	}
+}
+

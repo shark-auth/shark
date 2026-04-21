@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
 	"net/http"
@@ -120,8 +121,22 @@ func (c *jwksCache) refresh(ctx context.Context) error {
 		return fmt.Errorf("jwks %s: status %d", url, resp.StatusCode)
 	}
 
+	// W15c: cap body at 1 MiB to prevent a malicious or misbehaving auth
+	// server from OOMing the proxy with an unbounded JWKS response. The
+	// JWKS doc is a handful of small keys — 1 MiB is generous. We read one
+	// extra byte past the limit so we can distinguish "exactly at the
+	// limit" (fine) from "more than the limit" (rejected).
+	const maxJWKSBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxJWKSBytes+1))
+	if err != nil {
+		return fmt.Errorf("jwks read: %w", err)
+	}
+	if len(body) > maxJWKSBytes {
+		return fmt.Errorf("jwks response too large (>%d bytes)", maxJWKSBytes)
+	}
+
 	var doc jwksDoc
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+	if err := json.Unmarshal(body, &doc); err != nil {
 		return fmt.Errorf("jwks decode: %w", err)
 	}
 
