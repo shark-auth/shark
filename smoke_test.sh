@@ -2353,7 +2353,7 @@ if [ -n "$T04_NEW_ID" ] && [ "$T04_NEW_ID" != "MISSING" ]; then
   T04_AUDIT=$(curl -s -H "Authorization: Bearer $ADMIN" \
     "$BASE/api/v1/audit-logs?action=admin.user.create&limit=50")
   T04_AUDIT_HIT=$(echo "$T04_AUDIT" | jq -r --arg id "$T04_NEW_ID" \
-    '.logs // .audit_logs // [] | map(select(.target_id == $id and .action == "admin.user.create")) | length')
+    '(.data // .logs // .audit_logs // []) | map(select(.target_id == $id and .action == "admin.user.create")) | length')
   if [ "${T04_AUDIT_HIT:-0}" -gt 0 ] 2>/dev/null; then
     pass "audit log admin.user.create for $T04_NEW_ID present"
   else
