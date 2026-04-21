@@ -18,16 +18,36 @@ var healthCmd = &cobra.Command{
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Get(healthURL + "/healthz")
 		if err != nil {
-			return fmt.Errorf("reach %s: %w", healthURL, err)
+			return maybeJSONErr(cmd, "unreachable", fmt.Errorf("reach %s: %w", healthURL, err))
 		}
 		defer resp.Body.Close()
 
-		var body map[string]string
+		var body map[string]any
 		_ = json.NewDecoder(resp.Body).Decode(&body)
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unhealthy (status %d): %v", resp.StatusCode, body)
+			err := fmt.Errorf("unhealthy (status %d): %v", resp.StatusCode, body)
+			if jsonFlag(cmd) {
+				return writeJSONError(cmd, "unhealthy", err, map[string]any{
+					"status_code": resp.StatusCode,
+					"body":        body,
+				})
+			}
+			return err
 		}
+
+		if jsonFlag(cmd) {
+			payload := map[string]any{
+				"status": "ok",
+				"url":    healthURL,
+			}
+			// Merge whatever fields /healthz returned (status, uptime_s, version, …).
+			for k, v := range body {
+				payload[k] = v
+			}
+			return writeJSON(cmd.OutOrStdout(), payload)
+		}
+
 		fmt.Printf("ok — %s\n", healthURL)
 		return nil
 	},
@@ -35,4 +55,5 @@ var healthCmd = &cobra.Command{
 
 func init() {
 	healthCmd.Flags().StringVar(&healthURL, "url", "http://localhost:8080", "base URL of the running shark instance")
+	addJSONFlag(healthCmd)
 }
