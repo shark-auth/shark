@@ -69,6 +69,9 @@ func NewServer(store storage.Store, cfg *config.Config) (*Server, error) {
 		GlobalSecret:                   globalSecret[:],
 		SendDebugMessagesToClients:     false,
 		ClientSecretsHasher:            &SHA256Hasher{},
+		// DX1: emit RFC 7519 JWT access tokens signed by the ES256 JWKS key.
+		AccessTokenIssuer: issuer,
+		JWTScopeClaimKey:  jwt.JWTScopeFieldString, // "scope" as space-separated string
 	}
 
 	// Build a jose.JSONWebKey for fosite's JWT strategy.
@@ -79,19 +82,23 @@ func NewServer(store storage.Store, cfg *config.Config) (*Server, error) {
 		Use:       "sig",
 	}
 
-	// Build the HMAC core strategy (for opaque token signatures).
+	// Build the HMAC core strategy (still used for refresh-token and
+	// authorize-code signatures — refresh tokens stay opaque per DX1 scope).
 	hmacStrategy := compose.NewOAuth2HMACStrategy(fositeConfig)
 
-	// Build the JWT signer keyed to the ES256 key.
+	// DX1: build the JWT access-token strategy keyed to the ES256 JWKS key.
+	// Access tokens become RFC 7519 JWTs; refresh tokens + auth codes remain
+	// opaque (JWT strategy delegates those to the wrapped HMAC strategy).
 	keyGetter := func(_ context.Context) (interface{}, error) {
 		return jwk.Key, nil
 	}
-	signer := &jwt.DefaultSigner{GetPrivateKey: keyGetter}
+	jwtAccessStrategy := compose.NewOAuth2JWTStrategy(keyGetter, hmacStrategy, fositeConfig)
 
-	// Compose the strategy: HMAC for token signatures + JWT signer.
+	// Compose the strategy: JWT for access tokens (which delegates to HMAC
+	// for refresh + auth-code), plus the JWT signer for ID tokens.
 	strategy := &compose.CommonStrategy{
-		CoreStrategy: hmacStrategy,
-		Signer:       signer,
+		CoreStrategy: jwtAccessStrategy,
+		Signer:       &jwt.DefaultSigner{GetPrivateKey: keyGetter},
 	}
 
 	// Compose the OAuth2 provider with the desired grant factories.
@@ -227,18 +234,34 @@ func ensureES256Key(store storage.Store, serverSecret string) (*ecdsa.PrivateKey
 	return priv, nil
 }
 
-// newSession creates a fosite session for the given subject.
-func (s *Server) newSession(subject string) *openid.DefaultSession {
-	return &openid.DefaultSession{
-		Claims: &jwt.IDTokenClaims{
-			Issuer:  s.Issuer,
+// newSession creates a fosite session for the given subject. Returns a
+// *SharkSession which is simultaneously an OpenID session (for ID-token
+// grants) and an oauth2.JWTSessionContainer (so the DX1 JWT access-token
+// strategy can mint RFC 7519 access tokens signed by the ES256 JWKS key).
+func (s *Server) newSession(subject string) *SharkSession {
+	kidHeader := &jwt.Headers{
+		Extra: map[string]interface{}{
+			"kid": s.SigningKeyID,
+		},
+	}
+	return &SharkSession{
+		DefaultSession: &openid.DefaultSession{
+			Claims: &jwt.IDTokenClaims{
+				Issuer:  s.Issuer,
+				Subject: subject,
+			},
+			Headers: kidHeader,
 			Subject: subject,
 		},
-		Headers: &jwt.Headers{
+		JWTClaims: &jwt.JWTClaims{
+			Subject: subject,
+			Issuer:  s.Issuer,
+			Extra:   map[string]interface{}{},
+		},
+		JWTHeader: &jwt.Headers{
 			Extra: map[string]interface{}{
 				"kid": s.SigningKeyID,
 			},
 		},
-		Subject: subject,
 	}
 }

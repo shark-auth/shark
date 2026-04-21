@@ -388,15 +388,26 @@ func (s *FositeStore) createTokenSession(ctx context.Context, signature, tokenTy
 		audience = req.GetRequestForm().Get("resource")
 	}
 
+	// Generate per-token JTI. fosite reuses req.GetID() across access and
+	// refresh tokens minted from the same request AND across rotation
+	// chains (refresh.go:86 sets request.ID = originalRequest.ID), so
+	// using req.GetID() as JTI would collide on the unique constraint.
+	// We persist req.GetID() separately in the request_id column for
+	// fosite's Rotate/Revoke lookups.
+	//
+	// DX1: for JWT access tokens the handler pre-populates a JTI on the
+	// SharkSession so the on-the-wire `jti` claim matches the DB row —
+	// introspection can then look up by JTI directly.
+	jti := "jti_" + uuid.New().String()
+	if tokenType == "access" {
+		if ss, ok := sess.(*SharkSession); ok && ss != nil && ss.JWTClaims != nil && ss.JWTClaims.JTI != "" {
+			jti = ss.JWTClaims.JTI
+		}
+	}
+
 	token := &storage.OAuthToken{
-		ID: "tok_" + uuid.New().String()[:8],
-		// Generate per-token JTI. fosite reuses req.GetID() across access and
-		// refresh tokens minted from the same request AND across rotation
-		// chains (refresh.go:86 sets request.ID = originalRequest.ID), so
-		// using req.GetID() as JTI would collide on the unique constraint.
-		// We persist req.GetID() separately in the request_id column for
-		// fosite's Rotate/Revoke lookups.
-		JTI:       "jti_" + uuid.New().String(),
+		ID:        "tok_" + uuid.New().String()[:8],
+		JTI:       jti,
 		RequestID: req.GetID(),
 		ClientID:  req.GetClient().GetID(),
 		UserID:    sess.GetSubject(),

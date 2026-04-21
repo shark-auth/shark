@@ -9,11 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/ory/fosite"
+	"github.com/ory/fosite/token/jwt"
 
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
+
+// newUUID wraps uuid.New().String() so the call site stays compact.
+func newUUID() string { return uuid.New().String() }
 
 // dpopTokenEndpointURL returns the canonical HTU for DPoP proof validation at
 // the token endpoint. Query parameters and fragments are stripped.
@@ -96,6 +101,36 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	// via the Client interface).
 	for _, scope := range ar.GetRequestedScopes() {
 		ar.GrantScope(scope)
+	}
+
+	// DX1: enrich the JWT session with client_id and (if present) cnf.jkt
+	// before the JWT access-token is signed. These claims land in the
+	// RFC 7519 token body and are verifiable by any SDK using
+	// decode_agent_token + /.well-known/jwks.json.
+	if sharkSess, ok := ar.GetSession().(*SharkSession); ok && sharkSess != nil {
+		claims := sharkSess.GetJWTClaims()
+		if jc, ok := claims.(*jwt.JWTClaims); ok {
+			if jc.Extra == nil {
+				jc.Extra = map[string]interface{}{}
+			}
+			if cid := ar.GetClient().GetID(); cid != "" {
+				jc.Extra["client_id"] = cid
+			}
+			// For client_credentials, subject is typically the client itself.
+			if jc.Subject == "" {
+				jc.Subject = ar.GetClient().GetID()
+				sharkSess.DefaultSession.Subject = jc.Subject
+			}
+			if dpopJKT != "" {
+				jc.Extra["cnf"] = map[string]interface{}{"jkt": dpopJKT}
+			}
+			// DX1: pin the JTI so the on-the-wire `jti` claim matches the
+			// DB row our FositeStore persists — lets introspection/revocation
+			// look up tokens by JTI directly.
+			if jc.JTI == "" {
+				jc.JTI = "jti_" + newUUID()
+			}
+		}
 	}
 
 	response, err := s.Provider.NewAccessResponse(ctx, ar)
