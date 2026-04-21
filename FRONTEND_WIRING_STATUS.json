@@ -37,7 +37,8 @@
     "W26": {"status": "pending", "priority": "P2", "commit": null},
     "W27": {"status": "pending", "priority": "P2", "commit": null},
     "F5.2": {"status": "done", "priority": "P1", "commit": "be95dc1", "notes": "shark-sdk-py MVP shipped sdk/python/ — 13 files, 676 LOC source + 689 LOC tests, 31 tests pass, wheel+sdist build clean; commits 103aacd/5b3eacb/18fe13b/7a1b66e/0796b62/ea1bd58/be95dc1"},
-    "F5.3": {"status": "done_with_concerns", "priority": "P1", "commit": "6faaaa5", "notes": "Hello Agent walkthrough shipped — docs/hello-agent.md + examples/hello_agent.{sh,py} + examples/README.md + cross-links; commits 4317dff/5e49e84/6faaaa5; smoke script exits 0; 5 DX friction flagged for followup (see below)"}
+    "F5.3": {"status": "done_with_concerns", "priority": "P1", "commit": "6faaaa5", "notes": "Hello Agent walkthrough shipped — docs/hello-agent.md + examples/hello_agent.{sh,py} + examples/README.md + cross-links; commits 4317dff/5e49e84/6faaaa5; smoke script exits 0; 5 DX friction flagged for followup (see below)"},
+    "DX1": {"status": "in_progress", "priority": "P0", "commit": null, "notes": "Switch Fosite access token strategy from opaque (ory_at_...) to JWT (RS256/ES256 via JWKS) so decode_agent_token() actually works. Headline SDK primitive vs server default mismatch. Launch-visible. Dispatched 2026-04-21 pre-Phase-A"}
   },
   "phase_a_tasks": {
     "A1_migration": "pending",
