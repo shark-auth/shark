@@ -8,10 +8,10 @@ under fifteen minutes.
 
 A working local SharkAuth deployment with one registered agent. A Python
 script that mints a `client_credentials` access token, attaches an RFC
-9449 DPoP proof JWT, and introspects the token back against the server.
-At the end you will have the exact four primitives every agent builder
-reaches for: agent registration, DPoP proof emission, token minting, and
-server-side token verification.
+9449 DPoP proof JWT, and decodes the token's claims locally with three
+lines of SDK code. At the end you will have the exact four primitives
+every agent builder reaches for: agent registration, DPoP proof emission,
+token minting, and JWKS-based JWT verification.
 
 ## Prerequisites
 
@@ -193,31 +193,30 @@ r = requests.get(
 )
 ```
 
-On the server side, a resource server verifying Shark-issued tokens has
-two options:
-
-1. **Token introspection (RFC 7662)** — POST the token to
-   `/oauth/introspect` with the agent's `client_id` / `client_secret`.
-   Returns `{active, sub, iss, exp, scope, ...}`. Works with the default
-   opaque access tokens SharkAuth issues today.
-2. **JWKS-based verification** — for JWT-profile deployments, call
-   `decode_agent_token(token, jwks_url, expected_issuer,
-   expected_audience)`. This avoids a round-trip per request. Today
-   SharkAuth issues opaque tokens by default; JWT access tokens are a
-   configuration option.
-
-The example script runs path (1):
+SharkAuth issues **real RFC 7519 JWTs** out of the box, signed with the
+ES256 key advertised at `/.well-known/jwks.json`. Resource servers can
+verify them locally with three lines of SDK code — no introspection
+round-trip required:
 
 ```python
 from urllib.parse import urljoin
-claims = requests.post(
-    urljoin(AUTH + "/", "oauth/introspect"),
-    data={"token": token},
-    auth=(CID, CSECRET),
-).json()
-assert claims["active"]
-print("sub:", claims["sub"], "exp:", claims["exp"], "scope:", claims["scope"])
+from shark_auth import decode_agent_token
+
+claims = decode_agent_token(
+    token,
+    urljoin(AUTH + "/", ".well-known/jwks.json"),
+    expected_issuer=AUTH,
+    expected_audience=CID,
+)
+print("sub:", claims.sub, "exp:", claims.exp, "scope:", claims.scope)
 ```
+
+`decode_agent_token` fetches and caches the JWKS, verifies the signature
++ `exp`/`nbf`, and checks `iss` and `aud` against the values you pass in.
+
+If you prefer the round-trip (e.g. to centralize revocation checks),
+RFC 7662 introspection still works against the same `/oauth/introspect`
+endpoint and returns `{active, sub, iss, exp, scope, ...}`.
 
 ## Step 7 — Retrieve a 3rd-party credential via Vault (2 min)
 
@@ -250,10 +249,11 @@ end-to-end delegation flow.
 ## What just happened
 
 You stood up an OAuth 2.1 authorization server, registered an agent over
-RFC 7591, minted an access token over `client_credentials`, built an RFC
-9449 DPoP proof JWT that binds that token to your ECDSA keypair, and
-verified the token's claims via introspection. That's the full
-spec-compliant agent-auth loop.
+RFC 7591, minted a JWT access token over `client_credentials`, built an
+RFC 9449 DPoP proof JWT that binds that token to your ECDSA keypair, and
+verified the token's claims locally with `decode_agent_token` against
+the server's published JWKS. That's the full spec-compliant agent-auth
+loop with zero introspection round-trips.
 
 Architecture deep-dive: [`AGENT_AUTH.md`](../AGENT_AUTH.md).
 
@@ -263,8 +263,9 @@ Architecture deep-dive: [`AGENT_AUTH.md`](../AGENT_AUTH.md).
   `shark_auth.DeviceFlow`.
 - **RFC 8693 Token Exchange** — delegation + `act` (actor) chains for
   multi-agent systems. See `AGENT_AUTH.md` → Token Exchange.
-- **JWT access tokens** — flip SharkAuth's token strategy to issue JWTs
-  and swap introspection for `decode_agent_token`.
+- **Custom claim injection** — extend the JWT body with deployment-
+  specific extras (planned, see Implementation Status in
+  [`AGENT_AUTH.md`](../AGENT_AUTH.md)).
 - **Vault provider setup** — admin dashboard → Vault → Providers.
 - **RFC compliance matrix** — [`AGENT_AUTH.md`](../AGENT_AUTH.md)
   Implementation Status section.

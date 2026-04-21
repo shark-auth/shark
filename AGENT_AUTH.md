@@ -21,11 +21,13 @@ Shark is the only self-hosted, single-binary, OSS auth system where agents are f
 
 ---
 
-## Implementation Status (2026-04-20)
+## Implementation Status (2026-04-21)
 
 > **Want to try it?** See the [Hello Agent walkthrough](docs/hello-agent.md) — 15 minutes from clone to a working DPoP-bound agent token.
 
 **Waves A–E complete.** All core agent-auth primitives ship in the single binary, tested and smoke-covered.
+
+**Access tokens are now real RFC 7519 JWTs** (DX1, 2026-04-21). `/oauth/token` emits ES256-signed JWTs containing `sub`, `iss`, `aud`, `exp`, `iat`, `jti`, `scope`, `client_id`, plus shark extensions (`cnf.jkt` for DPoP-bound tokens, `act` for RFC 8693 delegation). Verify locally in 3 lines via `shark_auth.decode_agent_token(token, jwks_url, expected_issuer, expected_audience)` — no introspection round-trip required. Refresh tokens stay opaque per standard practice.
 
 **Shipped RFCs:**
 - RFC 6749 + 7636 — OAuth 2.1 + PKCE (authorization code + client credentials + refresh with rotation)
