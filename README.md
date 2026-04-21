@@ -26,6 +26,20 @@ Auth0 charges $23/mo for 1,000 users. Clerk charges $25/mo. Both lock you into t
 
 ---
 
+## quickstart
+
+New here? **[Hello Agent — 15-minute walkthrough](docs/hello-agent.md)**
+takes you from zero to a working agent: register an OAuth 2.1 client,
+mint a DPoP-bound access token, and verify claims — end to end.
+
+One-shot automated run:
+
+```bash
+bash examples/hello_agent.sh
+```
+
+---
+
 ## architecture
 
 sharkauth follows a clean layered architecture. Every component is internal — no public Go packages, just one HTTP API surface.

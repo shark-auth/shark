@@ -11,6 +11,10 @@ Implements the four primitives most agent builders reach for:
 
 Targets Python 3.9+.
 
+> **New to SharkAuth?** The [Hello Agent walkthrough](../../docs/hello-agent.md)
+> takes you from zero to a working DPoP-bound agent token in 15 minutes
+> using this SDK.
+
 ## Install
 
     pip install shark-auth

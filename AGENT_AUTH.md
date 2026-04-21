@@ -23,6 +23,8 @@ Shark is the only self-hosted, single-binary, OSS auth system where agents are f
 
 ## Implementation Status (2026-04-20)
 
+> **Want to try it?** See the [Hello Agent walkthrough](docs/hello-agent.md) — 15 minutes from clone to a working DPoP-bound agent token.
+
 **Waves A–E complete.** All core agent-auth primitives ship in the single binary, tested and smoke-covered.
 
 **Shipped RFCs:**
