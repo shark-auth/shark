@@ -2433,37 +2433,52 @@ if ! command -v python3 >/dev/null 2>&1; then
 else
   kill_port 9001
   kill_port 9000
+  kill_port 9101
+  kill_port 9100
   kill_port 8090
 
-  # Toy upstream: echoes request headers as JSON so the test can assert
-  # X-Shark-* / X-User-* injection.
+  # Two toy upstreams so we can verify ≥2 listeners running side-by-side,
+  # each with their own rules, each proxying to their own backend.
+  # Upstream A on :9001 echoes headers; upstream B on :9101 returns a
+  # fixed "from-b" body so we can assert traffic was routed to the right
+  # backend (not cross-wired).
   cat > upstream72.py <<'PY'
-import http.server, json
+import http.server, json, sys
+port = int(sys.argv[1])
+tag = sys.argv[2]
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
+        self.send_header("X-Backend-Tag", tag)
         self.end_headers()
-        self.wfile.write(json.dumps({k: v for k, v in self.headers.items()}).encode())
+        body = {"tag": tag, "headers": {k: v for k, v in self.headers.items()}}
+        self.wfile.write(json.dumps(body).encode())
     def log_message(self, *a): pass
-http.server.HTTPServer(("127.0.0.1", 9001), H).serve_forever()
+http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
 PY
-  python3 upstream72.py > upstream.log 2>&1 &
+  python3 upstream72.py 9001 A > upstream.log 2>&1 &
   UPSTREAM_PID=$!
+  python3 upstream72.py 9101 B > upstreamB.log 2>&1 &
+  UPSTREAM_B_PID=$!
 
-  # Give the upstream a moment to bind.
+  # Give both upstreams a moment to bind.
   for _ in $(seq 1 20); do
-    curl -sf http://127.0.0.1:9001/ >/dev/null 2>&1 && break
+    curl -sf http://127.0.0.1:9001/ >/dev/null 2>&1 \
+      && curl -sf http://127.0.0.1:9101/ >/dev/null 2>&1 && break
     sleep 0.1
   done
 
-  if ! curl -sf http://127.0.0.1:9001/ >/dev/null 2>&1; then
-    fail "toy upstream did not start on :9001"
-    kill $UPSTREAM_PID 2>/dev/null || true
+  if ! curl -sf http://127.0.0.1:9001/ >/dev/null 2>&1 \
+     || ! curl -sf http://127.0.0.1:9101/ >/dev/null 2>&1; then
+    fail "toy upstreams did not start on :9001 + :9101"
+    kill $UPSTREAM_PID $UPSTREAM_B_PID 2>/dev/null || true
   else
-    pass "toy upstream up on :9001"
+    pass "toy upstreams up on :9001 + :9101"
 
-    # Fresh shark instance with multi-listener config on its own DB.
+    # Fresh shark instance with TWO proxy listeners on its own DB. Each
+    # listener binds its own port, has its own upstream, and its own rule
+    # set — verifying listener isolation end-to-end.
     rm -f w15.db w15.db-wal w15.db-shm w15.yaml w15-server.log
     cat > w15.yaml <<EOF
 server:
@@ -2483,16 +2498,22 @@ proxy:
           allow: anonymous
         - path: /*
           require: authenticated
+    - bind: "127.0.0.1:9100"
+      upstream: "http://127.0.0.1:9101"
+      rules:
+        - path: /*
+          allow: anonymous
 EOF
 
     $BIN serve --dev --config w15.yaml >> w15-server.log 2>&1 &
     W15_PID=$!
 
-    # Wait for both main (:8090) and listener (:9000) to come up.
+    # Wait for main (:8090) + both listeners (:9000, :9100) to come up.
     UP=0
     for _ in $(seq 1 50); do
       if curl -sf http://127.0.0.1:8090/healthz >/dev/null 2>&1 \
-         && curl -s -o /dev/null http://127.0.0.1:9000/public/foo; then
+         && curl -s -o /dev/null http://127.0.0.1:9000/public/foo \
+         && curl -s -o /dev/null http://127.0.0.1:9100/anything; then
         UP=1; break
       fi
       sleep 0.2
@@ -2500,22 +2521,34 @@ EOF
 
     if [ $UP -ne 1 ]; then
       cat w15-server.log | tail -30
-      fail "W15 shark instance didn't bind both :8090 + :9000"
+      fail "W15 shark instance didn't bind :8090 + :9000 + :9100"
     else
-      pass "multi-listener: :8090 API + :9000 proxy both bound"
+      pass "multi-listener: :8090 API + :9000 proxy A + :9100 proxy B all bound"
 
-      # Anonymous on public path -> 200 (rule allows anonymous).
+      # Listener A: anonymous on public path -> 200 (rule allows anonymous).
       CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/public/foo)
-      [ "$CODE" = "200" ] && pass "anonymous /public/* -> 200" \
-        || fail "anonymous /public/* -> $CODE (expected 200)"
+      [ "$CODE" = "200" ] && pass "listener A: anonymous /public/* -> 200" \
+        || fail "listener A: anonymous /public/* -> $CODE (expected 200)"
 
-      # Anonymous on protected path -> 401 per spec (unauthenticated
-      # callers denied by require:authenticated rules get 401; 403 is
-      # reserved for authenticated-but-unauthorized).
+      # Listener A: anonymous on protected path -> 401 per spec.
       CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/secret)
       [ "$CODE" = "401" ] \
-        && pass "anonymous /secret -> 401 (unauth)" \
-        || fail "anonymous /secret -> $CODE (expected 401)"
+        && pass "listener A: anonymous /secret -> 401 (unauth)" \
+        || fail "listener A: anonymous /secret -> $CODE (expected 401)"
+
+      # Listener B: rule wide-open — every path allowed anonymously. Also
+      # verify routing landed on backend B (tag=B) not backend A.
+      TAG=$(curl -s http://127.0.0.1:9100/any/path | grep -o '"tag": *"[AB]"' | head -1)
+      [ "$TAG" = '"tag": "B"' ] \
+        && pass "listener B: routed to backend B ($TAG)" \
+        || fail "listener B: wrong backend routing ($TAG)"
+
+      # Cross-check: listener A should NOT route to backend B even for
+      # public paths (isolation sanity).
+      TAG=$(curl -s http://127.0.0.1:9000/public/ping | grep -o '"tag": *"[AB]"' | head -1)
+      [ "$TAG" = '"tag": "A"' ] \
+        && pass "listener A: routed to backend A ($TAG)" \
+        || fail "listener A: wrong backend routing ($TAG)"
 
       # Admin port still works.
       CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/healthz)
@@ -2555,12 +2588,14 @@ EOF
     wait $W15_PID 2>/dev/null || true
     kill_port 8090
     kill_port 9000
+    kill_port 9100
     rm -f w15.yaml w15.db w15.db-wal w15.db-shm w15-server.log
   fi
 
-  kill $UPSTREAM_PID 2>/dev/null || true
+  kill $UPSTREAM_PID $UPSTREAM_B_PID 2>/dev/null || true
   kill_port 9001
-  rm -f upstream.log upstream72.py
+  kill_port 9101
+  rm -f upstream.log upstreamB.log upstream72.py
 fi
 
 # --- 73: W15 standalone shark proxy + JWT verify -----------------------------
