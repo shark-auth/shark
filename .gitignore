@@ -70,3 +70,7 @@ scratch/
 .env
 .env.*
 !.env.example
+.gstack/
+
+# superpowers brainstorm session dirs
+.superpowers/
