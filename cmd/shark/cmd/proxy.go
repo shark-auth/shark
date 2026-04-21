@@ -19,12 +19,13 @@ import (
 )
 
 var (
-	proxyUpstream   string
-	proxyPort       int
-	proxyAuthBase   string
-	proxyRulesFile  string
-	proxyAudiences  []string
-	proxyIssuer     string
+	proxyUpstream     string
+	proxyPort         int
+	proxyAuthBase     string
+	proxyRulesFile    string
+	proxyAudiences    []string
+	proxyIssuer       string
+	proxyInsecureAuth bool
 )
 
 // proxyRulesFileSpec mirrors the rule YAML shape accepted by the shared
@@ -61,6 +62,9 @@ will therefore return 401.`,
 		}
 		if proxyAuthBase == "" {
 			return errors.New("--auth is required (Shark auth base URL)")
+		}
+		if err := validateAuthURL(proxyAuthBase, proxyInsecureAuth, slog.Default()); err != nil {
+			return err
 		}
 		// W15c: audience + issuer are mandatory for the standalone proxy.
 		// golang-jwt v5 does NOT validate aud/iss unless explicitly opted
@@ -170,6 +174,27 @@ will therefore return 401.`,
 	},
 }
 
+// validateAuthURL enforces the W15c HTTPS-for-auth guarantee. MITM on a
+// cleartext /.well-known/jwks.json response lets an attacker swap in
+// their own signing keys — turning every bearer token the proxy accepts
+// into a forgery. Refuse http:// unless the operator explicitly opts in
+// with --insecure-auth-http (kept for local dev + loopback test
+// fixtures), and loudly warn when they do.
+func validateAuthURL(authBase string, allowInsecure bool, logger *slog.Logger) error {
+	switch {
+	case strings.HasPrefix(authBase, "https://"):
+		return nil
+	case strings.HasPrefix(authBase, "http://"):
+		if !allowInsecure {
+			return errors.New("refusing http:// auth URL without --insecure-auth-http (dev/testing only)")
+		}
+		logger.Warn("using cleartext HTTP for auth server — DO NOT USE IN PRODUCTION", "auth", authBase)
+		return nil
+	default:
+		return errors.New("--auth must be an http:// or https:// URL")
+	}
+}
+
 // loadProxyRulesFile compiles the rule list at path into a proxy.Engine.
 // An empty path is permitted and yields an engine with no rules —
 // effectively "deny everything via the default-deny fall-through", which
@@ -211,6 +236,10 @@ func init() {
 	// both flags explicitly.
 	proxyCmd.Flags().StringSliceVar(&proxyAudiences, "audience", nil, "expected JWT audience (aud); repeatable, at least one required")
 	proxyCmd.Flags().StringVar(&proxyIssuer, "issuer", "", "expected JWT issuer (iss); defaults to --auth with trailing slash trimmed")
+	// W15c: HTTPS-by-default for --auth. Anyone flipping this flag on is
+	// accepting MITM-forged keys and should only do so for local dev /
+	// loopback test fixtures.
+	proxyCmd.Flags().BoolVar(&proxyInsecureAuth, "insecure-auth-http", false, "allow http:// --auth URL (MITM-exposed; dev/testing only)")
 
 	root.AddCommand(proxyCmd)
 }
