@@ -2418,6 +2418,250 @@ T15_NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" \
 [ "$T15_NOAUTH" = "401" ] && pass "bootstrap consume no-auth route (handler-level 401, not middleware)" \
   || fail "bootstrap consume no-auth -> $T15_NOAUTH (expected handler 401 for bad token)"
 
+# --- 72: W15 multi-listener proxy --------------------------------------------
+section "72: W15 multi-listener proxy (embedded)"
+
+# The main :8080 server is already up and owns dev.db. For this section we
+# need a toy HTTP upstream on :9001 and a proxy listener on :9000 that
+# injects identity headers. Running a second shark instance would require
+# a separate DB — easier to exercise the Listener directly via a tiny
+# Python or Go helper. We use python3 for the toy upstream, and a dedicated
+# shark instance with its own DB on :8090 for the proxy listener.
+
+if ! command -v python3 >/dev/null 2>&1; then
+  note "section 72 skipped: python3 not available"
+else
+  kill_port 9001
+  kill_port 9000
+  kill_port 8090
+
+  # Toy upstream: echoes request headers as JSON so the test can assert
+  # X-Shark-* / X-User-* injection.
+  cat > upstream72.py <<'PY'
+import http.server, json
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({k: v for k, v in self.headers.items()}).encode())
+    def log_message(self, *a): pass
+http.server.HTTPServer(("127.0.0.1", 9001), H).serve_forever()
+PY
+  python3 upstream72.py > upstream.log 2>&1 &
+  UPSTREAM_PID=$!
+
+  # Give the upstream a moment to bind.
+  for _ in $(seq 1 20); do
+    curl -sf http://127.0.0.1:9001/ >/dev/null 2>&1 && break
+    sleep 0.1
+  done
+
+  if ! curl -sf http://127.0.0.1:9001/ >/dev/null 2>&1; then
+    fail "toy upstream did not start on :9001"
+    kill $UPSTREAM_PID 2>/dev/null || true
+  else
+    pass "toy upstream up on :9001"
+
+    # Fresh shark instance with multi-listener config on its own DB.
+    rm -f w15.db w15.db-wal w15.db-shm w15.yaml w15-server.log
+    cat > w15.yaml <<EOF
+server:
+  port: 8090
+  base_url: http://localhost:8090
+  secret: "w15-smoke-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+storage:
+  path: w15.db
+email:
+  provider: dev
+proxy:
+  listeners:
+    - bind: "127.0.0.1:9000"
+      upstream: "http://127.0.0.1:9001"
+      rules:
+        - path: /public/*
+          allow: anonymous
+        - path: /*
+          require: authenticated
+EOF
+
+    $BIN serve --dev --config w15.yaml >> w15-server.log 2>&1 &
+    W15_PID=$!
+
+    # Wait for both main (:8090) and listener (:9000) to come up.
+    UP=0
+    for _ in $(seq 1 50); do
+      if curl -sf http://127.0.0.1:8090/healthz >/dev/null 2>&1 \
+         && curl -s -o /dev/null http://127.0.0.1:9000/public/foo; then
+        UP=1; break
+      fi
+      sleep 0.2
+    done
+
+    if [ $UP -ne 1 ]; then
+      cat w15-server.log | tail -30
+      fail "W15 shark instance didn't bind both :8090 + :9000"
+    else
+      pass "multi-listener: :8090 API + :9000 proxy both bound"
+
+      # Anonymous on public path -> 200 (rule allows anonymous).
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/public/foo)
+      [ "$CODE" = "200" ] && pass "anonymous /public/* -> 200" \
+        || fail "anonymous /public/* -> $CODE (expected 200)"
+
+      # Anonymous on protected path -> 403 (rules engine denies — this is
+      # W15's required behaviour for authenticated rules on the proxy
+      # listener; 401 would require a configured login redirect).
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/secret)
+      [ "$CODE" = "403" ] || [ "$CODE" = "401" ] \
+        && pass "anonymous /secret -> $CODE (denied)" \
+        || fail "anonymous /secret -> $CODE (expected 401/403)"
+
+      # Admin port still works.
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/healthz)
+      [ "$CODE" = "200" ] && pass "admin port still healthy during multi-listener" \
+        || fail "admin healthz on :8090 -> $CODE"
+
+      # Port-in-use = fatal. Try booting a second instance bound to :9000.
+      kill_port 8091 2>/dev/null || true
+      cat > w15-dup.yaml <<EOF
+server:
+  port: 8091
+  base_url: http://localhost:8091
+  secret: "w15-smoke-secret-yyyyyyyyyyyyyyyyyyyyyyyyyyy"
+storage:
+  path: w15-dup.db
+email:
+  provider: dev
+proxy:
+  listeners:
+    - bind: "127.0.0.1:9000"
+      upstream: "http://127.0.0.1:9001"
+      rules:
+        - path: /*
+          allow: anonymous
+EOF
+      $BIN serve --dev --config w15-dup.yaml > w15-dup.log 2>&1
+      RC=$?
+      if [ $RC -ne 0 ]; then
+        pass "port-in-use on :9000 -> fatal startup (exit $RC)"
+      else
+        fail "port-in-use accepted — expected fatal bind error"
+      fi
+      rm -f w15-dup.yaml w15-dup.db w15-dup.log
+    fi
+
+    kill $W15_PID 2>/dev/null || true
+    wait $W15_PID 2>/dev/null || true
+    kill_port 8090
+    kill_port 9000
+    rm -f w15.yaml w15.db w15.db-wal w15.db-shm w15-server.log
+  fi
+
+  kill $UPSTREAM_PID 2>/dev/null || true
+  kill_port 9001
+  rm -f upstream.log upstream72.py
+fi
+
+# --- 73: W15 standalone shark proxy + JWT verify -----------------------------
+section "73: W15 standalone shark proxy JWT verify"
+
+if ! command -v python3 >/dev/null 2>&1; then
+  note "section 73 skipped: python3 not available"
+else
+  kill_port 9002
+  kill_port 9003
+
+  # Toy upstream on :9003.
+  cat > upstream73.py <<'PY'
+import http.server
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+    def log_message(self, *a): pass
+http.server.HTTPServer(("127.0.0.1", 9003), H).serve_forever()
+PY
+  python3 upstream73.py > upstream73.log 2>&1 &
+  UP73_PID=$!
+
+  for _ in $(seq 1 20); do
+    curl -sf http://127.0.0.1:9003/ >/dev/null 2>&1 && break
+    sleep 0.1
+  done
+
+  # Rules file requiring authentication on all paths.
+  cat > rules73.yaml <<EOF
+rules:
+  - path: /*
+    require: authenticated
+EOF
+
+  $BIN proxy --upstream http://127.0.0.1:9003 --port 9002 \
+    --auth $BASE --rules rules73.yaml > proxy73.log 2>&1 &
+  PROXY73_PID=$!
+
+  # Wait for bind.
+  UP=0
+  for _ in $(seq 1 30); do
+    curl -s -o /dev/null http://127.0.0.1:9002/ && { UP=1; break; }
+    sleep 0.2
+  done
+
+  if [ $UP -ne 1 ]; then
+    cat proxy73.log | tail -30
+    fail "standalone proxy did not start on :9002"
+  else
+    pass "standalone proxy bound on :9002, JWKS fetched from $BASE"
+
+    # No token -> 403 (anonymous fails authenticated rule).
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9002/)
+    [ "$CODE" = "403" ] || [ "$CODE" = "401" ] \
+      && pass "no auth -> $CODE (denied)" \
+      || fail "no auth -> $CODE (expected 401/403)"
+
+    # $TOKEN was minted at signup in §2. It's an RS256 session JWT signed
+    # by the same shark instance whose JWKS the standalone proxy cached.
+    if [ -n "${TOKEN:-}" ]; then
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9002/)
+      [ "$CODE" = "200" ] && pass "valid JWT -> 200" \
+        || fail "valid JWT -> $CODE (expected 200)"
+
+      # Tampered token: flip a byte in the signature.
+      TAMPERED="${TOKEN%??}aa"
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer $TAMPERED" http://127.0.0.1:9002/)
+      [ "$CODE" = "401" ] && pass "tampered JWT -> 401" \
+        || fail "tampered JWT -> $CODE (expected 401)"
+
+      # Bogus token structure.
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer not.a.jwt" http://127.0.0.1:9002/)
+      [ "$CODE" = "401" ] && pass "malformed JWT -> 401" \
+        || fail "malformed JWT -> $CODE (expected 401)"
+    else
+      note "TOKEN not captured from §2 — skipping valid-JWT assertion"
+    fi
+
+    # Help text no longer carries the MVP caveat.
+    HELP=$($BIN proxy --help 2>&1)
+    if echo "$HELP" | grep -qi "MVP scope"; then
+      fail "proxy --help still contains MVP-scope caveat"
+    else
+      pass "proxy --help no longer warns MVP-scope"
+    fi
+  fi
+
+  kill $PROXY73_PID 2>/dev/null || true
+  wait $PROXY73_PID 2>/dev/null || true
+  kill $UP73_PID 2>/dev/null || true
+  kill_port 9002
+  kill_port 9003
+  rm -f rules73.yaml proxy73.log upstream73.log upstream73.py
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
