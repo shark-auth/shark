@@ -2509,13 +2509,13 @@ EOF
       [ "$CODE" = "200" ] && pass "anonymous /public/* -> 200" \
         || fail "anonymous /public/* -> $CODE (expected 200)"
 
-      # Anonymous on protected path -> 403 (rules engine denies — this is
-      # W15's required behaviour for authenticated rules on the proxy
-      # listener; 401 would require a configured login redirect).
+      # Anonymous on protected path -> 401 per spec (unauthenticated
+      # callers denied by require:authenticated rules get 401; 403 is
+      # reserved for authenticated-but-unauthorized).
       CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/secret)
-      [ "$CODE" = "403" ] || [ "$CODE" = "401" ] \
-        && pass "anonymous /secret -> $CODE (denied)" \
-        || fail "anonymous /secret -> $CODE (expected 401/403)"
+      [ "$CODE" = "401" ] \
+        && pass "anonymous /secret -> 401 (unauth)" \
+        || fail "anonymous /secret -> $CODE (expected 401)"
 
       # Admin port still works.
       CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/healthz)
@@ -2615,11 +2615,11 @@ EOF
   else
     pass "standalone proxy bound on :9002, JWKS fetched from $BASE"
 
-    # No token -> 403 (anonymous fails authenticated rule).
+    # No token -> 401 (anonymous fails authenticated rule, per spec).
     CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9002/)
-    [ "$CODE" = "403" ] || [ "$CODE" = "401" ] \
-      && pass "no auth -> $CODE (denied)" \
-      || fail "no auth -> $CODE (expected 401/403)"
+    [ "$CODE" = "401" ] \
+      && pass "no auth -> 401 (unauth)" \
+      || fail "no auth -> $CODE (expected 401)"
 
     # $TOKEN was minted at signup in §2. It's an RS256 session JWT signed
     # by the same shark instance whose JWKS the standalone proxy cached.

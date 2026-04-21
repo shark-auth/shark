@@ -156,7 +156,15 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"agent_id", id.AgentID,
 			)
 			w.Header().Set(HeaderDenyReason, decision.Reason)
-			http.Error(w, "forbidden: "+decision.Reason, http.StatusForbidden)
+			// W15b: unauthenticated callers get 401 — the spec semantics
+			// ("send credentials to proceed"). 403 is reserved for
+			// authenticated-but-unauthorized (authenticated caller missing
+			// a role, scope, or permission the rule demands).
+			status := http.StatusForbidden
+			if isAnonymous(id) {
+				status = http.StatusUnauthorized
+			}
+			http.Error(w, statusText(status)+": "+decision.Reason, status)
 			return
 		}
 	}
@@ -219,6 +227,27 @@ func (p *ReverseProxy) onUpstreamError(w http.ResponseWriter, r *http.Request, e
 		)
 	}
 	http.Error(w, "upstream unreachable", http.StatusBadGateway)
+}
+
+// isAnonymous reports whether id carries no authenticated principal.
+// Used by the deny path to distinguish "unauthenticated" (401) from
+// "authenticated-but-unauthorized" (403).
+func isAnonymous(id Identity) bool {
+	return id.UserID == "" && id.AgentID == ""
+}
+
+// statusText is a small helper that returns a canonical English phrase
+// for the few statuses the deny path emits, so callers don't have to
+// switch on status codes inline.
+func statusText(code int) string {
+	switch code {
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	default:
+		return http.StatusText(code)
+	}
 }
 
 // effectiveTimeout returns the timeout actually applied to outbound

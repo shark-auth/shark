@@ -423,15 +423,18 @@ func TestReverseProxy_DenyWritesDeniedResponse(t *testing.T) {
 	rec := httptest.NewRecorder()
 	p.ServeHTTP(rec, newGetReq("/anything"))
 
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("status: got %d, want 403", rec.Code)
+	// Default-deny for an anonymous caller with no matching rule is treated
+	// as "authentication required" (W15b): unauthenticated callers get 401,
+	// not 403.
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want 401", rec.Code)
 	}
 	if got := rec.Header().Get(HeaderDenyReason); got == "" {
 		t.Error("X-Shark-Deny-Reason header should be set on deny")
 	}
 	body, _ := io.ReadAll(rec.Body)
-	if !strings.Contains(string(body), "forbidden") {
-		t.Errorf("body should mention forbidden, got %q", body)
+	if !strings.Contains(string(body), "unauthorized") {
+		t.Errorf("body should mention unauthorized, got %q", body)
 	}
 	if atomic.LoadInt32(&hits) != 0 {
 		t.Error("upstream must not be contacted when denied")
@@ -492,9 +495,9 @@ func TestReverseProxy_EngineNilPassthrough(t *testing.T) {
 }
 
 func TestReverseProxy_DenyReasonInHeader(t *testing.T) {
-	// Engine rule requires role:admin; caller is anonymous — deny with a
-	// specific reason that should show up in the response header for
-	// operator-facing diagnostics.
+	// Engine rule requires role:admin; caller is an authenticated user who
+	// lacks the admin role. 403 is the correct status (authenticated-but-
+	// unauthorized) and the deny reason should surface in the header.
 	var hits int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)
@@ -513,7 +516,9 @@ func TestReverseProxy_DenyReasonInHeader(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	p.ServeHTTP(rec, newGetReq("/admin/dash"))
+	req := newGetReq("/admin/dash")
+	req = req.WithContext(WithIdentity(req.Context(), Identity{UserID: "u1", UserRoles: []string{"user"}}))
+	p.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("status: got %d, want 403", rec.Code)

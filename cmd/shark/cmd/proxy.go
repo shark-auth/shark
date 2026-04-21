@@ -51,7 +51,7 @@ Authorization: Bearer <jwt> is verified on every request against the
 auth server's /.well-known/jwks.json, cached in-memory with a 15-minute
 refresh (plus an eager refresh on an unknown kid). Requests without a
 valid JWT are treated as anonymous; rules with require:authenticated
-will therefore return 403.`,
+will therefore return 401.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if proxyUpstream == "" {
 			return errors.New("--upstream is required")
@@ -157,7 +157,7 @@ will therefore return 403.`,
 // loadProxyRulesFile compiles the rule list at path into a proxy.Engine.
 // An empty path is permitted and yields an engine with no rules —
 // effectively "deny everything via the default-deny fall-through", which
-// matches the safe-by-default behavior for the MVP anonymous-only mode.
+// matches the safe-by-default behavior for the standalone proxy.
 func loadProxyRulesFile(path string) (*proxy.Engine, error) {
 	if path == "" {
 		return proxy.NewEngine(nil)

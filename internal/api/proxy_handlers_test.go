@@ -390,8 +390,11 @@ func TestProxyIntegration_AuthRoutesBypassProxy(t *testing.T) {
 	}
 }
 
-func TestProxyIntegration_DeniedRequestReturns403(t *testing.T) {
-	// No rules at all → every path falls through to default-deny.
+func TestProxyIntegration_DeniedAnonymousReturns401(t *testing.T) {
+	// No rules at all → every path falls through to default-deny. The caller
+	// is anonymous (no cookie, no bearer) so the proxy translates the deny
+	// into a 401 per W15b ("authentication required" semantics — 403 is
+	// reserved for authenticated-but-unauthorized).
 	rules := []config.ProxyRule{}
 	ts, _, _ := newProxyTestServer(t, rules)
 
@@ -400,8 +403,8 @@ func TestProxyIntegration_DeniedRequestReturns403(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
 	}
 	if reason := resp.Header.Get("X-Shark-Deny-Reason"); reason == "" {
 		t.Fatalf("missing X-Shark-Deny-Reason header")

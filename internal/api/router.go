@@ -758,8 +758,9 @@ func (s *Server) initProxy() {
 // BreakerResolver composing JWT + live-session resolvers) and stashes it
 // on the request context so ReverseProxy.ServeHTTP can read it. On any
 // resolve error we treat the request as anonymous — the rules engine
-// will deny if the matched rule requires authentication, producing a
-// 403 rather than an opaque 401.
+// will deny if the matched rule requires authentication, and the proxy
+// will translate that into a 401 (unauthenticated) or 403 (authenticated-
+// but-unauthorized) based on the resolved identity.
 func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
 	return s.ProxyAuthMiddlewareFor(s.ProxyBreaker)(next)
 }
