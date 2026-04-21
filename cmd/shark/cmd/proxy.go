@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,10 +19,12 @@ import (
 )
 
 var (
-	proxyUpstream  string
-	proxyPort      int
-	proxyAuthBase  string
-	proxyRulesFile string
+	proxyUpstream   string
+	proxyPort       int
+	proxyAuthBase   string
+	proxyRulesFile  string
+	proxyAudiences  []string
+	proxyIssuer     string
 )
 
 // proxyRulesFileSpec mirrors the rule YAML shape accepted by the shared
@@ -58,6 +61,17 @@ will therefore return 401.`,
 		}
 		if proxyAuthBase == "" {
 			return errors.New("--auth is required (Shark auth base URL)")
+		}
+		// W15c: audience + issuer are mandatory for the standalone proxy.
+		// golang-jwt v5 does NOT validate aud/iss unless explicitly opted
+		// in; accepting a token from the auth server for a different
+		// audience or a different issuer would be a CVE-shape bug.
+		if len(proxyAudiences) == 0 {
+			return errors.New("--audience is required (repeatable; at least one expected audience)")
+		}
+		expectedIssuer := strings.TrimRight(proxyIssuer, "/")
+		if expectedIssuer == "" {
+			expectedIssuer = strings.TrimRight(proxyAuthBase, "/")
 		}
 
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -100,6 +114,8 @@ will therefore return 401.`,
 		// token short-circuits to 401 before the rules engine runs so
 		// callers get a clear error rather than an opaque forbidden.
 		jwks := newJWKSCache(proxyAuthBase, logger)
+		jwks.expectedAudiences = proxyAudiences
+		jwks.expectedIssuer = expectedIssuer
 		if err := jwks.Start(ctx); err != nil {
 			return fmt.Errorf("jwks: %w", err)
 		}
@@ -188,6 +204,13 @@ func init() {
 	proxyCmd.Flags().IntVar(&proxyPort, "port", 8081, "port to listen on")
 	proxyCmd.Flags().StringVar(&proxyAuthBase, "auth", "", "Shark auth base URL for health monitoring (required)")
 	proxyCmd.Flags().StringVar(&proxyRulesFile, "rules", "", "path to a YAML file with a 'rules:' list (optional)")
+	// W15c: aud + iss validation flags. Audience is repeatable — a token is
+	// accepted if any of its aud values matches any expected audience.
+	// Issuer defaults to --auth with trailing slash trimmed so operators
+	// running shark auth + shark proxy as a matched pair don't need to set
+	// both flags explicitly.
+	proxyCmd.Flags().StringSliceVar(&proxyAudiences, "audience", nil, "expected JWT audience (aud); repeatable, at least one required")
+	proxyCmd.Flags().StringVar(&proxyIssuer, "issuer", "", "expected JWT issuer (iss); defaults to --auth with trailing slash trimmed")
 
 	root.AddCommand(proxyCmd)
 }

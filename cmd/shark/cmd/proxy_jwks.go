@@ -35,6 +35,16 @@ type jwksCache struct {
 	refreshInterval time.Duration
 	logger          *slog.Logger
 
+	// W15c: aud + iss are NOT validated by golang-jwt/v5 automatically on
+	// MapClaims — only exp/nbf/iat are. Callers must populate these so
+	// verifyBearer can pass WithAudience + WithIssuer to the parser. A
+	// token whose aud isn't in expectedAudiences or whose iss differs
+	// from expectedIssuer is rejected. Empty expectedAudiences disables
+	// the aud check (not recommended — the proxy CLI requires --audience
+	// at startup); empty expectedIssuer disables the iss check.
+	expectedAudiences []string
+	expectedIssuer    string
+
 	mu       sync.RWMutex
 	keys     map[string]any // kid -> *rsa.PublicKey or *ecdsa.PublicKey
 	fetched  time.Time
@@ -215,9 +225,24 @@ func (c *jwksCache) verifyBearer(ctx context.Context, authHeader string) (proxy.
 	}
 	tok := strings.TrimPrefix(authHeader, "Bearer ")
 
-	parser := jwtlib.NewParser(
+	opts := []jwtlib.ParserOption{
 		jwtlib.WithValidMethods([]string{"RS256", "ES256"}),
-	)
+	}
+	// W15c: audience + issuer validation. golang-jwt v5 only enforces
+	// these when explicitly opted in via WithAudience/WithIssuer. Without
+	// them a valid token minted by the auth server for a different
+	// audience or issuer would be accepted — CVE-shape.
+	//
+	// Audience is checked as a set-intersection: the token is accepted
+	// when any of its `aud` values matches any of the expected audiences.
+	// Implemented by looping over the configured audiences and using
+	// WithAudience one-at-a-time so multi-audience tokens Just Work.
+	// (jwt/v5 WithAudience accepts a single string; passing them all in
+	// one call would require ALL to match, which is wrong.)
+	if c.expectedIssuer != "" {
+		opts = append(opts, jwtlib.WithIssuer(c.expectedIssuer))
+	}
+	parser := jwtlib.NewParser(opts...)
 	parsed, err := parser.Parse(tok, func(t *jwtlib.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
 		if kid == "" {
@@ -235,6 +260,21 @@ func (c *jwksCache) verifyBearer(ctx context.Context, authHeader string) (proxy.
 	claims, ok := parsed.Claims.(jwtlib.MapClaims)
 	if !ok {
 		return proxy.Identity{}, errors.New("unexpected claims type")
+	}
+
+	// W15c: manual audience check. We do NOT use jwtlib.WithAudience
+	// because it only accepts one expected value and requires it to
+	// appear in the token's aud claim; with multiple configured
+	// audiences we'd need set-intersection semantics instead. Accept
+	// the token when ANY token aud matches ANY configured audience.
+	if len(c.expectedAudiences) > 0 {
+		tokenAuds, err := extractAudiences(claims)
+		if err != nil {
+			return proxy.Identity{}, err
+		}
+		if !audienceMatches(tokenAuds, c.expectedAudiences) {
+			return proxy.Identity{}, fmt.Errorf("audience mismatch: token aud=%v, expected one of %v", tokenAuds, c.expectedAudiences)
+		}
 	}
 
 	id := proxy.Identity{AuthMethod: "jwt"}
@@ -262,4 +302,50 @@ func (c *jwksCache) verifyBearer(ctx context.Context, authHeader string) (proxy.
 		}
 	}
 	return id, nil
+}
+
+// extractAudiences pulls the aud claim from a MapClaims into a []string.
+// JWT allows aud to be either a single string or a list of strings (RFC
+// 7519 §4.1.3). Returns an error if aud is missing or malformed so the
+// caller can reject rather than silently treat a token with no aud as
+// matching — which would defeat the purpose of the W15c check.
+func extractAudiences(claims jwtlib.MapClaims) ([]string, error) {
+	raw, ok := claims["aud"]
+	if !ok {
+		return nil, errors.New("aud claim missing")
+	}
+	switch v := raw.(type) {
+	case string:
+		if v == "" {
+			return nil, errors.New("aud claim empty")
+		}
+		return []string{v}, nil
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		if len(out) == 0 {
+			return nil, errors.New("aud claim has no string values")
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("aud claim has unexpected type %T", raw)
+	}
+}
+
+// audienceMatches returns true when any value in tokenAuds appears in
+// expectedAuds. Set-intersection semantics — the token is "good enough"
+// if any of its audiences is one the proxy was told to trust.
+func audienceMatches(tokenAuds, expectedAuds []string) bool {
+	for _, t := range tokenAuds {
+		for _, e := range expectedAuds {
+			if t == e {
+				return true
+			}
+		}
+	}
+	return false
 }
