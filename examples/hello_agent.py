@@ -5,7 +5,9 @@ Flow
 ----
 1. Mint an access token via the OAuth 2.1 client_credentials grant.
 2. Generate a DPoP proof JWT bound to a hypothetical resource call.
-3. Introspect the token against the server (RFC 7662) to verify claims.
+3. Decode + verify the access token locally with ``decode_agent_token``
+   against ``/.well-known/jwks.json`` — the canonical SharkAuth promise:
+   "OSS MCP-native agent auth — decode tokens in 3 lines."
 4. Print structured step output + exit 0 on full success.
 
 This demo deliberately skips the Token Vault call (which requires a
@@ -21,7 +23,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from shark_auth import DPoPProver
+from shark_auth import DPoPProver, decode_agent_token
 
 
 def _iso(ts: int) -> str:
@@ -37,19 +39,6 @@ def mint_token(auth_url: str, client_id: str, client_secret: str, scope: str) ->
     resp = requests.post(
         url,
         data={"grant_type": "client_credentials", "scope": scope},
-        auth=(client_id, client_secret),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def introspect(auth_url: str, client_id: str, client_secret: str, token: str) -> dict:
-    url = urljoin(auth_url + "/", "oauth/introspect")
-    resp = requests.post(
-        url,
-        data={"token": token},
         auth=(client_id, client_secret),
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         timeout=10,
@@ -90,19 +79,29 @@ def main() -> int:
         )
         print(f"       jkt={prover.jkt}  proof_len={len(proof)}")
 
-        step(3, total, "Introspecting token against /oauth/introspect (RFC 7662) ...")
-        claims = introspect(args.auth, args.client_id, args.client_secret, access_token)
-        if not claims.get("active"):
-            print(f"ERROR: token not active: {json.dumps(claims)}", file=sys.stderr)
-            return 2
+        step(
+            3,
+            total,
+            "Decoding token locally via decode_agent_token + /.well-known/jwks.json ...",
+        )
+        jwks_url = urljoin(args.auth + "/", ".well-known/jwks.json")
+        # Server uses the configured base URL as both issuer and (when no
+        # explicit aud is requested) audience. For client_credentials the
+        # subject is the client_id itself.
+        claims = decode_agent_token(
+            access_token,
+            jwks_url,
+            expected_issuer=args.auth,
+            expected_audience=args.client_id,
+        )
         print(
-            f"       sub={claims.get('sub') or claims.get('client_id')} "
-            f"iss={claims.get('iss')} "
-            f"exp={_iso(claims['exp'])} "
-            f"scope={claims.get('scope')}"
+            f"       sub={claims.sub} "
+            f"iss={claims.iss} "
+            f"exp={_iso(claims.exp)} "
+            f"scope={claims.scope}"
         )
 
-        step(4, total, "All checks passed. Token minted, DPoP proof built, claims verified.")
+        step(4, total, "All checks passed. Token minted, DPoP proof built, JWT decoded.")
         return 0
     except requests.HTTPError as exc:
         print(f"HTTP error: {exc} — body={exc.response.text[:400]}", file=sys.stderr)

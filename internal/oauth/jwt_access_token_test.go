@@ -82,6 +82,20 @@ func TestJWTAccessToken_Shape(t *testing.T) {
 	if got, _ := claims["sub"].(string); got != "jwt-shape-client" {
 		t.Errorf("expected sub=jwt-shape-client (client_credentials), got %q", got)
 	}
+	// aud must default to client_id (Auth0/Okta convention) when no
+	// explicit resource/audience was requested.
+	switch a := claims["aud"].(type) {
+	case []interface{}:
+		if len(a) != 1 || a[0] != "jwt-shape-client" {
+			t.Errorf("expected aud=[jwt-shape-client], got %v", a)
+		}
+	case string:
+		if a != "jwt-shape-client" {
+			t.Errorf("expected aud=jwt-shape-client, got %q", a)
+		}
+	default:
+		t.Errorf("unexpected aud type %T: %v", claims["aud"], claims["aud"])
+	}
 	if got, _ := claims["scope"].(string); !strings.Contains(got, "openid") {
 		t.Errorf("expected scope to contain openid, got %q", got)
 	}

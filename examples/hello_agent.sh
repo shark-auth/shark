@@ -84,7 +84,13 @@ fi
 echo "      client_id=$CID"
 
 echo "[5/6] Running examples/hello_agent.py ..."
-if ! python3 "$ROOT/examples/hello_agent.py" \
+# Prefer the SDK's own venv if present so `import shark_auth` works without
+# the user installing the SDK globally. Falls back to system python3.
+PY="python3"
+if [[ -x "$ROOT/sdk/python/.venv/bin/python" ]]; then
+    PY="$ROOT/sdk/python/.venv/bin/python"
+fi
+if ! "$PY" "$ROOT/examples/hello_agent.py" \
     --auth "$AUTH_URL" \
     --client-id "$CID" \
     --client-secret "$CSECRET"; then

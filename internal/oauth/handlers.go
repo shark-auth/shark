@@ -103,6 +103,23 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		ar.GrantScope(scope)
 	}
 
+	// DX1: ensure the JWT access token has a meaningful aud claim. fosite
+	// only fills GrantedAudience from the explicit `resource` (RFC 8707) or
+	// `audience` (RFC 8693) request params. When the caller didn't request
+	// any, fall back to the client_id — same convention Auth0/Okta use for
+	// machine-to-machine tokens — so SDKs can verify aud without bespoke
+	// config.
+	if len(ar.GetGrantedAudience()) == 0 {
+		for _, aud := range ar.GetRequestedAudience() {
+			ar.GrantAudience(aud)
+		}
+		if len(ar.GetGrantedAudience()) == 0 {
+			if cid := ar.GetClient().GetID(); cid != "" {
+				ar.GrantAudience(cid)
+			}
+		}
+	}
+
 	// DX1: enrich the JWT session with client_id and (if present) cnf.jkt
 	// before the JWT access-token is signed. These claims land in the
 	// RFC 7519 token body and are verifiable by any SDK using
@@ -117,9 +134,11 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 				jc.Extra["client_id"] = cid
 			}
 			// For client_credentials, subject is typically the client itself.
+			// We populate this on the JWT claims only — NOT the DefaultSession
+			// Subject, which the FositeStore persists into oauth_tokens.user_id
+			// (a FK into users). Setting client_id there would FK-fail.
 			if jc.Subject == "" {
 				jc.Subject = ar.GetClient().GetID()
-				sharkSess.DefaultSession.Subject = jc.Subject
 			}
 			if dpopJKT != "" {
 				jc.Extra["cnf"] = map[string]interface{}{"jkt": dpopJKT}
