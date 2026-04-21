@@ -395,6 +395,18 @@ function FlowEditor({ id, onBack }) {
       setSelectedPath([next.steps.length - 1]);
       return;
     }
+    // If selectedPath ends with a branch name string (e.g. [0, 'then']) the user
+    // has selected an empty (or whole) branch — append directly into that branch.
+    if (typeof selectedPath[selectedPath.length - 1] === 'string') {
+      const branchName = selectedPath[selectedPath.length - 1]; // 'then' | 'else'
+      const parentPath = selectedPath.slice(0, -1);             // e.g. [0]
+      const parentStep = getStepAt(next.steps, parentPath);
+      const branchList = parentStep[branchName] = parentStep[branchName] || [];
+      branchList.push(cfg);
+      setDraft(next);
+      setSelectedPath([...selectedPath, branchList.length - 1]);
+      return;
+    }
     // Insert after the selected node at its level
     const { list, index } = getStepsRef(next.steps, selectedPath);
     list.splice(index + 1, 0, cfg);
@@ -860,6 +872,11 @@ function CanvasList({ steps, path, selectedPath, setSelectedPath, onDelete, onDu
 }
 
 function BranchBlock({ label, steps, path, selectedPath, setSelectedPath, onDelete, onDuplicate, onMove }) {
+  // A branch is "selected" when selectedPath exactly equals path (e.g. [0, 'then']).
+  const branchSelected = selectedPath &&
+    selectedPath.length === path.length &&
+    selectedPath.every((v, i) => v === path[i]);
+
   return (
     <div style={{
       marginTop: 8,
@@ -870,7 +887,19 @@ function BranchBlock({ label, steps, path, selectedPath, setSelectedPath, onDele
         {label}
       </div>
       {steps.length === 0 ? (
-        <div className="faint" style={{ fontSize: 11, padding: '4px 0' }}>(no steps)</div>
+        // Clicking the empty-branch placeholder selects this branch so the
+        // palette's next click inserts the first step here (not at top level).
+        <div
+          onClick={() => setSelectedPath(path)}
+          style={{
+            fontSize: 11, padding: '4px 6px', borderRadius: 4, cursor: 'pointer',
+            color: branchSelected ? 'var(--fg-muted)' : 'var(--fg-faint)',
+            border: branchSelected ? '1px dashed var(--fg)' : '1px dashed transparent',
+            display: 'inline-block',
+          }}
+        >
+          {branchSelected ? 'branch selected — pick a step from the palette' : '(no steps — click to add)'}
+        </div>
       ) : (
         <CanvasList
           steps={steps}

@@ -424,6 +424,183 @@ func TestSignup_FlowBlocksUnverifiedEmail(t *testing.T) {
 	}
 }
 
+// TestUpdateFlow_ConditionalBranchesPreserved asserts that nested then/else
+// branches survive a full PATCH → GET round-trip without data loss.
+//
+// Acceptance criteria:
+//  1. Conditional + webhook in then: PATCH stores it, GET reads it back intact.
+//  2. else branch is empty → omitted from response (omitempty) but not corrupted.
+//  3. Multi-level nesting: conditional inside then branch also survives.
+//  4. Explicit else steps also survive.
+func TestUpdateFlow_ConditionalBranchesPreserved(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	// --- Sub-test 1: conditional with webhook in then, empty else ---
+	t.Run("then_only", func(t *testing.T) {
+		id, cr := createFlowViaAPI(t, ts, map[string]any{
+			"name":    "Conditional Then-Only",
+			"trigger": "signup",
+			"steps": []map[string]any{
+				{
+					"type":      "conditional",
+					"condition": "user.email_domain == 'acme.com'",
+					"then": []map[string]any{
+						{"type": "webhook", "config": map[string]any{"url": "https://hooks.example.com/notify"}},
+					},
+				},
+			},
+			"enabled":  false,
+			"priority": 10,
+		})
+		if cr.StatusCode != http.StatusCreated {
+			t.Fatalf("create status=%d", cr.StatusCode)
+		}
+
+		// PATCH — resend same steps (simulates builder save).
+		patchResp := ts.PatchJSONWithAdminKey("/api/v1/admin/flows/"+id, map[string]any{
+			"steps": []map[string]any{
+				{
+					"type":      "conditional",
+					"condition": "user.email_domain == 'acme.com'",
+					"then": []map[string]any{
+						{"type": "webhook", "config": map[string]any{"url": "https://hooks.example.com/notify"}},
+					},
+					"else": []map[string]any{}, // frontend always sends else even when empty
+				},
+			},
+		})
+		if patchResp.StatusCode != http.StatusOK {
+			var e map[string]any
+			ts.DecodeJSON(patchResp, &e)
+			t.Fatalf("patch status=%d body=%+v", patchResp.StatusCode, e)
+		}
+
+		// GET and verify then-branch intact.
+		var got map[string]any
+		ts.DecodeJSON(ts.GetWithAdminKey("/api/v1/admin/flows/"+id), &got)
+
+		steps := got["steps"].([]any)
+		if len(steps) != 1 {
+			t.Fatalf("want 1 step, got %d", len(steps))
+		}
+		cond := steps[0].(map[string]any)
+		if cond["type"] != "conditional" {
+			t.Fatalf("steps[0].type=%v, want conditional", cond["type"])
+		}
+		then, ok := cond["then"].([]any)
+		if !ok || len(then) != 1 {
+			t.Fatalf("steps[0].then: got %v (len %d), want 1 webhook step", cond["then"], len(then))
+		}
+		if then[0].(map[string]any)["type"] != "webhook" {
+			t.Fatalf("then[0].type=%v, want webhook", then[0].(map[string]any)["type"])
+		}
+		// else must be absent or empty — must NOT be a non-empty slice.
+		if elseRaw, hasElse := cond["else"]; hasElse {
+			elseSlice, ok := elseRaw.([]any)
+			if !ok || len(elseSlice) != 0 {
+				t.Fatalf("steps[0].else should be absent/empty, got %v", elseRaw)
+			}
+		}
+	})
+
+	// --- Sub-test 2: both branches populated ---
+	t.Run("then_and_else", func(t *testing.T) {
+		id, cr := createFlowViaAPI(t, ts, map[string]any{
+			"name":    "Conditional Both Branches",
+			"trigger": "login",
+			"steps": []map[string]any{
+				{
+					"type":      "conditional",
+					"condition": "user.email_domain == 'acme.com'",
+					"then": []map[string]any{
+						{"type": "webhook", "config": map[string]any{"url": "https://hooks.example.com/acme"}},
+					},
+					"else": []map[string]any{
+						{"type": "redirect", "config": map[string]any{"url": "https://example.com/onboarding"}},
+					},
+				},
+			},
+			"enabled":  false,
+			"priority": 5,
+		})
+		if cr.StatusCode != http.StatusCreated {
+			t.Fatalf("create status=%d", cr.StatusCode)
+		}
+
+		var got map[string]any
+		ts.DecodeJSON(ts.GetWithAdminKey("/api/v1/admin/flows/"+id), &got)
+
+		steps := got["steps"].([]any)
+		cond := steps[0].(map[string]any)
+		then := cond["then"].([]any)
+		elseBranch := cond["else"].([]any)
+
+		if len(then) != 1 || then[0].(map[string]any)["type"] != "webhook" {
+			t.Fatalf("then branch wrong: %v", then)
+		}
+		if len(elseBranch) != 1 || elseBranch[0].(map[string]any)["type"] != "redirect" {
+			t.Fatalf("else branch wrong: %v", elseBranch)
+		}
+	})
+
+	// --- Sub-test 3: multi-level nesting (conditional inside conditional's then) ---
+	t.Run("nested_conditional", func(t *testing.T) {
+		id, cr := createFlowViaAPI(t, ts, map[string]any{
+			"name":    "Nested Conditional",
+			"trigger": "signup",
+			"steps": []map[string]any{
+				{
+					"type":      "conditional",
+					"condition": "user.email_domain == 'acme.com'",
+					"then": []map[string]any{
+						{
+							"type":      "conditional",
+							"condition": "user.email_verified == true",
+							"then": []map[string]any{
+								{"type": "webhook", "config": map[string]any{"url": "https://hooks.example.com/deep"}},
+							},
+						},
+					},
+				},
+			},
+			"enabled":  false,
+			"priority": 1,
+		})
+		if cr.StatusCode != http.StatusCreated {
+			t.Fatalf("create status=%d", cr.StatusCode)
+		}
+
+		// PATCH round-trip.
+		patchResp := ts.PatchJSONWithAdminKey("/api/v1/admin/flows/"+id, map[string]any{
+			"enabled": false, // no-op patch — triggers re-fetch
+		})
+		if patchResp.StatusCode != http.StatusOK {
+			t.Fatalf("patch status=%d", patchResp.StatusCode)
+		}
+
+		var got map[string]any
+		ts.DecodeJSON(ts.GetWithAdminKey("/api/v1/admin/flows/"+id), &got)
+
+		steps := got["steps"].([]any)
+		outer := steps[0].(map[string]any)
+		if outer["type"] != "conditional" {
+			t.Fatalf("outer type=%v", outer["type"])
+		}
+		outerThen := outer["then"].([]any)
+		if len(outerThen) != 1 {
+			t.Fatalf("outer then len=%d want 1", len(outerThen))
+		}
+		inner := outerThen[0].(map[string]any)
+		if inner["type"] != "conditional" {
+			t.Fatalf("inner type=%v want conditional", inner["type"])
+		}
+		innerThen := inner["then"].([]any)
+		if len(innerThen) != 1 || innerThen[0].(map[string]any)["type"] != "webhook" {
+			t.Fatalf("inner then webhook missing: %v", innerThen)
+		}
+	})
+}
+
 func TestLogin_FlowRedirectsToMFA(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
