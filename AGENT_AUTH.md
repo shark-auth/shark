@@ -1,36 +1,65 @@
 # Shark Agent Auth — The Definitive Spec
 
 **Date:** 2026-04-15
-**Status:** Design spec — not yet implemented
+**Status:** MVP shipping (Waves A-E complete, 95% feature parity). Phase 6 next.
 **Goal:** Make Shark the best agent auth system in OSS, and the only one that's MCP-native, single-binary, and SQLite-compatible.
 
 ---
 
 ## Why This Matters
 
-- 48% of security professionals name agentic AI as 2026's leading attack vector
-- 93% of audited agent projects use unscoped API keys
-- 97% lack user consent flows
-- 0% implement per-agent identity mechanisms
-- Nobody in OSS has nailed agent auth yet. Auth0 charges 50% add-on. Okta is enterprise-only and not GA. Stytch has good MCP compliance but no first-class agent identity.
+Agents are proliferating faster than the auth primitives they need. Teams shipping AI agents today reach for patterns that predate the threat model: shared API keys, service accounts, or hand-rolled JWTs with whatever scope checks happen to survive the next refactor. None of those give you per-agent identity, consent, or an audit trail that can name which agent touched which resource.
 
-Shark can own this space by being the first OSS auth system where agents are first-class citizens with full MCP compatibility, running on a single binary with SQLite.
+Nobody in OSS has shipped a complete answer. The commercial options each have a gap:
+
+- **Auth0** — agent auth is a 50% pricing add-on ($53+/month). Not OSS. Not self-hosted.
+- **Okta Agent Gateway** — enterprise plan only, pricing undisclosed, not GA for most use cases.
+- **Stytch** — strong MCP compliance, but agents are M2M clients, not first-class identities. No Token Vault.
+- **Arcade** — excellent tool-calling and Token Vault story, but not a general-purpose auth server. No OAuth 2.1 AS.
+
+Shark is the only self-hosted, single-binary, OSS auth system where agents are first-class OAuth clients with their own credentials, scopes, audit trail, and Token Vault — running on SQLite with zero external dependencies.
+
+---
+
+## Implementation Status (2026-04-20)
+
+**Waves A–E complete.** All core agent-auth primitives ship in the single binary, tested and smoke-covered.
+
+**Shipped RFCs:**
+- RFC 6749 + 7636 — OAuth 2.1 + PKCE (authorization code + client credentials + refresh with rotation)
+- RFC 8414 — OAuth Authorization Server Metadata discovery
+- RFC 7591/7592 — Dynamic Client Registration + management
+- RFC 7662 — Token Introspection
+- RFC 7009 — Token Revocation
+- RFC 8628 — Device Authorization Grant (headless agents)
+- RFC 9449 — DPoP proof-of-possession (JWK validation, JTI replay cache, thumbprint verify, ath claim)
+- RFC 8693 — Token Exchange with delegation chains (act claim) + scope narrowing
+- RFC 8707 — Resource Indicators (audience-bound tokens)
+
+**Token Vault:** encrypted-at-rest OAuth token storage for third-party APIs, provider templates (Google, Slack, GitHub), auto-refresh with 30s leeway, per-user per-provider connections, admin dashboard CRUD.
+
+**Agent identity:** agents are first-class OAuth clients with their own credentials, scopes, and audit trail. Not user extensions. Agent CRUD via `/api/v1/agents` + dashboard.
+
+**Not yet shipped (tracked for post-launch):**
+- RFC 9396 Rich Authorization Requests — schema field exists, no request validation yet
+- RFC 9126 Pushed Authorization Requests
+- Step-up authorization
 
 ---
 
 ## Competitive Gap Analysis
 
-| Capability | Auth0 | Okta | Stytch | Arcade | **Shark (planned)** |
+| Capability | Auth0 | Okta | Stytch | Arcade | **Shark** |
 |---|---|---|---|---|---|
 | Agent as first-class identity | No (user extension) | Yes | No (M2M client) | No (tool-calling only) | **Yes** |
 | MCP-native | No | Yes (Agent Gateway) | Yes (Connected Apps) | Yes (runtime) | **Yes** |
 | OAuth 2.1 compliant | OAuth 2.0 + CIBA | Yes | Yes | Partial | **Yes** |
-| Token Vault (managed OAuth for 3rd-party APIs) | Yes (30+ apps) | Yes | No | Yes (zero-exposure) | **No (v2)** |
+| Token Vault (managed OAuth for 3rd-party APIs) | Yes (30+ apps) | Yes | No | Yes (zero-exposure) | **Yes (v1)** |
 | Human-in-the-loop consent | CIBA | TBD | OAuth consent UI | JIT approval gates | **Yes** |
 | Agent-to-agent delegation | No | No | Published guide | No | **Yes (RFC 8693)** |
 | Device flow (headless agents) | No | Unknown | No | No | **Yes (RFC 8628)** |
 | DPoP (proof-of-possession) | No | Unknown | No | No | **Yes (RFC 9449)** |
-| Per-tool permissions (RAR) | No | Dynamic policy | Scopes only | Per-tool scoping | **Yes (RFC 9396)** |
+| Per-tool permissions (RAR) | No | Dynamic policy | Scopes only | Per-tool scoping | **Partial (RFC 9396, schema ships, validation post-launch)** |
 | Audit trail (agent-specific) | Basic | Yes | Per-token | Per-action | **Yes (unified)** |
 | Self-hosted / OSS | No | No | No | No | **Yes** |
 | Single binary | No | No | No | No | **Yes** |
