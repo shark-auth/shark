@@ -1750,7 +1750,7 @@ echo "$AD_BODY" | jq -e '.mfa_enabled == false' >/dev/null && pass "response ass
 
 # Verify via GET that mfa_enabled is now false on the user record.
 USER_BODY=$(curl -s -H "Authorization: Bearer $ADMIN" $BASE/api/v1/users/$MFA_USER)
-echo "$USER_BODY" | jq -e '.mfaEnabled == false' >/dev/null && pass "GET user reflects mfa_enabled=false" || fail "user body: $USER_BODY"
+echo "$USER_BODY" | jq -e '.mfa_enabled == false' >/dev/null && pass "GET user reflects mfa_enabled=false" || fail "user body: $USER_BODY"
 
 # Audit log entry exists.
 if [ -f $DB ]; then
