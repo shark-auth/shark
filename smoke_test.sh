@@ -2703,6 +2703,127 @@ EOF
   rm -f rules73.yaml proxy73.log upstream73.log upstream73.py
 fi
 
+# --- 74: Branding + Email Templates + integration_mode (Phase A) -------------
+section "74. Branding CRUD"
+
+# GET default branding — primary_color seeded to #7c3aed.
+r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/branding")
+if echo "$r" | jq -e '.branding.primary_color == "#7c3aed"' > /dev/null 2>&1; then
+  pass "branding GET returns default primary #7c3aed"
+else
+  note "body: $r"
+  fail "branding GET default primary mismatch"
+fi
+
+# PATCH branding — set primary_color to #ff0000 and confirm via GET.
+curl -sS -X PATCH -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{"primary_color":"#ff0000"}' "$BASE/api/v1/admin/branding" > /dev/null
+r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/branding")
+if echo "$r" | jq -e '.branding.primary_color == "#ff0000"' > /dev/null 2>&1; then
+  pass "branding PATCH persists primary_color"
+else
+  note "body: $r"
+  fail "branding PATCH did not persist"
+fi
+
+# Logo upload must reject files >1MB.
+dd if=/dev/zero of=/tmp/shark_big_logo.png bs=1048576 count=2 2>/dev/null
+CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN" \
+  -F "logo=@/tmp/shark_big_logo.png" "$BASE/api/v1/admin/branding/logo")
+if [ "$CODE" = "400" ] || [ "$CODE" = "413" ]; then
+  pass "logo upload rejects >1MB ($CODE)"
+else
+  fail "logo upload >1MB returned $CODE (expected 400 or 413)"
+fi
+rm -f /tmp/shark_big_logo.png
+
+# Logo upload accepts a tiny valid PNG.
+printf '\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDAT\x18Wc\x00\x00\x00\x03\x00\x01\x8f\x8f\xa4\xa6\x00\x00\x00\x00IEND\xaeB\x60\x82' > /tmp/shark_tiny_logo.png
+r=$(curl -sS -X POST -H "Authorization: Bearer $ADMIN" \
+  -F "logo=@/tmp/shark_tiny_logo.png" "$BASE/api/v1/admin/branding/logo")
+if echo "$r" | jq -e '.logo_url | startswith("/assets/branding/")' > /dev/null 2>&1; then
+  pass "logo upload accepts tiny PNG, returns /assets/branding/ URL"
+else
+  note "body: $r"
+  fail "logo upload tiny PNG did not return expected logo_url"
+fi
+rm -f /tmp/shark_tiny_logo.png
+
+section "74b. Email Templates"
+
+# List returns 5 seeded templates.
+r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/email-templates")
+COUNT=$(echo "$r" | jq '.data | length')
+if [ "$COUNT" = "5" ]; then
+  pass "email-templates list returns 5 seeded templates"
+else
+  note "body: $r"
+  fail "email-templates list returned $COUNT (expected 5)"
+fi
+
+# PATCH magic_link subject.
+curl -sS -X PATCH -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{"subject":"Custom subject"}' "$BASE/api/v1/admin/email-templates/magic_link" > /dev/null
+r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/email-templates/magic_link")
+if echo "$r" | jq -e '.subject == "Custom subject"' > /dev/null 2>&1; then
+  pass "email template PATCH persists subject"
+else
+  note "body: $r"
+  fail "email template PATCH did not persist"
+fi
+
+# Preview returns structured response with our updated subject + rendered HTML.
+r=$(curl -sS -X POST -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{}' "$BASE/api/v1/admin/email-templates/magic_link/preview")
+if echo "$r" | jq -e '.subject == "Custom subject" and (.html | type == "string") and (.html | length > 0)' > /dev/null 2>&1; then
+  pass "email preview returns subject + html"
+else
+  note "body: $r"
+  fail "email preview missing subject or html"
+fi
+
+# Reset reverts to seeded default (subject contains "Sign in to").
+curl -sS -X POST -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/email-templates/magic_link/reset" > /dev/null
+r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/email-templates/magic_link")
+if echo "$r" | jq -e '.subject | contains("Sign in to")' > /dev/null 2>&1; then
+  pass "email template reset restores default subject"
+else
+  note "body: $r"
+  fail "email template reset did not restore default"
+fi
+
+section "74c. Application integration_mode"
+
+# Pick first app id from admin list. Route is /admin/apps (not /admin/applications);
+# response field is .data (list of applicationResponse).
+APPS=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps")
+APP_ID=$(echo "$APPS" | jq -r '.data[0].id // empty')
+if [ -n "$APP_ID" ]; then
+  pass "picked app id $APP_ID"
+
+  # PATCH integration_mode to components.
+  CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+    -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -d '{"integration_mode":"components"}' "$BASE/api/v1/admin/apps/$APP_ID")
+  if [ "$CODE" = "200" ] || [ "$CODE" = "204" ]; then
+    pass "integration_mode PATCH $CODE"
+  else
+    fail "integration_mode PATCH returned $CODE"
+  fi
+
+  # Snippet endpoint returns 3 snippets for react framework.
+  r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps/$APP_ID/snippet?framework=react")
+  if echo "$r" | jq -e '.snippets | length == 3' > /dev/null 2>&1; then
+    pass "snippet endpoint returns 3 React snippets"
+  else
+    note "body: $r"
+    fail "snippet endpoint did not return 3 React snippets"
+  fi
+else
+  note "body: $APPS"
+  fail "could not pick first application id for integration_mode test"
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
