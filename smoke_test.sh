@@ -2907,10 +2907,13 @@ if [ -n "$UID74E" ]; then
     # email must NOT fire a second time because MarkWelcomeEmailSent's
     # WHERE welcome_email_sent=0 guard now matches zero rows.
     sqlite3 "$DB" "UPDATE users SET email_verified=0 WHERE id='$UID74E'" 2>/dev/null
+    # Capture the id of the most-recent pre-resend verify email so we can pick
+    # the one that arrives AFTER this call (race-free vs created_at ordering).
+    PREV_ID=$(sqlite3 "$DB" "SELECT id FROM dev_emails WHERE to_addr='$E74E' AND subject NOT LIKE 'Welcome%' ORDER BY created_at DESC, id DESC LIMIT 1" 2>/dev/null)
     curl -sS -o /dev/null -X POST -H "Authorization: Bearer $T74E" \
       "$BASE/api/v1/auth/email/verify/send"
-    sleep 0.3
-    VERIFY_URL2=$(sqlite3 "$DB" "SELECT html FROM dev_emails WHERE to_addr='$E74E' AND subject NOT LIKE 'Welcome%' ORDER BY created_at DESC LIMIT 1" 2>/dev/null \
+    sleep 0.6
+    VERIFY_URL2=$(sqlite3 "$DB" "SELECT html FROM dev_emails WHERE to_addr='$E74E' AND subject NOT LIKE 'Welcome%' AND id != '$PREV_ID' ORDER BY created_at DESC, id DESC LIMIT 1" 2>/dev/null \
       | grep -oE 'http://localhost:8080/api/v1/auth/email/verify\?token=[A-Za-z0-9_-]+' | head -1)
     CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$VERIFY_URL2")
     [ "$CODE" = "200" ] && pass "74e second verify 200" || fail "74e second verify $CODE"
@@ -2929,6 +2932,68 @@ if [ -n "$UID74E" ]; then
 else
   note "body: $SU74E"
   fail "74e signup failed"
+fi
+
+section "74f. Logo upload + asset headers + SVG script rejection + delete"
+
+# Upload a tiny valid PNG again (§74's upload may have been long ago in flow).
+printf '\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDAT\x18Wc\x00\x00\x00\x03\x00\x01\x8f\x8f\xa4\xa6\x00\x00\x00\x00IEND\xaeB\x60\x82' > /tmp/shark_74f_logo.png
+r=$(curl -sS -X POST -H "Authorization: Bearer $ADMIN" \
+  -F "logo=@/tmp/shark_74f_logo.png" "$BASE/api/v1/admin/branding/logo")
+LOGO_URL=$(echo "$r" | jq -r '.logo_url // empty')
+LOGO_SHA=$(echo "$r" | jq -r '.logo_sha // empty')
+if [ -n "$LOGO_URL" ] && [ -n "$LOGO_SHA" ]; then
+  pass "74f logo upload returned logo_url + logo_sha"
+else
+  note "body: $r"
+  fail "74f logo upload did not return logo_url/sha"
+fi
+rm -f /tmp/shark_74f_logo.png
+
+# Asset URL must serve with long-lived immutable cache + image/png content-type.
+if [ -n "$LOGO_URL" ]; then
+  HDRS=$(curl -sS -D - -o /dev/null "$BASE$LOGO_URL")
+  if echo "$HDRS" | grep -qi 'Cache-Control: public, max-age=31536000, immutable'; then
+    pass "74f asset Cache-Control immutable header"
+  else
+    note "headers: $HDRS"
+    fail "74f asset missing immutable Cache-Control"
+  fi
+  if echo "$HDRS" | grep -qi 'Content-Type: image/png'; then
+    pass "74f asset Content-Type image/png"
+  else
+    note "headers: $HDRS"
+    fail "74f asset Content-Type not image/png"
+  fi
+fi
+
+# SVG with <script> must be rejected with invalid_svg.
+cat > /tmp/shark_74f_evil.svg <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>
+SVG
+RESP=$(curl -sS -w "\n%{http_code}" -X POST -H "Authorization: Bearer $ADMIN" \
+  -F "logo=@/tmp/shark_74f_evil.svg" "$BASE/api/v1/admin/branding/logo")
+CODE=$(echo "$RESP" | tail -1)
+BODY=$(echo "$RESP" | head -n -1)
+if [ "$CODE" = "400" ] && echo "$BODY" | jq -e '.error == "invalid_svg"' > /dev/null 2>&1; then
+  pass "74f SVG with <script> rejected (400 invalid_svg)"
+else
+  note "code=$CODE body=$BODY"
+  fail "74f SVG script rejection: expected 400 invalid_svg, got $CODE"
+fi
+rm -f /tmp/shark_74f_evil.svg
+
+# DELETE logo → 204, then GET branding shows empty/null logo_url.
+CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
+  -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/branding/logo")
+[ "$CODE" = "204" ] && pass "74f logo DELETE 204" || fail "74f logo DELETE returned $CODE"
+
+r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/branding")
+if echo "$r" | jq -e '(.branding.logo_url == null) or (.branding.logo_url == "") or (.branding.logo_url | not)' > /dev/null 2>&1; then
+  pass "74f branding.logo_url cleared after DELETE"
+else
+  note "body: $r"
+  fail "74f branding.logo_url still present after DELETE"
 fi
 
 # --- Summary ------------------------------------------------------------------
