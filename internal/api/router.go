@@ -201,7 +201,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	// embedded in outbound emails and external sites without auth. Must sit
 	// before the proxy catch-all at the bottom so chi's trie routes /assets/*
 	// here rather than forwarding it upstream.
+	// HEAD registered alongside GET so email clients and browser preflight
+	// checks don't fall through to the proxy (which returns 401).
 	r.Get("/assets/branding/*", s.handleBrandingAsset)
+	r.Head("/assets/branding/*", s.handleBrandingAsset)
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
