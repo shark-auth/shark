@@ -2433,11 +2433,11 @@ section "72: W15 multi-listener proxy (embedded)"
 if ! command -v python3 >/dev/null 2>&1; then
   note "section 72 skipped: python3 not available"
 else
-  kill_port 9001
-  kill_port 9000
-  kill_port 9101
-  kill_port 9100
-  kill_port 8090
+  kill_port 19001
+  kill_port 19000
+  kill_port 19101
+  kill_port 19100
+  kill_port 18090
 
   # Two toy upstreams so we can verify ≥2 listeners running side-by-side,
   # each with their own rules, each proxying to their own backend.
@@ -2459,24 +2459,24 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
 PY
-  python3 upstream72.py 9001 A > upstream.log 2>&1 &
+  python3 upstream72.py 19001 A > upstream.log 2>&1 &
   UPSTREAM_PID=$!
-  python3 upstream72.py 9101 B > upstreamB.log 2>&1 &
+  python3 upstream72.py 19101 B > upstreamB.log 2>&1 &
   UPSTREAM_B_PID=$!
 
   # Give both upstreams a moment to bind.
   for _ in $(seq 1 20); do
-    curl -sf http://127.0.0.1:9001/ >/dev/null 2>&1 \
-      && curl -sf http://127.0.0.1:9101/ >/dev/null 2>&1 && break
+    curl -sf http://127.0.0.1:19001/ >/dev/null 2>&1 \
+      && curl -sf http://127.0.0.1:19101/ >/dev/null 2>&1 && break
     sleep 0.1
   done
 
-  if ! curl -sf http://127.0.0.1:9001/ >/dev/null 2>&1 \
-     || ! curl -sf http://127.0.0.1:9101/ >/dev/null 2>&1; then
-    fail "toy upstreams did not start on :9001 + :9101"
+  if ! curl -sf http://127.0.0.1:19001/ >/dev/null 2>&1 \
+     || ! curl -sf http://127.0.0.1:19101/ >/dev/null 2>&1; then
+    fail "toy upstreams did not start on :19001 + :19101"
     kill $UPSTREAM_PID $UPSTREAM_B_PID 2>/dev/null || true
   else
-    pass "toy upstreams up on :9001 + :9101"
+    pass "toy upstreams up on :19001 + :19101"
 
     # Fresh shark instance with TWO proxy listeners on its own DB. Each
     # listener binds its own port, has its own upstream, and its own rule
@@ -2484,8 +2484,8 @@ PY
     rm -f w15.db w15.db-wal w15.db-shm w15.yaml w15-server.log
     cat > w15.yaml <<EOF
 server:
-  port: 8090
-  base_url: http://localhost:8090
+  port: 18090
+  base_url: http://localhost:18090
   secret: "w15-smoke-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxx"
 storage:
   path: w15.db
@@ -2493,15 +2493,15 @@ email:
   provider: dev
 proxy:
   listeners:
-    - bind: "127.0.0.1:9000"
-      upstream: "http://127.0.0.1:9001"
+    - bind: "127.0.0.1:19000"
+      upstream: "http://127.0.0.1:19001"
       rules:
         - path: /public/*
           allow: anonymous
         - path: /*
           require: authenticated
-    - bind: "127.0.0.1:9100"
-      upstream: "http://127.0.0.1:9101"
+    - bind: "127.0.0.1:19100"
+      upstream: "http://127.0.0.1:19101"
       rules:
         - path: /*
           allow: anonymous
@@ -2510,12 +2510,12 @@ EOF
     $BIN serve --dev --config w15.yaml >> w15-server.log 2>&1 &
     W15_PID=$!
 
-    # Wait for main (:8090) + both listeners (:9000, :9100) to come up.
+    # Wait for main (:18090) + both listeners (:19000, :19100) to come up.
     UP=0
     for _ in $(seq 1 50); do
-      if curl -sf http://127.0.0.1:8090/healthz >/dev/null 2>&1 \
-         && curl -s -o /dev/null http://127.0.0.1:9000/public/foo \
-         && curl -s -o /dev/null http://127.0.0.1:9100/anything; then
+      if curl -sf http://127.0.0.1:18090/healthz >/dev/null 2>&1 \
+         && curl -s -o /dev/null http://127.0.0.1:19000/public/foo \
+         && curl -s -o /dev/null http://127.0.0.1:19100/anything; then
         UP=1; break
       fi
       sleep 0.2
@@ -2523,46 +2523,46 @@ EOF
 
     if [ $UP -ne 1 ]; then
       cat w15-server.log | tail -30
-      fail "W15 shark instance didn't bind :8090 + :9000 + :9100"
+      fail "W15 shark instance didn't bind :18090 + :19000 + :19100"
     else
-      pass "multi-listener: :8090 API + :9000 proxy A + :9100 proxy B all bound"
+      pass "multi-listener: :18090 API + :19000 proxy A + :19100 proxy B all bound"
 
       # Listener A: anonymous on public path -> 200 (rule allows anonymous).
-      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/public/foo)
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:19000/public/foo)
       [ "$CODE" = "200" ] && pass "listener A: anonymous /public/* -> 200" \
         || fail "listener A: anonymous /public/* -> $CODE (expected 200)"
 
       # Listener A: anonymous on protected path -> 401 per spec.
-      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/secret)
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:19000/secret)
       [ "$CODE" = "401" ] \
         && pass "listener A: anonymous /secret -> 401 (unauth)" \
         || fail "listener A: anonymous /secret -> $CODE (expected 401)"
 
       # Listener B: rule wide-open — every path allowed anonymously. Also
       # verify routing landed on backend B (tag=B) not backend A.
-      TAG=$(curl -s http://127.0.0.1:9100/any/path | grep -o '"tag": *"[AB]"' | head -1)
+      TAG=$(curl -s http://127.0.0.1:19100/any/path | grep -o '"tag": *"[AB]"' | head -1)
       [ "$TAG" = '"tag": "B"' ] \
         && pass "listener B: routed to backend B ($TAG)" \
         || fail "listener B: wrong backend routing ($TAG)"
 
       # Cross-check: listener A should NOT route to backend B even for
       # public paths (isolation sanity).
-      TAG=$(curl -s http://127.0.0.1:9000/public/ping | grep -o '"tag": *"[AB]"' | head -1)
+      TAG=$(curl -s http://127.0.0.1:19000/public/ping | grep -o '"tag": *"[AB]"' | head -1)
       [ "$TAG" = '"tag": "A"' ] \
         && pass "listener A: routed to backend A ($TAG)" \
         || fail "listener A: wrong backend routing ($TAG)"
 
       # Admin port still works.
-      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/healthz)
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18090/healthz)
       [ "$CODE" = "200" ] && pass "admin port still healthy during multi-listener" \
-        || fail "admin healthz on :8090 -> $CODE"
+        || fail "admin healthz on :18090 -> $CODE"
 
-      # Port-in-use = fatal. Try booting a second instance bound to :9000.
-      kill_port 8091 2>/dev/null || true
+      # Port-in-use = fatal. Try booting a second instance bound to :19000.
+      kill_port 18091 2>/dev/null || true
       cat > w15-dup.yaml <<EOF
 server:
-  port: 8091
-  base_url: http://localhost:8091
+  port: 18091
+  base_url: http://localhost:18091
   secret: "w15-smoke-secret-yyyyyyyyyyyyyyyyyyyyyyyyyyy"
 storage:
   path: w15-dup.db
@@ -2570,8 +2570,8 @@ email:
   provider: dev
 proxy:
   listeners:
-    - bind: "127.0.0.1:9000"
-      upstream: "http://127.0.0.1:9001"
+    - bind: "127.0.0.1:19000"
+      upstream: "http://127.0.0.1:19001"
       rules:
         - path: /*
           allow: anonymous
@@ -2579,7 +2579,7 @@ EOF
       $BIN serve --dev --config w15-dup.yaml > w15-dup.log 2>&1
       RC=$?
       if [ $RC -ne 0 ]; then
-        pass "port-in-use on :9000 -> fatal startup (exit $RC)"
+        pass "port-in-use on :19000 -> fatal startup (exit $RC)"
       else
         fail "port-in-use accepted — expected fatal bind error"
       fi
@@ -2588,15 +2588,15 @@ EOF
 
     kill $W15_PID 2>/dev/null || true
     wait $W15_PID 2>/dev/null || true
-    kill_port 8090
-    kill_port 9000
-    kill_port 9100
+    kill_port 18090
+    kill_port 19000
+    kill_port 19100
     rm -f w15.yaml w15.db w15.db-wal w15.db-shm w15-server.log
   fi
 
   kill $UPSTREAM_PID $UPSTREAM_B_PID 2>/dev/null || true
-  kill_port 9001
-  kill_port 9101
+  kill_port 19001
+  kill_port 19101
   rm -f upstream.log upstreamB.log upstream72.py
 fi
 
