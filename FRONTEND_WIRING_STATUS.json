@@ -43,8 +43,8 @@
   "phase_a_tasks": {
     "A1_migration": "done",
     "A2_branding_storage": "done",
-    "A3_email_templates_storage": "in_progress",
-    "A4_email_render_from_db": "pending",
+    "A3_email_templates_storage": "done",
+    "A4_email_render_from_db": "in_progress",
     "A5_branding_handlers": "pending",
     "A6_asset_serve_handler": "pending",
     "A7_email_template_handlers": "pending",
