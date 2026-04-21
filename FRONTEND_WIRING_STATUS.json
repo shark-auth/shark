@@ -54,8 +54,8 @@
     "A11_visuals_subtab": "done",
     "A12_email_subtab": "done",
     "A13_integrations_subtab": "done",
-    "A14_smoke_74": "in_progress",
-    "A15_verification_gate": "pending",
-    "A16_phase_tag": "pending"
+    "A14_smoke_74": "done",
+    "A15_verification_gate": "done",
+    "A16_phase_tag": "done"
   }
 }
