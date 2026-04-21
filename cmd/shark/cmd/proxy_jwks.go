@@ -18,6 +18,7 @@ import (
 	"time"
 
 	jwtlib "github.com/golang-jwt/jwt/v5"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/sharkauth/sharkauth/internal/proxy"
 )
@@ -50,6 +51,18 @@ type jwksCache struct {
 	keys     map[string]any // kid -> *rsa.PublicKey or *ecdsa.PublicKey
 	fetched  time.Time
 	inFlight sync.Mutex // serialises concurrent refreshes
+
+	// W15c: rate-limit unknown-kid-driven refreshes. Without this, an
+	// attacker-controlled stream of tokens bearing random kids each
+	// triggers a full JWKS fetch against the auth server — turning the
+	// proxy into a DoS amplifier. refreshGroup collapses concurrent
+	// refresh calls into a single HTTP round-trip, and
+	// minRefreshInterval clamps the rate at which kid-miss refreshes
+	// are even attempted.
+	refreshGroup        singleflight.Group
+	minRefreshInterval  time.Duration
+	lastRefreshAttempt  time.Time
+	lastRefreshAttemptM sync.Mutex
 }
 
 type jwksDoc struct {
@@ -72,11 +85,12 @@ type jwksKey struct {
 
 func newJWKSCache(baseURL string, logger *slog.Logger) *jwksCache {
 	return &jwksCache{
-		baseURL:         strings.TrimRight(baseURL, "/"),
-		httpClient:      &http.Client{Timeout: 10 * time.Second},
-		refreshInterval: 15 * time.Minute,
-		logger:          logger,
-		keys:            map[string]any{},
+		baseURL:            strings.TrimRight(baseURL, "/"),
+		httpClient:         &http.Client{Timeout: 10 * time.Second},
+		refreshInterval:    15 * time.Minute,
+		minRefreshInterval: 10 * time.Second,
+		logger:             logger,
+		keys:               map[string]any{},
 	}
 }
 
@@ -159,6 +173,12 @@ func (c *jwksCache) refresh(ctx context.Context) error {
 
 // keyForKid returns the cached key, force-refreshing once on a miss in case
 // the auth server rotated keys since the last scheduled refresh.
+//
+// W15c: kid-miss refreshes are rate-limited by minRefreshInterval AND
+// collapsed through a singleflight group. An attacker streaming tokens
+// with random kids sees at most one JWKS fetch per minRefreshInterval
+// window regardless of request volume, and concurrent misses share a
+// single in-flight refresh rather than each kicking off their own.
 func (c *jwksCache) keyForKid(ctx context.Context, kid string) (any, error) {
 	c.mu.RLock()
 	if k, ok := c.keys[kid]; ok {
@@ -167,7 +187,25 @@ func (c *jwksCache) keyForKid(ctx context.Context, kid string) (any, error) {
 	}
 	c.mu.RUnlock()
 
-	if err := c.refresh(ctx); err != nil {
+	// Rate-limit: if we tried recently, don't try again. The token's
+	// kid stays "unknown" until the window reopens — the caller maps
+	// that to 401, which is the right behavior for a forged or stale
+	// kid anyway.
+	c.lastRefreshAttemptM.Lock()
+	if !c.lastRefreshAttempt.IsZero() && time.Since(c.lastRefreshAttempt) < c.minRefreshInterval {
+		c.lastRefreshAttemptM.Unlock()
+		return nil, fmt.Errorf("unknown kid %q (refresh rate-limited)", kid)
+	}
+	c.lastRefreshAttempt = time.Now()
+	c.lastRefreshAttemptM.Unlock()
+
+	// Collapse concurrent refreshes: exactly one HTTP call per kid-miss
+	// burst across all goroutines. Key is constant because there's only
+	// one JWKS endpoint per cache.
+	_, err, _ := c.refreshGroup.Do("refresh", func() (any, error) {
+		return nil, c.refresh(ctx)
+	})
+	if err != nil {
 		return nil, err
 	}
 	c.mu.RLock()

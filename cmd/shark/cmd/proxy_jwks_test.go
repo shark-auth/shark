@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -288,3 +290,69 @@ func TestJWKSCache_OversizedBodyRejected(t *testing.T) {
 	}
 }
 
+
+// TestJWKSCache_KidMissRateLimit ensures that a flood of requests with
+// unknown kids does not turn into a flood of JWKS refreshes against the
+// auth server. Ten concurrent verifyBearer calls should collapse into a
+// single HTTP fetch within the refresh window (singleflight + min
+// interval). Without the rate-limit fix each request would serialize
+// behind inFlight but still trigger a full refresh — 10 HTTP hits here,
+// trivially scaled to DoS by an attacker-controlled token stream.
+func TestJWKSCache_KidMissRateLimit(t *testing.T) {
+	srv, priv := buildJWKSServer(t, "kid-real")
+	defer srv.Close()
+
+	// Count JWKS fetches independently of buildJWKSServer (which doesn't
+	// expose a counter). Wrap the real server with a counting proxy.
+	var hits int64
+	counting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&hits, 1)
+		// Proxy to the real JWKS server.
+		resp, err := http.Get(srv.URL + r.URL.Path)
+		if err != nil {
+			http.Error(w, err.Error(), 502)
+			return
+		}
+		defer resp.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	}))
+	defer counting.Close()
+
+	c := newJWKSCache(counting.URL, slog.Default())
+	c.expectedAudiences = []string{"shark-proxy"}
+	c.expectedIssuer = "https://auth.example"
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := c.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	// Reset counter post-Start so we only measure the kid-miss behavior.
+	atomic.StoreInt64(&hits, 0)
+
+	now := time.Now().Unix()
+	// Sign with the real key but set an unknown kid header so every call
+	// is a miss. The signature check never runs because kid lookup fails.
+	unknownTok := signJWT(t, priv, "kid-unknown", jwtlib.MapClaims{
+		"sub": "usr_x",
+		"exp": now + 60,
+		"aud": "shark-proxy",
+		"iss": "https://auth.example",
+	})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = c.verifyBearer(ctx, "Bearer "+unknownTok)
+		}()
+	}
+	wg.Wait()
+
+	got := atomic.LoadInt64(&hits)
+	if got > 1 {
+		t.Fatalf("expected at most 1 JWKS refresh for 10 concurrent unknown-kid requests, got %d", got)
+	}
+}
