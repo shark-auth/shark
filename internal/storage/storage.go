@@ -319,6 +319,13 @@ type Store interface {
 	CreateAuthFlowRun(ctx context.Context, run *AuthFlowRun) error
 	ListAuthFlowRunsByFlowID(ctx context.Context, flowID string, limit int) ([]*AuthFlowRun, error)
 
+	// Branding (global config + per-app overrides via applications.branding_override JSON)
+	GetBranding(ctx context.Context, id string) (*BrandingConfig, error)
+	UpdateBranding(ctx context.Context, id string, fields map[string]any) error
+	SetBrandingLogo(ctx context.Context, id, url, sha string) error
+	ClearBrandingLogo(ctx context.Context, id string) error
+	ResolveBranding(ctx context.Context, appID string) (*BrandingConfig, error)
+
 	// Proxy Rules (Phase 6.6 / Wave D — runtime override layer for the
 	// reverse proxy rule engine; YAML stays the bootstrap source).
 	CreateProxyRule(ctx context.Context, rule *ProxyRule) error
@@ -687,6 +694,18 @@ type SigningKey struct {
 	CreatedAt     string  `json:"created_at"`
 	RotatedAt     *string `json:"rotated_at,omitempty"`
 	Status        string  `json:"status"` // "active" | "retired"
+}
+
+// BrandingConfig is the resolved branding (global + app override merged).
+type BrandingConfig struct {
+	LogoURL          string `json:"logo_url,omitempty"`
+	LogoSHA          string `json:"logo_sha,omitempty"`
+	PrimaryColor     string `json:"primary_color"`
+	SecondaryColor   string `json:"secondary_color"`
+	FontFamily       string `json:"font_family"`
+	FooterText       string `json:"footer_text"`
+	EmailFromName    string `json:"email_from_name"`
+	EmailFromAddress string `json:"email_from_address"`
 }
 
 // Application represents a registered OAuth 2.x / OIDC client application.
