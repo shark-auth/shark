@@ -92,6 +92,30 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
+	// W15a: warn when legacy proxy fields coexist with the new listeners
+	// block. Resolve() already decided listeners win; surfacing the warning
+	// here (not inside config/) keeps the config package logger-free while
+	// giving operators a clear signal their legacy config is being ignored.
+	if cfg.Proxy.Enabled && cfg.Proxy.Upstream != "" && len(cfg.Proxy.Listeners) > 0 {
+		// Dual-config is only a real conflict when the legacy fields don't
+		// match a Resolve()-synthesised implicit listener. When Listeners was
+		// originally empty, Resolve() synthesises one from the legacy fields
+		// — that case is not a dual config even though all three are now set.
+		// Detect the "user explicitly set both" case by checking that at
+		// least one listener has a non-empty Bind (i.e. listeners was set by
+		// the user, not synthesised).
+		userAuthoredListeners := false
+		for _, l := range cfg.Proxy.Listeners {
+			if l.Bind != "" {
+				userAuthoredListeners = true
+				break
+			}
+		}
+		if userAuthoredListeners {
+			slog.Warn("proxy: both legacy and listeners fields set, listeners win")
+		}
+	}
+
 	if opts.SecretOverride != "" {
 		cfg.Server.Secret = opts.SecretOverride
 	}
