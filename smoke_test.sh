@@ -2824,6 +2824,49 @@ else
   fail "could not pick first application id for integration_mode test"
 fi
 
+section "74d. Per-app branding override"
+
+# Pick the same first app used in §74c. PATCH branding_override with a
+# distinct primary_color JSON object, confirm GET round-trips it, then clear
+# with null and confirm it's gone.
+APPS_74D=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps")
+APP_ID_74D=$(echo "$APPS_74D" | jq -r '.data[0].id // empty')
+if [ -n "$APP_ID_74D" ]; then
+  pass "74d picked app id $APP_ID_74D"
+
+  CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+    -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -d '{"branding_override":{"primary_color":"#00ff00"}}' \
+    "$BASE/api/v1/admin/apps/$APP_ID_74D")
+  [ "$CODE" = "200" ] && pass "branding_override PATCH 200" || fail "branding_override PATCH returned $CODE"
+
+  r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps/$APP_ID_74D")
+  # branding_override may serialize as an object OR as a JSON string; accept either.
+  if echo "$r" | jq -e '(.branding_override | type == "object" and .primary_color == "#00ff00") or
+                        (.branding_override | type == "string" and contains("#00ff00"))' > /dev/null 2>&1; then
+    pass "branding_override GET round-trips primary_color:#00ff00"
+  else
+    note "body: $r"
+    fail "branding_override GET did not contain primary_color:#00ff00"
+  fi
+
+  CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+    -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -d '{"branding_override":null}' "$BASE/api/v1/admin/apps/$APP_ID_74D")
+  [ "$CODE" = "200" ] && pass "branding_override clear PATCH 200" || fail "branding_override clear PATCH returned $CODE"
+
+  r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps/$APP_ID_74D")
+  if echo "$r" | jq -e '(.branding_override == null) or (.branding_override == "") or (.branding_override | not)' > /dev/null 2>&1; then
+    pass "branding_override cleared (null/empty/missing)"
+  else
+    note "body: $r"
+    fail "branding_override still present after null PATCH"
+  fi
+else
+  note "body: $APPS_74D"
+  fail "74d could not pick first application id"
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
