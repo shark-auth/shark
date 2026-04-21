@@ -600,6 +600,17 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Delete("/organizations/{id}/invitations/{invitationId}", s.handleAdminDeleteOrgInvitation)
 			r.Post("/organizations/{id}/invitations/{invitationId}/resend", s.handleAdminResendOrgInvitation)
 
+			// Branding admin CRUD + logo upload/delete (Phase A, task A5).
+			// Inherits the AdminAPIKeyFromStore middleware from the parent
+			// /admin group; asset-serve route /assets/branding/* is mounted
+			// separately (A6) since it's public + content-addressed.
+			r.Route("/branding", func(r chi.Router) {
+				r.Get("/", s.handleGetBranding)
+				r.Patch("/", s.handlePatchBranding)
+				r.Post("/logo", s.handleUploadLogo)
+				r.Delete("/logo", s.handleDeleteLogo)
+			})
+
 			if cfg.Server.DevMode {
 				r.Get("/dev/emails", s.handleListDevEmails)
 				r.Get("/dev/emails/{id}", s.handleGetDevEmail)
