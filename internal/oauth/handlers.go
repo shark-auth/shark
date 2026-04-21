@@ -210,7 +210,8 @@ func (s *Server) HandleAuthorizeDecision(w http.ResponseWriter, r *http.Request)
 
 	// Parse the POST body so we can read form fields.
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		WriteOAuthError(w, http.StatusBadRequest,
+			NewOAuthError(ErrInvalidRequest, "malformed authorize decision body"))
 		return
 	}
 
@@ -236,11 +237,10 @@ func (s *Server) HandleAuthorizeDecision(w http.ResponseWriter, r *http.Request)
 
 	userID := getUserIDFromRequest(r)
 	if userID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{ //#nosec G104
-			"error": "login_required",
-		})
+		// RFC 6749 §5.2 shape. Any "where to log in" hint goes on the URI,
+		// never as an extra top-level field — client libs reject unknowns.
+		WriteOAuthError(w, http.StatusUnauthorized,
+			NewOAuthError(ErrLoginRequired, "End-user authentication is required"))
 		return
 	}
 

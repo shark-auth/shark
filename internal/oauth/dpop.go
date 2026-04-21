@@ -302,7 +302,8 @@ func RequireDPoPMiddleware(cache *DPoPJTICache) func(http.Handler) http.Handler 
 			accessToken := strings.TrimPrefix(authHeader, "DPoP ")
 			proofJWT := r.Header.Get("DPoP")
 			if proofJWT == "" {
-				http.Error(w, `{"error":"invalid_dpop_proof","error_description":"DPoP header is required"}`, http.StatusUnauthorized)
+				WriteOAuthError(w, http.StatusUnauthorized,
+					NewOAuthError(ErrInvalidDPoPProof, "DPoP header is required"))
 				return
 			}
 
@@ -316,7 +317,8 @@ func RequireDPoPMiddleware(cache *DPoPJTICache) func(http.Handler) http.Handler 
 			ath := HashAccessTokenForDPoP(accessToken)
 			_, err := ValidateDPoPProof(proofJWT, r.Method, htu, ath, cache)
 			if err != nil {
-				http.Error(w, `{"error":"invalid_dpop_proof","error_description":"`+err.Error()+`"}`, http.StatusUnauthorized)
+				WriteOAuthError(w, http.StatusUnauthorized,
+					NewOAuthError(ErrInvalidDPoPProof, err.Error()))
 				return
 			}
 
