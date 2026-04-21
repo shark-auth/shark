@@ -124,3 +124,65 @@ func TestSessionLifetimeDuration(t *testing.T) {
 		t.Fatalf("expected 7 days, got %v", d)
 	}
 }
+
+func TestProxyConfig_Resolve_LegacyToListener(t *testing.T) {
+	cfg := &ProxyConfig{
+		Enabled:  true,
+		Upstream: "http://localhost:3001",
+		Rules:    []ProxyRule{{Path: "/*", Require: "authenticated"}},
+	}
+	cfg.Resolve()
+	if len(cfg.Listeners) != 1 {
+		t.Fatalf("expected 1 synthesised listener, got %d", len(cfg.Listeners))
+	}
+	l := cfg.Listeners[0]
+	if l.Bind != "" {
+		t.Errorf("legacy listener bind should be empty (main port), got %q", l.Bind)
+	}
+	if l.Upstream != "http://localhost:3001" {
+		t.Errorf("upstream not carried over: %q", l.Upstream)
+	}
+	if len(l.Rules) != 1 || l.Rules[0].Path != "/*" {
+		t.Errorf("rules not carried over: %+v", l.Rules)
+	}
+}
+
+func TestProxyConfig_Resolve_ExplicitListenersWin(t *testing.T) {
+	cfg := &ProxyConfig{
+		Enabled:  true,
+		Upstream: "http://legacy:1111",
+		Listeners: []ProxyListenerConfig{
+			{Bind: ":3000", Upstream: "http://localhost:3001"},
+		},
+	}
+	cfg.Resolve()
+	if len(cfg.Listeners) != 1 {
+		t.Fatalf("explicit listeners must not be clobbered, got %d", len(cfg.Listeners))
+	}
+	if cfg.Listeners[0].Upstream != "http://localhost:3001" {
+		t.Errorf("explicit listener upstream overwritten: %q", cfg.Listeners[0].Upstream)
+	}
+}
+
+func TestProxyConfig_Resolve_Disabled(t *testing.T) {
+	cfg := &ProxyConfig{Enabled: false, Upstream: "http://x"}
+	cfg.Resolve()
+	if len(cfg.Listeners) != 0 {
+		t.Fatalf("disabled proxy should synthesise no listener, got %d", len(cfg.Listeners))
+	}
+}
+
+func TestProxyListenerConfig_Defaults(t *testing.T) {
+	l := ProxyListenerConfig{}
+	if l.TimeoutDuration() != 30*time.Second {
+		t.Errorf("default timeout should be 30s, got %v", l.TimeoutDuration())
+	}
+	if !l.StripIncomingOrDefault() {
+		t.Errorf("StripIncoming default should be true")
+	}
+	f := false
+	l.StripIncoming = &f
+	if l.StripIncomingOrDefault() {
+		t.Errorf("StripIncoming=false must be honoured")
+	}
+}

@@ -52,6 +52,73 @@ type ProxyConfig struct {
 	TrustedHeaders []string    `koanf:"trusted_headers"`
 	StripIncoming  *bool       `koanf:"strip_incoming"`
 	Rules          []ProxyRule `koanf:"rules"`
+
+	// Listeners is the W15 multi-listener list. Each entry binds its own
+	// port + upstream + rules so a single shark binary can transparently
+	// protect N apps on their native ports. When empty, Resolve() maps the
+	// legacy top-level Enabled/Upstream/Rules fields into a single implicit
+	// listener so pre-W15 configs keep working unchanged.
+	Listeners []ProxyListenerConfig `koanf:"listeners"`
+}
+
+// ProxyListenerConfig is one reverse-proxy listener in the W15 multi-listener
+// design. Bind is a host:port or ":port" string handed straight to
+// net.Listen; leaving it empty means "use the main server port" (legacy
+// compat — the listener is still built but the top-level server owns the
+// bind; see Resolve + server.Build). TrustedHeaders + StripIncoming behave
+// identically to the top-level fields; SessionCookieDomain is accepted for
+// forward-compatibility with the wizard UI but currently informational.
+type ProxyListenerConfig struct {
+	Bind                string      `koanf:"bind"`
+	Upstream            string      `koanf:"upstream"`
+	SessionCookieDomain string      `koanf:"session_cookie_domain"`
+	TrustedHeaders      []string    `koanf:"trusted_headers"`
+	StripIncoming       *bool       `koanf:"strip_incoming"`
+	Timeout             int         `koanf:"timeout_seconds"`
+	Rules               []ProxyRule `koanf:"rules"`
+}
+
+// TimeoutDuration mirrors ProxyConfig.TimeoutDuration: returns the per-request
+// upstream timeout, defaulting to 30s when unset.
+func (l *ProxyListenerConfig) TimeoutDuration() time.Duration {
+	if l.Timeout <= 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(l.Timeout) * time.Second
+}
+
+// StripIncomingOrDefault returns the effective StripIncoming (default true).
+func (l *ProxyListenerConfig) StripIncomingOrDefault() bool {
+	if l.StripIncoming == nil {
+		return true
+	}
+	return *l.StripIncoming
+}
+
+// Resolve normalises the proxy config into a unified listener list.
+//
+// If the new Listeners field is empty AND the legacy Enabled/Upstream fields
+// are set, a single implicit listener is synthesised with Bind=="" (meaning
+// "mount on the main server port via the API router catch-all" — legacy
+// behaviour, preserved bit-for-bit). If both are set, Listeners wins and a
+// warning is the caller's responsibility (the config package has no logger).
+//
+// Idempotent: safe to call multiple times.
+func (p *ProxyConfig) Resolve() {
+	if len(p.Listeners) > 0 {
+		return
+	}
+	if !p.Enabled || p.Upstream == "" {
+		return
+	}
+	p.Listeners = []ProxyListenerConfig{{
+		Bind:           "", // empty = legacy main-port mount via router catch-all
+		Upstream:       p.Upstream,
+		TrustedHeaders: p.TrustedHeaders,
+		StripIncoming:  p.StripIncoming,
+		Timeout:        p.Timeout,
+		Rules:          p.Rules,
+	}}
 }
 
 // ProxyRule is a single route-level authorization rule consumed by the
@@ -444,6 +511,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.Email.Resolve(&cfg.SMTP)
+	cfg.Proxy.Resolve()
 
 	return &cfg, nil
 }
