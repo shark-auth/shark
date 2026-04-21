@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "shark-auth"
+version = "0.1.0"
+description = "Python SDK for SharkAuth agent-auth primitives (DPoP, device flow, token vault, agent tokens)."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [
+    { name = "SharkAuth" },
+]
+keywords = ["oauth", "oauth2", "dpop", "agent", "auth", "device-flow", "jwt", "rfc9449", "rfc8628"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "cryptography>=42.0",
+    "PyJWT[crypto]>=2.8",
+    "requests>=2.31",
+    "typing_extensions>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-httpserver>=1.0",
+    "responses>=0.24",
+    "build>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/shark-auth/shark"
+Repository = "https://github.com/shark-auth/shark"
+Issues = "https://github.com/shark-auth/shark/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["shark_auth"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/shark_auth",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+]
