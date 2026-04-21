@@ -99,7 +99,7 @@ export function GetStarted({ setPage }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
             <ChecklistRow
-              icon={<Icon.User width={13} height={13}/>}
+              icon={<Icon.Users width={13} height={13}/>}
               title="Create your first user"
               sub="Email + password or magic-link invite."
               onClick={() => go('users')}

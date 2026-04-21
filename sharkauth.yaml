@@ -2,7 +2,7 @@
 # Full reference: https://sharkauth.com/docs/config
 
 server:
-  secret: "d9529dd35c337dd4e97e2bee4e3efffe33472ddbe36316b3fa8e13a6a6418fea"              # required: 32+ bytes, encrypts sessions
+  secret: "b8bcb06baef6cb109aed3d298a4a1b9d865aa0397b72c8d8b63ee0034e49ac91"              # required: 32+ bytes, encrypts sessions
   base_url: "http://localhost:8080"         # required: determines cookie/origin
 
 email:
@@ -12,3 +12,25 @@ email:
   #   - shark email setup
   #   - Settings → Email in the admin dashboard
   # Docs: https://sharkauth.com/docs/email
+
+proxy:
+  enabled: true
+  upstream: "http://localhost:3000"
+  timeout_seconds: 30
+  rules:
+    # Public paths — no auth required
+    - path: /login
+      allow: anonymous
+    - path: /signup
+      allow: anonymous
+    - path: /public/*
+      allow: anonymous
+    - path: /favicon.ico
+      allow: anonymous
+    - path: /static/*
+      allow: anonymous
+    - path: /_next/*
+      allow: anonymous
+    # Everything else = authed
+    - path: /*
+      require: authenticated
