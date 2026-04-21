@@ -30,6 +30,12 @@ type Store interface {
 	ListUsers(ctx context.Context, opts ListUsersOpts) ([]*User, error)
 	UpdateUser(ctx context.Context, user *User) error
 	DeleteUser(ctx context.Context, id string) error
+	// MarkWelcomeEmailSent atomically flips welcome_email_sent from 0 to 1 for
+	// the given user. Returns sql.ErrNoRows when the flag was already set (or
+	// the user doesn't exist) — callers treat that as "don't send" for
+	// idempotency. The UPDATE ... WHERE welcome_email_sent = 0 guard makes
+	// this race-safe across concurrent verifications.
+	MarkWelcomeEmailSent(ctx context.Context, userID string) error
 
 	// Sessions
 	CreateSession(ctx context.Context, sess *Session) error

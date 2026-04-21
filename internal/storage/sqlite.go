@@ -171,6 +171,23 @@ func (s *SQLiteStore) DeleteUser(ctx context.Context, id string) error {
 	return err
 }
 
+// MarkWelcomeEmailSent flips welcome_email_sent to 1 atomically. The WHERE
+// clause makes the UPDATE a no-op on the second call, so we return
+// sql.ErrNoRows as the "already sent / nothing to do" signal — the
+// verify-email handler reads that and skips the send goroutine.
+func (s *SQLiteStore) MarkWelcomeEmailSent(ctx context.Context, userID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET welcome_email_sent = 1 WHERE id = ? AND welcome_email_sent = 0`, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *SQLiteStore) scanUser(row *sql.Row) (*User, error) {
 	var u User
 	var emailVerified, mfaEnabled, mfaVerified int

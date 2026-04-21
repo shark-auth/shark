@@ -5,9 +5,11 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	"github.com/sharkauth/sharkauth/internal/email"
 )
 
 // handleEmailVerifySend handles POST /api/v1/auth/email/verify/send
@@ -110,6 +112,43 @@ func (s *Server) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 				"message": "Internal server error",
 			})
 			return
+		}
+	}
+
+	// Fire welcome email once — idempotent via UPDATE ... WHERE welcome_email_sent = 0
+	// at the store layer. If MarkWelcomeEmailSent returns sql.ErrNoRows the
+	// flag was already set by a prior verification (or the user row is gone),
+	// so we skip the send entirely. Any DB errors other than ErrNoRows are
+	// also silently skipped — a missed welcome isn't worth failing the
+	// verify response on.
+	if err := s.Store.MarkWelcomeEmailSent(r.Context(), user.ID); err == nil {
+		branding, _ := s.Store.ResolveBranding(r.Context(), "")
+		dashboardURL := strings.TrimRight(s.Config.Server.BaseURL, "/") + "/admin"
+		rendered, rErr := email.RenderWelcome(r.Context(), s.Store, branding, email.WelcomeData{
+			AppName:      s.Config.MFA.Issuer,
+			UserEmail:    user.Email,
+			DashboardURL: dashboardURL,
+		})
+		if rErr == nil {
+			if sender := s.emailSender(); sender != nil {
+				to := user.Email
+				subject := rendered.Subject
+				html := rendered.HTML
+				userID := user.ID
+				go func() {
+					// Detached from the request ctx so the goroutine survives
+					// past response write. The Sender interface is synchronous
+					// and context-free (Send takes only *Message), so no
+					// cancellation plumbing is needed here.
+					if sendErr := sender.Send(&email.Message{
+						To:      to,
+						Subject: subject,
+						HTML:    html,
+					}); sendErr != nil {
+						slog.Warn("welcome email send failed", "user_id", userID, "error", sendErr)
+					}
+				}()
+			}
 		}
 	}
 
