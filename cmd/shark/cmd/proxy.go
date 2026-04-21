@@ -43,17 +43,15 @@ var proxyCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Run the standalone Shark reverse proxy",
 	Long: `Starts a reverse proxy that connects to a Shark auth instance
-for health monitoring. Useful when you want the proxy in a separate
-process from the auth server (e.g. an edge deployment).
+for health monitoring and JWT verification. Useful when you want the
+proxy in a separate process from the auth server (e.g. an edge
+deployment).
 
-MVP scope: this standalone mode treats all requests as anonymous
-because JWT verification via the auth server's JWKS endpoint is not
-wired yet. Rules with require:authenticated will therefore deny. For
-the full-featured proxy use the embedded mode:
-
-  shark serve --proxy-upstream http://localhost:3000
-
-Standalone mode will gain JWT verification in a follow-up.`,
+Authorization: Bearer <jwt> is verified on every request against the
+auth server's /.well-known/jwks.json, cached in-memory with a 15-minute
+refresh (plus an eager refresh on an unknown kid). Requests without a
+valid JWT are treated as anonymous; rules with require:authenticated
+will therefore return 403.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if proxyUpstream == "" {
 			return errors.New("--upstream is required")
@@ -96,12 +94,30 @@ Standalone mode will gain JWT verification in a follow-up.`,
 			return fmt.Errorf("build proxy: %w", err)
 		}
 
-		// TODO(P4.1): wire real auth resolution here. For MVP standalone
-		// mode every request is anonymous; rules with require:authenticated
-		// will 403. Acceptable because self-hosters typically use embedded
-		// mode, which IS full-featured.
+		// W15c: fetch JWKS from the Shark auth server and verify Bearer
+		// tokens on every request. Falls back to anonymous identity when
+		// no Authorization header is present; an invalid/expired/tampered
+		// token short-circuits to 401 before the rules engine runs so
+		// callers get a clear error rather than an opaque forbidden.
+		jwks := newJWKSCache(proxyAuthBase, logger)
+		if err := jwks.Start(ctx); err != nil {
+			return fmt.Errorf("jwks: %w", err)
+		}
+
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r = r.WithContext(proxy.WithIdentity(r.Context(), proxy.Identity{AuthMethod: "anonymous"}))
+			auth := r.Header.Get("Authorization")
+			if auth == "" {
+				r = r.WithContext(proxy.WithIdentity(r.Context(), proxy.Identity{AuthMethod: "anonymous"}))
+				h.ServeHTTP(w, r)
+				return
+			}
+			id, verr := jwks.verifyBearer(r.Context(), auth)
+			if verr != nil {
+				logger.Debug("standalone proxy: JWT verify failed", "err", verr)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			r = r.WithContext(proxy.WithIdentity(r.Context(), id))
 			h.ServeHTTP(w, r)
 		})
 
