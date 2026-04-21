@@ -26,19 +26,23 @@ var appShowCmd = &cobra.Command{
 		}
 		cfg, err := config.Load(configPath)
 		if err != nil {
-			return fmt.Errorf("load config: %w", err)
+			return maybeJSONErr(cmd, "config_load_failed", fmt.Errorf("load config: %w", err))
 		}
 
 		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
 		if err != nil {
-			return fmt.Errorf("open database: %w", err)
+			return maybeJSONErr(cmd, "database_open_failed", fmt.Errorf("open database: %w", err))
 		}
 		defer store.Close()
 
 		ctx := context.Background()
 		app, err := lookupApp(ctx, store, idOrClientID)
 		if err != nil {
-			return err
+			return maybeJSONErr(cmd, "app_not_found", err)
+		}
+
+		if jsonFlag(cmd) {
+			return writeJSON(cmd.OutOrStdout(), appToJSON(app))
 		}
 
 		callbacksJSON, _ := json.MarshalIndent(app.AllowedCallbackURLs, "              ", "  ")
@@ -80,5 +84,6 @@ func lookupApp(ctx context.Context, store storage.Store, idOrClientID string) (*
 
 func init() {
 	appShowCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
+	addJSONFlag(appShowCmd)
 	appCmd.AddCommand(appShowCmd)
 }

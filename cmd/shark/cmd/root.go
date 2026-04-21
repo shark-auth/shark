@@ -4,7 +4,6 @@ package cmd
 import (
 	"embed"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -87,20 +86,6 @@ func writeJSONError(cmd *cobra.Command, code string, err error, details map[stri
 func addJSONFlag(cmd *cobra.Command) {
 	cmd.Flags().Bool("json", false, "emit machine-readable JSON to stdout")
 }
-
-// jsonErrorWrap runs fn; if --json is set and fn returns an error, emits JSON
-// error to stderr under the given code and returns the same error so cobra
-// propagates a non-zero exit code.
-func jsonErrorWrap(cmd *cobra.Command, code string, fn func() error) error {
-	err := fn()
-	if err != nil && jsonFlag(cmd) {
-		return writeJSONError(cmd, code, err, nil)
-	}
-	return err
-}
-
-// ensure fmt import is used even if no other site does.
-var _ = fmt.Sprintf
 
 func init() {
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable debug-level logging to stderr")

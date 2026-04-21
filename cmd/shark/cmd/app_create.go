@@ -29,17 +29,17 @@ var appCreateCmd = &cobra.Command{
 	Long:  `Creates a new OAuth application and prints the client_secret once.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if appCreateName == "" {
-			return fmt.Errorf("--name is required")
+			return maybeJSONErr(cmd, "invalid_args", fmt.Errorf("--name is required"))
 		}
 
 		if err := validateCLIURLs(appCreateCallbacks); err != nil {
-			return fmt.Errorf("invalid callback URL: %w", err)
+			return maybeJSONErr(cmd, "invalid_args", fmt.Errorf("invalid callback URL: %w", err))
 		}
 		if err := validateCLIURLs(appCreateLogouts); err != nil {
-			return fmt.Errorf("invalid logout URL: %w", err)
+			return maybeJSONErr(cmd, "invalid_args", fmt.Errorf("invalid logout URL: %w", err))
 		}
 		if err := validateCLIURLs(appCreateOrigins); err != nil {
-			return fmt.Errorf("invalid origin URL: %w", err)
+			return maybeJSONErr(cmd, "invalid_args", fmt.Errorf("invalid origin URL: %w", err))
 		}
 
 		configPath, _ := cmd.Flags().GetString("config")
@@ -101,7 +101,14 @@ var appCreateCmd = &cobra.Command{
 
 		ctx := context.Background()
 		if err := store.CreateApplication(ctx, app); err != nil {
-			return fmt.Errorf("create application: %w", err)
+			return maybeJSONErr(cmd, "create_failed", fmt.Errorf("create application: %w", err))
+		}
+
+		if jsonFlag(cmd) {
+			return writeJSON(cmd.OutOrStdout(), map[string]any{
+				"app":    appToJSON(app),
+				"secret": secret,
+			})
 		}
 
 		fmt.Println()
@@ -202,5 +209,6 @@ func init() {
 	appCreateCmd.Flags().StringArrayVar(&appCreateLogouts, "logout", nil, "allowed logout URL (repeatable)")
 	appCreateCmd.Flags().StringArrayVar(&appCreateOrigins, "origin", nil, "allowed origin (repeatable)")
 	appCreateCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
+	addJSONFlag(appCreateCmd)
 	appCmd.AddCommand(appCreateCmd)
 }

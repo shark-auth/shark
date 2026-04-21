@@ -22,23 +22,31 @@ var appListCmd = &cobra.Command{
 		}
 		cfg, err := config.Load(configPath)
 		if err != nil {
-			return fmt.Errorf("load config: %w", err)
+			return maybeJSONErr(cmd, "config_load_failed", fmt.Errorf("load config: %w", err))
 		}
 
 		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
 		if err != nil {
-			return fmt.Errorf("open database: %w", err)
+			return maybeJSONErr(cmd, "database_open_failed", fmt.Errorf("open database: %w", err))
 		}
 		defer store.Close()
 
 		ctx := context.Background()
 		apps, err := store.ListApplications(ctx, 100, 0)
 		if err != nil {
-			return fmt.Errorf("list applications: %w", err)
+			return maybeJSONErr(cmd, "list_failed", fmt.Errorf("list applications: %w", err))
+		}
+
+		if jsonFlag(cmd) {
+			out := make([]map[string]any, 0, len(apps))
+			for _, a := range apps {
+				out = append(out, appToJSON(a))
+			}
+			return writeJSON(cmd.OutOrStdout(), out)
 		}
 
 		if len(apps) == 0 {
-			fmt.Println("No applications found.")
+			fmt.Fprintln(cmd.OutOrStdout(), "No applications found.")
 			return nil
 		}
 
@@ -68,7 +76,32 @@ func summarizeURLs(urls []string) string {
 	return fmt.Sprintf("%d urls", len(urls))
 }
 
+// appToJSON returns the canonical JSON shape for an Application used by the CLI.
+func appToJSON(a *storage.Application) map[string]any {
+	return map[string]any{
+		"id":                    a.ID,
+		"name":                  a.Name,
+		"client_id":             a.ClientID,
+		"client_secret_prefix":  a.ClientSecretPrefix,
+		"is_default":            a.IsDefault,
+		"allowed_callback_urls": a.AllowedCallbackURLs,
+		"allowed_logout_urls":   a.AllowedLogoutURLs,
+		"allowed_origins":       a.AllowedOrigins,
+		"created_at":            a.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		"updated_at":            a.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+	}
+}
+
+// maybeJSONErr emits a JSON error to stderr if --json is set, and returns err unchanged.
+func maybeJSONErr(cmd *cobra.Command, code string, err error) error {
+	if jsonFlag(cmd) {
+		return writeJSONError(cmd, code, err, nil)
+	}
+	return err
+}
+
 func init() {
 	appListCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
+	addJSONFlag(appListCmd)
 	appCmd.AddCommand(appListCmd)
 }
