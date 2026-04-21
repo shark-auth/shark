@@ -301,8 +301,21 @@ export function BrandingVisualsTab() {
           />
         </Field>
 
-        {/* Save / discard */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        {/* Save / discard — sticky to bottom of scroll container so it's
+            always reachable without scrolling on tall forms. */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            marginTop: 8,
+            position: 'sticky',
+            bottom: 0,
+            background: 'var(--surface-1, #0e0e10)',
+            padding: '12px 0',
+            borderTop: '1px solid var(--hairline)',
+            zIndex: 1,
+          }}
+        >
           <button
             type="button"
             className="btn primary"
