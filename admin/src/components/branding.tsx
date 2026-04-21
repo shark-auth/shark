@@ -29,9 +29,17 @@ export function Branding() {
         ))}
       </div>
 
-      {subtab === 'visuals' && <BrandingVisualsTab/>}
-      {subtab === 'email' && <BrandingEmailTab/>}
-      {subtab === 'integrations' && <BrandingIntegrationsTab/>}
+      {/* Keep all subtabs mounted so in-progress drafts survive tab switches.
+          Hide inactive ones via display:none instead of unmounting. */}
+      <div style={{ display: subtab === 'visuals' ? 'block' : 'none' }}>
+        <BrandingVisualsTab/>
+      </div>
+      <div style={{ display: subtab === 'email' ? 'block' : 'none' }}>
+        <BrandingEmailTab/>
+      </div>
+      <div style={{ display: subtab === 'integrations' ? 'block' : 'none' }}>
+        <BrandingIntegrationsTab/>
+      </div>
     </div>
   )
 }
