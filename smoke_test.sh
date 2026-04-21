@@ -2996,6 +2996,63 @@ else
   fail "74f branding.logo_url still present after DELETE"
 fi
 
+section "74g. integration_mode enum validation + snippet error paths"
+
+APPS_74G=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps")
+APP_ID_74G=$(echo "$APPS_74G" | jq -r '.data[0].id // empty')
+if [ -n "$APP_ID_74G" ]; then
+  pass "74g picked app id $APP_ID_74G"
+
+  # Bogus integration_mode must 400.
+  CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+    -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -d '{"integration_mode":"bogus"}' "$BASE/api/v1/admin/apps/$APP_ID_74G")
+  [ "$CODE" = "400" ] && pass "74g integration_mode=bogus → 400" || fail "74g integration_mode=bogus returned $CODE"
+
+  # Each valid enum value must 200.
+  for mode in hosted components proxy custom; do
+    CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+      -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+      -d "{\"integration_mode\":\"$mode\"}" "$BASE/api/v1/admin/apps/$APP_ID_74G")
+    [ "$CODE" = "200" ] && pass "74g integration_mode=$mode → 200" || fail "74g integration_mode=$mode → $CODE"
+  done
+
+  # Invalid proxy_login_fallback must 400 (enum is hosted|custom_url).
+  CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+    -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -d '{"proxy_login_fallback":"invalid"}' "$BASE/api/v1/admin/apps/$APP_ID_74G")
+  [ "$CODE" = "400" ] && pass "74g proxy_login_fallback=invalid → 400" || fail "74g proxy_login_fallback=invalid returned $CODE"
+
+  # ?framework=vue → 501 framework_not_supported.
+  RESP=$(curl -sS -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" \
+    "$BASE/api/v1/admin/apps/$APP_ID_74G/snippet?framework=vue")
+  CODE=$(echo "$RESP" | tail -1)
+  BODY=$(echo "$RESP" | head -n -1)
+  if [ "$CODE" = "501" ] && echo "$BODY" | jq -e '.error == "framework_not_supported"' > /dev/null 2>&1; then
+    pass "74g snippet framework=vue → 501 framework_not_supported"
+  else
+    note "code=$CODE body=$BODY"
+    fail "74g snippet framework=vue: expected 501 framework_not_supported"
+  fi
+
+  # No framework param defaults to react (200 + framework:"react").
+  r=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps/$APP_ID_74G/snippet")
+  if echo "$r" | jq -e '.framework == "react" and (.snippets | length == 3)' > /dev/null 2>&1; then
+    pass "74g snippet default framework=react"
+  else
+    note "body: $r"
+    fail "74g snippet default did not return react+3 snippets"
+  fi
+
+  # Unknown app id → 404.
+  CODE=$(curl -sS -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN" \
+    "$BASE/api/v1/admin/apps/app_does_not_exist_xyz/snippet")
+  [ "$CODE" = "404" ] && pass "74g snippet unknown app id → 404" || fail "74g snippet unknown app id → $CODE"
+else
+  note "body: $APPS_74G"
+  fail "74g could not pick first application id"
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
