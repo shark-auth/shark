@@ -68,7 +68,7 @@ export function BrandingIntegrationsTab() {
     API.get('/admin/apps')
       .then((r) => {
         if (cancelled) return
-        setApps(r?.applications || [])
+        setApps(r?.data || r?.applications || r?.items || [])
       })
       .catch((e) => {
         if (!cancelled) toast.error(e?.message || 'Failed to load applications')
