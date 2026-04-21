@@ -23,7 +23,7 @@
     "W11": {"status": "pending", "priority": "P3", "commit": null},
     "W12": {"status": "pending", "priority": "P3", "commit": null},
     "W13": {"status": "pending", "priority": "P3", "commit": null},
-    "W15": {"status": "pending", "priority": "P1", "commit": null, "notes": "multi-listener proxy, issue draft at .github/ISSUE_W15_multi_listener_proxy.md"},
+    "W15": {"status": "in_progress", "priority": "P1", "commit": null, "notes": "multi-listener proxy, issue draft at .github/ISSUE_W15_multi_listener_proxy.md; dispatched 2026-04-21 via subagent-driven-development in worktree"},
     "W16": {"status": "done", "priority": "P0", "commit": "6484b7a", "notes": "flow conditional save bug — UX deadlock fix (branch-insert + clickable empty state); integration test TestUpdateFlow_ConditionalBranchesPreserved 3/3 green"},
     "W17": {"status": "done", "priority": "P0", "commit": "a71aa8e", "notes": "AGENT_AUTH.md status + competitive table + Implementation Status section; fabricated citations caught + dropped"},
     "W18": {"status": "pending", "priority": "P1", "commit": null, "notes": "structured error envelope — defer until Phase A ships"},
