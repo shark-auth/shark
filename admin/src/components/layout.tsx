@@ -49,7 +49,7 @@ export const NAV = [
     { id: 'impersonation', label: 'Impersonation', icon: 'Impersonate', ph: 9 },
     { id: 'compliance', label: 'Compliance', icon: 'Compliance' },
     { id: 'migrations', label: 'Migrations', icon: 'Migration', ph: 9 },
-    { id: 'branding', label: 'Branding', icon: 'Brand', ph: 9 },
+    { id: 'branding', label: 'Branding', icon: 'Brand' },
     { id: 'flow', label: 'Flow Builder', icon: 'Flow' },
   ]},
 ];

@@ -22,4 +22,3 @@ export function EventSchemas() { return <EmptyShell title="Event Schemas" phase=
 export function OIDCProvider() { return <EmptyShell title="OIDC Provider" phase={8} description="Use Shark as an OpenID Connect identity provider. Federate with other services and IdPs." />; }
 export function Impersonation() { return <EmptyShell title="Impersonation" phase={9} description="Sign in as any user for debugging and support. All actions are audit-logged with admin attribution." />; }
 export function Migrations() { return <EmptyShell title="Migrations" phase={9} description="Import users from Auth0, Clerk, or Supabase with field mapping, dry-run preview, and conflict resolution." />; }
-export function Branding() { return <EmptyShell title="Branding" phase={9} description="Customize sign-in components, email templates, logos, and colors for your brand." />; }
