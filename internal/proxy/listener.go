@@ -121,6 +121,27 @@ func (l *Listener) Engine() *Engine { return l.engine }
 // Breaker returns the circuit breaker for admin dashboard consumption.
 func (l *Listener) Breaker() *Breaker { return l.breaker }
 
+// SetAuthWrap installs the identity-resolution middleware. Callers that
+// need the listener's own Breaker to build their AuthWrap (the
+// server.Build path) construct the Listener first, read l.Breaker(),
+// then install the wrap via this setter — avoiding a second NewListener
+// call (which would recompile rules and allocate a second Breaker).
+//
+// Must be called before Start; calling on a running listener is a
+// programmer error and returns an error without mutating state.
+func (l *Listener) SetAuthWrap(fn func(http.Handler) http.Handler) error {
+	if l.started {
+		return fmt.Errorf("proxy listener %s: SetAuthWrap after Start", l.Bind)
+	}
+	l.authWrap = fn
+	var h http.Handler = l.handler
+	if fn != nil {
+		h = fn(l.handler)
+	}
+	l.server.Handler = h
+	return nil
+}
+
 // Start binds the port and spawns a serve goroutine. It pre-binds via
 // net.Listen so a port-in-use error is returned synchronously (letting the
 // caller treat it as a fatal startup error rather than discovering a half

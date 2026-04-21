@@ -320,12 +320,10 @@ func buildProxyListeners(cfg *config.Config, apiSrv *api.Server) ([]*proxy.Liste
 			return nil, fmt.Errorf("listeners[%d]: %w", i, err)
 		}
 		// Wire auth middleware using the listener's own breaker so a dead
-		// upstream on one listener can't tank sessions on another.
-		params.AuthWrap = apiSrv.ProxyAuthMiddlewareFor(l.Breaker())
-		// NewListener captured AuthWrap at construction time, so rebuild
-		// with the final wrap. Cheap — no network I/O yet.
-		l, err = proxy.NewListener(params)
-		if err != nil {
+		// upstream on one listener can't tank sessions on another. Using
+		// the SetAuthWrap setter avoids a second NewListener call (which
+		// would recompile rules and allocate a second Breaker).
+		if err := l.SetAuthWrap(apiSrv.ProxyAuthMiddlewareFor(l.Breaker())); err != nil {
 			return nil, fmt.Errorf("listeners[%d]: %w", i, err)
 		}
 		out = append(out, l)
