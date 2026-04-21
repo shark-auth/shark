@@ -36,8 +36,8 @@
     "W25": {"status": "pending", "priority": "P3", "commit": null},
     "W26": {"status": "pending", "priority": "P2", "commit": null},
     "W27": {"status": "pending", "priority": "P2", "commit": null},
-    "F5.2": {"status": "in_progress", "priority": "P1", "commit": null, "notes": "shark-sdk-py MVP — DPoPProver + DeviceFlow + VaultClient + decode_agent_token; ~500 LOC; PyPI scaffold; gate item for Phase A; dispatched 2026-04-21"},
-    "F5.3": {"status": "pending", "priority": "P1", "commit": null, "notes": "Hello Agent walkthrough (docs/hello-agent.md + examples/hello_agent.sh); gate item for Phase A; 4h doc"}
+    "F5.2": {"status": "done", "priority": "P1", "commit": "be95dc1", "notes": "shark-sdk-py MVP shipped sdk/python/ — 13 files, 676 LOC source + 689 LOC tests, 31 tests pass, wheel+sdist build clean; commits 103aacd/5b3eacb/18fe13b/7a1b66e/0796b62/ea1bd58/be95dc1"},
+    "F5.3": {"status": "in_progress", "priority": "P1", "commit": null, "notes": "Hello Agent walkthrough docs/hello-agent.md + examples/hello_agent.sh — last gate item before Phase A; dispatched 2026-04-21"}
   },
   "phase_a_tasks": {
     "A1_migration": "pending",
