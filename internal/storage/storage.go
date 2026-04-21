@@ -742,6 +742,17 @@ type Application struct {
 	AllowedOrigins      []string       `json:"allowed_origins"`
 	IsDefault           bool           `json:"is_default"`
 	Metadata            map[string]any `json:"metadata"`
-	CreatedAt           time.Time      `json:"created_at"`
-	UpdatedAt           time.Time      `json:"updated_at"`
+	// IntegrationMode is the per-app login-surface picker. One of
+	// "hosted", "components", "proxy", "custom". Defaults to "custom".
+	IntegrationMode string `json:"integration_mode"`
+	// BrandingOverride is a JSON object of per-app branding overrides
+	// that merge over the global branding row in ResolveBranding.
+	// Empty string means "no override; use global".
+	BrandingOverride string `json:"branding_override,omitempty"`
+	// ProxyLoginFallback controls where proxy-mode apps send unauthed
+	// requests: "hosted" or "custom_url". Defaults to "hosted".
+	ProxyLoginFallback    string    `json:"proxy_login_fallback,omitempty"`
+	ProxyLoginFallbackURL string    `json:"proxy_login_fallback_url,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }

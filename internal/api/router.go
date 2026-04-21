@@ -496,6 +496,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Patch("/{id}", s.handleUpdateApp)
 			r.Delete("/{id}", s.handleDeleteApp)
 			r.Post("/{id}/rotate-secret", s.handleRotateAppSecret)
+			r.Get("/{id}/snippet", s.handleAppSnippet)
 		})
 
 		// Admin JWT JTI revocation

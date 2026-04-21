@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -30,8 +31,14 @@ type applicationResponse struct {
 	AllowedOrigins      []string       `json:"allowed_origins"`
 	IsDefault           bool           `json:"is_default"`
 	Metadata            map[string]any `json:"metadata"`
-	CreatedAt           string         `json:"created_at"`
-	UpdatedAt           string         `json:"updated_at"`
+
+	IntegrationMode       string          `json:"integration_mode"`
+	BrandingOverride      json.RawMessage `json:"branding_override,omitempty"`
+	ProxyLoginFallback    string          `json:"proxy_login_fallback,omitempty"`
+	ProxyLoginFallbackURL string          `json:"proxy_login_fallback_url,omitempty"`
+
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type applicationResponseWithSecret struct {
@@ -40,19 +47,45 @@ type applicationResponseWithSecret struct {
 }
 
 func appToResponse(a *storage.Application) applicationResponse {
-	return applicationResponse{
-		ID:                  a.ID,
-		Name:                a.Name,
-		ClientID:            a.ClientID,
-		ClientSecretPrefix:  a.ClientSecretPrefix,
-		AllowedCallbackURLs: a.AllowedCallbackURLs,
-		AllowedLogoutURLs:   a.AllowedLogoutURLs,
-		AllowedOrigins:      a.AllowedOrigins,
-		IsDefault:           a.IsDefault,
-		Metadata:            a.Metadata,
-		CreatedAt:           a.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:           a.UpdatedAt.UTC().Format(time.RFC3339),
+	var override json.RawMessage
+	if a.BrandingOverride != "" {
+		override = json.RawMessage(a.BrandingOverride)
 	}
+	return applicationResponse{
+		ID:                    a.ID,
+		Name:                  a.Name,
+		ClientID:              a.ClientID,
+		ClientSecretPrefix:    a.ClientSecretPrefix,
+		AllowedCallbackURLs:   a.AllowedCallbackURLs,
+		AllowedLogoutURLs:     a.AllowedLogoutURLs,
+		AllowedOrigins:        a.AllowedOrigins,
+		IsDefault:             a.IsDefault,
+		Metadata:              a.Metadata,
+		IntegrationMode:       a.IntegrationMode,
+		BrandingOverride:      override,
+		ProxyLoginFallback:    a.ProxyLoginFallback,
+		ProxyLoginFallbackURL: a.ProxyLoginFallbackURL,
+		CreatedAt:             a.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:             a.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+// validIntegrationMode checks the enum for integration_mode.
+func validIntegrationMode(m string) bool {
+	switch m {
+	case "hosted", "components", "proxy", "custom":
+		return true
+	}
+	return false
+}
+
+// validProxyLoginFallback checks the enum for proxy_login_fallback.
+func validProxyLoginFallback(m string) bool {
+	switch m {
+	case "hosted", "custom_url":
+		return true
+	}
+	return false
 }
 
 // validateAppURL parses a URL and enforces http/https scheme.
@@ -313,10 +346,14 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name      *string   `json:"name"`
-		Callbacks *[]string `json:"allowed_callback_urls"`
-		Logouts   *[]string `json:"allowed_logout_urls"`
-		Origins   *[]string `json:"allowed_origins"`
+		Name                  *string         `json:"name"`
+		Callbacks             *[]string       `json:"allowed_callback_urls"`
+		Logouts               *[]string       `json:"allowed_logout_urls"`
+		Origins               *[]string       `json:"allowed_origins"`
+		IntegrationMode       *string         `json:"integration_mode,omitempty"`
+		BrandingOverride      json.RawMessage `json:"branding_override,omitempty"`
+		ProxyLoginFallback    *string         `json:"proxy_login_fallback,omitempty"`
+		ProxyLoginFallbackURL *string         `json:"proxy_login_fallback_url,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -345,6 +382,47 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.AllowedOrigins = *req.Origins
+	}
+	if req.IntegrationMode != nil {
+		if !validIntegrationMode(*req.IntegrationMode) {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request",
+				"integration_mode must be one of: hosted, components, proxy, custom"))
+			return
+		}
+		app.IntegrationMode = *req.IntegrationMode
+	}
+	if req.BrandingOverride != nil {
+		// Normalise: null or "" clears the override. Otherwise must be a JSON object.
+		raw := strings.TrimSpace(string(req.BrandingOverride))
+		switch raw {
+		case "", "null", `""`:
+			app.BrandingOverride = ""
+		default:
+			var probe map[string]any
+			if err := json.Unmarshal([]byte(raw), &probe); err != nil {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_request",
+					"branding_override must be a JSON object"))
+				return
+			}
+			app.BrandingOverride = raw
+		}
+	}
+	if req.ProxyLoginFallback != nil {
+		if !validProxyLoginFallback(*req.ProxyLoginFallback) {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request",
+				"proxy_login_fallback must be one of: hosted, custom_url"))
+			return
+		}
+		app.ProxyLoginFallback = *req.ProxyLoginFallback
+	}
+	if req.ProxyLoginFallbackURL != nil {
+		if *req.ProxyLoginFallbackURL != "" {
+			if err := validateAppURL(*req.ProxyLoginFallbackURL); err != nil {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", err.Error()))
+				return
+			}
+		}
+		app.ProxyLoginFallbackURL = *req.ProxyLoginFallbackURL
 	}
 
 	if err := s.Store.UpdateApplication(r.Context(), app); err != nil {
