@@ -2867,6 +2867,70 @@ else
   fail "74d could not pick first application id"
 fi
 
+section "74e. Welcome email idempotent on repeat verify"
+
+# Fresh user whose email is unverified + welcome_email_sent=0 (storage default).
+E74E="welcome$RANDOM@test.com"
+P74E='GetCake117$$$'
+SU74E=$(curl -sS -X POST "$BASE/api/v1/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$E74E\",\"password\":\"$P74E\"}")
+UID74E=$(echo "$SU74E" | jq -r '.id // empty')
+if [ -n "$UID74E" ]; then
+  pass "74e signup created user $UID74E"
+
+  # Trigger email verification send — /auth/email/verify/send needs the session,
+  # so hit it with the JWT from the signup response.
+  T74E=$(echo "$SU74E" | jq -r '.token // empty')
+  curl -sS -o /dev/null -X POST -H "Authorization: Bearer $T74E" \
+    "$BASE/api/v1/auth/email/verify/send"
+  sleep 0.3
+
+  # Pull the verify URL out of the captured dev-inbox HTML. Dev provider stores
+  # rendered HTML; the verify URL contains /api/v1/auth/email/verify?token=...
+  VERIFY_URL=$(sqlite3 "$DB" "SELECT html FROM dev_emails WHERE to_addr='$E74E' ORDER BY created_at DESC LIMIT 1" 2>/dev/null \
+    | grep -oE 'http://localhost:8080/api/v1/auth/email/verify\?token=[A-Za-z0-9_-]+' | head -1)
+  if [ -n "$VERIFY_URL" ]; then
+    pass "74e extracted verify URL from dev inbox"
+    CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$VERIFY_URL")
+    [ "$CODE" = "200" ] && pass "74e first verify 200" || fail "74e first verify $CODE"
+
+    # Welcome email is sent asynchronously via a goroutine — give it a moment.
+    sleep 0.5
+
+    FLAG=$(sqlite3 "$DB" "SELECT welcome_email_sent FROM users WHERE id='$UID74E'" 2>/dev/null)
+    [ "$FLAG" = "1" ] && pass "74e welcome_email_sent=1 after verify" || fail "74e welcome_email_sent=$FLAG (expected 1)"
+
+    WELCOME_AFTER_FIRST=$(sqlite3 "$DB" "SELECT COUNT(*) FROM dev_emails WHERE subject LIKE 'Welcome%' AND to_addr='$E74E'" 2>/dev/null || echo 0)
+
+    # Unverify + generate a second verify token, then re-verify. The welcome
+    # email must NOT fire a second time because MarkWelcomeEmailSent's
+    # WHERE welcome_email_sent=0 guard now matches zero rows.
+    sqlite3 "$DB" "UPDATE users SET email_verified=0 WHERE id='$UID74E'" 2>/dev/null
+    curl -sS -o /dev/null -X POST -H "Authorization: Bearer $T74E" \
+      "$BASE/api/v1/auth/email/verify/send"
+    sleep 0.3
+    VERIFY_URL2=$(sqlite3 "$DB" "SELECT html FROM dev_emails WHERE to_addr='$E74E' AND subject NOT LIKE 'Welcome%' ORDER BY created_at DESC LIMIT 1" 2>/dev/null \
+      | grep -oE 'http://localhost:8080/api/v1/auth/email/verify\?token=[A-Za-z0-9_-]+' | head -1)
+    CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$VERIFY_URL2")
+    [ "$CODE" = "200" ] && pass "74e second verify 200" || fail "74e second verify $CODE"
+    sleep 0.5
+
+    WELCOME_AFTER_SECOND=$(sqlite3 "$DB" "SELECT COUNT(*) FROM dev_emails WHERE subject LIKE 'Welcome%' AND to_addr='$E74E'" 2>/dev/null || echo 0)
+    if [ "$WELCOME_AFTER_SECOND" = "$WELCOME_AFTER_FIRST" ]; then
+      pass "74e welcome email idempotent (count unchanged: $WELCOME_AFTER_SECOND)"
+    else
+      fail "74e welcome email fired again (first=$WELCOME_AFTER_FIRST, second=$WELCOME_AFTER_SECOND)"
+    fi
+  else
+    note "no verify URL found in dev_emails for $E74E"
+    fail "74e could not extract verify URL from dev inbox"
+  fi
+else
+  note "body: $SU74E"
+  fail "74e signup failed"
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
