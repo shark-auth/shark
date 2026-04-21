@@ -326,6 +326,12 @@ type Store interface {
 	ClearBrandingLogo(ctx context.Context, id string) error
 	ResolveBranding(ctx context.Context, appID string) (*BrandingConfig, error)
 
+	// Email templates (editable copy for hosted emails)
+	ListEmailTemplates(ctx context.Context) ([]*EmailTemplate, error)
+	GetEmailTemplate(ctx context.Context, id string) (*EmailTemplate, error)
+	UpdateEmailTemplate(ctx context.Context, id string, fields map[string]any) error
+	SeedEmailTemplates(ctx context.Context) error
+
 	// Proxy Rules (Phase 6.6 / Wave D — runtime override layer for the
 	// reverse proxy rule engine; YAML stays the bootstrap source).
 	CreateProxyRule(ctx context.Context, rule *ProxyRule) error
@@ -694,6 +700,20 @@ type SigningKey struct {
 	CreatedAt     string  `json:"created_at"`
 	RotatedAt     *string `json:"rotated_at,omitempty"`
 	Status        string  `json:"status"` // "active" | "retired"
+}
+
+// EmailTemplate is the editable copy for one hosted email (magic_link, etc).
+// BodyParagraphs is stored as a JSON string in SQLite but surfaced as []string.
+type EmailTemplate struct {
+	ID             string   `json:"id"`
+	Subject        string   `json:"subject"`
+	Preheader      string   `json:"preheader"`
+	HeaderText     string   `json:"header_text"`
+	BodyParagraphs []string `json:"body_paragraphs"`
+	CTAText        string   `json:"cta_text"`
+	CTAURLTemplate string   `json:"cta_url_template"`
+	FooterText     string   `json:"footer_text"`
+	UpdatedAt      string   `json:"updated_at"`
 }
 
 // BrandingConfig is the resolved branding (global + app override merged).

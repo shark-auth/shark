@@ -192,6 +192,13 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		// Non-fatal: server continues; roles will be missing until next boot fixes it.
 	}
 
+	// Seed editable copies for hosted email templates. Idempotent via INSERT OR
+	// IGNORE — only fills rows that don't already exist, so operator edits stick.
+	if err := store.SeedEmailTemplates(seedCtx); err != nil {
+		slog.Warn("email: failed to seed email templates", "error", err)
+		// Non-fatal: server continues; renderer falls back to bundled defaults.
+	}
+
 	adminKey, err := bootstrapAdminKey(ctx, store)
 	if err != nil {
 		store.Close() //#nosec G104 -- cleanup after bootstrap failure; primary error returned
