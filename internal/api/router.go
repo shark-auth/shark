@@ -761,36 +761,46 @@ func (s *Server) initProxy() {
 // will deny if the matched rule requires authentication, producing a
 // 403 rather than an opaque 401.
 func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
-	composite := &proxy.BreakerResolver{
-		Breaker: s.ProxyBreaker,
-		JWTResolver: &JWTResolver{
-			JWT:   s.JWTManager,
-			Store: s.Store,
-		},
-		Live: &LiveResolver{
-			Sessions: s.SessionManager,
-			Store:    s.Store,
-			RBAC:     s.RBAC,
-		},
-		Logger: slog.Default(),
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id, err := composite.Resolve(r)
-		if err != nil {
-			// Downgrade to anonymous — the rules engine is the single
-			// source of truth for whether that's allowed for this path.
-			// Logging here is intentionally at Debug: a flood of failed
-			// resolves (e.g. during an auth outage) shouldn't spam the
-			// info log.
-			slog.Debug("proxy auth resolve failed, treating as anonymous",
-				"err", err,
-				"path", r.URL.Path,
-			)
-			id = proxy.Identity{AuthMethod: "anonymous"}
+	return s.ProxyAuthMiddlewareFor(s.ProxyBreaker)(next)
+}
+
+// ProxyAuthMiddlewareFor returns a middleware that resolves the request's
+// identity via the given per-listener breaker. Exposed so the W15
+// multi-listener path in internal/server can share the same JWT + session
+// resolution code as the legacy main-port mount.
+func (s *Server) ProxyAuthMiddlewareFor(breaker *proxy.Breaker) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		composite := &proxy.BreakerResolver{
+			Breaker: breaker,
+			JWTResolver: &JWTResolver{
+				JWT:   s.JWTManager,
+				Store: s.Store,
+			},
+			Live: &LiveResolver{
+				Sessions: s.SessionManager,
+				Store:    s.Store,
+				RBAC:     s.RBAC,
+			},
+			Logger: slog.Default(),
 		}
-		r = r.WithContext(proxy.WithIdentity(r.Context(), id))
-		next.ServeHTTP(w, r)
-	})
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id, err := composite.Resolve(r)
+			if err != nil {
+				// Downgrade to anonymous — the rules engine is the single
+				// source of truth for whether that's allowed for this path.
+				// Logging here is intentionally at Debug: a flood of failed
+				// resolves (e.g. during an auth outage) shouldn't spam the
+				// info log.
+				slog.Debug("proxy auth resolve failed, treating as anonymous",
+					"err", err,
+					"path", r.URL.Path,
+				)
+				id = proxy.Identity{AuthMethod: "anonymous"}
+			}
+			r = r.WithContext(proxy.WithIdentity(r.Context(), id))
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {

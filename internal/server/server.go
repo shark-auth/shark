@@ -21,6 +21,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/oauth"
+	"github.com/sharkauth/sharkauth/internal/proxy"
 	"github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/storage"
 	"github.com/sharkauth/sharkauth/internal/webhook"
@@ -64,6 +65,12 @@ type Bootstrap struct {
 	API        *api.Server
 	Dispatcher *webhook.Dispatcher
 	AdminKey   string // populated only when a new admin key was generated
+
+	// ProxyListeners holds the W15 multi-listener set. One entry per
+	// proxy.listeners[] config block with a non-empty bind. Legacy
+	// main-port mode uses the catch-all mount inside api.Server and
+	// does not populate this slice.
+	ProxyListeners []*proxy.Listener
 }
 
 // Close releases resources.
@@ -98,6 +105,11 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	if opts.ProxyUpstream != "" {
 		cfg.Proxy.Enabled = true
 		cfg.Proxy.Upstream = opts.ProxyUpstream
+		// Drop any pre-existing listener set — the CLI flag is the
+		// single source of truth for the demo path, and Resolve() below
+		// will re-synthesise a single implicit main-port listener.
+		cfg.Proxy.Listeners = nil
+		cfg.Proxy.Resolve()
 	}
 
 	cfg.Server.DevMode = opts.DevMode
@@ -211,13 +223,90 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		api.WithOAuthServer(oauthSrv),
 	)
 
+	// W15: build multi-listener proxy set. cfg.Proxy.Resolve() has already
+	// been called in config.Load; entries with empty Bind are legacy
+	// main-port mounts handled by the api router's catch-all and skipped
+	// here. Building (not binding) happens up front so config errors —
+	// missing upstream, bad rule glob — fail at Build time alongside the
+	// rest of the startup-critical checks.
+	proxyListeners, err := buildProxyListeners(cfg, apiSrv)
+	if err != nil {
+		store.Close() //#nosec G104 -- cleanup after listener build failure
+		return nil, fmt.Errorf("build proxy listeners: %w", err)
+	}
+
 	return &Bootstrap{
-		Config:     cfg,
-		Store:      store,
-		API:        apiSrv,
-		Dispatcher: dispatcher,
-		AdminKey:   adminKey,
+		Config:         cfg,
+		Store:          store,
+		API:            apiSrv,
+		Dispatcher:     dispatcher,
+		AdminKey:       adminKey,
+		ProxyListeners: proxyListeners,
 	}, nil
+}
+
+// buildProxyListeners constructs one *proxy.Listener per config entry with
+// a non-empty Bind. Legacy mount-on-main-port entries (Bind=="") are
+// skipped — api.Server.initProxy handles them via the router catch-all.
+func buildProxyListeners(cfg *config.Config, apiSrv *api.Server) ([]*proxy.Listener, error) {
+	out := make([]*proxy.Listener, 0, len(cfg.Proxy.Listeners))
+	for i, lc := range cfg.Proxy.Listeners {
+		if lc.Bind == "" {
+			// Legacy main-port mount — handled inside api.Server.
+			continue
+		}
+		if lc.Upstream == "" {
+			return nil, fmt.Errorf("listeners[%d] %s: upstream is required", i, lc.Bind)
+		}
+
+		ruleSpecs := make([]proxy.RuleSpec, len(lc.Rules))
+		for j, pr := range lc.Rules {
+			ruleSpecs[j] = proxy.RuleSpec{
+				Path:    pr.Path,
+				Methods: pr.Methods,
+				Require: pr.Require,
+				Allow:   pr.Allow,
+				Scopes:  pr.Scopes,
+			}
+		}
+
+		breakerCfg := proxy.BreakerConfig{
+			HealthURL:        cfg.Server.BaseURL + "/api/v1/admin/health",
+			HealthInterval:   10 * time.Second,
+			FailureThreshold: 3,
+			CacheSize:        10000,
+			CacheTTL:         5 * time.Minute,
+			NegativeTTL:      30 * time.Second,
+			MissBehavior:     proxy.MissReject,
+		}
+
+		params := proxy.ListenerParams{
+			Bind:           lc.Bind,
+			Upstream:       lc.Upstream,
+			Timeout:        lc.TimeoutDuration(),
+			TrustedHeaders: lc.TrustedHeaders,
+			StripIncoming:  lc.StripIncomingOrDefault(),
+			Rules:          ruleSpecs,
+			BreakerConfig:  breakerCfg,
+			Logger:         slog.Default(),
+		}
+
+		l, err := proxy.NewListener(params)
+		if err != nil {
+			return nil, fmt.Errorf("listeners[%d]: %w", i, err)
+		}
+		// Wire auth middleware using the listener's own breaker so a dead
+		// upstream on one listener can't tank sessions on another.
+		params.AuthWrap = apiSrv.ProxyAuthMiddlewareFor(l.Breaker())
+		// NewListener captured AuthWrap at construction time, so rebuild
+		// with the final wrap. Cheap — no network I/O yet.
+		l, err = proxy.NewListener(params)
+		if err != nil {
+			return nil, fmt.Errorf("listeners[%d]: %w", i, err)
+		}
+		out = append(out, l)
+	}
+	return out, nil
 }
 
 // Serve runs Build then binds the HTTP listener. Blocks until ctx is cancelled.
@@ -250,6 +339,23 @@ func Serve(ctx context.Context, opts Options) error {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// W15: start each proxy listener BEFORE the main server so a port-
+	// in-use failure is surfaced synchronously as a fatal startup error.
+	// Partial bind is never acceptable — if any listener can't bind, the
+	// entire server exits non-zero so the operator can fix config and
+	// retry rather than run half-protected.
+	for _, pl := range b.ProxyListeners {
+		if err := pl.Start(ctx); err != nil {
+			// Best-effort drain any listeners that already bound.
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			for _, x := range b.ProxyListeners {
+				_ = x.Shutdown(shutdownCtx) //#nosec G104 -- cleanup after fatal bind failure
+			}
+			cancel()
+			return fmt.Errorf("proxy listener %s: %w", pl.Bind, err)
+		}
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("SharkAuth starting", "addr", addr, "dev_mode", opts.DevMode)
@@ -266,6 +372,15 @@ func Serve(ctx context.Context, opts Options) error {
 		slog.Info("shutting down server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		// Fan-out shutdown to proxy listeners first so they stop
+		// accepting new connections before the main API server starts
+		// draining (upstream auth calls still work while listeners
+		// drain).
+		for _, pl := range b.ProxyListeners {
+			if err := pl.Shutdown(shutdownCtx); err != nil {
+				slog.Warn("proxy listener shutdown", "bind", pl.Bind, "err", err)
+			}
+		}
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("shutdown: %w", err)
 		}
