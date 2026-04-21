@@ -587,6 +587,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// convention and keep create distinct from the list/patch flow.
 			r.Post("/users", s.handleAdminCreateUser)
 
+			r.Post("/organizations", s.handleAdminCreateOrganization)
 			r.Get("/organizations", s.handleAdminListOrganizations)
 			r.Get("/organizations/{id}", s.handleAdminGetOrganization)
 			r.Patch("/organizations/{id}", s.handleAdminUpdateOrganization)

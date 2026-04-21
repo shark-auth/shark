@@ -14,11 +14,32 @@ import { usePageActions } from './useKeyboardShortcuts'
 export function Organizations() {
   const { data: orgsRaw, loading, refresh } = useAPI('/admin/organizations');
   const orgs = orgsRaw?.organizations || [];
+  const toast = useToast();
 
-  usePageActions({ onRefresh: refresh });
+  usePageActions({ onRefresh: refresh, onNew: () => setCreating(true) });
 
   const [selectedId, setSelectedId] = React.useState(() => localStorage.getItem('org-selected') || '');
   const [query, setQuery] = React.useState('');
+  const [creating, setCreating] = React.useState(false);
+
+  // `?new=1` query auto-opens the slide-over on mount; strip the param after.
+  React.useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('new') === '1') {
+      setCreating(true);
+      sp.delete('new');
+      const qs = sp.toString();
+      const url = window.location.pathname + (qs ? '?' + qs : '');
+      window.history.replaceState(null, '', url);
+    }
+  }, []);
+
+  const handleCreated = (newOrg) => {
+    setCreating(false);
+    toast.success(`Organization "${newOrg.name}" created`);
+    refresh();
+    setSelectedId(newOrg.id);
+  };
 
   // Auto-select first org once loaded
   React.useEffect(() => {
@@ -54,7 +75,7 @@ export function Organizations() {
               <span style={{ fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-display)' }}>Organizations</span>
               <span className="chip" style={{ height: 17, fontSize: 10, lineHeight: 1.5 }}>{orgs.length}</span>
             </div>
-            <button className="btn primary sm"><Icon.Plus width={11} height={11}/>New</button>
+            <button className="btn primary sm" onClick={() => setCreating(true)}><Icon.Plus width={11} height={11}/>New</button>
           </div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
@@ -99,6 +120,13 @@ export function Organizations() {
           : <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 13, lineHeight: 1.5 }}>Select an organization</div>
         }
       </div>
+
+      {creating && (
+        <CreateOrgSlideover
+          onClose={() => setCreating(false)}
+          onCreated={handleCreated}
+        />
+      )}
     </div>
   );
 }
@@ -711,6 +739,307 @@ function OrgAuditTab({ org }) {
           <span className="faint">{e.actor_email || e.actor_id || '—'}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// --- CreateOrgSlideover — W01 ---
+// Right-side slide-over to create a new organization via POST /admin/organizations.
+// Mirrors CreateUserSlideover (T05) pattern: ESC + backdrop close with dirty
+// check, ?new=1 auto-open, inline field errors, 201/409/400 response handling.
+// Fields: name (required), slug (auto-derived, editable), description (optional),
+// metadata (optional JSON object).
+function CreateOrgSlideover({ onClose, onCreated }) {
+  const toast = useToast();
+  const [name, setName] = React.useState('');
+  const [slug, setSlug] = React.useState('');
+  const [slugManual, setSlugManual] = React.useState(false); // user has edited slug
+  const [description, setDescription] = React.useState('');
+  const [metadata, setMetadata] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [fieldErrors, setFieldErrors] = React.useState({});
+  const nameRef = React.useRef(null);
+
+  const dirty = name !== '' || slug !== '' || description !== '' || metadata !== '';
+
+  // Auto-derive slug from name (only when user hasn't manually edited).
+  React.useEffect(() => {
+    if (slugManual) return;
+    const derived = name
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 63);
+    setSlug(derived);
+  }, [name, slugManual]);
+
+  const tryClose = () => {
+    if (dirty) {
+      if (!window.confirm('Discard this new organization?')) return;
+    }
+    onClose();
+  };
+
+  // ESC closes; guard while submitting.
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !submitting) tryClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dirty, submitting]);
+
+  // Focus name on mount.
+  React.useEffect(() => {
+    if (nameRef.current) nameRef.current.focus();
+  }, []);
+
+  const slugRE = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
+
+  const validate = () => {
+    const errs = {};
+    if (!name.trim()) errs.name = 'Name is required';
+    else if (name.trim().length > 64) errs.name = 'Name must be 64 characters or fewer';
+    if (!slugRE.test(slug)) errs.slug = 'Slug must be 3-64 chars, lowercase a-z, 0-9, hyphens, no leading/trailing hyphen';
+    if (metadata.trim() !== '') {
+      try {
+        const parsed = JSON.parse(metadata.trim());
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          errs.metadata = 'Metadata must be a JSON object, e.g. {"key": "value"}';
+        }
+      } catch {
+        errs.metadata = 'Metadata is not valid JSON';
+      }
+    }
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (submitting) return;
+    if (!validate()) return;
+    setSubmitting(true);
+
+    const body = {
+      name: name.trim(),
+      slug: slug.trim(),
+    };
+    if (description.trim()) body.description = description.trim();
+    if (metadata.trim()) body.metadata = metadata.trim();
+
+    try {
+      const key = sessionStorage.getItem('shark_admin_key');
+      const res = await fetch('/api/v1/admin/organizations', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (res.status === 201) {
+        const newOrg = await res.json();
+        onCreated(newOrg);
+        return;
+      }
+
+      const errBody = await res.json().catch(() => ({}));
+      const msg = errBody.message || errBody.error || `HTTP ${res.status}`;
+      const code = errBody.code || errBody.error || '';
+
+      if (res.status === 409) {
+        setFieldErrors({ slug: msg });
+        toast.error(msg);
+      } else if (res.status === 400) {
+        const lower = (code || msg).toLowerCase();
+        if (lower.includes('slug')) {
+          setFieldErrors({ slug: msg });
+        } else if (lower.includes('name')) {
+          setFieldErrors({ name: msg });
+        } else if (lower.includes('metadata')) {
+          setFieldErrors({ metadata: msg });
+        } else {
+          setFieldErrors({ form: msg });
+        }
+        toast.error('Could not create organization. Check the form.');
+      } else {
+        setFieldErrors({ form: msg });
+        toast.error(msg);
+      }
+    } catch (err) {
+      const msg = err?.message || 'Network error';
+      setFieldErrors({ form: msg });
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputStyle = (hasError) => ({
+    width: '100%', height: 28, padding: '0 8px',
+    background: 'var(--surface-1)',
+    border: '1px solid ' + (hasError ? 'var(--danger)' : 'var(--hairline-strong)'),
+    borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+  });
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={() => !submitting && tryClose()}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 40,
+          background: 'rgba(0,0,0,0.35)',
+        }}
+      />
+      {/* Panel */}
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0,
+          width: 520, maxWidth: '100vw',
+          zIndex: 41,
+          borderLeft: '1px solid var(--hairline)',
+          background: 'var(--surface-0)',
+          display: 'flex', flexDirection: 'column',
+          animation: 'slideIn 140ms ease-out',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ padding: 16, borderBottom: '1px solid var(--hairline)' }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+            <button type="button" className="btn ghost sm" onClick={tryClose} disabled={submitting}>
+              <Icon.X width={12} height={12}/>Close
+            </button>
+            <span className="faint" style={{ fontSize: 11 }}>POST /admin/organizations</span>
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', fontFamily: 'var(--font-display)', lineHeight: 1.2 }}>
+            Create organization
+          </div>
+          <div className="faint" style={{ fontSize: 13, marginTop: 4 }}>
+            New tenant. Slug is auto-derived from name and can be edited below.
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <OrgSlideoverField label="Name">
+              <input
+                ref={nameRef}
+                type="text"
+                required
+                value={name}
+                onChange={e => {
+                  setName(e.target.value);
+                  if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: undefined });
+                }}
+                placeholder="Acme Inc"
+                style={inputStyle(fieldErrors.name)}
+              />
+              {fieldErrors.name && (
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--danger)', marginTop: 3 }}>{fieldErrors.name}</div>
+              )}
+            </OrgSlideoverField>
+
+            <OrgSlideoverField label="Slug" hint="Unique identifier · lowercase, hyphens · 3-64 chars">
+              <input
+                type="text"
+                value={slug}
+                onChange={e => {
+                  setSlug(e.target.value);
+                  setSlugManual(true);
+                  if (fieldErrors.slug) setFieldErrors({ ...fieldErrors, slug: undefined });
+                }}
+                placeholder="acme-inc"
+                style={inputStyle(fieldErrors.slug)}
+              />
+              {fieldErrors.slug && (
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--danger)', marginTop: 3 }}>{fieldErrors.slug}</div>
+              )}
+            </OrgSlideoverField>
+
+            <OrgSlideoverField label="Description" hint="Optional">
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="What is this organization for?"
+                rows={3}
+                style={{
+                  width: '100%', padding: '6px 8px',
+                  background: 'var(--surface-1)',
+                  border: '1px solid var(--hairline-strong)',
+                  borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+                  resize: 'vertical', fontFamily: 'inherit',
+                }}
+              />
+            </OrgSlideoverField>
+
+            <OrgSlideoverField label="Metadata" hint={'Optional · JSON object, e.g. {"plan": "pro"}'}>
+              <textarea
+                value={metadata}
+                onChange={e => {
+                  setMetadata(e.target.value);
+                  if (fieldErrors.metadata) setFieldErrors({ ...fieldErrors, metadata: undefined });
+                }}
+                placeholder={'{"plan": "pro", "region": "us-east-1"}'}
+                rows={4}
+                style={{
+                  width: '100%', padding: '6px 8px',
+                  background: 'var(--surface-1)',
+                  border: '1px solid ' + (fieldErrors.metadata ? 'var(--danger)' : 'var(--hairline-strong)'),
+                  borderRadius: 4, fontSize: 12, color: 'var(--fg)',
+                  resize: 'vertical', fontFamily: 'var(--font-mono)',
+                }}
+              />
+              {fieldErrors.metadata && (
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--danger)', marginTop: 3 }}>{fieldErrors.metadata}</div>
+              )}
+            </OrgSlideoverField>
+
+            {fieldErrors.form && (
+              <div style={{
+                padding: 8,
+                border: '1px solid var(--danger)',
+                borderRadius: 4,
+                background: 'color-mix(in oklch, var(--danger) 8%, var(--surface-1))',
+                fontSize: 12, color: 'var(--danger)', lineHeight: 1.5,
+              }}>
+                {fieldErrors.form}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: 12, borderTop: '1px solid var(--hairline)',
+          display: 'flex', justifyContent: 'flex-end', gap: 8,
+          background: 'var(--surface-0)',
+        }}>
+          <button type="button" className="btn sm ghost" onClick={tryClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button type="submit" className="btn primary sm" disabled={submitting}>
+            {submitting ? 'Creating…' : 'Create organization'}
+          </button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+// OrgSlideoverField — label + optional hint wrapper used inside CreateOrgSlideover.
+function OrgSlideoverField({ label, children, hint }) {
+  return (
+    <div style={{ marginBottom: 0 }}>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 4, lineHeight: 1.5 }}>{label}</div>
+      {children}
+      {hint && <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>{hint}</div>}
     </div>
   );
 }

@@ -14,15 +14,88 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
+
+// --- Create org (admin) ---
+
+type adminCreateOrgRequest struct {
+	Name        string  `json:"name"`
+	Slug        string  `json:"slug"`
+	Description *string `json:"description,omitempty"` // accepted for forward-compat, not stored
+	Metadata    *string `json:"metadata,omitempty"`
+}
+
+// handleAdminCreateOrganization handles POST /api/v1/admin/organizations.
+// Creates a new org without requiring a session user — the admin key is the
+// only credential. No owner membership row is created (admin-managed orgs
+// are bootstrapped; owners can be added via POST /admin/organizations/{id}/members
+// or by having users join the org later). RBAC builtin roles are seeded if
+// the RBAC subsystem is present.
+func (s *Server) handleAdminCreateOrganization(w http.ResponseWriter, r *http.Request) {
+	var req adminCreateOrgRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.Slug = strings.ToLower(strings.TrimSpace(req.Slug))
+
+	if req.Name == "" {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_name", "Name is required"))
+		return
+	}
+	if !slugRE.MatchString(req.Slug) {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_slug", "Slug must be 3-64 chars, lowercase a-z, 0-9, hyphens, no leading/trailing hyphen"))
+		return
+	}
+	if _, err := s.Store.GetOrganizationBySlug(r.Context(), req.Slug); err == nil {
+		writeJSON(w, http.StatusConflict, errPayload("slug_taken", "An organization with this slug already exists"))
+		return
+	}
+
+	id, _ := gonanoid.New()
+	now := time.Now().UTC().Format(time.RFC3339)
+	meta := ""
+	if req.Metadata != nil {
+		meta = normalizeMetadata(*req.Metadata)
+	}
+	org := &storage.Organization{
+		ID:        "org_" + id,
+		Name:      req.Name,
+		Slug:      req.Slug,
+		Metadata:  meta,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.Store.CreateOrganization(r.Context(), org); err != nil {
+		internal(w, err)
+		return
+	}
+
+	// Seed builtin RBAC roles (owner/admin/member). Non-fatal — log on error.
+	if s.RBAC != nil {
+		if err := s.RBAC.SeedOrgRoles(r.Context(), org.ID); err != nil {
+			slog.Warn("admin create org: seed roles failed", "org_id", org.ID, "err", err)
+		}
+	}
+
+	s.auditAdminOrg(r.Context(), "admin.organization.create", org.ID, ipOf(r), uaOf(r))
+	s.emit(r.Context(), storage.WebhookEventOrgCreated, map[string]any{
+		"id": org.ID, "name": org.Name, "slug": org.Slug,
+	})
+
+	writeJSON(w, http.StatusCreated, orgToResponse(org))
+}
 
 // --- Update org (admin) ---
 
