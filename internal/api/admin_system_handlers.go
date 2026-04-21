@@ -521,35 +521,43 @@ func (s *Server) handleAdminEmailPreview(w http.ResponseWriter, r *http.Request)
 		appName = "SharkAuth"
 	}
 
-	var html string
+	ctx := r.Context()
+	branding, _ := s.Store.ResolveBranding(ctx, "")
+	var rendered email.Rendered
 	var err error
 	switch tpl {
 	case "magic_link":
-		html, err = email.RenderMagicLink(email.MagicLinkData{
+		rendered, err = email.RenderMagicLink(ctx, s.Store, branding, email.MagicLinkData{
 			AppName:       appName,
 			MagicLinkURL:  "https://example.com/auth/magic?token=preview-token-not-real",
 			ExpiryMinutes: 15,
 		})
 	case "verify_email":
-		html, err = email.RenderVerifyEmail(email.VerifyEmailData{
+		rendered, err = email.RenderVerifyEmail(ctx, s.Store, branding, email.VerifyEmailData{
 			AppName:       appName,
 			VerifyURL:     "https://example.com/auth/verify?token=preview-token-not-real",
 			ExpiryMinutes: 60,
 		})
 	case "password_reset":
-		html, err = email.RenderPasswordReset(email.PasswordResetData{
+		rendered, err = email.RenderPasswordReset(ctx, s.Store, branding, email.PasswordResetData{
 			AppName:       appName,
 			ResetURL:      "https://example.com/auth/reset?token=preview-token-not-real",
 			ExpiryMinutes: 30,
 		})
 	case "organization_invitation":
-		html, err = email.RenderOrganizationInvitation(email.OrganizationInvitationData{
+		rendered, err = email.RenderOrganizationInvitation(ctx, s.Store, branding, email.OrganizationInvitationData{
 			AppName:      appName,
 			OrgName:      "Acme Corp",
 			Role:         "member",
 			AcceptURL:    "https://example.com/orgs/acme/accept?token=preview",
 			InviterEmail: "alice@acme.com",
 			ExpiryHours:  72,
+		})
+	case "welcome":
+		rendered, err = email.RenderWelcome(ctx, s.Store, branding, email.WelcomeData{
+			AppName:      appName,
+			UserEmail:    "user@example.com",
+			DashboardURL: "https://example.com/dashboard",
 		})
 	default:
 		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Unknown email template: "+tpl))
@@ -561,7 +569,8 @@ func (s *Server) handleAdminEmailPreview(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"template": tpl,
-		"html":     html,
+		"subject":  rendered.Subject,
+		"html":     rendered.HTML,
 	})
 }
 

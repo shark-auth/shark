@@ -509,7 +509,8 @@ func (s *Server) sendOrgInvitationEmail(inv *storage.OrganizationInvitation, org
 	inviter, _ := s.Store.GetUserByID(ctx, inviterID)
 	acceptURL := fmt.Sprintf("%s/organizations/invitations/%s/accept",
 		strings.TrimRight(s.Config.Server.BaseURL, "/"), rawToken)
-	html, err := email.RenderOrganizationInvitation(email.OrganizationInvitationData{
+	branding, _ := s.Store.ResolveBranding(ctx, "")
+	rendered, err := email.RenderOrganizationInvitation(ctx, s.Store, branding, email.OrganizationInvitationData{
 		AppName:      s.Config.MFA.Issuer,
 		OrgName:      org.Name,
 		Role:         inv.Role,
@@ -523,8 +524,8 @@ func (s *Server) sendOrgInvitationEmail(inv *storage.OrganizationInvitation, org
 	if sender := s.emailSender(); sender != nil {
 		_ = sender.Send(&email.Message{
 			To:      inv.Email,
-			Subject: fmt.Sprintf("You're invited to %s", org.Name),
-			HTML:    html,
+			Subject: rendered.Subject,
+			HTML:    rendered.HTML,
 		})
 	}
 }
