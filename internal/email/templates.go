@@ -143,6 +143,12 @@ func RenderWelcome(ctx context.Context, store storage.Store, branding *storage.B
 	}, nil
 }
 
+// RenderStructured exposes the internal render path for preview endpoints.
+// Matches renderStructured signature exactly.
+func RenderStructured(tmpl *storage.EmailTemplate, branding *storage.BrandingConfig, data any) (Rendered, error) {
+	return renderStructured(tmpl, branding, data)
+}
+
 // renderStructured takes a DB-backed EmailTemplate and composes it into the
 // branded shared layout. Per-field Go-template syntax inside the EmailTemplate
 // rows is evaluated against data, then the final strings are slotted into

@@ -618,6 +618,17 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Delete("/logo", s.handleDeleteLogo)
 			})
 
+			// Email template admin CRUD + preview/send-test/reset (Phase A, task A7).
+			// Inherits the AdminAPIKeyFromStore middleware from the parent /admin group.
+			r.Route("/email-templates", func(r chi.Router) {
+				r.Get("/", s.handleListEmailTemplates)
+				r.Get("/{id}", s.handleGetEmailTemplate)
+				r.Patch("/{id}", s.handlePatchEmailTemplate)
+				r.Post("/{id}/preview", s.handlePreviewEmailTemplate)
+				r.Post("/{id}/send-test", s.handleSendTestEmail)
+				r.Post("/{id}/reset", s.handleResetEmailTemplate)
+			})
+
 			if cfg.Server.DevMode {
 				r.Get("/dev/emails", s.handleListDevEmails)
 				r.Get("/dev/emails/{id}", s.handleGetDevEmail)
