@@ -3053,6 +3053,115 @@ else
   fail "74g could not pick first application id"
 fi
 
+# --- §F4: Token Exchange (RFC 8693) delegation --------------------------------
+section "F4: Token Exchange delegation (RFC 8693)"
+
+# Seed agent_a (subject) and agent_b (actor) via admin API.
+F4A_RESP=$(curl -sS -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST "$BASE/api/v1/agents" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"f4-agent-a","grant_types":["client_credentials","urn:ietf:params:oauth:grant-type:token-exchange"],"scopes":["read","write"]}')
+F4A_CODE=$(echo "$F4A_RESP" | tail -1)
+F4A_BODY=$(echo "$F4A_RESP" | sed '$d')
+[ "$F4A_CODE" = 201 ] && pass "F4 agent_a create 201" || { fail "F4 agent_a create $F4A_CODE"; note "$F4A_BODY"; }
+F4A_CID=$(echo "$F4A_BODY" | jq -r '.client_id // empty')
+F4A_SECRET=$(echo "$F4A_BODY" | jq -r '.client_secret // empty')
+[ -n "$F4A_CID" ] && pass "F4 agent_a client_id: $F4A_CID" || fail "F4 agent_a client_id missing"
+
+F4B_RESP=$(curl -sS -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST "$BASE/api/v1/agents" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"f4-agent-b","grant_types":["client_credentials","urn:ietf:params:oauth:grant-type:token-exchange"],"scopes":["read","write"]}')
+F4B_CODE=$(echo "$F4B_RESP" | tail -1)
+F4B_BODY=$(echo "$F4B_RESP" | sed '$d')
+[ "$F4B_CODE" = 201 ] && pass "F4 agent_b create 201" || { fail "F4 agent_b create $F4B_CODE"; note "$F4B_BODY"; }
+F4B_CID=$(echo "$F4B_BODY" | jq -r '.client_id // empty')
+F4B_SECRET=$(echo "$F4B_BODY" | jq -r '.client_secret // empty')
+[ -n "$F4B_CID" ] && pass "F4 agent_b client_id: $F4B_CID" || fail "F4 agent_b client_id missing"
+
+if [ -n "$F4A_CID" ] && [ -n "$F4A_SECRET" ] && [ -n "$F4B_CID" ] && [ -n "$F4B_SECRET" ]; then
+  # Mint subject token for agent_a via client_credentials.
+  F4A_BASIC=$(printf '%s' "$F4A_CID:$F4A_SECRET" | base64 | tr -d '\n' | tr -d ' ')
+  F4A_TOK_RESP=$(curl -sS -w "\n%{http_code}" -X POST "$BASE/oauth/token" \
+    -H "Authorization: Basic $F4A_BASIC" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d 'grant_type=client_credentials&scope=read')
+  F4A_TOK_CODE=$(echo "$F4A_TOK_RESP" | tail -1)
+  F4A_TOK_BODY=$(echo "$F4A_TOK_RESP" | sed '$d')
+  [ "$F4A_TOK_CODE" = 200 ] && pass "F4 agent_a CC token 200" || { fail "F4 agent_a CC token $F4A_TOK_CODE"; note "$F4A_TOK_BODY"; }
+  F4A_AT=$(echo "$F4A_TOK_BODY" | jq -r '.access_token // empty')
+  [ -n "$F4A_AT" ] && pass "F4 subject token (agent_a) issued" || fail "F4 no subject token"
+
+  # Mint actor token for agent_b via client_credentials.
+  F4B_BASIC=$(printf '%s' "$F4B_CID:$F4B_SECRET" | base64 | tr -d '\n' | tr -d ' ')
+  F4B_TOK_RESP=$(curl -sS -w "\n%{http_code}" -X POST "$BASE/oauth/token" \
+    -H "Authorization: Basic $F4B_BASIC" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d 'grant_type=client_credentials&scope=read')
+  F4B_TOK_CODE=$(echo "$F4B_TOK_RESP" | tail -1)
+  F4B_TOK_BODY=$(echo "$F4B_TOK_RESP" | sed '$d')
+  [ "$F4B_TOK_CODE" = 200 ] && pass "F4 agent_b CC token 200" || { fail "F4 agent_b CC token $F4B_TOK_CODE"; note "$F4B_TOK_BODY"; }
+  F4B_AT=$(echo "$F4B_TOK_BODY" | jq -r '.access_token // empty')
+  [ -n "$F4B_AT" ] && pass "F4 actor token (agent_b) issued" || fail "F4 no actor token"
+
+  if [ -n "$F4A_AT" ] && [ -n "$F4B_AT" ]; then
+    # POST token exchange: agent_b acts on behalf of agent_a's subject token.
+    F4_EX_RESP=$(curl -sS -w "\n%{http_code}" -X POST "$BASE/oauth/token" \
+      -H "Authorization: Basic $F4B_BASIC" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+      --data-urlencode "subject_token=$F4A_AT" \
+      --data-urlencode "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
+      --data-urlencode "actor_token=$F4B_AT" \
+      --data-urlencode "actor_token_type=urn:ietf:params:oauth:token-type:access_token" \
+      --data-urlencode "scope=read")
+    F4_EX_CODE=$(echo "$F4_EX_RESP" | tail -1)
+    F4_EX_BODY=$(echo "$F4_EX_RESP" | sed '$d')
+
+    if [ "$F4_EX_CODE" = 200 ]; then
+      pass "F4 token exchange 200"
+      echo "$F4_EX_BODY" | jq -e '.issued_token_type == "urn:ietf:params:oauth:token-type:access_token"' >/dev/null \
+        && pass "F4 issued_token_type correct" || fail "F4 issued_token_type wrong"
+      echo "$F4_EX_BODY" | jq -e '.token_type == "Bearer"' >/dev/null \
+        && pass "F4 token_type=Bearer" || fail "F4 token_type not Bearer"
+
+      # Decode the returned JWT and assert act.sub == agent_b's client_id.
+      F4_DELEGATED=$(echo "$F4_EX_BODY" | jq -r '.access_token // empty')
+      if [ -n "$F4_DELEGATED" ]; then
+        # base64url decode the middle segment (payload).
+        F4_PAYLOAD_B64=$(echo "$F4_DELEGATED" | cut -d'.' -f2)
+        # Pad to multiple of 4 for base64 decode.
+        F4_PAD=$(( (4 - ${#F4_PAYLOAD_B64} % 4) % 4 ))
+        F4_PAYLOAD_B64_PADDED="${F4_PAYLOAD_B64}$(printf '=%.0s' $(seq 1 $F4_PAD 2>/dev/null || true))"
+        F4_CLAIMS=$(echo "$F4_PAYLOAD_B64_PADDED" | tr '_-' '/+' | base64 -d 2>/dev/null || \
+                    echo "$F4_PAYLOAD_B64_PADDED" | tr '_-' '/+' | openssl base64 -d 2>/dev/null)
+
+        if [ -n "$F4_CLAIMS" ]; then
+          F4_ACT_SUB=$(echo "$F4_CLAIMS" | jq -r '.act.sub // empty' 2>/dev/null)
+          if [ "$F4_ACT_SUB" = "$F4B_CID" ]; then
+            pass "F4 act.sub == agent_b client_id ($F4B_CID)"
+          else
+            fail "F4 act.sub mismatch: got '$F4_ACT_SUB', want '$F4B_CID'"
+            note "F4 delegated token claims: $F4_CLAIMS"
+          fi
+          F4_TOKEN_SUB=$(echo "$F4_CLAIMS" | jq -r '.sub // empty' 2>/dev/null)
+          [ -n "$F4_TOKEN_SUB" ] && pass "F4 delegated token sub present: $F4_TOKEN_SUB" || fail "F4 delegated token missing sub"
+        else
+          fail "F4 could not base64url-decode JWT payload"
+        fi
+      else
+        fail "F4 no access_token in exchange response"
+      fi
+    else
+      fail "F4 token exchange $F4_EX_CODE"
+      note "F4 exchange body: $F4_EX_BODY"
+      note "Subject token for agent_a is a CC opaque token; server requires JWT subject. Full RFC 8693 delegation coverage in exchange_test.go."
+    fi
+  else
+    note "F4 skipped — could not mint subject/actor tokens"
+  fi
+else
+  note "F4 skipped — could not create agents"
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
