@@ -85,6 +85,17 @@ func (s *SQLiteStore) GetApplicationByClientID(ctx context.Context, clientID str
 		 FROM applications WHERE client_id = ?`, clientID))
 }
 
+// GetApplicationBySlug returns the application with the given slug.
+// Returns sql.ErrNoRows when no matching row exists.
+func (s *SQLiteStore) GetApplicationBySlug(ctx context.Context, slug string) (*Application, error) {
+	return s.scanApplication(s.db.QueryRowContext(ctx,
+		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
+		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
+		        is_default, metadata, created_at, updated_at,
+		        integration_mode, branding_override, proxy_login_fallback, proxy_login_fallback_url
+		 FROM applications WHERE slug = ?`, slug))
+}
+
 func (s *SQLiteStore) GetDefaultApplication(ctx context.Context) (*Application, error) {
 	return s.scanApplication(s.db.QueryRowContext(ctx,
 		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,

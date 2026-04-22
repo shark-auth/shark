@@ -24,6 +24,10 @@ const adminCSP = "default-src 'self'; " +
 	"connect-src 'self'; " +
 	"frame-ancestors 'none'"
 
+// DistFS returns the embedded dist filesystem so sibling packages (e.g.
+// internal/api) can reach into dist/hosted/assets/ without re-embedding.
+func DistFS() embed.FS { return distFS }
+
 // Handler returns an http.Handler that serves the embedded admin dashboard.
 // Unknown paths fall back to index.html so client-side routing works.
 func Handler() http.Handler {

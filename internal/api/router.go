@@ -702,6 +702,12 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		})
 	}
 
+	// Hosted SPA shell (Phase B, task B7). Public — no auth required. Must be
+	// mounted before /admin/* so chi's trie routes /admin/hosted/assets/* here
+	// rather than falling through to the admin dashboard SPA fallback.
+	r.Get("/hosted/{app_slug}/{page}", s.handleHostedPage)
+	r.Get("/admin/hosted/assets/*", s.handleHostedAssets)
+
 	// Admin dashboard (Phase 4) — embedded HTML/React bundle, SPA fallback.
 	r.Handle("/admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))
 	r.Handle("/admin/*", http.StripPrefix("/admin/", admin.Handler()))

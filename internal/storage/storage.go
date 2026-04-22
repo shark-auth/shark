@@ -232,6 +232,7 @@ type Store interface {
 	CreateApplication(ctx context.Context, app *Application) error
 	GetApplicationByID(ctx context.Context, id string) (*Application, error)
 	GetApplicationByClientID(ctx context.Context, clientID string) (*Application, error)
+	GetApplicationBySlug(ctx context.Context, slug string) (*Application, error)
 	GetDefaultApplication(ctx context.Context) (*Application, error)
 	ListApplications(ctx context.Context, limit, offset int) ([]*Application, error)
 	UpdateApplication(ctx context.Context, app *Application) error
