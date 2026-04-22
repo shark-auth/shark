@@ -3130,7 +3130,11 @@ if [ -n "$F4A_CID" ] && [ -n "$F4A_SECRET" ] && [ -n "$F4B_CID" ] && [ -n "$F4B_
         F4_PAYLOAD_B64=$(echo "$F4_DELEGATED" | cut -d'.' -f2)
         # Pad to multiple of 4 for base64 decode.
         F4_PAD=$(( (4 - ${#F4_PAYLOAD_B64} % 4) % 4 ))
-        F4_PAYLOAD_B64_PADDED="${F4_PAYLOAD_B64}$(printf '=%.0s' $(seq 1 $F4_PAD 2>/dev/null || true))"
+        case $F4_PAD in
+          1) F4_PAYLOAD_B64_PADDED="${F4_PAYLOAD_B64}=" ;;
+          2) F4_PAYLOAD_B64_PADDED="${F4_PAYLOAD_B64}==" ;;
+          *) F4_PAYLOAD_B64_PADDED="$F4_PAYLOAD_B64" ;;
+        esac
         F4_CLAIMS=$(echo "$F4_PAYLOAD_B64_PADDED" | tr '_-' '/+' | base64 -d 2>/dev/null || \
                     echo "$F4_PAYLOAD_B64_PADDED" | tr '_-' '/+' | openssl base64 -d 2>/dev/null)
 
@@ -3214,7 +3218,11 @@ else
           if [ -n "$F5_AT" ]; then
             F5_PAYLOAD_B64=$(echo "$F5_AT" | cut -d'.' -f2)
             F5_PAD=$(( (4 - ${#F5_PAYLOAD_B64} % 4) % 4 ))
-            F5_PAYLOAD_B64_P="${F5_PAYLOAD_B64}$(printf '=%.0s' $(seq 1 $F5_PAD 2>/dev/null || true))"
+            case $F5_PAD in
+              1) F5_PAYLOAD_B64_P="${F5_PAYLOAD_B64}=" ;;
+              2) F5_PAYLOAD_B64_P="${F5_PAYLOAD_B64}==" ;;
+              *) F5_PAYLOAD_B64_P="$F5_PAYLOAD_B64" ;;
+            esac
             F5_AT_CLAIMS=$(echo "$F5_PAYLOAD_B64_P" | tr '_-' '/+' | base64 -d 2>/dev/null || \
                            echo "$F5_PAYLOAD_B64_P" | tr '_-' '/+' | openssl base64 -d 2>/dev/null)
             F5_TOKEN_JKT=$(echo "$F5_AT_CLAIMS" | jq -r '.cnf.jkt // empty' 2>/dev/null)
