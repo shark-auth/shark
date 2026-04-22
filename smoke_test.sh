@@ -3354,10 +3354,22 @@ fi
 # --- §F5: DPoP full flow (RFC 9449) -------------------------------------------
 section "F5: DPoP full flow (RFC 9449)"
 
-if ! command -v python3 >/dev/null 2>&1; then
+# Prefer the sdk/python venv (has pyjwt + cryptography) over the system python3.
+_F5_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -x "$_F5_SCRIPT_DIR/sdk/python/.venv/bin/python" ]; then
+  F5_PY="$_F5_SCRIPT_DIR/sdk/python/.venv/bin/python"
+elif [ -x "$_F5_SCRIPT_DIR/sdk/python/.venv/bin/python3" ]; then
+  F5_PY="$_F5_SCRIPT_DIR/sdk/python/.venv/bin/python3"
+elif command -v python3 >/dev/null 2>&1; then
+  F5_PY="python3"
+else
+  F5_PY=""
+fi
+
+if [ -z "$F5_PY" ]; then
   note "F5 skipped: python3 not available"
 else
-  F5_HELPER_DIR="$(cd "$(dirname "$0")" && pwd)/examples"
+  F5_HELPER_DIR="$_F5_SCRIPT_DIR/examples"
   F5_HELPER="$F5_HELPER_DIR/_dpop_helper.py"
   F5_KEY_FILE="/tmp/shark_f5_dpop_key.pem"
 
@@ -3380,7 +3392,7 @@ else
 
       # --- Happy path: DPoP proof + client_credentials -> 200 ---
       rm -f "$F5_KEY_FILE"
-      F5_PROOF=$(python3 "$F5_HELPER" POST "$F5_TOKEN_URL" --key-file="$F5_KEY_FILE" 2>/dev/null)
+      F5_PROOF=$("$F5_PY" "$F5_HELPER" POST "$F5_TOKEN_URL" --key-file="$F5_KEY_FILE" 2>/dev/null)
       if [ -n "$F5_PROOF" ]; then
         # Verify it's a valid 3-segment JWT.
         F5_SEG_COUNT=$(echo "$F5_PROOF" | tr '.' '\n' | wc -l | tr -d ' ')
@@ -3413,7 +3425,7 @@ else
             F5_TOKEN_JKT=$(echo "$F5_AT_CLAIMS" | jq -r '.cnf.jkt // empty' 2>/dev/null)
 
             # Get the helper to print the JKT of the key it used.
-            F5_HELPER_JKT=$(python3 "$F5_HELPER" POST "$F5_TOKEN_URL" --key-file="$F5_KEY_FILE" --print-jkt 2>/dev/null || echo "")
+            F5_HELPER_JKT=$("$F5_PY" "$F5_HELPER" POST "$F5_TOKEN_URL" --key-file="$F5_KEY_FILE" --print-jkt 2>/dev/null || echo "")
             if [ -n "$F5_TOKEN_JKT" ]; then
               pass "F5 issued token contains cnf.jkt: $F5_TOKEN_JKT"
               if [ -n "$F5_HELPER_JKT" ] && [ "$F5_TOKEN_JKT" = "$F5_HELPER_JKT" ]; then
@@ -3450,7 +3462,7 @@ else
         fi
 
         # --- Expired iat: --iat-offset=-3600 -> 400/401 ---
-        F5_EXP_PROOF=$(python3 "$F5_HELPER" POST "$F5_TOKEN_URL" \
+        F5_EXP_PROOF=$("$F5_PY" "$F5_HELPER" POST "$F5_TOKEN_URL" \
           --key-file="$F5_KEY_FILE" --iat-offset=-3600 2>/dev/null)
         if [ -n "$F5_EXP_PROOF" ]; then
           F5_EXP_RESP=$(curl -sS -w "\n%{http_code}" -X POST "$F5_TOKEN_URL" \
@@ -3474,7 +3486,7 @@ else
         note "F5 key-mismatch check is resource-server-level (cnf.jkt vs proof jwk); not enforced at token endpoint"
       else
         fail "F5 DPoP helper produced no proof"
-        note "Run: python3 examples/_dpop_helper.py POST $BASE/oauth/token"
+        note "Run: $F5_PY examples/_dpop_helper.py POST $BASE/oauth/token"
       fi
     else
       note "F5 skipped — could not create DPoP test agent"
