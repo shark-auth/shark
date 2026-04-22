@@ -169,13 +169,24 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- Step 7: Store token ---
+	// Resolve the subject to a real user ID only if it exists in the users
+	// table. When the subject token was a client_credentials token the sub
+	// claim holds a client_id (not a user ID), and the oauth_tokens.user_id
+	// column has a FK → users(id). Setting it to a non-existent ID triggers a
+	// FK violation, so we leave it NULL for agent-to-agent delegation.
+	resolvedUserID := ""
+	if subjectSub != "" {
+		if _, lookupErr := s.RawStore.GetUserByID(ctx, subjectSub); lookupErr == nil {
+			resolvedUserID = subjectSub
+		}
+	}
 	tokenHash := hashTokenString(signedToken)
 	oauthToken := &storage.OAuthToken{
 		ID:                "tok_" + jti[:8],
 		JTI:               jti,
 		ClientID:          actingAgent.ClientID,
 		AgentID:           actingAgent.ID,
-		UserID:            subjectSub,
+		UserID:            resolvedUserID,
 		TokenType:         "access",
 		TokenHash:         tokenHash,
 		Scope:             strings.Join(grantedScopes, " "),
@@ -225,17 +236,33 @@ func (s *Server) Sign(claims gojwt.MapClaims) (string, error) {
 	return token.SignedString(s.signingPrivKey)
 }
 
-// parseSubjectJWT parses and validates a JWT against the active ES256 public key.
+// parseSubjectJWT parses and validates a JWT against the server's ES256 signing
+// key. The key is resolved in two steps:
+//
+//  1. If the JWT header contains a "kid" claim, the key is looked up by KID
+//     (allowing retired keys so that tokens signed before a key rotation are
+//     still accepted until they expire).
+//  2. Otherwise (no kid), fall back to the current active ES256 key.
 func (s *Server) parseSubjectJWT(ctx context.Context, tokenStr string) (gojwt.MapClaims, error) {
-	pubKey, err := s.loadES256PublicKey(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load public key: %w", err)
-	}
 	parsed, err := gojwt.ParseWithClaims(tokenStr, gojwt.MapClaims{}, func(t *gojwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*gojwt.SigningMethodECDSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
-		return pubKey, nil
+		// Prefer kid-based lookup so tokens signed with a recently-rotated (but
+		// not yet expired) key remain verifiable after admin key rotation.
+		if kid, ok := t.Header["kid"].(string); ok && kid != "" {
+			key, lookupErr := s.RawStore.GetSigningKeyByKID(ctx, kid)
+			if lookupErr == nil {
+				return parseECPublicKeyPEM(key.PublicKeyPEM)
+			}
+			// KID not in DB — fall through to active-key lookup.
+		}
+		// No kid or kid not found: try the current active ES256 key.
+		key, err := s.RawStore.GetActiveSigningKeyByAlgorithm(ctx, "ES256")
+		if err != nil {
+			return nil, fmt.Errorf("get active ES256 key: %w", err)
+		}
+		return parseECPublicKeyPEM(key.PublicKeyPEM)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parse JWT: %w", err)
@@ -250,17 +277,7 @@ func (s *Server) parseSubjectJWT(ctx context.Context, tokenStr string) (gojwt.Ma
 	return claims, nil
 }
 
-// loadES256PublicKey fetches the active ES256 key from storage and returns the
-// parsed ECDSA public key.
-func (s *Server) loadES256PublicKey(ctx context.Context) (*ecdsa.PublicKey, error) {
-	key, err := s.RawStore.GetActiveSigningKeyByAlgorithm(ctx, "ES256")
-	if err != nil {
-		return nil, fmt.Errorf("get active ES256 key: %w", err)
-	}
-	return parseECPublicKeyPEM(key.PublicKeyPEM)
-}
-
-// parseECPublicKeyPEM parses a PEM-encoded ECDSA public key (PKIX).
+// parseECPublicKeyPEM decodes a PEM-encoded ECDSA public key (PKIX).
 func parseECPublicKeyPEM(pemStr string) (*ecdsa.PublicKey, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
