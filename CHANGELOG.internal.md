@@ -2,6 +2,55 @@
 
 > Not for public consumption. Technical notes on what shipped, why it shipped that way, and what trade-offs were made. Cross-reference with commit SHAs in repo.
 
+## 2026-04-22 — Post-Phase-B smoke-suite fixes (3 failures → 0)
+
+Shipped: 2026-04-22
+Branch: `claude/admin-vendor-assets-fix` (B8 follow-up)
+Commits: `04b9104` `a0d1052` `dd2a889`
+Result: 514 PASS / 0 FAIL (was 498 PASS / 3 FAIL)
+
+### Fix 1 — RBAC reverse user lookup returning internal_error
+
+**Symptom:** `GET /api/v1/permissions/{id}/users` returned 500 `{"error":"internal_error","message":"Internal server error"}`.
+
+**Root cause:** W1-B added `mfa_verified_at` column to `users` and updated `scanUserFromRows` to scan 15 columns (adding `MFAVerifiedAt`). But `GetUsersByRoleID` and `GetUsersByPermissionID` in `internal/storage/sqlite.go` had explicit SELECT lists with only 14 columns — missing `u.mfa_verified_at`. The column count mismatch caused a scan error on every row.
+
+**Fix:** Added `u.mfa_verified_at` to the SELECT in both `GetUsersByRoleID` (line ~720) and `GetUsersByPermissionID` (line ~771). Same fix that `ListUsers` already had at line 133.
+
+**File:** `internal/storage/sqlite.go`
+
+### Fix 2 — §F5 DPoP helper produced no proof (pyjwt not in system python)
+
+**Symptom:** `fail "F5 DPoP helper produced no proof"` — `python3 examples/_dpop_helper.py` exited with `ModuleNotFoundError: No module named 'jwt'`.
+
+**Root cause:** `examples/_dpop_helper.py` imports `sdk/python/shark_auth/dpop.py` which imports `pyjwt`. System python does not have pyjwt installed. No venv existed at `sdk/python/.venv/`.
+
+**Fix:**
+1. Created `sdk/python/.venv` via `python3 -m venv .venv && .venv/bin/pip install pyjwt cryptography requests`.
+2. Modified `smoke_test.sh` §F5 to detect the venv and set `$F5_PY` to the venv python when present, falling back to system `python3`. All `python3 "$F5_HELPER"` calls in §F5 replaced with `"$F5_PY" "$F5_HELPER"`.
+
+**Files:** `smoke_test.sh` (§F5 preamble + 3 invocation sites). Venv at `sdk/python/.venv/` (gitignored).
+
+### Fix 3 — §F4 token exchange returning invalid_token / failed to store token
+
+**Symptom:** `fail "F4 token exchange 400"` with `{"error":"invalid_token","error_description":"subject_token is invalid or expired"}`.
+
+**Root cause (two bugs stacked):**
+
+**Bug A — parseSubjectJWT vs key rotation.** `parseSubjectJWT` called `GetActiveSigningKeyByAlgorithm("ES256")` to get the public key for JWT verification. During the smoke test, section 14 calls `POST /api/v1/admin/auth/rotate-signing-key`, which internally calls `RotateSigningKeys`. That function retires ALL active keys (RS256 AND ES256) before inserting only a new RS256 key. The server is still running with the old ES256 private key in memory and fosite keeps minting CC tokens with it — but by section F4, `GetActiveSigningKeyByAlgorithm("ES256")` returns `sql.ErrNoRows` because the key was retired.
+
+**Bug B — UserID FK violation (masked by Bug A in test but present).** `HandleTokenExchange` stored the delegated token with `UserID: subjectSub`. When the subject token is a CC token, `sub` is the agent's `client_id` (not a real user ID). `oauth_tokens.user_id` has `REFERENCES users(id)`, so inserting a non-existent user_id causes "FOREIGN KEY constraint failed". This showed up as a 500 when Bug A was bypassed in manual testing.
+
+**Fix A — kid-based key lookup.** `parseSubjectJWT` now uses the `kid` from the JWT header to call `GetSigningKeyByKID` (which finds active OR retired keys). Falls back to `GetActiveSigningKeyByAlgorithm` only when kid is absent or not found. This correctly handles tokens signed with a recently-rotated key.
+
+**Fix B — UserID resolution.** Before storing the delegated token, attempt `GetUserByID(ctx, subjectSub)`. If found, set `UserID = subjectSub`. If not found (agent client_id, not a real user), leave `UserID` empty (NULL). `DelegationSubject` always captures the actual principal.
+
+**Files:** `internal/oauth/exchange.go` (both fixes). `internal/oauth/testmigrations/00001_init.sql` had no FK on `user_id`, which is why unit tests passed but the live server with the real migration failed.
+
+**Architecture note:** `RotateSigningKeys` should ideally only retire keys of the same algorithm. This was not changed here — fixing the consumer (parseSubjectJWT) to tolerate key rotation is the right approach and aligns with how JWKS validation normally works (kid-based lookup).
+
+---
+
 ## W1-C — Smoke §F4/§F5 + stress baseline
 
 Shipped: 2026-04-21
