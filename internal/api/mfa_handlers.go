@@ -57,7 +57,9 @@ func (s *Server) handleMFAEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.MFAEnabled && user.MFAVerified {
+	// Block re-enroll only when already verified (MFAVerifiedAt is set).
+	// Allow re-enroll when the user has a pending secret (enrolled but not yet verified).
+	if user.MFAVerifiedAt != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{
 			"error":   "mfa_already_enabled",
 			"message": "MFA is already enabled for this account",
@@ -140,7 +142,7 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.MFAEnabled && user.MFAVerified {
+	if user.MFAVerifiedAt != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{
 			"error":   "mfa_already_verified",
 			"message": "MFA is already verified and enabled",
@@ -167,10 +169,12 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enable MFA on the user
+	// Enable MFA on the user and stamp the verified_at time (F3.2).
+	now := time.Now().UTC().Format(time.RFC3339)
 	user.MFAEnabled = true
 	user.MFAVerified = true
-	user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	user.MFAVerifiedAt = &now
+	user.UpdatedAt = now
 	if err := s.Store.UpdateUser(r.Context(), user); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
@@ -403,10 +407,11 @@ func (s *Server) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Disable MFA
+	// Disable MFA — clear verified_at so a future enroll is treated as fresh.
 	user.MFAEnabled = false
 	user.MFAVerified = false
 	user.MFASecret = nil
+	user.MFAVerifiedAt = nil
 	user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	if err := s.Store.UpdateUser(r.Context(), user); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{

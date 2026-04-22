@@ -75,13 +75,13 @@ func (s *SQLiteStore) CreateUser(ctx context.Context, u *User) error {
 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at
+		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at
 		 FROM users WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at
+		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at
 		 FROM users WHERE email = ?`, email))
 }
 
@@ -130,7 +130,7 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 		args = append(args, opts.OrgID)
 	}
 
-	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at FROM users`
+	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at FROM users`
 	if len(conditions) > 0 {
 		query += ` WHERE ` + strings.Join(conditions, ` AND `)
 	}
@@ -157,10 +157,11 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 
 func (s *SQLiteStore) UpdateUser(ctx context.Context, u *User) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET email=?, email_verified=?, password_hash=?, hash_type=?, name=?, avatar_url=?, mfa_enabled=?, mfa_secret=?, mfa_verified=?, metadata=?, updated_at=?, last_login_at=?
+		`UPDATE users SET email=?, email_verified=?, password_hash=?, hash_type=?, name=?, avatar_url=?, mfa_enabled=?, mfa_secret=?, mfa_verified=?, mfa_verified_at=?, metadata=?, updated_at=?, last_login_at=?
 		 WHERE id=?`,
 		u.Email, boolToInt(u.EmailVerified), u.PasswordHash, u.HashType,
 		u.Name, u.AvatarURL, boolToInt(u.MFAEnabled), u.MFASecret, boolToInt(u.MFAVerified),
+		u.MFAVerifiedAt,
 		u.Metadata, u.UpdatedAt, u.LastLoginAt, u.ID,
 	)
 	return err
@@ -195,6 +196,7 @@ func (s *SQLiteStore) scanUser(row *sql.Row) (*User, error) {
 		&u.ID, &u.Email, &emailVerified, &u.PasswordHash, &u.HashType,
 		&u.Name, &u.AvatarURL, &mfaEnabled, &u.MFASecret, &mfaVerified,
 		&u.Metadata, &u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
+		&u.MFAVerifiedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -212,6 +214,7 @@ func (s *SQLiteStore) scanUserFromRows(rows *sql.Rows) (*User, error) {
 		&u.ID, &u.Email, &emailVerified, &u.PasswordHash, &u.HashType,
 		&u.Name, &u.AvatarURL, &mfaEnabled, &u.MFASecret, &mfaVerified,
 		&u.Metadata, &u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
+		&u.MFAVerifiedAt,
 	)
 	if err != nil {
 		return nil, err
