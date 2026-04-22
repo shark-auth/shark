@@ -10,6 +10,9 @@ export interface AuthContextValue {
   organization: Organization | null
   client: ReturnType<typeof createClient>
   signOut: () => Promise<void>
+  /** Available for internal use by SignIn/SignUp components */
+  authUrl?: string
+  publishableKey?: string
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
