@@ -748,6 +748,10 @@ type BrandingConfig struct {
 type Application struct {
 	ID                  string         `json:"id"`           // app_<nanoid>
 	Name                string         `json:"name"`
+	// Slug is the URL-safe identifier used in hosted login page routing.
+	// Auto-generated from Name on create if not supplied; must match
+	// ^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$ and be unique across all applications.
+	Slug                string         `json:"slug"`
 	ClientID            string         `json:"client_id"`    // shark_app_<nanoid>
 	ClientSecretHash    string         `json:"-"`            // SHA-256 hex, never exposed
 	ClientSecretPrefix  string         `json:"client_secret_prefix"` // first 8 chars (UX only)

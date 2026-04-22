@@ -24,6 +24,7 @@ import (
 type applicationResponse struct {
 	ID                  string         `json:"id"`
 	Name                string         `json:"name"`
+	Slug                string         `json:"slug"`
 	ClientID            string         `json:"client_id"`
 	ClientSecretPrefix  string         `json:"client_secret_prefix"`
 	AllowedCallbackURLs []string       `json:"allowed_callback_urls"`
@@ -54,6 +55,7 @@ func appToResponse(a *storage.Application) applicationResponse {
 	return applicationResponse{
 		ID:                    a.ID,
 		Name:                  a.Name,
+		Slug:                  a.Slug,
 		ClientID:              a.ClientID,
 		ClientSecretPrefix:    a.ClientSecretPrefix,
 		AllowedCallbackURLs:   a.AllowedCallbackURLs,
@@ -207,6 +209,7 @@ func (s *Server) auditApp(r *http.Request, action, targetID string) {
 func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name      string   `json:"name"`
+		Slug      string   `json:"slug"`
 		Callbacks []string `json:"allowed_callback_urls"`
 		Logouts   []string `json:"allowed_logout_urls"`
 		Origins   []string `json:"allowed_origins"`
@@ -230,6 +233,17 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	if err := validateAppURLs(req.Origins); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", err.Error()))
 		return
+	}
+
+	// Resolve slug: auto-generate from name if not provided, validate if provided.
+	slug := req.Slug
+	if slug == "" {
+		slug = generateSlug(req.Name)
+	} else {
+		if err := validateSlug(slug); err != nil {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_slug", err.Error()))
+			return
+		}
 	}
 
 	nid, err := gonanoid.New(21)
@@ -264,6 +278,7 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	app := &storage.Application{
 		ID:                  "app_" + appNid,
 		Name:                req.Name,
+		Slug:                slug,
 		ClientID:            clientID,
 		ClientSecretHash:    secretHash,
 		ClientSecretPrefix:  secretPrefix,
@@ -277,6 +292,10 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.Store.CreateApplication(r.Context(), app); err != nil {
+		if isDuplicateErr(err) {
+			writeJSON(w, http.StatusConflict, errPayload("slug_conflict", "An application with this slug already exists"))
+			return
+		}
 		internal(w, err)
 		return
 	}
@@ -347,6 +366,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Name                  *string         `json:"name"`
+		Slug                  *string         `json:"slug,omitempty"`
 		Callbacks             *[]string       `json:"allowed_callback_urls"`
 		Logouts               *[]string       `json:"allowed_logout_urls"`
 		Origins               *[]string       `json:"allowed_origins"`
@@ -361,6 +381,13 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Name != nil {
 		app.Name = *req.Name
+	}
+	if req.Slug != nil {
+		if err := validateSlug(*req.Slug); err != nil {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_slug", err.Error()))
+			return
+		}
+		app.Slug = *req.Slug
 	}
 	if req.Callbacks != nil {
 		if err := validateAppURLs(*req.Callbacks); err != nil {
@@ -426,6 +453,10 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.Store.UpdateApplication(r.Context(), app); err != nil {
+		if isDuplicateErr(err) {
+			writeJSON(w, http.StatusConflict, errPayload("slug_conflict", "An application with this slug already exists"))
+			return
+		}
 		internal(w, err)
 		return
 	}
