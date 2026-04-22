@@ -53,6 +53,7 @@ def _load_or_create_prover(key_file: str | None) -> DPoPProver:
         with open(tmp, "wb") as fh:
             fh.write(pem)
         os.replace(tmp, key_file)
+        os.chmod(key_file, 0o600)
 
     return prover
 
