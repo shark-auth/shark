@@ -3162,6 +3162,133 @@ else
   note "F4 skipped — could not create agents"
 fi
 
+# --- §F5: DPoP full flow (RFC 9449) -------------------------------------------
+section "F5: DPoP full flow (RFC 9449)"
+
+if ! command -v python3 >/dev/null 2>&1; then
+  note "F5 skipped: python3 not available"
+else
+  F5_HELPER_DIR="$(cd "$(dirname "$0")" && pwd)/examples"
+  F5_HELPER="$F5_HELPER_DIR/_dpop_helper.py"
+  F5_KEY_FILE="/tmp/shark_f5_dpop_key.pem"
+
+  if [ ! -f "$F5_HELPER" ]; then
+    note "F5 skipped: $F5_HELPER not found"
+  else
+    # Create a CC agent for DPoP testing.
+    F5A_RESP=$(curl -sS -w "\n%{http_code}" -H "Authorization: Bearer $ADMIN" -X POST "$BASE/api/v1/agents" \
+      -H "Content-Type: application/json" \
+      -d '{"name":"f5-dpop-agent","grant_types":["client_credentials"],"scopes":["read"]}')
+    F5A_CODE=$(echo "$F5A_RESP" | tail -1)
+    F5A_BODY=$(echo "$F5A_RESP" | sed '$d')
+    [ "$F5A_CODE" = 201 ] && pass "F5 dpop-agent create 201" || { fail "F5 dpop-agent create $F5A_CODE"; note "$F5A_BODY"; }
+    F5_CID=$(echo "$F5A_BODY" | jq -r '.client_id // empty')
+    F5_SECRET=$(echo "$F5A_BODY" | jq -r '.client_secret // empty')
+
+    if [ -n "$F5_CID" ] && [ -n "$F5_SECRET" ]; then
+      F5_BASIC=$(printf '%s' "$F5_CID:$F5_SECRET" | base64 | tr -d '\n' | tr -d ' ')
+      F5_TOKEN_URL="$BASE/oauth/token"
+
+      # --- Happy path: DPoP proof + client_credentials -> 200 ---
+      rm -f "$F5_KEY_FILE"
+      F5_PROOF=$(python3 "$F5_HELPER" POST "$F5_TOKEN_URL" --key-file="$F5_KEY_FILE" 2>/dev/null)
+      if [ -n "$F5_PROOF" ]; then
+        # Verify it's a valid 3-segment JWT.
+        F5_SEG_COUNT=$(echo "$F5_PROOF" | tr '.' '\n' | wc -l | tr -d ' ')
+        [ "$F5_SEG_COUNT" = 3 ] && pass "F5 DPoP proof is 3-segment JWT" || fail "F5 DPoP proof malformed ($F5_SEG_COUNT segments)"
+
+        F5_TOK_RESP=$(curl -sS -w "\n%{http_code}" -X POST "$F5_TOKEN_URL" \
+          -H "Authorization: Basic $F5_BASIC" \
+          -H "DPoP: $F5_PROOF" \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          -d 'grant_type=client_credentials&scope=read')
+        F5_TOK_CODE=$(echo "$F5_TOK_RESP" | tail -1)
+        F5_TOK_BODY=$(echo "$F5_TOK_RESP" | sed '$d')
+
+        if [ "$F5_TOK_CODE" = 200 ]; then
+          pass "F5 happy path: DPoP + CC -> 200"
+          F5_AT=$(echo "$F5_TOK_BODY" | jq -r '.access_token // empty')
+          [ -n "$F5_AT" ] && pass "F5 access_token issued" || fail "F5 no access_token"
+
+          # Assert cnf.jkt in the issued token matches the DPoP pubkey thumbprint.
+          if [ -n "$F5_AT" ]; then
+            F5_PAYLOAD_B64=$(echo "$F5_AT" | cut -d'.' -f2)
+            F5_PAD=$(( (4 - ${#F5_PAYLOAD_B64} % 4) % 4 ))
+            F5_PAYLOAD_B64_P="${F5_PAYLOAD_B64}$(printf '=%.0s' $(seq 1 $F5_PAD 2>/dev/null || true))"
+            F5_AT_CLAIMS=$(echo "$F5_PAYLOAD_B64_P" | tr '_-' '/+' | base64 -d 2>/dev/null || \
+                           echo "$F5_PAYLOAD_B64_P" | tr '_-' '/+' | openssl base64 -d 2>/dev/null)
+            F5_TOKEN_JKT=$(echo "$F5_AT_CLAIMS" | jq -r '.cnf.jkt // empty' 2>/dev/null)
+
+            # Get the helper to print the JKT of the key it used.
+            F5_HELPER_JKT=$(python3 "$F5_HELPER" POST "$F5_TOKEN_URL" --key-file="$F5_KEY_FILE" --print-jkt 2>/dev/null || echo "")
+            if [ -n "$F5_TOKEN_JKT" ]; then
+              pass "F5 issued token contains cnf.jkt: $F5_TOKEN_JKT"
+              if [ -n "$F5_HELPER_JKT" ] && [ "$F5_TOKEN_JKT" = "$F5_HELPER_JKT" ]; then
+                pass "F5 cnf.jkt matches DPoP pubkey thumbprint"
+              elif [ -n "$F5_HELPER_JKT" ]; then
+                fail "F5 cnf.jkt mismatch: token=$F5_TOKEN_JKT helper=$F5_HELPER_JKT"
+              else
+                note "F5 --print-jkt not supported; cnf.jkt present in token"
+              fi
+            else
+              note "F5 cnf.jkt not in token claims (server may not embed it for CC grant without resource server check)"
+            fi
+          fi
+        else
+          fail "F5 happy path -> $F5_TOK_CODE"
+          note "F5 body: $F5_TOK_BODY"
+        fi
+
+        # --- JTI replay: submit same proof twice -> second must 400/401 ---
+        if [ -n "$F5_PROOF" ]; then
+          F5_REPLAY_RESP=$(curl -sS -w "\n%{http_code}" -X POST "$F5_TOKEN_URL" \
+            -H "Authorization: Basic $F5_BASIC" \
+            -H "DPoP: $F5_PROOF" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d 'grant_type=client_credentials&scope=read')
+          F5_REPLAY_CODE=$(echo "$F5_REPLAY_RESP" | tail -1)
+          F5_REPLAY_BODY=$(echo "$F5_REPLAY_RESP" | sed '$d')
+          if [ "$F5_REPLAY_CODE" = 400 ] || [ "$F5_REPLAY_CODE" = 401 ]; then
+            pass "F5 JTI replay -> $F5_REPLAY_CODE (rejected)"
+          else
+            fail "F5 JTI replay expected 400/401, got $F5_REPLAY_CODE"
+            note "F5 replay body: $F5_REPLAY_BODY"
+          fi
+        fi
+
+        # --- Expired iat: --iat-offset=-3600 -> 400/401 ---
+        F5_EXP_PROOF=$(python3 "$F5_HELPER" POST "$F5_TOKEN_URL" \
+          --key-file="$F5_KEY_FILE" --iat-offset=-3600 2>/dev/null)
+        if [ -n "$F5_EXP_PROOF" ]; then
+          F5_EXP_RESP=$(curl -sS -w "\n%{http_code}" -X POST "$F5_TOKEN_URL" \
+            -H "Authorization: Basic $F5_BASIC" \
+            -H "DPoP: $F5_EXP_PROOF" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d 'grant_type=client_credentials&scope=read')
+          F5_EXP_CODE=$(echo "$F5_EXP_RESP" | tail -1)
+          if [ "$F5_EXP_CODE" = 400 ] || [ "$F5_EXP_CODE" = 401 ]; then
+            pass "F5 expired iat (-3600s) -> $F5_EXP_CODE (rejected)"
+          else
+            fail "F5 expired iat expected 400/401, got $F5_EXP_CODE"
+          fi
+        else
+          note "F5 expired iat test skipped (helper error)"
+        fi
+
+        # --- Key mismatch: rotate key, new proof with rotated key -> resource-server check ---
+        # The token endpoint doesn't validate key binding against a prior access token;
+        # that check happens at the resource server when the DPoP-bound token is presented.
+        note "F5 key-mismatch check is resource-server-level (cnf.jkt vs proof jwk); not enforced at token endpoint"
+      else
+        fail "F5 DPoP helper produced no proof"
+        note "Run: python3 examples/_dpop_helper.py POST $BASE/oauth/token"
+      fi
+    else
+      note "F5 skipped — could not create DPoP test agent"
+    fi
+  fi
+fi
+
 # --- Summary ------------------------------------------------------------------
 section "summary"
 echo "  ${GRN}PASS: $PASS${RST}   ${RED}FAIL: $FAIL${RST}"
