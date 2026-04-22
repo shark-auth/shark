@@ -3238,6 +3238,62 @@ else
   fail "75 seeding failed — skipping all hosted page assertions"
 fi
 
+# --- §76: SDK integration (example app smoke) ---------------------------------
+section "76. SDK integration (example app smoke)"
+
+# ── 76-1: @shark-auth/react package builds cleanly ---------------------------
+if command -v pnpm >/dev/null 2>&1; then
+  ( pnpm --filter @shark-auth/react build >/dev/null 2>&1 )
+  [ $? -eq 0 ] && pass "76 pnpm --filter @shark-auth/react build succeeds" \
+    || fail "76 pnpm --filter @shark-auth/react build failed"
+else
+  note "76 pnpm not found — skipping SDK build assertions"
+fi
+
+# ── 76-2: @shark-auth/react tests pass ---------------------------------------
+if command -v pnpm >/dev/null 2>&1; then
+  ( pnpm --filter @shark-auth/react test --run >/dev/null 2>&1 )
+  [ $? -eq 0 ] && pass "76 pnpm --filter @shark-auth/react test succeeds" \
+    || fail "76 pnpm --filter @shark-auth/react test failed"
+fi
+
+# ── 76-3: react-next-example Next.js app builds cleanly ----------------------
+if command -v pnpm >/dev/null 2>&1; then
+  ( pnpm --filter react-next-example build >/dev/null 2>&1 )
+  [ $? -eq 0 ] && pass "76 pnpm --filter react-next-example build succeeds" \
+    || fail "76 pnpm --filter react-next-example build failed"
+fi
+
+# ── 76-4: Snippet endpoint — react → 200 with 3 snippets ---------------------
+# Reuse APP_ID_75 (hosted-test app seeded in §75). Fall back to listing apps.
+_76_APP_ID="${APP_ID_75:-}"
+if [ -z "$_76_APP_ID" ]; then
+  _76_LIST=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps?limit=1")
+  _76_APP_ID=$(echo "$_76_LIST" | jq -r '.data[0].id // empty')
+fi
+
+if [ -n "$_76_APP_ID" ]; then
+  _76_SNIP_RESP=$(curl -sS -w "\n%{http_code}" \
+    -H "Authorization: Bearer $ADMIN" \
+    "$BASE/api/v1/admin/apps/$_76_APP_ID/snippet?framework=react")
+  _76_SNIP_CODE=$(echo "$_76_SNIP_RESP" | tail -1)
+  _76_SNIP_BODY=$(echo "$_76_SNIP_RESP" | sed '$d')
+  [ "$_76_SNIP_CODE" = "200" ] && pass "76 GET snippet?framework=react → 200" \
+    || { fail "76 GET snippet?framework=react → $_76_SNIP_CODE (expected 200)"; note "$_76_SNIP_BODY"; }
+  _76_SNIP_LEN=$(echo "$_76_SNIP_BODY" | jq '.snippets | length' 2>/dev/null)
+  [ "$_76_SNIP_LEN" = "3" ] && pass "76 snippet response has 3 entries" \
+    || fail "76 snippet response has $_76_SNIP_LEN entries (expected 3)"
+
+  # ── 76-5: Unsupported framework → 501 ----------------------------------------
+  _76_VUE_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer $ADMIN" \
+    "$BASE/api/v1/admin/apps/$_76_APP_ID/snippet?framework=vue")
+  [ "$_76_VUE_CODE" = "501" ] && pass "76 GET snippet?framework=vue → 501 (unsupported)" \
+    || fail "76 GET snippet?framework=vue → $_76_VUE_CODE (expected 501)"
+else
+  fail "76 no app ID available — skipping snippet endpoint assertions"
+fi
+
 # --- §F4: Token Exchange (RFC 8693) delegation --------------------------------
 section "F4: Token Exchange delegation (RFC 8693)"
 
