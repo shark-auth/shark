@@ -2,7 +2,7 @@
 import React from 'react'
 
 export const API = {
-  _key: () => sessionStorage.getItem('shark_admin_key'),
+  _key: () => localStorage.getItem('shark_admin_key'),
 
   async request(method, path, body) {
     const key = this._key();
@@ -18,7 +18,7 @@ export const API = {
     const res = await fetch(`/api/v1${path}`, opts);
     if (res.status === 401) {
       if (path.startsWith('/admin/') || path.startsWith('/api-keys') || path.startsWith('/users') || path.startsWith('/roles') || path.startsWith('/audit-logs')) {
-        sessionStorage.removeItem('shark_admin_key');
+        localStorage.removeItem('shark_admin_key');
         window.dispatchEvent(new Event('shark-auth-expired'));
       }
       throw new Error('Unauthorized');

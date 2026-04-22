@@ -53,7 +53,7 @@ function useTweaks() {
 }
 
 export function App() {
-  const [apiKey, setApiKey] = React.useState(() => sessionStorage.getItem('shark_admin_key') || '');
+  const [apiKey, setApiKey] = React.useState(() => localStorage.getItem('shark_admin_key') || '');
 
   const getPageFromURL = () => {
     const path = window.location.pathname.replace(/^\/admin\/?/, '').replace(/\/$/, '');
@@ -80,10 +80,12 @@ export function App() {
   };
 
   React.useEffect(() => {
-    const handler = () => setPageState(getPageFromURL());
-    window.addEventListener('popstate', handler);
-    return () => window.removeEventListener('popstate', handler);
-  }, []);
+    if (apiKey) {
+      localStorage.setItem('shark_admin_key', apiKey);
+    } else {
+      localStorage.removeItem('shark_admin_key');
+    }
+  }, [apiKey]);
 
   const [tweaks, setTweak] = useTweaks();
   const [tweaksOpen, setTweaksOpen] = React.useState(false);

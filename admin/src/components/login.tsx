@@ -41,7 +41,7 @@ export function Login({ onLogin }) {
           const body = await res.json();
           const minted = body?.api_key;
           if (minted) {
-            sessionStorage.setItem('shark_admin_key', minted);
+            localStorage.setItem('shark_admin_key', minted);
             onLogin(minted);
             return;
           }
@@ -69,7 +69,7 @@ export function Login({ onLogin }) {
         headers: { Authorization: 'Bearer ' + trimmed },
       });
       if (res.ok) {
-        sessionStorage.setItem('shark_admin_key', trimmed);
+        localStorage.setItem('shark_admin_key', trimmed);
         onLogin(trimmed);
       } else if (res.status === 401) {
         setError('Invalid API key.');

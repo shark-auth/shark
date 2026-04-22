@@ -23,14 +23,14 @@ function useProxyStats() {
   const [probing, setProbing] = React.useState(false);
 
   const fetchOnce = React.useCallback(async () => {
-    const key = sessionStorage.getItem('shark_admin_key');
+    const key = localStorage.getItem('shark_admin_key');
     if (!key) return;
     try {
       const res = await fetch('/api/v1/admin/proxy/status', {
         headers: { 'Authorization': 'Bearer ' + key },
       });
       if (res.status === 401) {
-        sessionStorage.removeItem('shark_admin_key');
+        localStorage.removeItem('shark_admin_key');
         window.dispatchEvent(new Event('shark-auth-expired'));
         return;
       }

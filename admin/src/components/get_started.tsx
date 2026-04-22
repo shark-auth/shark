@@ -59,48 +59,44 @@ export function GetStarted({ setPage }) {
     if (typeof setPage === 'function') setPage('overview');
   };
 
-  if (stage === 'hero') {
-    return (
-      <div style={{ height: '100%', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-        <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
-           <div className="row" style={{ justifyContent: 'center', gap: 10, marginBottom: 20 }}>
-              <Icon.Sparkle width={24} height={24} style={{ color: 'var(--accent)' }}/>
-              <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--fg-dim)' }}>Welcome to SharkAuth</span>
-           </div>
-           
-           <h1 style={{ fontSize: 42, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '-0.03em', lineHeight: 1, marginBottom: 20 }}>
-             Authentication <br/>without the bullshit.
-           </h1>
-           
-           <p style={{ fontSize: 17, color: 'var(--fg-muted)', lineHeight: 1.6, marginBottom: 32 }}>
-             You're one step away from protecting your application. How would you like to start?
-           </p>
-
-           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-             <button className="btn primary" style={{ height: 50, fontSize: 15, fontWeight: 600 }} onClick={() => setStep('wizard')}>
-               Protect an Existing App (Proxy Gateway)
-             </button>
-             <button className="btn ghost" style={{ height: 50, fontSize: 15 }} onClick={() => setStep('alternative')}>
-               I'll use the SDK / API
-             </button>
-           </div>
-           
-           <button className="btn ghost sm" style={{ marginTop: 40, opacity: 0.5 }} onClick={skip}>
-             Skip to dashboard
-           </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ height: '100%', overflow: 'auto', padding: '40px 24px' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto' }}>
-        <button className="btn ghost sm" onClick={() => setStep('hero')} style={{ marginBottom: 24, paddingLeft: 0 }}>
-           <Icon.ChevronLeft width={12}/> Back
-        </button>
+    <div style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: stage === 'hero' ? 'center' : 'flex-start', padding: 40 }}>
+      <div style={{ maxWidth: stage === 'hero' ? 560 : 720, width: '100%' }}>
+        {stage !== 'hero' && (
+          <button className="btn ghost sm" onClick={() => setStep('hero')} style={{ marginBottom: 24, paddingLeft: 0 }}>
+             <Icon.ChevronLeft width={12}/> Back
+          </button>
+        )}
 
-        {stage === 'wizard' ? (
+        {stage === 'hero' ? (
+          <div style={{ textAlign: 'center' }}>
+             <div className="row" style={{ justifyContent: 'center', gap: 10, marginBottom: 20 }}>
+                <Icon.Sparkle width={24} height={24} style={{ color: 'var(--accent)' }}/>
+                <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--fg-dim)' }}>Welcome to SharkAuth</span>
+             </div>
+             
+             <h1 style={{ fontSize: 42, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '-0.03em', lineHeight: 1, marginBottom: 20 }}>
+               Authentication <br/>without the bullshit.
+             </h1>
+             
+             <p style={{ fontSize: 17, color: 'var(--fg-muted)', lineHeight: 1.6, marginBottom: 32 }}>
+               You're one step away from protecting your application. How would you like to start?
+             </p>
+
+             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+               <button className="btn primary" style={{ height: 50, fontSize: 15, fontWeight: 600 }} onClick={() => setStep('wizard')}>
+                 Protect an Existing App (Proxy Gateway)
+               </button>
+               <button className="btn ghost" style={{ height: 50, fontSize: 15 }} onClick={() => setStep('alternative')}>
+                 I'll use the SDK / API
+               </button>
+             </div>
+             
+             <button className="btn ghost sm" style={{ marginTop: 40, opacity: 0.5 }} onClick={skip}>
+               Skip to dashboard
+             </button>
+          </div>
+        ) : stage === 'wizard' ? (
           <div>
             <div style={{ marginBottom: 24 }}>
               <h2 style={{ fontSize: 24, fontWeight: 600, fontFamily: 'var(--font-display)', marginBottom: 8 }}>Setup Proxy Gateway</h2>

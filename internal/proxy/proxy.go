@@ -199,8 +199,12 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Porter Logic: Browser Redirect vs API 401/403
 			if isAnonymous(id) {
 				// We only redirect if the app is in "proxy" mode AND it's a browser.
-				// (Implicit: Codeless gateway = integration_mode:"proxy")
-				isProxyMode := resolved != nil && resolved.IntegrationMode == "proxy"
+				// If not resolved to a specific app, we treat it as global proxy (if issuer set).
+				isProxyMode := true
+				if resolved != nil && resolved.IntegrationMode != "" {
+					isProxyMode = resolved.IntegrationMode == "proxy"
+				}
+
 				if isProxyMode && isBrowser(r) && p.issuer != "" {
 					slug := "default"
 					if resolved != nil && resolved.Slug != "" {
@@ -248,7 +252,16 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // by looking for "text/html" in the Accept header.
 func isBrowser(r *http.Request) bool {
 	accept := r.Header.Get("Accept")
-	return strings.Contains(accept, "text/html")
+	if strings.Contains(accept, "text/html") {
+		return true
+	}
+	// Check fetch metadata (modern browsers)
+	if r.Header.Get("Sec-Fetch-Mode") == "navigate" {
+		return true
+	}
+	// Fallback: check UA for common browsers if Accept is generic
+	ua := r.Header.Get("User-Agent")
+	return strings.Contains(ua, "Mozilla/") || strings.Contains(ua, "Chrome/") || strings.Contains(ua, "Safari/")
 }
 
 // fullURL reconstructs the full inbound URL for the return_to parameter.
@@ -257,7 +270,7 @@ func fullURL(r *http.Request) string {
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
-	return fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.String())
+	return fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.RequestURI())
 }
 
 type resolvedAppCtxKey struct{}
