@@ -35,7 +35,8 @@ export function HostedApp({ config }: HostedAppProps) {
           <Route path="/passkey" component={() => <PasskeyPage config={config} />} />
           <Route path="/mfa" component={() => <MFAPage config={config} />} />
           <Route path="/verify" component={() => <VerifyPage config={config} />} />
-          <Route component={() => <ErrorPage code={404} message="Page not found" />} />
+          <Route path="/error" component={() => <ErrorPage config={config} />} />
+          <Route component={() => <ErrorPage code={404} message="Page not found" config={config} />} />
         </Switch>
       </Router>
     </ToastProvider>
