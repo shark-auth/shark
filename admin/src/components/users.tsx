@@ -413,7 +413,7 @@ function CreateUserSlideover({ onClose, onCreated }) {
 
     // Direct fetch so we can read status code for 409 vs 400 branching.
     try {
-      const key = sessionStorage.getItem('shark_admin_key');
+      const key = localStorage.getItem('shark_admin_key');
       const res = await fetch('/api/v1/admin/users', {
         method: 'POST',
         headers: {
@@ -827,6 +827,15 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
     }
   };
 
+  const handleSendVerification = async () => {
+    try {
+      await API.post(`/users/${user.id}/verify/send`);
+      toast.success('Verification email sent');
+    } catch (e) {
+      toast.error(e.message || 'Failed to send verification email');
+    }
+  };
+
   const isVerified = user.email_verified !== undefined ? user.email_verified : user.verified;
   const metadata = user.metadata ? JSON.stringify(user.metadata, null, 2) : '{\n  \n}';
 
@@ -840,7 +849,15 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
         <Field label="Email">
           <div className="row" style={{ gap: 6 }}>
             <Input value={emailVal} onChange={e => setEmailVal(e.target.value)}/>
-            {!isVerified && <button className="btn sm" style={{ whiteSpace: 'nowrap' }}>Send verification</button>}
+            {!isVerified && (
+              <button
+                className="btn sm"
+                style={{ whiteSpace: 'nowrap' }}
+                onClick={handleSendVerification}
+              >
+                Send verification
+              </button>
+            )}
           </div>
         </Field>
         <Field label="User ID"><CopyField value={user.id} truncate={0}/></Field>

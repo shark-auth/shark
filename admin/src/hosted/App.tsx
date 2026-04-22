@@ -8,6 +8,8 @@ import { MagicPage } from './routes/magic'
 import { PasskeyPage } from './routes/passkey'
 import { MFAPage } from './routes/mfa'
 import { VerifyPage } from './routes/verify'
+import { ForgotPasswordPage } from './routes/forgot_password'
+import { ResetPasswordPage } from './routes/reset_password'
 import { ErrorPage } from './routes/error'
 
 interface HostedAppProps {
@@ -35,6 +37,8 @@ export function HostedApp({ config }: HostedAppProps) {
           <Route path="/passkey" component={() => <PasskeyPage config={config} />} />
           <Route path="/mfa" component={() => <MFAPage config={config} />} />
           <Route path="/verify" component={() => <VerifyPage config={config} />} />
+          <Route path="/forgot-password" component={() => <ForgotPasswordPage config={config} />} />
+          <Route path="/reset-password" component={() => <ResetPasswordPage config={config} />} />
           <Route path="/error" component={() => <ErrorPage config={config} />} />
           <Route component={() => <ErrorPage code={404} message="Page not found" config={config} />} />
         </Switch>

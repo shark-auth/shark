@@ -66,7 +66,7 @@ export function PasskeyPage({ config }: PasskeyPageProps) {
 
       const data = await finishRes.json().catch(() => ({}))
       if (data.mfaRequired) {
-        navigate(`${base}/mfa?method=totp`)
+        navigate("/mfa?method=totp")
         return
       }
 

@@ -253,7 +253,7 @@ func (m *MagicLinkManager) SendEmailVerification(ctx context.Context, emailAddr 
 	}
 
 	baseURL := strings.TrimRight(m.cfg.Server.BaseURL, "/")
-	verifyURL := fmt.Sprintf("%s/api/v1/auth/email/verify?token=%s", baseURL, rawToken)
+	verifyURL := fmt.Sprintf("%s/hosted/default/verify?token=%s", baseURL, rawToken)
 
 	appName := "SharkAuth"
 	if m.cfg.SMTP.FromName != "" {

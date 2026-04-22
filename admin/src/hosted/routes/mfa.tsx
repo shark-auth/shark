@@ -85,7 +85,7 @@ export function MFAPage({ config }: MFAPageProps) {
   }
 
   function onUseBackup(): void {
-    navigate(`${base}/mfa?method=totp&backup=1${session ? `&session=${encodeURIComponent(session)}` : ''}`)
+    navigate(`/mfa?method=totp&backup=1${session ? `&session=${encodeURIComponent(session)}` : ''}`)
   }
 
   // Only sms/email methods support resend

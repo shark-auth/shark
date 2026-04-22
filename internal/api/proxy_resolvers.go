@@ -47,6 +47,12 @@ func (r *JWTResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 		// ErrNoCredentials which callers may choose to surface as 401.
 		return proxy.Identity{}, nil
 	}
+	// HACK: ignore admin API keys, which are not JWTs. This allows the
+	// LiveResolver (session cookie) to be used when the admin dashboard
+	// sends both an API key and a session cookie.
+	if strings.HasPrefix(bearer, "sk_") {
+		return proxy.Identity{}, nil
+	}
 	if r.JWT == nil {
 		return proxy.Identity{}, ErrNoCredentials
 	}

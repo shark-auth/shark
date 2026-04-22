@@ -8,40 +8,74 @@ export function Branding() {
   const [subtab, setSubtab] = React.useState<'visuals' | 'email' | 'integrations'>('visuals')
 
   return (
-    <div style={{ padding: 24, height: '100%', overflow: 'auto' }}>
-      <h1 style={{ fontSize: 22, marginBottom: 16 }}>Branding</h1>
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--hairline)', marginBottom: 20 }}>
+    <div style={{ padding: '16px 20px', height: '100%', overflow: 'auto', background: 'var(--bg)' }}>
+      <div style={{ marginBottom: 16 }}>
+        <h1 style={{ 
+          fontFamily: 'Hanken Grotesk, var(--font-sans)',
+          fontSize: 18, 
+          fontWeight: 600,
+          letterSpacing: '-0.01em',
+          margin: 0,
+          color: 'var(--fg)'
+        }}>
+          Branding
+        </h1>
+        <p className="faint" style={{ margin: '2px 0 0', fontSize: 11, fontWeight: 400 }}>
+          Precision identity & communication control.
+        </p>
+      </div>
+      
+      <div style={{ 
+        display: 'flex', 
+        gap: 0, 
+        borderBottom: '1px solid var(--hairline)', 
+        marginBottom: 20,
+        padding: '0'
+      }}>
         {([
-          { key: 'visuals', label: 'Visuals' },
-          { key: 'email', label: 'Email Templates' },
+          { key: 'visuals', label: 'Visual Identity' },
+          { key: 'email', label: 'Email Communication' },
           { key: 'integrations', label: 'Integrations' },
-        ] as const).map(t => (
-          <button
-            key={t.key}
-            onClick={() => setSubtab(t.key)}
-            style={{
-              padding: '10px 14px',
-              background: subtab === t.key ? 'var(--surface-2)' : 'transparent',
-              borderBottom: subtab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+        ] as const).map(t => {
+          const isSel = subtab === t.key
+          return (
+            <button
+              key={t.key}
+              onClick={() => setSubtab(t.key)}
+              style={{
+                padding: '6px 14px',
+                height: 32,
+                fontSize: 11.5,
+                fontWeight: isSel ? 600 : 400,
+                color: isSel ? 'var(--fg)' : 'var(--fg-dim)',
+                background: 'transparent',
+                borderBottom: isSel ? '2px solid var(--fg)' : '2px solid transparent',
+                marginBottom: -1,
+                cursor: 'pointer',
+                transition: 'all 60ms ease-out',
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: 0,
+                border: 'none',
+                outline: 'none'
+              }}
+            >
+              {t.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Keep all subtabs mounted so in-progress drafts survive tab switches.
-          Hide inactive ones via display:none instead of unmounting. */}
-      <div style={{ display: subtab === 'visuals' ? 'block' : 'none' }}>
-        <BrandingVisualsTab/>
-      </div>
-      <div style={{ display: subtab === 'email' ? 'block' : 'none' }}>
-        <BrandingEmailTab/>
-      </div>
-      <div style={{ display: subtab === 'integrations' ? 'block' : 'none' }}>
-        <BrandingIntegrationsTab/>
+      <div style={{ marginTop: 4 }}>
+        <div style={{ display: subtab === 'visuals' ? 'block' : 'none' }}>
+          <BrandingVisualsTab/>
+        </div>
+        <div style={{ display: subtab === 'email' ? 'block' : 'none' }}>
+          <BrandingEmailTab/>
+        </div>
+        <div style={{ display: subtab === 'integrations' ? 'block' : 'none' }}>
+          <BrandingIntegrationsTab/>
+        </div>
       </div>
     </div>
   )

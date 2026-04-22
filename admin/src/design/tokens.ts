@@ -17,7 +17,7 @@ export const tokens = {
     focusRing: 'var(--shark-primary, #7c3aed)',
   },
   space: { 1: 4, 2: 8, 3: 12, 4: 16, 6: 24, 8: 32, 12: 48 },
-  radius: { sm: 4, md: 6, lg: 8, xl: 12 },
+  radius: { sm: 2, md: 2, lg: 2, xl: 4 },
   type: {
     display: { family: 'var(--font-display, Manrope), -apple-system, sans-serif' },
     body: { family: 'var(--font-body, Manrope), sans-serif' },
@@ -26,8 +26,8 @@ export const tokens = {
     weight: { regular: 400, medium: 500, semibold: 600, bold: 700 },
   },
   motion: {
-    fast: '160ms cubic-bezier(0.2, 0, 0, 1)',
-    med: '240ms cubic-bezier(0.2, 0, 0, 1)',
+    fast: '60ms cubic-bezier(0.2, 0, 0, 1)',
+    med: '120ms cubic-bezier(0.2, 0, 0, 1)',
   },
   shadow: {
     sm: '0 1px 2px oklch(0% 0 0 / 20%)',

@@ -35,7 +35,7 @@ export function SignupPage({ config }: SignupPageProps) {
 
       // If email not verified, prompt verification
       if (result.emailVerified === false) {
-        navigate(`${base}/verify`)
+        navigate("/verify")
         return
       }
 

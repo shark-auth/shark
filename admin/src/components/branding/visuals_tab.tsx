@@ -135,19 +135,8 @@ export function BrandingVisualsTab() {
     try {
       const form = new FormData()
       form.append('logo', file)
-      const res = await fetch('/api/v1/admin/branding/logo', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${sessionStorage.getItem('shark_admin_key')}`,
-        },
-        body: form,
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        toast.error(errorCodeMessage(body?.code || ''))
-        return
-      }
-      const j = await res.json()
+      const res = await API.postFormData('/admin/branding/logo', form)
+      const j = res
       // Upload already persists server-side, so update both cfg + draft so
       // the Save button doesn't light up for a change we already committed.
       const next = { ...draft, logo_url: j.logo_url, logo_sha: j.logo_sha }
@@ -182,35 +171,45 @@ export function BrandingVisualsTab() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 24, padding: 20, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 32, padding: 0, alignItems: 'flex-start' }}>
       {/* ── Left: form ─────────────────────────────────────────────── */}
-      <div style={{ flex: '0 0 400px', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ flex: '0 0 400px', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ marginBottom: 4 }}>
+          <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>Identity</h2>
+          <p style={{ fontSize: 11.5, color: 'var(--fg-dim)', margin: 0 }}>Visual branding & identifiers.</p>
+        </div>
+
         {/* Logo */}
-        <Field label="Logo">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <Field label="Brand Logo">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
             {draft.logo_url ? (
-              <img
-                src={draft.logo_url}
-                alt="Current logo"
-                style={{
-                  maxHeight: 48,
-                  maxWidth: 140,
-                  padding: 4,
-                  background: 'var(--surface-1)',
-                  border: '1px solid var(--hairline)',
-                  borderRadius: 'var(--radius)',
-                }}
-              />
+              <div style={{ 
+                padding: 12, 
+                background: 'var(--surface-0)', 
+                border: '1px solid var(--hairline-strong)', 
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <img
+                  src={draft.logo_url}
+                  alt="Current logo"
+                  style={{ maxHeight: 60, maxWidth: 180 }}
+                />
+              </div>
             ) : (
-              <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>No logo uploaded</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-muted)', padding: '12px', border: '1px dashed var(--hairline-strong)', borderRadius: '12px', width: '100%', textAlign: 'center' }}>
+                No logo uploaded
+              </div>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <label
-              className="btn sm"
-              style={{ cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.6 : 1 }}
+              className="btn"
+              style={{ padding: '0 20px', height: 36, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.6 : 1 }}
             >
-              {uploading ? 'Uploading…' : 'Upload'}
+              {uploading ? 'Uploading…' : 'Upload Logo'}
               <input
                 type="file"
                 accept=".png,.svg,.jpg,.jpeg"
@@ -226,39 +225,47 @@ export function BrandingVisualsTab() {
             {draft.logo_url && (
               <button
                 type="button"
-                className="btn sm"
+                className="btn danger"
+                style={{ height: 36, padding: '0 16px' }}
                 onClick={removeLogo}
                 disabled={uploading}
               >
-                Remove logo
+                Remove
               </button>
             )}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 6 }}>
-            .png .svg .jpg .jpeg · max 1&nbsp;MB
+          <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 8 }}>
+            Supports PNG, SVG, JPG (Max 1MB). Transparent background recommended.
           </div>
         </Field>
 
+        <div style={{ height: 1, background: 'var(--hairline)', margin: '4px 0' }} />
+
+        <div style={{ marginBottom: 4 }}>
+          <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>Visual Style</h2>
+          <p style={{ fontSize: 11.5, color: 'var(--fg-dim)', margin: 0 }}>Colors & typography.</p>
+        </div>
+
         {/* Primary color */}
         <ColorField
-          label="Primary color"
+          label="Primary Accent"
           value={draft.primary_color || '#000000'}
           onChange={(c) => patch({ primary_color: c })}
         />
 
         {/* Secondary color */}
         <ColorField
-          label="Secondary color"
+          label="Secondary Surface"
           value={draft.secondary_color || '#000000'}
           onChange={(c) => patch({ secondary_color: c })}
         />
 
         {/* Font */}
-        <Field label="Font family">
+        <Field label="Typography Interface">
           <select
             value={draft.font_family || 'inter'}
             onChange={(e) => patch({ font_family: e.target.value })}
-            style={inputStyle}
+            style={{ ...inputStyle, height: 40 }}
           >
             {FONT_OPTIONS.map((f) => (
               <option key={f.value} value={f.value}>
@@ -268,105 +275,149 @@ export function BrandingVisualsTab() {
           </select>
         </Field>
 
+        <div style={{ height: 1, background: 'var(--hairline)', margin: '4px 0' }} />
+
+        <div style={{ marginBottom: 4 }}>
+          <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>Communication</h2>
+          <p style={{ fontSize: 11.5, color: 'var(--fg-dim)', margin: 0 }}>Sender metadata & signatures.</p>
+        </div>
+
         {/* Footer */}
-        <Field label="Footer text">
+        <Field label="System Footer Note">
           <textarea
             value={draft.footer_text || ''}
             onChange={(e) => patch({ footer_text: e.target.value })}
-            rows={2}
+            rows={3}
             placeholder="© Acme 2026 · support@acme.com"
-            style={{ ...inputStyle, resize: 'vertical', minHeight: 56, fontFamily: 'inherit' }}
+            style={{ ...inputStyle, resize: 'vertical', minHeight: 80, fontFamily: 'inherit' }}
           />
         </Field>
 
         {/* Email from name */}
-        <Field label="Email from name">
+        <Field label="Sender Display Name">
           <input
             type="text"
             value={draft.email_from_name || ''}
             onChange={(e) => patch({ email_from_name: e.target.value })}
             placeholder="Acme Security"
-            style={inputStyle}
+            style={{ ...inputStyle, height: 40 }}
           />
         </Field>
 
         {/* Email from address */}
-        <Field label="Email from address">
+        <Field label="Sender Reply-To Address">
           <input
             type="email"
             value={draft.email_from_address || ''}
             onChange={(e) => patch({ email_from_address: e.target.value })}
             placeholder="no-reply@acme.com"
-            style={inputStyle}
+            style={{ ...inputStyle, height: 40 }}
           />
         </Field>
 
-        {/* Save / discard — sticky to bottom of scroll container so it's
-            always reachable without scrolling on tall forms. */}
+        {/* Save / discard */}
         <div
           style={{
             display: 'flex',
-            gap: 8,
+            gap: 12,
             marginTop: 8,
             position: 'sticky',
-            bottom: 0,
-            background: 'var(--surface-1, #0e0e10)',
-            padding: '12px 0',
+            bottom: -32,
+            background: 'var(--bg)',
+            padding: '20px 0 24px',
             borderTop: '1px solid var(--hairline)',
             zIndex: 1,
+            alignItems: 'center'
           }}
         >
           <button
             type="button"
-            className="btn primary"
+            className="btn primary sm"
+            style={{ height: 32, padding: '0 20px', fontSize: 12, fontWeight: 600 }}
             onClick={save}
             disabled={!dirty || saving}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving…' : 'Publish'}
           </button>
           <button
             type="button"
-            className="btn"
+            className="btn ghost sm"
+            style={{ height: 32, padding: '0 16px', fontSize: 12 }}
             onClick={discard}
             disabled={!dirty || saving}
           >
             Discard
           </button>
           {dirty && (
-            <span style={{ fontSize: 11, color: 'var(--warn, #b58900)', alignSelf: 'center' }}>
-              unsaved changes
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+               <div style={{ width: 6, height: 6, borderRadius: 1, background: 'var(--warn)' }} />
+               <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>
+                 Draft edits
+               </span>
+            </div>
           )}
         </div>
       </div>
 
       {/* ── Right: live preview ────────────────────────────────────── */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--hairline)', gap: 10 }}>
-           <button className="btn sm ghost" style={{ borderBottom: '2px solid var(--accent)', borderRadius: 0 }}>Login Page</button>
-           <button className="btn sm ghost" style={{ borderRadius: 0 }}>Magic Link Email</button>
-        </div>
-
-        <div style={{ flex: 1, position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, pointerEvents: 'none' }}>
-            <span className="chip agent sm">LIVE PREVIEW</span>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 460 }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--hairline)', gap: 0, marginBottom: 16 }}>
+             <div style={{ 
+               borderBottom: '2px solid var(--fg-dim)', 
+               borderRadius: 0, 
+               color: 'var(--fg)', 
+               height: 36,
+               fontSize: 11,
+               fontWeight: 600,
+               padding: '0 4px',
+               display: 'flex',
+               alignItems: 'center'
+             }}>
+               Live Page Preview
+             </div>
           </div>
-          
-          <iframe
-            title="Hosted Login Preview"
-            src={`/hosted/default/login?preview=true&primary=${encodeURIComponent(draft.primary_color)}&secondary=${encodeURIComponent(draft.secondary_color)}&font=${encodeURIComponent(draft.font_family)}`}
-            style={{
-              width: '100%',
-              height: 600,
-              border: '1px solid var(--hairline)',
-              borderRadius: 'var(--radius)',
-              background: '#fff',
-            }}
-          />
-        </div>
 
-        <div style={{ fontSize: 11, color: 'var(--fg-dim)', textAlign: 'center' }}>
-          Real-time preview of your <b>Hosted Login Page</b>. Changes are applied via query params before saving.
+          <div style={{ 
+            width: '100%', 
+            aspectRatio: '1 / 1',
+            background: 'var(--surface-1)',
+            borderRadius: 4,
+            border: '1px solid var(--hairline-strong)',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundSize: '20px 20px',
+            backgroundImage: 'radial-gradient(var(--hairline) 1px, transparent 0)',
+          }}>
+            <div style={{ 
+              width: '125%', 
+              height: '125%', 
+              transform: 'scale(0.8)',
+              transformOrigin: 'center',
+              boxShadow: '0 30px 60px rgba(0,0,0,0.4)',
+              borderRadius: 8,
+              overflow: 'hidden',
+              border: '1px solid var(--hairline-bright)'
+            }}>
+              <iframe
+                title="Hosted Login Preview"
+                src={`/hosted/default/login?preview=true&primary=${encodeURIComponent(draft.primary_color)}&secondary=${encodeURIComponent(draft.secondary_color)}&font=${encodeURIComponent(draft.font_family)}`}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  background: '#fff',
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ fontSize: 10.5, color: 'var(--fg-dim)', textAlign: 'center', marginTop: 16, maxWidth: 360, margin: '16px auto 0', lineHeight: 1.5 }}>
+            Real-time reconciliation through optimistic rendering.
+            Page state tracks draft in-buffer.
+          </div>
         </div>
       </div>
     </div>
@@ -375,16 +426,19 @@ export function BrandingVisualsTab() {
 
 // ── helpers ────────────────────────────────────────────────────────
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '6px 8px',
-  fontSize: 12,
-  background: 'var(--surface-1)',
-  border: '1px solid var(--hairline)',
-  borderRadius: 'var(--radius)',
-  color: 'var(--fg)',
-  boxSizing: 'border-box',
-}
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '6px 10px',
+    fontSize: 13,
+    fontFamily: 'var(--font-sans)',
+    background: 'var(--surface-1)',
+    border: '1px solid var(--hairline-strong)',
+    borderRadius: 2,
+    color: 'var(--fg)',
+    boxSizing: 'border-box',
+    outline: 'none',
+    transition: 'border-color 60ms ease-out'
+  }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -395,7 +449,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
           fontSize: 10,
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
-          color: 'var(--fg-muted)',
+          color: 'var(--fg-dim)',
           marginBottom: 6,
           fontWeight: 500,
         }}
@@ -433,7 +487,7 @@ function ColorField({
             type="text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+            style={{ ...inputStyle, fontFamily: 'var(--font-mono)', fontSize: 11.5 }}
             spellCheck={false}
           />
           <div

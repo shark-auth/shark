@@ -4,6 +4,12 @@ export type { SignInFormProps } from './SignInForm'
 export { SignUpForm } from './SignUpForm'
 export type { SignUpFormProps } from './SignUpForm'
 
+export { ForgotPasswordForm } from './ForgotPasswordForm'
+export type { ForgotPasswordFormProps } from './ForgotPasswordForm'
+
+export { ResetPasswordForm } from './ResetPasswordForm'
+export type { ResetPasswordFormProps } from './ResetPasswordForm'
+
 export { MFAForm } from './MFAForm'
 export type { MFAFormProps } from './MFAForm'
 

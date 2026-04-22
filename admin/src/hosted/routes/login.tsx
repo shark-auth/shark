@@ -30,7 +30,7 @@ export function LoginPage({ config }: LoginPageProps) {
       const data = await res.json().catch(() => ({}))
 
       if (data.mfaRequired) {
-        navigate(`${base}/mfa?method=totp`)
+        navigate("/mfa?method=totp")
         return
       }
 
@@ -62,7 +62,7 @@ export function LoginPage({ config }: LoginPageProps) {
         throw new Error(body.message || 'Something went wrong — try again')
       }
 
-      navigate(`${base}/magic?email=${encodeURIComponent(email)}`)
+      navigate(`/magic?email=${encodeURIComponent(email)}`)
     } catch (err) {
       toast.danger(err instanceof Error ? err.message : 'Something went wrong — try again')
       throw err
@@ -71,7 +71,7 @@ export function LoginPage({ config }: LoginPageProps) {
 
   async function onPasskeyStart(): Promise<void> {
     if (!window.PublicKeyCredential) {
-      navigate(`${base}/passkey`)
+      navigate("/passkey")
       return
     }
     try {
@@ -121,7 +121,7 @@ export function LoginPage({ config }: LoginPageProps) {
 
       const finishData = await finishRes.json().catch(() => ({}))
       if (finishData.mfaRequired) {
-        navigate(`${base}/mfa?method=totp`)
+        navigate("/mfa?method=totp")
         return
       }
 
@@ -158,6 +158,7 @@ export function LoginPage({ config }: LoginPageProps) {
       onPasskeyStart={onPasskeyStart}
       onOAuthStart={onOAuthStart}
       signUpHref={`${base}/signup`}
+      forgotPasswordHref={`${base}/forgot-password`}
     />
   )
 }

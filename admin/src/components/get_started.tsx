@@ -8,7 +8,7 @@ import { CLIFooter } from './CLIFooter'
 // Reached on first login when users=0.
 
 function markOnboarded() {
-  try { sessionStorage.setItem('shark_admin_onboarded', '1'); } catch {}
+  try { localStorage.setItem('shark_admin_onboarded', '1'); } catch {}
 }
 
 function ChecklistRow({ icon, title, sub, onClick }) {

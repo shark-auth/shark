@@ -1,27 +1,43 @@
-<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<meta name="color-scheme" content="light dark">
-<title>{{.Header}}</title>
-<style>
-  body{margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,system-ui,sans-serif}
-  .container{max-width:520px;margin:0 auto;padding:32px 16px}
-  .card{background:#ffffff;border-radius:8px;padding:32px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .logo{max-height:40px;margin-bottom:24px}
-  h1{margin:0 0 16px;font-size:22px;color:#0a0a0a}
-  p{margin:0 0 12px;color:#4a4a4a;line-height:1.55;font-size:14px}
-  .btn{display:inline-block;background:{{.Branding.PrimaryColor}};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;margin:16px 0}
-  .footer{margin-top:24px;font-size:12px;color:#8a8a8a}
-  .preheader{display:none;max-height:0;overflow:hidden;opacity:0;color:transparent}
-</style>
-</head><body>
-<div class="preheader">{{.Preheader}}</div>
-<div class="container">
-  <div class="card">
-    {{if .Branding.LogoURL}}<img class="logo" src="{{.Branding.LogoURL}}" alt="">{{end}}
-    <h1>{{.Header}}</h1>
-    {{range .Paragraphs}}<p>{{.}}</p>{{end}}
-    {{if .CTAText}}<a class="btn" href="{{.CTAURL}}">{{.CTAText}}</a>{{end}}
-    {{if .Footer}}<div class="footer">{{.Footer}}</div>{{end}}
-  </div>
-</div>
-</body></html>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>{{.Header}}</title>
+    <style>
+      body{margin:0;padding:0;background:#fcfcfc;font-family:-apple-system,system-ui,sans-serif}
+      .container{max-width:500px;margin:0 auto;padding:48px 16px}
+      .card{background:#ffffff;border:1px solid #eeeeee;border-radius:2px;padding:40px;box-shadow:none}
+      .logo{max-height:36px;margin-bottom:32px;filter:grayscale(1)}
+      h1{margin:0 0 20px;font-size:20px;color:#000000;font-weight:600;letter-spacing:-0.01em}
+      p{margin:0 0 16px;color:#111111;line-height:1.6;font-size:13.5px}
+      .btn{display:inline-block;background:{{.Branding.PrimaryColor}};color:#ffffff;padding:10px 20px;border-radius:2px;text-decoration:none;font-weight:600;font-size:13px;margin:24px 0}
+      .footer{margin-top:32px;padding-top:24px;border-top:1px solid #f0f0f0;font-size:12px;color:#666666;line-height:1.5}
+      .preheader{display:none;max-height:0;overflow:hidden;opacity:0;color:transparent}
+      .secured-by{margin-bottom:24px;text-align:center;opacity:0.8;display:flex;align-items:center;justify-content:center;gap:8px}
+      .secured-by span{font-size:9px;font-weight:600;color:#000;text-transform:uppercase;letter-spacing:0.12em}
+    </style>
+  </head>
+  <body>
+    <div class="preheader">{{.Preheader}}</div>
+    <div class="container">
+      <div class="secured-by">
+        <span>Secured by Shark Auth</span>
+      </div>
+      <div class="card">
+        {{if .Branding.LogoURL}}<img
+          class="logo"
+          src="{{.Branding.LogoURL}}"
+          alt=""
+        />{{end}}
+        <h1>{{.Header}}</h1>
+        {{range .Paragraphs}}
+        <p>{{.}}</p>
+        {{end}} {{if .CTAText}}<a class="btn" href="{{.CTAURL}}">{{.CTAText}}</a
+        >{{end}} {{if .Footer}}
+        <div class="footer">{{.Footer}}</div>
+        {{end}}
+      </div>
+    </div>
+  </body>
+</html>

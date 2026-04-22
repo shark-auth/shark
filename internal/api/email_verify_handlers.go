@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
 	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 // handleEmailVerifySend handles POST /api/v1/auth/email/verify/send
@@ -154,5 +156,67 @@ func (s *Server) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "Email verified successfully",
+	})
+}
+
+// handleAdminEmailVerifySend handles POST /api/v1/users/{id}/verify/send (admin)
+// Sends a verification email to a specific user.
+func (s *Server) handleAdminEmailVerifySend(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	user, err := s.Store.GetUserByID(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "User not found",
+		})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	if user.EmailVerified {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "already_verified",
+			"message": "User email is already verified",
+		})
+		return
+	}
+
+	if s.MagicLinkManager == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error":   "email_not_configured",
+			"message": "Email sending is not configured",
+		})
+		return
+	}
+
+	if err := s.MagicLinkManager.SendEmailVerification(r.Context(), user.Email); err != nil {
+		slog.Error("admin failed to send verification email", "user_id", id, "email", user.Email, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "send_failed",
+			"message": "Failed to send verification email: " + err.Error(),
+		})
+		return
+	}
+
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "admin.user.verification_sent",
+			TargetType: "user",
+			TargetID:   id,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Status:     "success",
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Verification email sent",
 	})
 }

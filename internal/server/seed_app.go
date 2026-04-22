@@ -134,6 +134,7 @@ func seedDefaultApplication(ctx context.Context, store storage.Store, cfg *confi
 	app := &storage.Application{
 		ID:                  "app_" + appNid,
 		Name:                "Default Application",
+		Slug:                "default",
 		ClientID:            clientID,
 		ClientSecretHash:    secretHash,
 		ClientSecretPrefix:  secretPrefix,

@@ -15,7 +15,7 @@ auth:
     salt_length: 16
     key_length: 32
   jwt:
-    enabled: true
+    enabled: false
     mode: session
     issuer: ""
     audience: shark
@@ -36,6 +36,7 @@ magic_link:
   redirect_url: http://localhost:3000/auth/callback
 password_reset:
   redirect_url: http://localhost:3000/auth/reset-password
+  token_lifetime: 30m
 smtp:
   host: ""
   port: 587
@@ -44,9 +45,9 @@ smtp:
   from: ""
   from_name: SharkAuth
 email:
-  provider: dev
-  api_key: ""
-  from: ""
+  provider: resend
+  api_key: re_aLGeEFpR_HjvFa8MAvwuqHpv5HwzgQe5D
+  from: raul@mail.buildersmty.com.mx
   from_name: SharkAuth
   host: ""
   port: 0

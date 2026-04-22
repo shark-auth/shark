@@ -1,27 +1,19 @@
 import React from 'react'
-import { MagicLinkSent } from '../../design/composed/MagicLinkSent'
+import { ForgotPasswordForm } from '../../design/composed/ForgotPasswordForm'
 import { useToast } from '../../design/primitives/Toast'
 import type { HostedConfig } from '../../hosted-entry'
 
-interface MagicPageProps {
+interface ForgotPasswordPageProps {
   config: HostedConfig
 }
 
-const INITIAL_COOLDOWN_SECONDS = 30
-
-export function MagicPage(_props: MagicPageProps) {
+export function ForgotPasswordPage({ config }: ForgotPasswordPageProps) {
   const toast = useToast()
+  const base = `/hosted/${config.app.slug}`
 
-  // Read email from query string once on mount
-  const [email] = React.useState<string>(() => {
-    const params = new URLSearchParams(window.location.search)
-    return decodeURIComponent(params.get('email') ?? '')
-  })
-
-  async function onResend(): Promise<void> {
-    if (!email) return
+  async function onSubmit(email: string): Promise<void> {
     try {
-      const res = await fetch('/api/v1/auth/magic-link/send', {
+      const res = await fetch('/api/v1/auth/password/send-reset-link', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -32,6 +24,8 @@ export function MagicPage(_props: MagicPageProps) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.message || 'Something went wrong — try again')
       }
+
+      toast.success('Reset link sent!')
     } catch (err) {
       toast.danger(err instanceof Error ? err.message : 'Something went wrong — try again')
       throw err
@@ -39,10 +33,10 @@ export function MagicPage(_props: MagicPageProps) {
   }
 
   return (
-    <MagicLinkSent
-      email={email}
-      onResend={onResend}
-      resendCooldownSeconds={INITIAL_COOLDOWN_SECONDS}
+    <ForgotPasswordForm
+      appName={config.app.name}
+      onSubmit={onSubmit}
+      signInHref={`${base}/login`}
     />
   )
 }

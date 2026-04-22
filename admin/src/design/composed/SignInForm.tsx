@@ -5,6 +5,8 @@ import { FormField } from '../primitives/FormField'
 import { Card } from '../primitives/Card'
 import { PasskeyButton } from './PasskeyButton'
 import { OAuthProviderButton } from './OAuthProviderButton'
+import sharkGlyph from '../../assets/sharky-glyph.png'
+import sharkWordmark from '../../assets/sharky-wordmark.png'
 
 export interface SignInFormProps {
   appName: string
@@ -114,9 +116,9 @@ export function SignInForm({
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: `${tokens.space[8]}px ${tokens.space[6]}px`,
+    padding: `80px 24px`,
     minHeight: '100vh',
-    background: tokens.color.surface0,
+    background: 'var(--bg)',
   }
 
   const innerStyle: React.CSSProperties = {
@@ -125,18 +127,19 @@ export function SignInForm({
   }
 
   const titleStyle: React.CSSProperties = {
-    fontSize: tokens.type.size['2xl'],
-    fontFamily: tokens.type.display.family,
-    fontWeight: tokens.type.weight.bold,
+    fontSize: tokens.type.size.xl,
+    fontFamily: 'Hanken Grotesk, var(--font-sans)',
+    fontWeight: 600,
     color: tokens.color.fg,
     textAlign: 'center',
     marginBottom: tokens.space[1],
+    letterSpacing: '-0.01em'
   }
 
   const subtitleStyle: React.CSSProperties = {
-    fontSize: tokens.type.size.base,
+    fontSize: 13,
     fontFamily: tokens.type.body.family,
-    color: tokens.color.fgMuted,
+    color: tokens.color.fgDim,
     textAlign: 'center',
     marginBottom: tokens.space[6],
   }
@@ -144,8 +147,8 @@ export function SignInForm({
   const dividerStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    gap: tokens.space[3],
-    margin: `${tokens.space[4]}px 0`,
+    gap: 12,
+    margin: `20px 0`,
   }
 
   const dividerLineStyle: React.CSSProperties = {
@@ -155,10 +158,12 @@ export function SignInForm({
   }
 
   const dividerTextStyle: React.CSSProperties = {
-    fontSize: tokens.type.size.xs,
-    fontFamily: tokens.type.body.family,
-    color: tokens.color.fgDim,
+    fontSize: 10,
+    fontFamily: 'Azeret Mono, var(--font-mono)',
+    color: 'var(--fg-dim)',
     whiteSpace: 'nowrap',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
   }
 
   const footerStyle: React.CSSProperties = {
@@ -171,15 +176,16 @@ export function SignInForm({
   }
 
   const linkStyle: React.CSSProperties = {
-    color: tokens.color.primary,
+    color: 'var(--fg-dim)',
     textDecoration: 'none',
+    transition: 'color 60ms ease-out'
   }
 
   const errorBannerStyle: React.CSSProperties = {
     padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-    background: `${tokens.color.danger}22`,
-    border: `1px solid ${tokens.color.danger}44`,
-    borderRadius: tokens.radius.md,
+    background: 'var(--bg)',
+    border: `1px solid ${tokens.color.danger}`,
+    borderRadius: 2,
     color: tokens.color.danger,
     fontSize: tokens.type.size.sm,
     fontFamily: tokens.type.body.family,
@@ -189,10 +195,38 @@ export function SignInForm({
   return (
     <div style={containerStyle}>
       <div style={innerStyle}>
+        <div 
+          className="premium-branding"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            marginBottom: 24,
+            opacity: 0.8,
+            filter: 'grayscale(1)',
+            cursor: 'default',
+            userSelect: 'none'
+          }}
+        >
+          <span style={{ 
+            fontSize: 9, 
+            color: 'var(--fg-dim)', 
+            letterSpacing: '0.08em', 
+            fontWeight: 600, 
+            textTransform: 'uppercase',
+            fontFamily: 'Azeret Mono, var(--font-mono)'
+          }}>
+            Secured by
+          </span>
+          <img src={sharkGlyph} alt="Shark Auth" style={{ height: 16, width: 'auto', opacity: 0.8 }} />
+          <img src={sharkWordmark} alt="Shark Auth" style={{ height: 12, width: 'auto', opacity: 0.8 }} />
+        </div>
+
         <h1 style={titleStyle}>{appName}</h1>
         <p style={subtitleStyle}>Sign in to your account</p>
 
-        <Card bodyStyle={{ padding: tokens.space[6] }}>
+        <Card bodyStyle={{ padding: 32, background: 'var(--surface-0)', border: '1px solid var(--hairline)', borderRadius: 2 }}>
           {formError && (
             <div role="alert" style={errorBannerStyle}>{formError}</div>
           )}
@@ -260,7 +294,7 @@ export function SignInForm({
                   size="lg"
                   loading={loading}
                   disabled={loading}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', height: 40, fontSize: 13, fontWeight: 600, borderRadius: 2 }}
                 >
                   Sign in
                 </Button>
@@ -287,7 +321,7 @@ export function SignInForm({
                     loading={magicLoading}
                     disabled={loading || magicLoading || passkeyLoading}
                     onClick={handleMagicLink}
-                    style={{ width: '100%' }}
+                    style={{ width: '100%', height: 40, fontSize: 13, borderRadius: 2 }}
                   >
                     Continue with magic link
                   </Button>
@@ -313,6 +347,8 @@ export function SignInForm({
             </>
           )}
         </Card>
+
+        {/* Branding moved to top */}
 
         {(signUpHref || forgotPasswordHref) && (
           <div style={footerStyle}>

@@ -6,12 +6,14 @@
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "strict": false,
-    "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "typeRoots": ["node_modules/@types"],
+    "composite": true
   },
-  "include": ["src"]
+  "include": ["src", "vite.config.ts"]
 }
+

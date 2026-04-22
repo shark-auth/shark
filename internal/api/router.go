@@ -33,15 +33,15 @@ type Server struct {
 	Config            *config.Config
 	ConfigPath        string // path to sharkauth.yaml for updates
 	Router            chi.Router
-	SessionManager   *auth.SessionManager
-	PasskeyManager   *auth.PasskeyManager
-	OAuthManager     *auth.OAuthManager
-	MagicLinkManager *auth.MagicLinkManager
-	JWTManager       *jwtpkg.Manager
-	RBAC             *rbacpkg.RBACManager
-	AuditLogger      *audit.Logger
-	RateLimiter      *auth.TokenBucket
-	LockoutManager   *auth.LockoutManager
+	SessionManager    *auth.SessionManager
+	PasskeyManager    *auth.PasskeyManager
+	OAuthManager      *auth.OAuthManager
+	MagicLinkManager  *auth.MagicLinkManager
+	JWTManager        *jwtpkg.Manager
+	RBAC              *rbacpkg.RBACManager
+	AuditLogger       *audit.Logger
+	RateLimiter       *auth.TokenBucket
+	LockoutManager    *auth.LockoutManager
 	FieldEncryptor    *auth.FieldEncryptor
 	SSOHandlers       *SSOHandlers
 	WebhookDispatcher *webhook.Dispatcher
@@ -408,7 +408,6 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 			r.Get("/{id}/users", s.handleListUsersByPermission)
 		})
 
-
 		// Auth check (admin) — validates if a user has a specific permission
 		r.Group(func(r chi.Router) {
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
@@ -436,6 +435,7 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 			// support can recover an account when the device is lost. The
 			// user-facing /auth/mfa endpoint still requires a current code.
 			r.Delete("/{id}/mfa", s.handleAdminDisableUserMFA)
+			r.Post("/{id}/verify/send", s.handleAdminEmailVerifySend)
 		})
 
 		// SSO connections (admin + public endpoints)

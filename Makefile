@@ -4,7 +4,7 @@ BINARY := sharkauth
 PKG    := ./cmd/shark
 
 frontend-build:
-	@cd admin && pnpm build
+	@cd admin && NODE_OPTIONS=--max-old-space-size=4096 pnpm build
 
 build: frontend-build
 	go build -ldflags="-s -w" -o $(BINARY) $(PKG)
@@ -28,7 +28,7 @@ lint: vet
 	golangci-lint run ./...
 
 run: build
-	./$(BINARY)
+	./$(BINARY) serve --dev --proxy-upstream http://localhost:3000
 
 clean:
 	rm -f $(BINARY)

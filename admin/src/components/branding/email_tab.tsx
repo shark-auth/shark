@@ -185,30 +185,31 @@ export function BrandingEmailTab() {
   const paragraphs: string[] = draft.body_paragraphs || []
 
   return (
-    <div style={{ display: 'flex', gap: 20, padding: 20, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 24, padding: 0, alignItems: 'flex-start' }}>
       {/* ── Left: template list ────────────────────────────────────── */}
       <div
         style={{
-          flex: '0 0 200px',
+          flex: '0 0 180px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 4,
+          gap: 2,
           border: '1px solid var(--hairline)',
-          borderRadius: 'var(--radius)',
-          padding: 6,
+          borderRadius: 4,
+          padding: '6px 2px',
           background: 'var(--surface-1)',
         }}
       >
         <div
           style={{
-            fontSize: 10,
+            fontSize: 9,
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
-            color: 'var(--fg-muted)',
-            padding: '4px 6px 6px',
+            color: 'var(--fg-dim)',
+            padding: '4px 10px 4px',
+            fontWeight: 500
           }}
         >
-          Templates
+          Communication
         </div>
         {templates.map((t) => {
           const isSel = t.id === selected
@@ -219,16 +220,21 @@ export function BrandingEmailTab() {
               onClick={() => selectTemplate(t.id)}
               style={{
                 textAlign: 'left',
-                padding: '6px 8px',
+                padding: '6px 10px',
                 fontSize: 12,
-                background: isSel ? 'var(--surface-2, #e8ecff)' : 'transparent',
-                color: isSel ? 'var(--fg)' : 'var(--fg)',
-                border: '1px solid ' + (isSel ? 'var(--accent, #4f6bed)' : 'transparent'),
-                borderRadius: 'var(--radius)',
+                background: isSel ? 'var(--surface-2)' : 'transparent',
+                color: isSel ? 'var(--fg)' : 'var(--fg-muted)',
+                borderRadius: 2,
                 cursor: 'pointer',
                 fontWeight: isSel ? 600 : 400,
+                transition: 'all 60ms ease-out',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                border: 'none'
               }}
             >
+              <div style={{ width: 4, height: 4, borderRadius: 1, background: isSel ? 'var(--fg-dim)' : 'transparent' }} />
               {templateLabel(t.id)}
             </button>
           )
@@ -238,56 +244,61 @@ export function BrandingEmailTab() {
       {/* ── Middle: editor ─────────────────────────────────────────── */}
       <div
         style={{
-          flex: '0.4 1 0',
+          flex: '0.45 1 0',
           minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
-          gap: 14,
+          gap: 20,
         }}
       >
-        <Field label="Subject">
+        <div style={{ marginBottom: 4 }}>
+          <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>Template Content</h2>
+          <p style={{ fontSize: 11.5, color: 'var(--fg-dim)', margin: 0 }}>Editable strings for <b>{templateLabel(selected)}</b>.</p>
+        </div>
+
+        <Field label="Message Subject">
           <input
             type="text"
             value={draft.subject || ''}
             onChange={(e) => patch({ subject: e.target.value })}
-            style={inputStyle}
+            style={{ ...inputStyle, height: 40 }}
           />
         </Field>
 
-        <Field label="Preheader">
+        <Field label="System Preheader">
           <input
             type="text"
             value={draft.preheader || ''}
             onChange={(e) => patch({ preheader: e.target.value })}
-            style={inputStyle}
+            style={{ ...inputStyle, height: 40 }}
           />
         </Field>
 
-        <Field label="Header text">
+        <Field label="Primary Header Text">
           <input
             type="text"
             value={draft.header_text || ''}
             onChange={(e) => patch({ header_text: e.target.value })}
-            style={inputStyle}
+            style={{ ...inputStyle, height: 40 }}
           />
         </Field>
 
-        <Field label="Body paragraphs">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Field label="Message Body Paragraphs">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {paragraphs.map((p, i) => (
-              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                 <textarea
                   value={p}
                   onChange={(e) => setParagraph(i, e.target.value)}
-                  rows={2}
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: 48, fontFamily: 'inherit', flex: 1 }}
+                  rows={3}
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: 60, fontFamily: 'inherit', flex: 1 }}
                 />
                 <button
                   type="button"
-                  className="btn sm"
+                  className="btn danger"
                   onClick={() => removeParagraph(i)}
                   title="Remove paragraph"
-                  style={{ flex: '0 0 auto' }}
+                  style={{ flex: '0 0 auto', width: 32, height: 32, padding: 0, justifyContent: 'center' }}
                 >
                   ×
                 </button>
@@ -295,96 +306,134 @@ export function BrandingEmailTab() {
             ))}
             <button
               type="button"
-              className="btn sm"
+              className="btn"
               onClick={addParagraph}
-              style={{ alignSelf: 'flex-start' }}
+              style={{ alignSelf: 'flex-start', height: 32, padding: '0 16px' }}
             >
-              + Add paragraph
+              + Add new paragraph
             </button>
           </div>
         </Field>
 
-        <Field label="CTA button text">
+        <Field label="Call to Action Label">
           <input
             type="text"
             value={draft.cta_text || ''}
             onChange={(e) => patch({ cta_text: e.target.value })}
-            style={inputStyle}
+            style={{ ...inputStyle, height: 40 }}
           />
         </Field>
 
-        <Field label="CTA URL template">
+        <Field label="Action Target Template">
           <input
             type="text"
             value={draft.cta_url_template || ''}
             onChange={(e) => patch({ cta_url_template: e.target.value })}
             placeholder="{{.Link}}"
-            style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+            style={{ ...inputStyle, fontFamily: 'var(--font-mono)', height: 40 }}
             spellCheck={false}
           />
         </Field>
 
-        <Field label="Footer">
+        <Field label="Footer Signature">
           <textarea
             value={draft.footer_text || ''}
             onChange={(e) => patch({ footer_text: e.target.value })}
             rows={2}
-            style={{ ...inputStyle, resize: 'vertical', minHeight: 56, fontFamily: 'inherit' }}
+            style={{ ...inputStyle, resize: 'vertical', minHeight: 60, fontFamily: 'inherit' }}
           />
         </Field>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             type="button"
-            className="btn primary"
+            className="btn primary sm"
+            style={{ height: 32, padding: '0 20px', fontSize: 12, fontWeight: 600 }}
             onClick={save}
             disabled={saving}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving…' : 'Publish'}
           </button>
           <button
             type="button"
-            className="btn"
+            className="btn ghost sm"
+            style={{ height: 32, padding: '0 16px', fontSize: 12 }}
             onClick={sendTest}
             disabled={sending}
           >
             {sending ? 'Sending…' : 'Send test'}
           </button>
+          <div style={{ flex: 1 }} />
           <button
             type="button"
-            className="btn"
+            className="btn danger sm"
+            style={{ height: 32, padding: '0 16px', fontSize: 12 }}
             onClick={reset}
             disabled={resetting}
           >
-            {resetting ? 'Resetting…' : 'Reset to default'}
+            {resetting ? 'Resetting…' : 'Reset'}
           </button>
         </div>
       </div>
 
       {/* ── Right: iframe preview ──────────────────────────────────── */}
-      <div style={{ flex: '0.6 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div
-          style={{
-            fontSize: 10,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--fg-dim)',
-          }}
-        >
-          Live preview — {templateLabel(selected)}
-        </div>
-        <iframe
-          title={`Email preview — ${selected}`}
-          srcDoc={previewHTML}
-          sandbox=""
-          style={{
+      <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 460 }}>
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: 'var(--fg-dim)',
+              fontWeight: 500,
+              marginBottom: 8,
+              borderBottom: '1px solid var(--hairline)',
+              paddingBottom: 4
+            }}
+          >
+            Visual Preview — {templateLabel(selected)}
+          </div>
+          <div style={{
             width: '100%',
-            height: 600,
-            border: '1px solid var(--hairline)',
-            borderRadius: 'var(--radius)',
-            background: '#fff',
-          }}
-        />
+            aspectRatio: '1 / 1',
+            background: 'var(--surface-1)',
+            borderRadius: 4,
+            border: '1px solid var(--hairline-strong)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundSize: '20px 20px',
+            backgroundImage: 'radial-gradient(var(--hairline) 1px, transparent 0)',
+            overflow: 'hidden'
+          }}>
+            <div style={{ 
+              width: '125%', 
+              height: '125%', 
+              transform: 'scale(0.8)',
+              transformOrigin: 'center',
+              boxShadow: '0 30px 60px rgba(0,0,0,0.4)',
+              borderRadius: 8,
+              overflow: 'hidden',
+              border: '1px solid var(--hairline-bright)'
+            }}>
+              <iframe
+                title={`Email preview — ${selected}`}
+                srcDoc={previewHTML}
+                sandbox=""
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  background: '#fff',
+                }}
+              />
+            </div>
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--fg-dim)', textAlign: 'center', marginTop: 16, maxWidth: 360, margin: '16px auto 0', lineHeight: 1.5 }}>
+            Template state rendered via backend resolver.
+            Dynamic tokens injected into buffer.
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -394,13 +443,15 @@ export function BrandingEmailTab() {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: '6px 8px',
-  fontSize: 12,
+  padding: '6px 10px',
+  fontSize: 13,
   background: 'var(--surface-1)',
-  border: '1px solid var(--hairline)',
-  borderRadius: 'var(--radius)',
+  border: '1px solid var(--hairline-strong)',
+  borderRadius: 2,
   color: 'var(--fg)',
   boxSizing: 'border-box',
+  outline: 'none',
+  transition: 'border-color 60ms ease-out'
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -412,7 +463,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
           fontSize: 10,
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
-          color: 'var(--fg-muted)',
+          color: 'var(--fg-dim)',
           marginBottom: 6,
           fontWeight: 500,
         }}

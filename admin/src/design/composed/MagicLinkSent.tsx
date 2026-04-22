@@ -33,14 +33,16 @@ export function MagicLinkSent({
   onResend,
   resendCooldownSeconds = 60,
 }: MagicLinkSentProps) {
-  const [cooldown, setCooldown] = React.useState(0)
+  const [cooldown, setCooldown] = React.useState(onResend ? (resendCooldownSeconds > 0 ? resendCooldownSeconds : 0) : 0)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
   const [success, setSuccess] = React.useState(false)
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
 
-  function startCooldown() {
-    setCooldown(resendCooldownSeconds)
+  function startCooldown(seconds: number = resendCooldownSeconds) {
+    if (seconds <= 0) return
+    setCooldown(seconds)
+    if (timerRef.current) clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
       setCooldown((prev) => {
         if (prev <= 1) {
@@ -53,10 +55,13 @@ export function MagicLinkSent({
   }
 
   React.useEffect(() => {
+    if (onResend && resendCooldownSeconds > 0) {
+      startCooldown(resendCooldownSeconds)
+    }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleResend() {
     if (loading || cooldown > 0) return
