@@ -687,6 +687,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/register/{client_id}", s.OAuthServer.HandleDCRGet)
 			r.Put("/register/{client_id}", s.OAuthServer.HandleDCRUpdate)
 			r.Delete("/register/{client_id}", s.OAuthServer.HandleDCRDelete)
+			r.Post("/register/{client_id}/secret", s.OAuthServer.HandleDCRRotateSecret)
+			r.Delete("/register/{client_id}/registration-token", s.OAuthServer.HandleDCRRotateRegistrationToken)
 			// Token Introspection (RFC 7662) and Revocation (RFC 7009)
 			r.Post("/introspect", s.OAuthServer.HandleIntrospect)
 			r.Post("/revoke", s.OAuthServer.HandleRevoke)
