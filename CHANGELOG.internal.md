@@ -2,6 +2,46 @@
 
 > Not for public consumption. Technical notes on what shipped, why it shipped that way, and what trade-offs were made. Cross-reference with commit SHAs in repo.
 
+## W1-C — Smoke §F4/§F5 + stress baseline
+
+Shipped: 2026-04-21
+Branch: `claude/admin-vendor-assets-fix` (W1-C)
+
+### What shipped
+
+1. **Smoke §F4 (Token Exchange RFC 8693 delegation)** — seeds two agents via admin API, mints CC tokens for each, posts a token-exchange request, base64url-decodes the returned JWT, and asserts `act.sub == agent_b's client_id`. Checks `issued_token_type`, `token_type`, and delegation chain integrity.
+
+2. **Smoke §F5 (DPoP full flow RFC 9449)** — uses `examples/_dpop_helper.py` (Python CLI wrapping `DPoPProver`). Covers: happy path (proof + CC → 200), JTI replay (same proof twice → 400/401), expired iat (--iat-offset=-3600 → 400/401), key mismatch (rotated key scenario noted as RS-level check).
+
+3. **`examples/_dpop_helper.py`** — CLI that emits a DPoP proof JWT to stdout. Persists the P-256 key to a PEM file on first run so subsequent calls reuse the same keypair (enabling replay/mismatch test scenarios). Supports `--nonce`, `--jti`, `--iat-offset`, `--access-token`, `--key-file`, `--print-jkt`.
+
+4. **`test/stress/stress.go`** — 30s / 500-concurrent stress tool. Round-robins across `GET /healthz`, `POST /oauth/token` (CC), `GET /api/v1/admin/users`. Collects request count, 5xx count, p50/p95/p99, throughput. Emits JSON summary to stdout. Asserts: 0 5xx, p99 < 500 ms, throughput > 100 req/s. Exits 1 on failure.
+
+### Stress baseline — PENDING LIVE RUN
+
+**Target thresholds:** 0 5xx · p99 < 500 ms · throughput > 100 req/s
+
+The tool compiles cleanly (`go build ./test/stress`). Baseline numbers to be recorded on next full-stack bring-up:
+
+```
+go run ./test/stress \
+  -base http://localhost:8080 \
+  -duration 30s \
+  -concurrency 500 \
+  -admin-token <ADMIN_TOKEN> \
+  -client-id <CLIENT_ID> \
+  -client-secret <CLIENT_SECRET>
+```
+
+Results will be appended here once a server is available.
+
+### Trade-offs
+
+- Token exchange smoke test (`§F4`) posts the agent_b CC access token as `actor_token` but the server's `HandleTokenExchange` route authenticates the actor via HTTP Basic Auth (`Authorization: Basic`), not `actor_token` form field. The actor_token parameter is included for RFC compliance; the server uses Basic Auth. The test correctly authenticates agent_b via Basic.
+- Key-mismatch DPoP scenario is a resource-server-level check (comparing stored `cnf.jkt` against the presented DPoP proof). The token endpoint doesn't re-validate the key against a prior access token. This is per-RFC — the test notes it and skips a hard assertion.
+
+---
+
 ## Phase 6.7 — Live dogfood session: stale bundle + migration path + Icon.User crash
 
 Shipped: 2026-04-20 (night session)
