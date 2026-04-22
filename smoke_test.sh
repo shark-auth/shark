@@ -3053,6 +3053,191 @@ else
   fail "74g could not pick first application id"
 fi
 
+# --- §75: Hosted pages shell + slug + bundle asset ----------------------------
+section "75. Hosted pages shell + slug + bundle asset"
+
+# ── Seed: pre-delete any stale hosted-test / custom-test slugs to make the
+#    section idempotent on reruns. We look up by slug via the list endpoint.
+for _75_slug in hosted-test custom-test; do
+  _75_EXISTING=$(curl -sS -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps?limit=200")
+  _75_EXISTING_ID=$(echo "$_75_EXISTING" | jq -r --arg s "$_75_slug" '.data[] | select(.slug==$s) | .id' 2>/dev/null | head -1)
+  if [ -n "$_75_EXISTING_ID" ]; then
+    curl -sS -o /dev/null -X DELETE -H "Authorization: Bearer $ADMIN" "$BASE/api/v1/admin/apps/$_75_EXISTING_ID"
+  fi
+done
+
+# ── 75-1: Seed a hosted-mode app (slug=hosted-test, integration_mode=hosted) --
+_75_CREATE=$(curl -sS -w "\n%{http_code}" -X POST -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Hosted Test","slug":"hosted-test","allowed_callback_urls":["http://localhost:3000/cb"]}' \
+  "$BASE/api/v1/admin/apps")
+_75_CREATE_CODE=$(echo "$_75_CREATE" | tail -1)
+_75_CREATE_BODY=$(echo "$_75_CREATE" | sed '$d')
+[ "$_75_CREATE_CODE" = "201" ] && pass "75 create hosted-test app 201" || { fail "75 create hosted-test app returned $_75_CREATE_CODE"; note "$_75_CREATE_BODY"; }
+APP_ID_75=$(echo "$_75_CREATE_BODY" | jq -r '.id // empty')
+[ -n "$APP_ID_75" ] && pass "75 captured app id $APP_ID_75" || fail "75 app id missing"
+
+# PATCH integration_mode → hosted
+if [ -n "$APP_ID_75" ]; then
+  _75_PATCH_CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+    -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -d '{"integration_mode":"hosted"}' "$BASE/api/v1/admin/apps/$APP_ID_75")
+  [ "$_75_PATCH_CODE" = "200" ] && pass "75 PATCH integration_mode=hosted 200" || fail "75 PATCH integration_mode=hosted returned $_75_PATCH_CODE"
+fi
+
+if [ -n "$APP_ID_75" ]; then
+
+  # ── 75-2: GET /hosted/hosted-test/login → 200 --------------------------------
+  _75_SHELL_RESP=$(curl -sS -w "\n%{http_code}" "$BASE/hosted/hosted-test/login")
+  _75_SHELL_CODE=$(echo "$_75_SHELL_RESP" | tail -1)
+  _75_SHELL_BODY=$(echo "$_75_SHELL_RESP" | sed '$d')
+  [ "$_75_SHELL_CODE" = "200" ] && pass "75 GET /hosted/hosted-test/login → 200" || { fail "75 GET /hosted/hosted-test/login → $_75_SHELL_CODE"; note "$_75_SHELL_BODY"; }
+
+  # ── 75-3: Response body contains __SHARK_HOSTED (config injection) -----------
+  if echo "$_75_SHELL_BODY" | grep -q '__SHARK_HOSTED'; then
+    pass "75 body contains __SHARK_HOSTED"
+  else
+    note "body (first 500): ${_75_SHELL_BODY:0:500}"
+    fail "75 body missing __SHARK_HOSTED"
+  fi
+
+  # ── 75-4: Response body contains app name "Hosted Test" (title) --------------
+  if echo "$_75_SHELL_BODY" | grep -q 'Hosted Test'; then
+    pass "75 body contains app name 'Hosted Test'"
+  else
+    note "body (first 500): ${_75_SHELL_BODY:0:500}"
+    fail "75 body missing 'Hosted Test'"
+  fi
+
+  # ── 75-5: Content-Type is text/html; charset=utf-8 ---------------------------
+  _75_HDRS=$(curl -sS -D - -o /dev/null "$BASE/hosted/hosted-test/login")
+  if echo "$_75_HDRS" | grep -qi 'content-type: text/html; charset=utf-8'; then
+    pass "75 Content-Type text/html; charset=utf-8"
+  else
+    note "headers: $_75_HDRS"
+    fail "75 Content-Type mismatch (expected text/html; charset=utf-8)"
+  fi
+
+  # ── 75-6: Body contains mount point <div id="hosted-root"> -------------------
+  if echo "$_75_SHELL_BODY" | grep -q '<div id="hosted-root">'; then
+    pass "75 body contains <div id=\"hosted-root\">"
+  else
+    note "body (first 800): ${_75_SHELL_BODY:0:800}"
+    fail "75 body missing <div id=\"hosted-root\">"
+  fi
+
+  # ── 75-7: Body contains <script type="module" referencing /admin/hosted/assets/hosted- --
+  if echo "$_75_SHELL_BODY" | grep -q 'type="module"' && echo "$_75_SHELL_BODY" | grep -q '/admin/hosted/assets/hosted-'; then
+    pass "75 body contains <script type=\"module\" referencing /admin/hosted/assets/hosted-"
+  else
+    note "body (first 800): ${_75_SHELL_BODY:0:800}"
+    note "75 bundle script may be absent if dev server was not built with hosted target"
+    note "75 <script type=module> + /admin/hosted/assets/hosted- check: code=$_75_SHELL_CODE"
+    # Non-fatal: bundle only present when Vite has been built; mark as note not fail
+    note "75 SKIP: bundle script tag not found (server built without hosted SPA assets)"
+  fi
+
+  # ── 75-8: Unknown slug → 404 --------------------------------------------------
+  _75_UNK_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE/hosted/does-not-exist/login")
+  [ "$_75_UNK_CODE" = "404" ] && pass "75 unknown slug → 404" || fail "75 unknown slug → $_75_UNK_CODE (expected 404)"
+
+  # ── 75-9: Invalid page → 404 -------------------------------------------------
+  _75_BOGUS_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE/hosted/hosted-test/bogus")
+  [ "$_75_BOGUS_CODE" = "404" ] && pass "75 invalid page /bogus → 404" || fail "75 invalid page /bogus → $_75_BOGUS_CODE (expected 404)"
+
+  # ── 75-10: integration_mode mismatch → 404 -----------------------------------
+  # Create a custom-mode app and verify /hosted/{slug}/login → 404.
+  _75_CUST_CREATE=$(curl -sS -w "\n%{http_code}" -X POST -H "Authorization: Bearer $ADMIN" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"Custom App","slug":"custom-test","allowed_callback_urls":["http://localhost:3000/cb"]}' \
+    "$BASE/api/v1/admin/apps")
+  _75_CUST_CODE=$(echo "$_75_CUST_CREATE" | tail -1)
+  _75_CUST_BODY=$(echo "$_75_CUST_CREATE" | sed '$d')
+  APP_ID_75C=$(echo "$_75_CUST_BODY" | jq -r '.id // empty')
+  if [ -n "$APP_ID_75C" ]; then
+    # PATCH integration_mode → custom (it defaults to custom, but be explicit)
+    curl -sS -o /dev/null -X PATCH -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+      -d '{"integration_mode":"custom"}' "$BASE/api/v1/admin/apps/$APP_ID_75C"
+    _75_MISMATCH_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE/hosted/custom-test/login")
+    [ "$_75_MISMATCH_CODE" = "404" ] && pass "75 integration_mode=custom slug → 404 (mode mismatch)" \
+      || fail "75 integration_mode=custom slug → $_75_MISMATCH_CODE (expected 404)"
+  else
+    note "75 could not create custom-test app ($_75_CUST_CODE): $_75_CUST_BODY"
+    fail "75 integration_mode mismatch test: app creation failed"
+  fi
+
+  # ── 75-11: All valid pages respond 200 ----------------------------------------
+  for _75_page in login signup magic passkey mfa verify error; do
+    _75_PAGE_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE/hosted/hosted-test/$_75_page")
+    [ "$_75_PAGE_CODE" = "200" ] && pass "75 /hosted/hosted-test/$_75_page → 200" \
+      || fail "75 /hosted/hosted-test/$_75_page → $_75_PAGE_CODE (expected 200)"
+  done
+
+  # ── 75-12: OAuth query params propagated into __SHARK_HOSTED config -----------
+  _75_OAUTH_BODY=$(curl -sS "$BASE/hosted/hosted-test/login?client_id=abc&state=xyz&redirect_uri=http%3A%2F%2Fexample.com")
+  if echo "$_75_OAUTH_BODY" | grep -q '"client_id":"abc"'; then
+    pass "75 OAuth param client_id=abc in config"
+  else
+    note "body (first 800): ${_75_OAUTH_BODY:0:800}"
+    fail "75 OAuth param client_id not found in config"
+  fi
+  if echo "$_75_OAUTH_BODY" | grep -q '"state":"xyz"'; then
+    pass "75 OAuth param state=xyz in config"
+  else
+    note "body (first 800): ${_75_OAUTH_BODY:0:800}"
+    fail "75 OAuth param state not found in config"
+  fi
+
+  # ── 75-13: Static bundle asset reachable + correct headers -------------------
+  # Extract hosted-*.js filename from the shell body using a grep regex.
+  _75_BUNDLE_FILE=$(echo "$_75_SHELL_BODY" | grep -oE '/admin/hosted/assets/(hosted-[A-Za-z0-9_-]+\.js)' | head -1 | sed 's|.*/admin/hosted/assets/||')
+  if [ -n "$_75_BUNDLE_FILE" ]; then
+    _75_ASSET_HDRS=$(curl -sS -D - -o /dev/null "$BASE/admin/hosted/assets/$_75_BUNDLE_FILE")
+    _75_ASSET_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE/admin/hosted/assets/$_75_BUNDLE_FILE")
+    [ "$_75_ASSET_CODE" = "200" ] && pass "75 bundle asset /$_75_BUNDLE_FILE → 200" \
+      || fail "75 bundle asset /$_75_BUNDLE_FILE → $_75_ASSET_CODE (expected 200)"
+    if echo "$_75_ASSET_HDRS" | grep -qi 'content-type:.*javascript'; then
+      pass "75 bundle asset Content-Type application/javascript"
+    else
+      note "headers: $_75_ASSET_HDRS"
+      fail "75 bundle asset Content-Type not javascript"
+    fi
+    if echo "$_75_ASSET_HDRS" | grep -qi 'cache-control:.*\(immutable\|max-age=31536000\)'; then
+      pass "75 bundle asset Cache-Control immutable/max-age=31536000"
+    else
+      note "headers: $_75_ASSET_HDRS"
+      fail "75 bundle asset Cache-Control missing immutable or max-age=31536000"
+    fi
+  else
+    note "75 bundle filename not found in shell body — skipping asset fetch assertions"
+    note "75 (server must be built with 'npm run build' in the hosted SPA to embed the bundle)"
+  fi
+
+  # ── 75-14: Branding CSS vars — per-app primary_color propagates to shell -----
+  # Set branding_override.primary_color=#00ff00 on the hosted-test app.
+  _75_BRAND_CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+    -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -d '{"branding_override":{"primary_color":"#00ff00"}}' \
+    "$BASE/api/v1/admin/apps/$APP_ID_75")
+  [ "$_75_BRAND_CODE" = "200" ] && pass "75 PATCH branding_override primary_color=#00ff00 → 200" \
+    || fail "75 PATCH branding_override → $_75_BRAND_CODE (expected 200)"
+  # Re-fetch the shell (fresh request, no cache — server sets Cache-Control: no-store).
+  _75_BRAND_SHELL=$(curl -sS "$BASE/hosted/hosted-test/login")
+  if echo "$_75_BRAND_SHELL" | grep -q '#00ff00'; then
+    pass "75 branding CSS var #00ff00 reflected in hosted shell"
+  else
+    note "body (first 800): ${_75_BRAND_SHELL:0:800}"
+    fail "75 branding CSS var #00ff00 not found in hosted shell after PATCH"
+  fi
+
+  # Restore branding_override to null to avoid leaking state into later sections.
+  curl -sS -o /dev/null -X PATCH -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+    -d '{"branding_override":null}' "$BASE/api/v1/admin/apps/$APP_ID_75"
+
+else
+  fail "75 seeding failed — skipping all hosted page assertions"
+fi
+
 # --- §F4: Token Exchange (RFC 8693) delegation --------------------------------
 section "F4: Token Exchange delegation (RFC 8693)"
 
