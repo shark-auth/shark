@@ -82,17 +82,25 @@ func (s *FositeStore) GetClient(ctx context.Context, id string) (fosite.Client, 
 }
 
 // agentToClient converts a storage.Agent to a fosite.DefaultOpenIDConnectClient.
+// If the agent has an old_secret_hash that has not yet expired, it is included
+// in RotatedSecrets so fosite accepts either the current or old secret during
+// the 1-hour grace window (F4.3).
 func agentToClient(agent *storage.Agent) *fosite.DefaultOpenIDConnectClient {
+	dc := &fosite.DefaultClient{
+		ID:            agent.ClientID,
+		Secret:        []byte(agent.ClientSecretHash),
+		RedirectURIs:  agent.RedirectURIs,
+		GrantTypes:    agent.GrantTypes,
+		ResponseTypes: agent.ResponseTypes,
+		Scopes:        agent.Scopes,
+		Public:        agent.ClientType == "public",
+	}
+	// Include old secret in RotatedSecrets only while grace window is open.
+	if agent.OldSecretHash != "" && agent.OldSecretExpiresAt != nil && time.Now().UTC().Before(*agent.OldSecretExpiresAt) {
+		dc.RotatedSecrets = [][]byte{[]byte(agent.OldSecretHash)}
+	}
 	return &fosite.DefaultOpenIDConnectClient{
-		DefaultClient: &fosite.DefaultClient{
-			ID:            agent.ClientID,
-			Secret:        []byte(agent.ClientSecretHash),
-			RedirectURIs:  agent.RedirectURIs,
-			GrantTypes:    agent.GrantTypes,
-			ResponseTypes: agent.ResponseTypes,
-			Scopes:        agent.Scopes,
-			Public:        agent.ClientType == "public",
-		},
+		DefaultClient:           dc,
 		TokenEndpointAuthMethod: agent.AuthMethod,
 	}
 }

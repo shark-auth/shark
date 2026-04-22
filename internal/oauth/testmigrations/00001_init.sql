@@ -20,29 +20,31 @@ CREATE TABLE users (
 );
 
 CREATE TABLE agents (
-    id                  TEXT PRIMARY KEY,
-    name                TEXT NOT NULL,
-    description         TEXT DEFAULT '',
-    client_id           TEXT UNIQUE NOT NULL,
-    client_secret_hash  TEXT,
-    client_type         TEXT NOT NULL DEFAULT 'confidential'
-                            CHECK (client_type IN ('confidential', 'public')),
-    auth_method         TEXT NOT NULL DEFAULT 'client_secret_basic'
-                            CHECK (auth_method IN ('client_secret_basic', 'client_secret_post', 'private_key_jwt', 'none')),
-    jwks                TEXT,
-    jwks_uri            TEXT,
-    redirect_uris       TEXT NOT NULL DEFAULT '[]',
-    grant_types         TEXT NOT NULL DEFAULT '["client_credentials"]',
-    response_types      TEXT NOT NULL DEFAULT '["code"]',
-    scopes              TEXT NOT NULL DEFAULT '[]',
-    token_lifetime      INTEGER DEFAULT 900,
-    metadata            TEXT DEFAULT '{}',
-    logo_uri            TEXT,
-    homepage_uri        TEXT,
-    active              INTEGER NOT NULL DEFAULT 1,
-    created_by          TEXT,
-    created_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    updated_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    id                    TEXT PRIMARY KEY,
+    name                  TEXT NOT NULL,
+    description           TEXT DEFAULT '',
+    client_id             TEXT UNIQUE NOT NULL,
+    client_secret_hash    TEXT,
+    client_type           TEXT NOT NULL DEFAULT 'confidential'
+                              CHECK (client_type IN ('confidential', 'public')),
+    auth_method           TEXT NOT NULL DEFAULT 'client_secret_basic'
+                              CHECK (auth_method IN ('client_secret_basic', 'client_secret_post', 'private_key_jwt', 'none')),
+    jwks                  TEXT,
+    jwks_uri              TEXT,
+    redirect_uris         TEXT NOT NULL DEFAULT '[]',
+    grant_types           TEXT NOT NULL DEFAULT '["client_credentials"]',
+    response_types        TEXT NOT NULL DEFAULT '["code"]',
+    scopes                TEXT NOT NULL DEFAULT '[]',
+    token_lifetime        INTEGER DEFAULT 900,
+    metadata              TEXT DEFAULT '{}',
+    logo_uri              TEXT,
+    homepage_uri          TEXT,
+    active                INTEGER NOT NULL DEFAULT 1,
+    created_by            TEXT,
+    created_at            TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at            TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    old_secret_hash       TEXT,
+    old_secret_expires_at TEXT
 );
 
 CREATE TABLE oauth_authorization_codes (

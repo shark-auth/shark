@@ -25,6 +25,9 @@ type Agent struct {
 	CreatedBy        string         `json:"created_by,omitempty"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
+	// F4.3: previous secret hash kept valid during the 1-hour grace window.
+	OldSecretHash      string     `json:"-"`
+	OldSecretExpiresAt *time.Time `json:"-"`
 }
 
 // ListAgentsOpts configures agent list queries.

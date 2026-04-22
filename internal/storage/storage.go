@@ -246,6 +246,9 @@ type Store interface {
 	UpdateAgent(ctx context.Context, agent *Agent) error
 	UpdateAgentSecret(ctx context.Context, id, secretHash string) error
 	DeactivateAgent(ctx context.Context, id string) error
+	// RotateDCRClientSecret rotates the client secret for a DCR-registered agent,
+	// preserving the previous hash as old_secret_hash valid until oldSecretExpiresAt.
+	RotateDCRClientSecret(ctx context.Context, agentID, newSecretHash, oldSecretHash string, oldSecretExpiresAt time.Time) error
 
 	// OAuth Authorization Codes
 	CreateAuthorizationCode(ctx context.Context, code *OAuthAuthorizationCode) error
@@ -292,6 +295,8 @@ type Store interface {
 	GetDCRClient(ctx context.Context, clientID string) (*OAuthDCRClient, error)
 	UpdateDCRClient(ctx context.Context, client *OAuthDCRClient) error
 	DeleteDCRClient(ctx context.Context, clientID string) error
+	// RotateDCRRegistrationToken replaces the registration_token_hash for a DCR client.
+	RotateDCRRegistrationToken(ctx context.Context, clientID, newTokenHash string) error
 
 	// Vault Providers (Token Vault — third-party OAuth providers)
 	CreateVaultProvider(ctx context.Context, p *VaultProvider) error
@@ -361,6 +366,9 @@ type User struct {
 	MFAEnabled    bool    `json:"mfa_enabled"`
 	MFASecret     *string `json:"-"`
 	MFAVerified   bool    `json:"mfa_verified"`
+	// MFAVerifiedAt is set when the user successfully completes their first TOTP
+	// verification after enrollment (F3.2). NULL means enrolled but pending.
+	MFAVerifiedAt *string `json:"-"`
 	Metadata      string  `json:"metadata"`
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`

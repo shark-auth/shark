@@ -580,3 +580,12 @@ func (s *SQLiteStore) DeleteDCRClient(ctx context.Context, clientID string) erro
 	_, err := s.db.ExecContext(ctx, `DELETE FROM oauth_dcr_clients WHERE client_id = ?`, clientID)
 	return err
 }
+
+// RotateDCRRegistrationToken replaces the registration_token_hash for a DCR client.
+func (s *SQLiteStore) RotateDCRRegistrationToken(ctx context.Context, clientID, newTokenHash string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE oauth_dcr_clients SET registration_token_hash = ? WHERE client_id = ?`,
+		newTokenHash, clientID,
+	)
+	return err
+}

@@ -141,6 +141,25 @@ func (s *SQLiteStore) DeactivateAgent(ctx context.Context, id string) error {
 	return err
 }
 
+// RotateDCRClientSecret updates the client_secret_hash for a DCR-registered agent,
+// preserving the previous hash as old_secret_hash valid until expiresAt.
+// Uses a targeted UPDATE so no SELECT * re-scan is needed.
+func (s *SQLiteStore) RotateDCRClientSecret(ctx context.Context, agentID, newSecretHash, oldSecretHash string, oldSecretExpiresAt time.Time) error {
+	expiresAtStr := oldSecretExpiresAt.UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE agents SET
+			client_secret_hash    = ?,
+			old_secret_hash       = ?,
+			old_secret_expires_at = ?,
+			updated_at            = ?
+		WHERE id = ?`,
+		newSecretHash, oldSecretHash, expiresAtStr,
+		time.Now().UTC().Format(time.RFC3339),
+		agentID,
+	)
+	return err
+}
+
 // scanAgent scans a single agent row.
 func (s *SQLiteStore) scanAgent(row *sql.Row) (*Agent, error) {
 	var a Agent
@@ -148,6 +167,8 @@ func (s *SQLiteStore) scanAgent(row *sql.Row) (*Agent, error) {
 	var createdAt, updatedAt string
 	var active int
 	var createdBy sql.NullString
+	var oldSecretHash sql.NullString
+	var oldSecretExpiresAt sql.NullString
 
 	err := row.Scan(
 		&a.ID, &a.Name, &a.Description, &a.ClientID, &a.ClientSecretHash,
@@ -156,6 +177,7 @@ func (s *SQLiteStore) scanAgent(row *sql.Row) (*Agent, error) {
 		&a.TokenLifetime, &metadata, &a.LogoURI, &a.HomepageURI,
 		&active, &createdBy,
 		&createdAt, &updatedAt,
+		&oldSecretHash, &oldSecretExpiresAt,
 	)
 	if err != nil {
 		// Propagate sql.ErrNoRows unwrapped so callers can `errors.Is` it.
@@ -164,6 +186,19 @@ func (s *SQLiteStore) scanAgent(row *sql.Row) (*Agent, error) {
 
 	if createdBy.Valid {
 		a.CreatedBy = createdBy.String
+	}
+	if oldSecretHash.Valid {
+		a.OldSecretHash = oldSecretHash.String
+	}
+	if oldSecretExpiresAt.Valid {
+		t, _ := time.Parse(time.RFC3339, oldSecretExpiresAt.String)
+		if t.IsZero() {
+			// Try SQLite CURRENT_TIMESTAMP format
+			t, _ = time.Parse("2006-01-02 15:04:05", oldSecretExpiresAt.String)
+		}
+		if !t.IsZero() {
+			a.OldSecretExpiresAt = &t
+		}
 	}
 	a.Active = active == 1
 	json.Unmarshal([]byte(redirectURIs), &a.RedirectURIs)   //#nosec G104
@@ -200,6 +235,8 @@ func (s *SQLiteStore) scanAgentFromRows(rows *sql.Rows) (*Agent, error) {
 	var createdAt, updatedAt string
 	var active int
 	var createdBy sql.NullString
+	var oldSecretHash sql.NullString
+	var oldSecretExpiresAt sql.NullString
 
 	err := rows.Scan(
 		&a.ID, &a.Name, &a.Description, &a.ClientID, &a.ClientSecretHash,
@@ -208,6 +245,7 @@ func (s *SQLiteStore) scanAgentFromRows(rows *sql.Rows) (*Agent, error) {
 		&a.TokenLifetime, &metadata, &a.LogoURI, &a.HomepageURI,
 		&active, &createdBy,
 		&createdAt, &updatedAt,
+		&oldSecretHash, &oldSecretExpiresAt,
 	)
 	if err != nil {
 		return nil, err
@@ -215,6 +253,18 @@ func (s *SQLiteStore) scanAgentFromRows(rows *sql.Rows) (*Agent, error) {
 
 	if createdBy.Valid {
 		a.CreatedBy = createdBy.String
+	}
+	if oldSecretHash.Valid {
+		a.OldSecretHash = oldSecretHash.String
+	}
+	if oldSecretExpiresAt.Valid {
+		t, _ := time.Parse(time.RFC3339, oldSecretExpiresAt.String)
+		if t.IsZero() {
+			t, _ = time.Parse("2006-01-02 15:04:05", oldSecretExpiresAt.String)
+		}
+		if !t.IsZero() {
+			a.OldSecretExpiresAt = &t
+		}
 	}
 	a.Active = active == 1
 	json.Unmarshal([]byte(redirectURIs), &a.RedirectURIs)   //#nosec G104

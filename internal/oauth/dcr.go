@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,9 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
+
+// secretRotationGrace is the duration the old secret remains valid after rotation.
+const secretRotationGrace = time.Hour
 
 // allowedGrantTypes is the set of grant types DCR clients may request.
 var allowedGrantTypes = map[string]bool{
@@ -191,7 +195,7 @@ func (s *Server) verifyRegistrationToken(w http.ResponseWriter, r *http.Request,
 	// Constant-time compare: hash the provided token and compare against stored hash.
 	h := sha256.Sum256([]byte(token))
 	provided := hex.EncodeToString(h[:])
-	if provided != dcr.RegistrationTokenHash {
+	if subtle.ConstantTimeCompare([]byte(provided), []byte(dcr.RegistrationTokenHash)) != 1 {
 		writeDCRError(w, http.StatusUnauthorized, "invalid_token", "invalid registration access token")
 		return nil
 	}
@@ -571,4 +575,92 @@ func (s *Server) HandleDCRDelete(w http.ResponseWriter, r *http.Request) {
 	s.logDCRAudit(ctx, "oauth.dcr.deleted", clientID, r.RemoteAddr)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleDCRRotateSecret handles POST /oauth/register/{client_id}/secret (F4.3).
+// Rotates the OAuth client secret and keeps the OLD secret valid for a 1-hour grace window.
+// Requires Authorization: Bearer {registration_access_token}.
+func (s *Server) HandleDCRRotateSecret(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	clientID := chi.URLParam(r, "client_id")
+
+	dcr := s.verifyRegistrationToken(w, r, clientID)
+	if dcr == nil {
+		return
+	}
+
+	// Fetch the agent for its current secret hash and internal ID.
+	agent, err := s.RawStore.GetAgentByClientID(ctx, clientID)
+	if err != nil {
+		slog.Error("dcr: fetching agent for secret rotation", "client_id", clientID, "error", err)
+		writeDCRError(w, http.StatusInternalServerError, "server_error", "failed to retrieve client")
+		return
+	}
+
+	// Generate new secret.
+	newSecret, newSecretHash, err := generateDCRToken()
+	if err != nil {
+		slog.Error("dcr: generating new secret", "error", err)
+		writeDCRError(w, http.StatusInternalServerError, "server_error", "failed to generate new secret")
+		return
+	}
+
+	// Preserve the current secret as the old secret with a 1-hour grace window.
+	oldSecretHash := agent.ClientSecretHash
+	oldSecretExpiresAt := time.Now().UTC().Add(secretRotationGrace)
+
+	if err := s.RawStore.RotateDCRClientSecret(ctx, agent.ID, newSecretHash, oldSecretHash, oldSecretExpiresAt); err != nil {
+		slog.Error("dcr: rotating client secret in DB", "client_id", clientID, "error", err)
+		writeDCRError(w, http.StatusInternalServerError, "server_error", "failed to rotate secret")
+		return
+	}
+
+	s.logDCRAudit(ctx, "oauth.dcr.secret_rotated", clientID, r.RemoteAddr)
+
+	// Return same shape as initial registration response.
+	resp := dcrResponse{
+		ClientID:              clientID,
+		ClientSecret:          newSecret,
+		ClientIDIssuedAt:      dcr.CreatedAt.Unix(),
+		ClientSecretExpiresAt: 0, // never expires (only old secret window expires)
+		RegistrationClientURI: s.Issuer + "/oauth/register/" + clientID,
+	}
+	writeDCRJSON(w, http.StatusOK, resp)
+}
+
+// HandleDCRRotateRegistrationToken handles DELETE /oauth/register/{client_id}/registration-token (F4.3).
+// Rotates the registration access token, invalidating the previous one immediately.
+// Requires Authorization: Bearer {current_registration_access_token}.
+func (s *Server) HandleDCRRotateRegistrationToken(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	clientID := chi.URLParam(r, "client_id")
+
+	dcr := s.verifyRegistrationToken(w, r, clientID)
+	if dcr == nil {
+		return
+	}
+
+	// Generate new registration access token.
+	newToken, newTokenHash, err := generateDCRToken()
+	if err != nil {
+		slog.Error("dcr: generating new registration token", "error", err)
+		writeDCRError(w, http.StatusInternalServerError, "server_error", "failed to generate registration token")
+		return
+	}
+
+	if err := s.RawStore.RotateDCRRegistrationToken(ctx, clientID, newTokenHash); err != nil {
+		slog.Error("dcr: rotating registration token in DB", "client_id", clientID, "error", err)
+		writeDCRError(w, http.StatusInternalServerError, "server_error", "failed to rotate registration token")
+		return
+	}
+
+	s.logDCRAudit(ctx, "oauth.dcr.registration_token_rotated", clientID, r.RemoteAddr)
+
+	resp := dcrResponse{
+		ClientID:                clientID,
+		ClientIDIssuedAt:        dcr.CreatedAt.Unix(),
+		RegistrationAccessToken: newToken,
+		RegistrationClientURI:   s.Issuer + "/oauth/register/" + clientID,
+	}
+	writeDCRJSON(w, http.StatusOK, resp)
 }
