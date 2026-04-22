@@ -717,7 +717,7 @@ func (s *SQLiteStore) GetRolesByUserID(ctx context.Context, userID string) ([]*R
 
 func (s *SQLiteStore) GetUsersByRoleID(ctx context.Context, roleID string) ([]*User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at
+		`SELECT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at, u.mfa_verified_at
 		 FROM users u
 		 INNER JOIN user_roles ur ON ur.user_id = u.id
 		 WHERE ur.role_id = ?`, roleID)
@@ -768,7 +768,7 @@ func (s *SQLiteStore) GetRolesByPermissionID(ctx context.Context, permissionID s
 // permission through multiple roles. Used by the RBAC reverse-lookup card.
 func (s *SQLiteStore) GetUsersByPermissionID(ctx context.Context, permissionID string) ([]*User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at
+		`SELECT DISTINCT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at, u.mfa_verified_at
 		 FROM users u
 		 INNER JOIN user_roles ur ON ur.user_id = u.id
 		 INNER JOIN role_permissions rp ON rp.role_id = ur.role_id
