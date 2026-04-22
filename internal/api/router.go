@@ -29,9 +29,10 @@ import (
 
 // Server holds dependencies for the HTTP API.
 type Server struct {
-	Store            storage.Store
-	Config           *config.Config
-	Router           chi.Router
+	Store             storage.Store
+	Config            *config.Config
+	ConfigPath        string // path to sharkauth.yaml for updates
+	Router            chi.Router
 	SessionManager   *auth.SessionManager
 	PasskeyManager   *auth.PasskeyManager
 	OAuthManager     *auth.OAuthManager
@@ -61,12 +62,31 @@ type Server struct {
 	// catch-all block in NewServer short-circuits.
 	ProxyHandler *proxy.ReverseProxy
 
+	// ProxyListeners holds the W15 multi-listener set.
+	ProxyListeners []*proxy.Listener
+
+	// AppResolver maps inbound request Host to Application upstreams.
+	AppResolver proxy.AppResolver
+
 	magicLinkRL *magicLinkRateLimiter
 	startTime   time.Time
 }
 
 // ServerOption configures optional dependencies for the Server.
 type ServerOption func(*Server)
+
+// WithProxyListeners wires the W15 multi-listener set into the API server.
+func WithProxyListeners(ls []*proxy.Listener) ServerOption {
+	return func(s *Server) {
+		s.ProxyListeners = ls
+		// If the server has a resolver, wire it to any transparent listeners.
+		if s.AppResolver != nil {
+			for _, l := range ls {
+				l.SetResolver(s.AppResolver)
+			}
+		}
+	}
+}
 
 // WithEmailSender enables magic link functionality with the provided email sender.
 func WithEmailSender(sender email.Sender) ServerOption {
@@ -98,7 +118,7 @@ func WithOAuthServer(os *oauth.Server) ServerOption {
 }
 
 // NewServer creates a new API server with all routes mounted.
-func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *Server {
+func NewServer(store storage.Store, cfg *config.Config, configPath string, opts ...ServerOption) *Server {
 	sessionLifetime := cfg.Auth.SessionLifetimeDuration()
 	sm := auth.NewSessionManager(store, cfg.Server.Secret, sessionLifetime, cfg.Server.BaseURL)
 
@@ -112,6 +132,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	s := &Server{
 		Store:          store,
 		Config:         cfg,
+		ConfigPath:     configPath,
 		SessionManager: sm,
 		magicLinkRL:    newMagicLinkRateLimiter(60 * time.Second),
 		RateLimiter:    auth.NewTokenBucket(),
@@ -119,6 +140,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		FieldEncryptor: fe,
 		VaultManager:   vault.NewManager(store, fe),
 		startTime:      time.Now().UTC(),
+		AppResolver:    &DBAppResolver{Store: store},
 	}
 
 	// Apply options
@@ -141,13 +163,14 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	// Initialize RBAC manager
 	s.RBAC = rbacpkg.NewRBACManager(store)
 
-	// Phase 6 F3: Initialize the auth flow engine so the signup/login/reset
-	// hooks below have somewhere to dispatch. Safe to wire unconditionally —
-	// Execute returns Continue when no flows are configured.
+	// Phase 6 F3: Initialize the auth flow engine
 	s.FlowEngine = authflow.NewEngine(store, slog.Default())
 
 	// Initialize Audit logger
 	s.AuditLogger = audit.NewLogger(store)
+	if s.WebhookDispatcher != nil {
+		s.AuditLogger.SetDispatcher(s.WebhookDispatcher)
+	}
 
 	// Initialize SSO manager + handlers
 	ssoManager := sso.NewSSOManager(store, sm, cfg)
@@ -552,6 +575,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
 			r.Get("/health", s.handleAdminHealth)
 			r.Get("/config", s.handleAdminConfig)
+			r.Patch("/config", s.handleAdminUpdateConfig)
+			r.Get("/logs/stream", s.handleAdminLogStream)
 			r.Get("/stats", s.handleAdminStats)
 			r.Get("/stats/trends", s.handleAdminStatsTrends)
 			r.Get("/sessions", s.handleAdminListSessions)
@@ -792,6 +817,7 @@ func (s *Server) initProxy() {
 	if err != nil {
 		panic("proxy: building reverse proxy: " + err.Error())
 	}
+	h.SetIssuer(cfg.Server.BaseURL)
 	s.ProxyHandler = h
 }
 

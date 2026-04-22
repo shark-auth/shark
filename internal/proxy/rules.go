@@ -14,6 +14,7 @@ import (
 // time and make this package harder to test in isolation). Callers
 // translate config.ProxyRule into RuleSpec at New-engine time.
 type RuleSpec struct {
+	AppID   string
 	Path    string
 	Methods []string
 	Require string
@@ -102,6 +103,7 @@ type pathPattern struct {
 // exported where they're useful for diagnostics or the simulator API
 // landing in P4 (Path, Methods, Require, Scopes).
 type Rule struct {
+	AppID   string
 	Path    string
 	pattern pathPattern
 	Methods map[string]struct{} // empty = any method
@@ -324,6 +326,7 @@ func compileRule(spec RuleSpec) (*Rule, error) {
 	}
 
 	return &Rule{
+		AppID:   spec.AppID,
 		Path:    spec.Path,
 		pattern: pattern,
 		Methods: methods,

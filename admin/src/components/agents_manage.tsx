@@ -18,7 +18,7 @@ const modalBackdrop = { position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)'
 const modalCard = { background:'var(--surface-1)', border:'1px solid var(--hairline-bright)', borderRadius: 6, padding: 18 };
 const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: '0 0 8px' };
 
-const ALL_GRANTS = ['authorization_code', 'client_credentials', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'];
+const ALL_GRANTS = ['authorization_code', 'client_credentials', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code', 'urn:ietf:params:oauth:grant-type:token-exchange'];
 
 export function Agents() {
   const [selected, setSelected] = React.useState(null);
@@ -267,6 +267,7 @@ function truncateMiddle(s, n) {
 
 function shortGrant(g) {
   if (!g) return '';
+  if (g === 'urn:ietf:params:oauth:grant-type:token-exchange') return 'Token Exchange (RFC 8693)';
   if (g.startsWith('urn:ietf:params:oauth:grant-type:')) return g.replace('urn:ietf:params:oauth:grant-type:', '');
   return g;
 }

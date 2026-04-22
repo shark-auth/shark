@@ -32,6 +32,7 @@ var KnownWebhookEvents = map[string]bool{
 	storage.WebhookEventOrgCreated:     true,
 	storage.WebhookEventOrgDeleted:     true,
 	storage.WebhookEventOrgMemberAdded: true,
+	storage.WebhookEventSystemAuditLog: true,
 	storage.WebhookEventTest:           true,
 }
 
@@ -133,7 +134,7 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 	for _, h := range hooks {
 		out = append(out, webhookToResponse(h))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": out})
+	writeJSON(w, http.StatusOK, map[string]any{"webhooks": out})
 }
 
 func (s *Server) handleGetWebhook(w http.ResponseWriter, r *http.Request) {

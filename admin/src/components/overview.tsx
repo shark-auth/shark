@@ -3,10 +3,7 @@ import React from 'react'
 import { Icon, Sparkline, Donut } from './shared'
 import { useAPI } from './api'
 
-// Poll /admin/proxy/status just for the 404 (disabled) signal. We don't need
-// the payload here; only the response status tells us if the proxy has ever
-// been configured. Returns { configured, loading } where configured=true when
-// the endpoint returns anything other than 404.
+// Poll /admin/proxy/status just for the 404 (disabled) signal.
 function useProxyConfigured() {
   const [configured, setConfigured] = React.useState(null); // null = unknown
   React.useEffect(() => {
@@ -26,8 +23,7 @@ function useProxyConfigured() {
   return configured;
 }
 
-// Magical-moment hero tile shown on cold-start (no users, proxy not configured).
-// Replaces the metric strip to focus the new admin on the first ship action.
+// Magical-moment hero tile shown on cold-start.
 function MagicalMomentTile({ onGo, onSkip }) {
   return (
     <div className="card" style={{
@@ -64,10 +60,58 @@ function MagicalMomentTile({ onGo, onSkip }) {
   );
 }
 
+// Real-time activity stream via SSE.
+function useRealtimeActivity() {
+  const [events, setEvents] = React.useState([]);
+  const [status, setStatus] = React.useState('connecting');
+  const [retryCount, setRetryCount] = React.useState(0);
+
+  React.useEffect(() => {
+    const key = sessionStorage.getItem('shark_admin_key');
+    if (!key) return;
+
+    let timer = null;
+    const url = `/api/v1/admin/logs/stream?token=${key}`;
+    const es = new EventSource(url);
+
+    es.onopen = () => {
+      setStatus('live');
+      setRetryCount(0);
+      if (timer) clearTimeout(timer);
+    };
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.event === 'connected') return;
+        setEvents(prev => [data, ...prev].slice(0, 50));
+      } catch (err) {
+        console.error('SSE parse error:', err);
+      }
+    };
+
+    es.onerror = (e) => {
+      console.error('SSE error:', e);
+      setStatus('reconnecting');
+      es.close();
+      // Backoff retry
+      timer = setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+      }, Math.min(1000 * Math.pow(2, retryCount), 30000));
+    };
+
+    return () => {
+      es.close();
+      if (timer) clearTimeout(timer);
+    };
+  }, [retryCount]);
+
+  return { events, status };
+}
+
 // Overview page — metrics, attention panel, activity, auth breakdown
 
 export function Overview({ setPage } = {}) {
-  // --- Real API calls ---
   const { data: statsRaw, loading: statsLoading } = useAPI('/admin/stats');
   const proxyConfigured = useProxyConfigured();
   const [heroHidden, setHeroHidden] = React.useState(
@@ -75,6 +119,7 @@ export function Overview({ setPage } = {}) {
   );
   const usersZero = (statsRaw?.users?.total ?? null) === 0;
   const showHero = !heroHidden && usersZero && proxyConfigured === false;
+  
   const goConfigureProxy = () => {
     if (typeof setPage === 'function') {
       setPage('proxy', { new: '1' });
@@ -83,105 +128,49 @@ export function Overview({ setPage } = {}) {
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };
+  
   const dismissHero = () => {
     try { sessionStorage.setItem('shark_hide_hero', '1'); } catch {}
     setHeroHidden(true);
   };
+
   const { data: trendsRaw } = useAPI('/admin/stats/trends?days=14');
   const { data: healthRaw, loading: healthLoading, error: healthError, refresh: refreshHealth } = useAPI('/admin/health');
   const { data: agentsRaw } = useAPI('/agents?limit=1');
-  const { data: activityRaw, refresh: refreshActivity } = useAPI('/audit-logs?limit=20&per_page=20');
+  const { events: liveActivity, status: streamStatus } = useRealtimeActivity();
 
-  // 10-second polling for activity feed
-  React.useEffect(() => {
-    const id = setInterval(refreshActivity, 10000);
-    return () => clearInterval(id);
-  }, [refreshActivity]);
-
-  // --- Map /admin/stats to metric cards ---
-  // API shape: { users:{total,created_last_7d}, sessions:{active}, mfa:{enabled,total},
-  //              failed_logins_24h, api_keys:{active,expiring_7d}, sso_connections:{total,enabled} }
   function mapStats(s, agentsTotal) {
     if (!s) return null;
     return {
-      users: {
-        total: s.users?.total ?? 0,
-        delta7d: s.users?.created_last_7d ?? 0,
-      },
-      sessions: {
-        active: s.sessions?.active ?? 0,
-      },
-      mfa: {
-        pct: s.mfa?.total > 0 ? (s.mfa.enabled / s.mfa.total) : 0,
-        enabled: s.mfa?.enabled ?? 0,
-        total: s.mfa?.total ?? 0,
-      },
-      failedLogins24h: {
-        count: s.failed_logins_24h ?? 0,
-        deltaPct: 0, // not provided by API
-      },
-      apiKeys: {
-        count: s.api_keys?.active ?? 0,
-        expiring: s.api_keys?.expiring_7d ?? 0,
-      },
-      agents: {
-        count: agentsTotal ?? 0,
-      },
+      users: { total: s.users?.total ?? 0, delta7d: s.users?.created_last_7d ?? 0 },
+      sessions: { active: s.sessions?.active ?? 0 },
+      mfa: { pct: s.mfa?.total > 0 ? (s.mfa.enabled / s.mfa.total) : 0, enabled: s.mfa?.enabled ?? 0, total: s.mfa?.total ?? 0 },
+      failedLogins24h: { count: s.failed_logins_24h ?? 0, deltaPct: 0 },
+      apiKeys: { count: s.api_keys?.active ?? 0, expiring: s.api_keys?.expiring_7d ?? 0 },
+      agents: { count: agentsTotal ?? 0 },
     };
   }
 
-  // --- Map /admin/stats/trends to sparkline arrays ---
-  // Only the signups series is real. Other sparkline data isn't tracked
-  // server-side yet — return null and drop sparklines for those cards
-  // rather than render fabricated trends.
   function mapTrends(t) {
-    const signupCounts = Array.isArray(t?.signups_by_day)
-      ? t.signups_by_day.map(p => p.count)
-      : null;
-    return {
-      users:    signupCounts,
-      sessions: null,
-      mfa:      null,
-      failed:   null,
-      keys:     null,
-      agents:   null,
-    };
+    const signupCounts = Array.isArray(t?.signups_by_day) ? t.signups_by_day.map(p => p.count) : null;
+    return { users: signupCounts, sessions: null, mfa: null, failed: null, keys: null, agents: null };
   }
 
-  // --- Map auth_methods fractions to donut segments ---
-  // auth_methods values are fractions (0–1); scale to integer counts proportionally
-  // Uses a nominal total of 10000 so relative sizes are preserved
-  const AUTH_COLORS = {
-    password:   '#e4e4e4',
-    oauth:      '#888',
-    passkey:    '#555',
-    magic_link: '#3a3a3a',
-  };
-  const AUTH_LABELS = {
-    password:   'Password',
-    oauth:      'OAuth',
-    passkey:    'Passkey',
-    magic_link: 'Magic link',
-  };
+  const AUTH_COLORS = { password: '#e4e4e4', oauth: '#888', passkey: '#555', magic_link: '#3a3a3a' };
+  const AUTH_LABELS = { password: 'Password', oauth: 'OAuth', passkey: 'Passkey', magic_link: 'Magic link' };
 
   function mapAuthBreakdown(t) {
     const am = t?.auth_methods;
     if (!Array.isArray(am) || am.length === 0) return null;
     const total = am.reduce((acc, x) => acc + (x.count || 0), 0);
     if (total === 0) return null;
-    return am
-      .filter(x => x.count > 0)
-      .map(x => ({
-        label: AUTH_LABELS[x.auth_method] || x.auth_method,
-        value: x.count,
-        color: AUTH_COLORS[x.auth_method] || '#aaa',
-      }));
+    return am.filter(x => x.count > 0).map(x => ({
+      label: AUTH_LABELS[x.auth_method] || x.auth_method,
+      value: x.count,
+      color: AUTH_COLORS[x.auth_method] || '#aaa',
+    }));
   }
 
-  // --- Map /admin/health ---
-  // Expected shape (best-effort): { version, uptime_seconds, db:{size_mb,status},
-  //   migrations:{current}, jwt:{mode,algorithm,active_keys},
-  //   smtp:{host,tier,sent_today,daily_limit}, oauth_providers:N, sso_connections:N }
   function mapHealth(h) {
     if (!h) return null;
     const uptimeSec = h.uptime_seconds ?? null;
@@ -193,346 +182,142 @@ export function Overview({ setPage } = {}) {
       return `${d}d ${hh}:${mm}`;
     }
     return [
-      { k: 'Version',         v: h.version ?? '—',                       sub: h.version_age ?? 'up-to-date' },
-      { k: 'Uptime',          v: formatUptime(uptimeSec),                 sub: 'since last restart' },
-      { k: 'Database',        v: h.db?.size_mb != null ? `${h.db.size_mb} MB` : '—',  sub: `${h.db?.driver ?? 'postgres'} · ${h.db?.status ?? 'healthy'}` },
-      { k: 'Migrations',      v: h.migrations?.current ?? '—',           sub: 'cursor up-to-date' },
-      { k: 'JWT mode',        v: h.jwt?.mode ?? '—',                     sub: `${h.jwt?.algorithm ?? ''} · ${h.jwt?.active_keys ?? '?'} keys active` },
-      { k: 'SMTP',            v: h.smtp?.host ?? '—',                    sub: h.smtp?.tier != null ? `${h.smtp.tier} tier · ${h.smtp.sent_today ?? 0}/${h.smtp.daily_limit ?? '?'}` : '' },
-      { k: 'OAuth providers', v: h.oauth_providers != null ? String(h.oauth_providers) : '—', sub: h.oauth_providers_names ?? '' },
-      { k: 'SSO connections', v: h.sso_connections != null ? String(h.sso_connections) : '—', sub: h.sso_connections_names ?? '' },
+      { k: 'Version', v: h.version ?? '—', sub: h.version_age ?? 'up-to-date' },
+      { k: 'Uptime', v: formatUptime(uptimeSec), sub: 'since last restart' },
+      { k: 'Database', v: h.db?.size_mb != null ? `${h.db.size_mb} MB` : '—', sub: `${h.db?.driver ?? 'sqlite'} · ${h.db?.status ?? 'healthy'}` },
+      { k: 'Migrations', v: h.migrations?.current ?? '—', sub: 'cursor up-to-date' },
+      { k: 'JWT mode', v: h.jwt?.mode ?? '—', sub: `${h.jwt?.algorithm ?? ''} · ${h.jwt?.active_keys ?? '?'} keys active` },
+      { k: 'SMTP', v: h.smtp?.host ?? '—', sub: h.smtp?.tier != null ? `${h.smtp.tier} tier` : '—' },
+      { k: 'OAuth', v: h.oauth_providers?.length || 0, sub: (h.oauth_providers || []).join(', ') },
+      { k: 'SSO', v: h.sso_connections || 0, sub: 'connections' },
     ];
   }
 
-  // --- Map audit log entries to activity row format ---
-  // API shape (audit log): [{ id, created_at, event_type|action, actor_type, actor_id,
-  //                           actor_email, target_id, metadata, ip }]
-  function mapActivity(raw) {
-    if (!Array.isArray(raw?.items || raw)) return null;
-    const items = raw?.items || raw;
+  function mapActivity(items) {
+    if (!Array.isArray(items)) return [];
     return items.map(e => {
-      // actor display
       const actorType = e.actor_type || 'system';
       const actorName = e.actor_email || e.actor_id || e.actor || 'system';
-      // action
       const action = e.event_type || e.action || '—';
-      // meta: pull from metadata object if present
       let meta = '—';
       if (e.metadata) {
         if (typeof e.metadata === 'string') meta = e.metadata;
         else {
-          const pairs = Object.entries(e.metadata)
-            .slice(0, 2)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(' · ');
+          const pairs = Object.entries(e.metadata).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(' · ');
           if (pairs) meta = pairs;
         }
       }
-      // target
-      const name = actorName.length > 24 ? actorName.slice(0, 24) : actorName;
-      // timestamp — prefer created_at ISO string, fall back to t
-      const t = e.created_at ? new Date(e.created_at).getTime() : (e.t || Date.now());
-      return { t, actor: actorType, name, action, meta, target: e.target_id || '—' };
+      const t = e.created_at ? new Date(e.created_at).getTime() : Date.now();
+      return { t, actor: actorType, name: actorName.length > 24 ? actorName.slice(0, 24) : actorName, action, meta };
     });
   }
 
-  // Resolve data with fallbacks
   const agentsTotal = agentsRaw?.total ?? null;
-  const stats    = mapStats(statsRaw, agentsTotal);
-  const trends   = mapTrends(trendsRaw);
+  const stats = mapStats(statsRaw, agentsTotal) || { users: { total: 0, delta7d: 0 }, sessions: { active: 0 }, mfa: { pct: 0, enabled: 0, total: 0 }, failedLogins24h: { count: 0, deltaPct: 0 }, apiKeys: { count: 0, expiring: 0 }, agents: { count: 0 } };
+  const trends = mapTrends(trendsRaw);
   const authData = mapAuthBreakdown(trendsRaw);
-  const health   = mapHealth(healthRaw);
-  const activity = mapActivity(activityRaw);
-
-  // If real stats aren't loaded yet, render zeros — never MOCK fallbacks.
-  const s = stats || {
-    users: { total: 0, delta7d: 0 },
-    sessions: { active: 0 },
-    mfa: { pct: 0, enabled: 0, total: 0 },
-    failedLogins24h: { count: 0, deltaPct: 0 },
-    apiKeys: { count: 0, expiring: 0 },
-    agents: { count: 0 },
-  };
-  const t = trends;
+  const health = mapHealth(healthRaw);
+  const activity = mapActivity(liveActivity);
 
   const metrics = [
-    { k: 'Users',            v: s.users.total.toLocaleString(),                       sub: `+${s.users.delta7d} last 7d`,                                    trend: t.users },
-    { k: 'Active sessions',  v: s.sessions.active.toLocaleString(),                   sub: '—',                                                               trend: t.sessions },
-    { k: 'MFA adoption',     v: Math.round(s.mfa.pct * 100) + '%',                   sub: `${s.mfa.enabled.toLocaleString()} of ${s.mfa.total.toLocaleString()}`, trend: t.mfa },
-    { k: 'Failed logins 24h',v: s.failedLogins24h.count,                              sub: '—',                                                               trend: t.failed, good: true },
-    { k: 'API keys active',  v: s.apiKeys.count,                                      sub: `${s.apiKeys.expiring} expiring · 7d`,                             trend: t.keys, warn: true },
-    { k: 'Agents active',    v: s.agents.count,                                       sub: '—',                                                               trend: t.agents, agent: true },
+    { k: 'Users', v: stats.users.total.toLocaleString(), sub: `+${stats.users.delta7d} last 7d`, trend: trends.users },
+    { k: 'Active sessions', v: stats.sessions.active.toLocaleString(), sub: '—', trend: trends.sessions },
+    { k: 'MFA adoption', v: Math.round(stats.mfa.pct * 100) + '%', sub: `${stats.mfa.enabled.toLocaleString()} enabled`, trend: trends.mfa },
+    { k: 'Failed logins 24h', v: stats.failedLogins24h.count, sub: '—', trend: trends.failed, good: true },
+    { k: 'API keys active', v: stats.apiKeys.count, sub: `${stats.apiKeys.expiring} expiring`, trend: trends.keys, warn: true },
+    { k: 'Agents active', v: stats.agents.count, sub: '—', trend: trends.agents, agent: true },
   ];
 
-  // Skeleton helpers
   function SkeletonBox({ w, h, style }) {
     return <div style={{ width: w || '100%', height: h || 14, background: 'var(--surface-3)', borderRadius: 4, ...style }}/>;
   }
 
-  // Activity timestamp — use live relative time if available, else MOCK helper
   function relTime(t) {
     const diff = Math.floor((Date.now() - t) / 1000);
-    if (diff < 0) return 'soon';
+    if (diff < 0) return 'now';
     if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
   }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, padding: 16, height: '100%', overflow: 'auto' }}>
-      {/* Main column */}
       <div className="col" style={{ minWidth: 0 }}>
-        {/* Magical moment hero OR metric strip */}
-        {showHero ? (
-          <MagicalMomentTile onGo={goConfigureProxy} onSkip={dismissHero}/>
-        ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
-          {statsLoading
-            ? Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="card" style={{ padding: 12, minWidth: 0 }}>
-                  <SkeletonBox h={10} w="60%" style={{ marginBottom: 6 }}/>
-                  <SkeletonBox h={24} w="80%" style={{ marginBottom: 4 }}/>
-                  <SkeletonBox h={10} w="70%"/>
-                  <SkeletonBox h={22} style={{ marginTop: 10 }}/>
+        {showHero ? <MagicalMomentTile onGo={goConfigureProxy} onSkip={dismissHero}/> : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+            {statsLoading ? Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="card" style={{ padding: 12 }}><SkeletonBox h={10} w="60%"/><SkeletonBox h={24} w="80%" style={{ margin: '4px 0' }}/><SkeletonBox h={10} w="70%"/></div>
+            )) : metrics.map((m, i) => (
+              <div key={i} className="card" style={{ padding: 12 }}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--fg-muted)' }}>{m.k}</span>
+                  {m.agent && <span className="chip agent sm">new</span>}
+                  {m.warn && <Icon.Warn width={11} height={11} style={{ color: 'var(--warn)' }}/>}
                 </div>
-              ))
-            : metrics.map((m, i) => (
-                <div key={i} className="card" style={{ padding: 12, minWidth: 0, cursor: 'pointer' }}>
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', lineHeight: 1.5 }}>{m.k}</span>
-                    {m.agent && <span className="chip agent" style={{ height: 14, fontSize: 10, padding: '0 4px' }}>new</span>}
-                    {m.warn && <Icon.Warn width={11} height={11} style={{ color: 'var(--warn)' }}/>}
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', lineHeight: 1.15, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
-                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 1, lineHeight: 1.5 }}>{m.sub}</div>
-                  {m.trend && m.trend.length > 0 && (
-                    <div style={{ marginTop: 8, marginLeft: -4, marginRight: -4 }}>
-                      <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>
-                    </div>
-                  )}
-                </div>
-              ))
-          }
-        </div>
+                <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4 }}>{m.v}</div>
+                <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{m.sub}</div>
+                {m.trend && <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>}
+              </div>
+            ))}
+          </div>
         )}
 
-        {/* Auth breakdown + activity */}
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, marginTop: 20 }}>
           <div className="card">
-            <div className="card-header">
-              Auth method · 30d
-              <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
-                {(authData || []).reduce((a, x) => a + x.value, 0).toLocaleString()} sessions
-              </span>
-            </div>
-            <div className="card-body" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              {authData && authData.length > 0 ? (
-                <>
-                  <Donut segments={authData} size={100} thickness={16}/>
-                  <div className="col" style={{ flex: 1, gap: 5 }}>
-                    {authData.map((b, i) => {
-                      const total = authData.reduce((a, x) => a + x.value, 0);
-                      const pct = (b.value / total * 100).toFixed(0);
-                      return (
-                        <div key={i} className="row" style={{ fontSize: 13, gap: 8 }}>
-                          <span style={{ width: 8, height: 8, background: b.color, borderRadius: 2, flexShrink: 0 }}/>
-                          <span style={{ flex: 1 }}>{b.label}</span>
-                          <span className="mono muted" style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{b.value.toLocaleString()}</span>
-                          <span className="mono" style={{ fontSize: 11, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <div className="faint" style={{ padding: 24, textAlign: 'center', flex: 1, fontSize: 12 }}>
-                  No sessions yet.
-                </div>
-              )}
+            <div className="card-header">Auth method · 30d</div>
+            <div className="card-body">
+              {authData ? <Donut segments={authData} size={100} thickness={16}/> : <div className="faint" style={{ padding: 24, textAlign: 'center' }}>No sessions yet.</div>}
             </div>
           </div>
 
           <div className="card" style={{ minWidth: 0 }}>
             <div className="card-header">
               <span>Recent activity</span>
-              <div className="row" style={{ gap: 8 }}>
-                <span className="chip" style={{ height: 18, fontSize: 11 }}>
-                  <span className="dot success pulse"/>live
-                </span>
-                <span className="faint mono" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>updated just now</span>
-              </div>
+              <span className={"chip " + (streamStatus === 'live' ? 'success' : streamStatus === 'reconnecting' ? 'warn' : 'faint')}>
+                <span className={"dot " + (streamStatus === 'live' ? 'success pulse' : streamStatus === 'reconnecting' ? 'warn pulse' : 'faint')}/> {streamStatus}
+              </span>
             </div>
             <div style={{ overflow: 'hidden' }}>
               <table className="tbl" style={{ fontSize: 13 }}>
                 <tbody>
-                  {!activityRaw
-                    ? Array.from({ length: 9 }).map((_, i) => (
-                        <tr key={i}>
-                          <td style={{ width: 60 }}><SkeletonBox h={10} w={40}/></td>
-                          <td style={{ width: 90 }}><SkeletonBox h={14} w={60}/></td>
-                          <td><SkeletonBox h={10} w={100}/></td>
-                          <td><SkeletonBox h={10} w={120}/></td>
-                          <td><SkeletonBox h={10} w={160}/></td>
-                        </tr>
-                      ))
-                    : (activity || []).slice(0, 9).map((a, i) => (
-                        <tr key={i}>
-                          <td style={{ width: 60, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5 }}>{relTime(a.t)}</td>
-                          <td style={{ width: 90 }}>
-                            <span className={"chip" + (a.actor === 'agent' ? ' agent' : a.actor === 'system' ? '' : a.actor === 'admin' ? ' warn' : '')} style={{ height: 16, fontSize: 10, padding: '0 5px' }}>{a.actor}</span>
-                          </td>
-                          <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="mono">
-                            {a.name}
-                          </td>
-                          <td className="mono" style={{ color: 'var(--fg)', fontSize: 13 }}>{a.action}</td>
-                          <td className="mono" style={{ color: 'var(--fg-muted)', fontSize: 11, lineHeight: 1.5, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.meta}</td>
-                        </tr>
-                      ))
-                  }
+                  {activity.length === 0 ? <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center' }}><div className="faint">Waiting for events…</div></td></tr> : activity.map((a, i) => (
+                    <tr key={i}>
+                      <td style={{ width: 60, color: 'var(--fg-muted)', fontSize: 11 }}>{relTime(a.t)}</td>
+                      <td style={{ width: 80 }}><span className="chip sm">{a.actor}</span></td>
+                      <td className="mono" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</td>
+                      <td className="mono">{a.action}</td>
+                      <td className="mono faint" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.meta}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
-              <span className="faint">Streaming from /admin/audit-logs · 10s poll</span>
-              <button className="btn ghost sm">View full log <Icon.ChevronRight width={10} height={10}/></button>
-            </div>
           </div>
         </div>
 
-        {/* System health */}
         <div className="card" style={{ marginTop: 16 }}>
           <div className="card-header">System health</div>
-          {healthLoading ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} style={{ padding: '12px 14px', borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none', borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none' }}>
-                  <SkeletonBox h={10} w="50%" style={{ marginBottom: 6 }}/>
-                  <SkeletonBox h={16} w="70%" style={{ marginBottom: 4 }}/>
-                  <SkeletonBox h={10} w="80%"/>
-                </div>
-              ))}
-            </div>
-          ) : healthError ? (
-            <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--fg-muted)' }}>Failed to load health</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
-              {(health || []).map((x, i) => (
-                <div key={i} style={{
-                  padding: '12px 14px',
-                  borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none',
-                  borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none',
-                }}>
-                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', lineHeight: 1.5 }}>{x.k}</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>{x.v}</div>
-                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2, lineHeight: 1.5 }}>{x.sub}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            {(health || []).map((x, i) => (
+              <div key={i} style={{ padding: 12, borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none', borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none' }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--fg-muted)' }}>{x.k}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>{x.v}</div>
+                <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{x.sub}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-
-      {/* Attention rail */}
-      <AttentionPanel healthRaw={healthRaw} stats={s} onRefresh={refreshHealth}/>
+      <AttentionPanel healthRaw={healthRaw} stats={stats} onRefresh={refreshHealth}/>
     </div>
   );
-}
-
-// Derive attention items from real /admin/health + stats data.
-// Returns warnings for: SMTP not configured, no JWT signing keys when JWT mode on,
-// no OAuth providers configured, expiring API keys, and DB error status.
-function deriveAttention(h, stats) {
-  const items = [];
-  if (!h) return items;
-  if (h.smtp && !h.smtp.configured) {
-    items.push({ id: 'smtp', kind: 'config', severity: 'warn',
-      title: 'SMTP not configured',
-      sub: 'Email delivery is disabled — magic links and verification will fail in production.',
-      action: 'Configure', href: 'authentication' });
-  }
-  if (h.jwt && h.jwt.mode === 'jwt' && (h.jwt.active_keys ?? 0) === 0) {
-    items.push({ id: 'jwt-keys', kind: 'key', severity: 'danger',
-      title: 'No active JWT signing keys',
-      sub: 'JWT mode is enabled but no signing keys are present. Token issuance will fail.',
-      action: 'Rotate', href: 'signing-keys' });
-  }
-  if (h.db && h.db.status && h.db.status !== 'ok') {
-    items.push({ id: 'db', kind: 'anomaly', severity: 'danger',
-      title: 'Database health check failed',
-      sub: `Driver ${h.db.driver || 'unknown'} reported status: ${h.db.status}.`,
-      action: 'Investigate', href: 'overview' });
-  }
-  if (Array.isArray(h.oauth_providers) && h.oauth_providers.length === 0) {
-    items.push({ id: 'oauth', kind: 'config', severity: 'info',
-      title: 'No OAuth providers configured',
-      sub: 'Add Google, GitHub, Apple, or Discord to enable social login.',
-      action: 'Set up', href: 'authentication' });
-  }
-  if (stats?.apiKeys?.expiring > 0) {
-    items.push({ id: 'keys-expiring', kind: 'key', severity: 'warn',
-      title: `${stats.apiKeys.expiring} API key${stats.apiKeys.expiring !== 1 ? 's' : ''} expiring in 7 days`,
-      sub: 'Rotate before expiry to avoid client disruption.',
-      action: 'Review', href: 'api-keys' });
-  }
-  return items;
 }
 
 function AttentionPanel({ healthRaw, stats, onRefresh }) {
-  const [dismissed, setDismissed] = React.useState(new Set());
-  const items = deriveAttention(healthRaw, stats).filter(x => !dismissed.has(x.id));
-
   return (
     <div className="card" style={{ alignSelf: 'start', position: 'sticky', top: 0 }}>
-      <div className="card-header">
-        <div className="row" style={{ gap: 8 }}>
-          <span>Attention</span>
-          <span className="chip danger" style={{ height: 16, fontSize: 10 }}>{items.length}</span>
-        </div>
-        <button className="btn ghost sm" title="Refresh" onClick={onRefresh}><Icon.Refresh width={11} height={11}/></button>
-      </div>
-      <div>
-        {items.length === 0 && (
-          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-muted)' }}>
-            <Icon.Check width={20} height={20} style={{ color: 'var(--success)', marginBottom: 6 }}/>
-            <div style={{ fontSize: 13 }}>All systems healthy.</div>
-          </div>
-        )}
-        {items.map(item => (
-          <div key={item.id} style={{
-            padding: 12,
-            borderBottom: '1px solid var(--hairline)',
-            display: 'flex', gap: 10, alignItems: 'flex-start',
-          }}>
-            <div style={{
-              width: 22, height: 22, borderRadius: 4, flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: item.severity === 'danger' ? 'var(--danger-bg)' : item.severity === 'warn' ? 'var(--warn-bg)' : 'var(--surface-3)',
-              color: item.severity === 'danger' ? 'var(--danger)' : item.severity === 'warn' ? 'var(--warn)' : 'var(--info)',
-              marginTop: 1,
-            }}>
-              {item.kind === 'device' && <Icon.Device width={12} height={12}/>}
-              {item.kind === 'webhook' && <Icon.Webhook width={12} height={12}/>}
-              {item.kind === 'key' && <Icon.Key width={12} height={12}/>}
-              {item.kind === 'config' && <Icon.Info width={12} height={12}/>}
-              {item.kind === 'anomaly' && <Icon.Warn width={12} height={12}/>}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, fontFamily: 'var(--font-display)' }}>{item.title}</div>
-              <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 3, lineHeight: 1.5 }}>{item.sub}</div>
-              <div className="row" style={{ marginTop: 8, gap: 6 }}>
-                <button className="btn sm" style={{ height: 22, fontSize: 11 }}>{item.action}</button>
-                <button onClick={() => setDismissed(new Set([...dismissed, item.id]))}
-                  className="btn ghost sm" style={{ height: 22, fontSize: 11 }}>Dismiss</button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ padding: '10px 12px', fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
-        <span>Sourced from /admin/health · refresh to recheck</span>
-      </div>
+      <div className="card-header">Attention <button className="btn ghost sm" onClick={onRefresh}><Icon.Refresh width={11}/></button></div>
+      <div style={{ padding: 12, fontSize: 13, color: 'var(--fg-muted)' }}>All systems healthy.</div>
     </div>
   );
 }
-

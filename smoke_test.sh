@@ -3241,6 +3241,11 @@ fi
 # --- §76: SDK integration (example app smoke) ---------------------------------
 section "76. SDK integration (example app smoke)"
 
+# Ensure pnpm workspace symlinks present before filtered builds.
+if command -v pnpm >/dev/null 2>&1; then
+  ( pnpm install --prefer-offline >/dev/null 2>&1 ) || note "76 pnpm install warned"
+fi
+
 # ── 76-1: @shark-auth/react package builds cleanly ---------------------------
 if command -v pnpm >/dev/null 2>&1; then
   ( pnpm --filter @shark-auth/react build >/dev/null 2>&1 )
@@ -3560,3 +3565,41 @@ if [ $FAIL -gt 0 ]; then
   exit 1
 fi
 exit 0
+
+# --- 70: Transparent Gateway & Porter Logic -----------------------------------
+section "70: Transparent Gateway & Porter Logic"
+
+# Setup: create an application with a public domain and internal upstream.
+GW_DOM="api.smoke-test.local"
+GW_UPS="http://localhost:8080/healthz" # Use our own healthz as mock upstream
+GW_RESP=$(curl -s -H "Authorization: Bearer $ADMIN" -X POST $BASE/api/v1/admin/apps \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"Gateway App\",\"slug\":\"gw-smoke\",\"proxy_public_domain\":\"$GW_DOM\",\"proxy_protected_url\":\"$GW_UPS\"}")
+GW_ID=$(echo "$GW_RESP" | jq -r '.id // empty')
+[ -n "$GW_ID" ] && pass "gateway app seeded: $GW_ID" || fail "gateway app seed failed"
+
+# Test 1: Dynamic Resolution (W15 Transparent Mode)
+# We hit the main port but send the GW_DOM Host header.
+# Since GW_UPS is /healthz, it should return 200 "ok".
+GW_PROBE=$(curl -s -H "Host: $GW_DOM" $BASE/non-existent-path-on-shark)
+echo "$GW_PROBE" | grep -q "ok" && pass "dynamic host resolution -> upstream success" || fail "resolution failed or wrong upstream: $GW_PROBE"
+
+# Test 2: Porter Logic — API/Agent (Accept: application/json)
+# We hit a path that is NOT /healthz to trigger the proxy rules (default deny).
+# Since we didn't define any rules, the engine will deny.
+# Unauthenticated API request -> 401 Unauthorized.
+GW_API_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $GW_DOM" -H "Accept: application/json" $BASE/protected-api)
+[ "$GW_API_CODE" = "401" ] && pass "unauth API -> 401 Unauthorized" || fail "unauth API -> $GW_API_CODE (expected 401)"
+
+# Test 3: Porter Logic — Browser (Accept: text/html)
+# Unauthenticated browser request -> 302 Redirect to hosted login.
+GW_BROWSER_H=$(curl -s -o /dev/null -D - -H "Host: $GW_DOM" -H "Accept: text/html" $BASE/dashboard)
+GW_BROWSER_CODE=$(echo "$GW_BROWSER_H" | head -1 | awk '{print $2}')
+[ "$GW_BROWSER_CODE" = "302" ] && pass "unauth browser -> 302 Redirect" || fail "unauth browser -> $GW_BROWSER_CODE (expected 302)"
+
+GW_BROWSER_LOC=$(echo "$GW_BROWSER_H" | grep -i '^location:' | tr -d '\r\n' | sed 's/^[Ll]ocation: //')
+echo "$GW_BROWSER_LOC" | grep -q "/hosted/gw-smoke/login" && pass "redirect URL includes app slug: gw-smoke" || fail "wrong redirect URL: $GW_BROWSER_LOC"
+echo "$GW_BROWSER_LOC" | grep -q "return_to=" && pass "redirect URL includes return_to" || fail "return_to missing: $GW_BROWSER_LOC"
+
+# Cleanup
+curl -s -o /dev/null -H "Authorization: Bearer $ADMIN" -X DELETE $BASE/api/v1/admin/apps/$GW_ID

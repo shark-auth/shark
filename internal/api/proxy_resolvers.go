@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/sharkauth/sharkauth/internal/auth"
@@ -149,11 +152,79 @@ func extractBearer(req *http.Request) string {
 	return ""
 }
 
+// DBAppResolver maps an inbound request Host to an Application upstream.
+type DBAppResolver struct {
+	Store storage.Store
+}
+
+// ResolveApp implements proxy.AppResolver. It looks up the application by its
+// proxy_public_domain field and returns a ResolvedApp carrying its upstream URL.
+func (r *DBAppResolver) ResolveApp(ctx context.Context, host string) (*proxy.ResolvedApp, error) {
+	// Strip port if present (e.g. "api.myapp.com:80" -> "api.myapp.com").
+	h := host
+	if idx := strings.Index(host, ":"); idx != -1 {
+		h = host[:idx]
+	}
+
+	app, err := r.Store.GetApplicationByProxyDomain(ctx, h)
+	if err != nil {
+		return nil, err
+	}
+
+	// ENFORCEMENT: Only resolve if the application is explicitly set to proxy mode.
+	if app.IntegrationMode != "proxy" {
+		return nil, fmt.Errorf("application %q is not in proxy mode (current: %s)", app.Name, app.IntegrationMode)
+	}
+
+	if app.ProxyProtectedURL == "" {
+		return nil, errors.New("application has no proxy_protected_url configured")
+	}
+
+	u, err := url.Parse(app.ProxyProtectedURL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing application proxy_protected_url %q: %w", app.ProxyProtectedURL, err)
+	}
+
+	// Fetch rules for this application.
+	rules, err := r.Store.ListProxyRulesByAppID(ctx, app.ID)
+	var engine *proxy.Engine
+	if err == nil && len(rules) > 0 {
+		ruleSpecs := make([]proxy.RuleSpec, 0, len(rules))
+		for _, pr := range rules {
+			if !pr.Enabled {
+				continue
+			}
+			ruleSpecs = append(ruleSpecs, proxy.RuleSpec{
+				AppID:   pr.AppID,
+				Path:    pr.Pattern,
+				Methods: pr.Methods,
+				Require: pr.Require,
+				Allow:   pr.Allow,
+				Scopes:  pr.Scopes,
+			})
+		}
+		if len(ruleSpecs) > 0 {
+			if e, err := proxy.NewEngine(ruleSpecs); err == nil {
+				engine = e
+			}
+		}
+	}
+
+	return &proxy.ResolvedApp{
+		ID:              app.ID,
+		Slug:            app.Slug,
+		IntegrationMode: app.IntegrationMode,
+		UpstreamURL:     u,
+		Engine:          engine,
+	}, nil
+}
+
 // Compile-time interface satisfaction checks so a future refactor of
 // proxy.AuthResolver surfaces here, not at a wire site.
 var (
 	_ proxy.AuthResolver = (*JWTResolver)(nil)
 	_ proxy.AuthResolver = (*LiveResolver)(nil)
+	_ proxy.AppResolver  = (*DBAppResolver)(nil)
 )
 
 // Silence unused imports when the file evolves. Keeping proxySessionCookieName

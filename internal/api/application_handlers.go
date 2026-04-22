@@ -37,6 +37,8 @@ type applicationResponse struct {
 	BrandingOverride      json.RawMessage `json:"branding_override,omitempty"`
 	ProxyLoginFallback    string          `json:"proxy_login_fallback,omitempty"`
 	ProxyLoginFallbackURL string          `json:"proxy_login_fallback_url,omitempty"`
+	ProxyPublicDomain     string          `json:"proxy_public_domain,omitempty"`
+	ProxyProtectedURL     string          `json:"proxy_protected_url,omitempty"`
 
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
@@ -67,6 +69,8 @@ func appToResponse(a *storage.Application) applicationResponse {
 		BrandingOverride:      override,
 		ProxyLoginFallback:    a.ProxyLoginFallback,
 		ProxyLoginFallbackURL: a.ProxyLoginFallbackURL,
+		ProxyPublicDomain:     a.ProxyPublicDomain,
+		ProxyProtectedURL:     a.ProxyProtectedURL,
 		CreatedAt:             a.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:             a.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -208,11 +212,14 @@ func (s *Server) auditApp(r *http.Request, action, targetID string) {
 // POST /api/v1/admin/apps
 func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name      string   `json:"name"`
-		Slug      string   `json:"slug"`
-		Callbacks []string `json:"allowed_callback_urls"`
-		Logouts   []string `json:"allowed_logout_urls"`
-		Origins   []string `json:"allowed_origins"`
+		Name              string   `json:"name"`
+		Slug              string   `json:"slug"`
+		Callbacks         []string `json:"allowed_callback_urls"`
+		Logouts           []string `json:"allowed_logout_urls"`
+		Origins           []string `json:"allowed_origins"`
+		IntegrationMode   string   `json:"integration_mode"`
+		ProxyPublicDomain string   `json:"proxy_public_domain"`
+		ProxyProtectedURL string   `json:"proxy_protected_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -232,6 +239,25 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateAppURLs(req.Origins); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", err.Error()))
+		return
+	}
+	if req.ProxyProtectedURL != "" {
+		if err := validateAppURL(req.ProxyProtectedURL); err != nil {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", "proxy_protected_url: "+err.Error()))
+			return
+		}
+	}
+
+	mode := req.IntegrationMode
+	if mode == "" {
+		if req.ProxyPublicDomain != "" {
+			mode = "proxy"
+		} else {
+			mode = "custom"
+		}
+	}
+	if !validIntegrationMode(mode) {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "invalid integration_mode"))
 		return
 	}
 
@@ -285,6 +311,9 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		AllowedCallbackURLs: callbacks,
 		AllowedLogoutURLs:   logouts,
 		AllowedOrigins:      origins,
+		IntegrationMode:     mode,
+		ProxyPublicDomain:   req.ProxyPublicDomain,
+		ProxyProtectedURL:   req.ProxyProtectedURL,
 		IsDefault:           false,
 		Metadata:            map[string]any{},
 		CreatedAt:           now,
@@ -374,6 +403,8 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 		BrandingOverride      json.RawMessage `json:"branding_override,omitempty"`
 		ProxyLoginFallback    *string         `json:"proxy_login_fallback,omitempty"`
 		ProxyLoginFallbackURL *string         `json:"proxy_login_fallback_url,omitempty"`
+		ProxyPublicDomain     *string         `json:"proxy_public_domain"`
+		ProxyProtectedURL     *string         `json:"proxy_protected_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -450,6 +481,18 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		app.ProxyLoginFallbackURL = *req.ProxyLoginFallbackURL
+	}
+	if req.ProxyPublicDomain != nil {
+		app.ProxyPublicDomain = *req.ProxyPublicDomain
+	}
+	if req.ProxyProtectedURL != nil {
+		if *req.ProxyProtectedURL != "" {
+			if err := validateAppURL(*req.ProxyProtectedURL); err != nil {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", "proxy_protected_url: "+err.Error()))
+				return
+			}
+		}
+		app.ProxyProtectedURL = *req.ProxyProtectedURL
 	}
 
 	if err := s.Store.UpdateApplication(r.Context(), app); err != nil {

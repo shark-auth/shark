@@ -474,6 +474,7 @@ func TestDevice_Approve_POST_Denied(t *testing.T) {
 	_, userCode, _ := createPendingDeviceCode(t, store, "device-approve-denied-client", "openid", 15*time.Minute)
 
 	r := chi.NewRouter()
+	r.Use(testUserMW)
 	r.Post("/oauth/device/verify", srv.HandleDeviceApprove)
 
 	ts := httptest.NewServer(r)
@@ -485,7 +486,7 @@ func TestDevice_Approve_POST_Denied(t *testing.T) {
 	}
 	req, _ := http.NewRequest("POST", ts.URL+"/oauth/device/verify", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-User-ID", userID)
+	req.Header.Set("X-Test-Auth-User", userID)
 
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse

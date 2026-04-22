@@ -24,7 +24,8 @@ export const NAV = [
   ]},
   { group: 'ACCESS', items: [
     { id: 'apps', label: 'Applications', icon: 'App' },
-    { id: 'auth', label: 'Authentication', icon: 'Lock' },
+    { id: 'auth', label: 'Identity', icon: 'Lock' },
+    { id: 'proxy', label: 'Proxy', icon: 'Proxy' },
     { id: 'sso', label: 'SSO', icon: 'SSO' },
     { id: 'rbac', label: 'Roles & Permissions', icon: 'Shield' },
     { id: 'keys', label: 'API Keys', icon: 'Key' },
@@ -34,7 +35,7 @@ export const NAV = [
     { id: 'webhooks', label: 'Webhooks', icon: 'Webhook' },
     { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', badge: 'dev', devOnly: true },
     { id: 'signing', label: 'Signing Keys', icon: 'Signing' },
-    { id: 'settings', label: 'Settings', icon: 'Settings' },
+    { id: 'settings', label: 'System', icon: 'Settings' },
   ]},
   { group: 'DEVELOPERS', items: [
     { id: 'explorer', label: 'API Explorer', icon: 'Explorer', ph: 5 },
@@ -42,7 +43,6 @@ export const NAV = [
     { id: 'schemas', label: 'Event Schemas', icon: 'Schema', ph: 5 },
   ]},
   { group: 'INFRASTRUCTURE', items: [
-    { id: 'proxy', label: 'Proxy', icon: 'Proxy' },
     { id: 'oidc', label: 'OIDC Provider', icon: 'Globe', ph: 8 },
   ]},
   { group: 'ENTERPRISE', items: [
@@ -133,7 +133,6 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode, showP
             {visibleItems.map(item => {
               const IconEl = Icon[item.icon] || Icon.Home;
               const active = page === item.id;
-              // Phase gating: items with ph > CURRENT_PHASE are visibly disabled.
               const gated = item.ph && item.ph > CURRENT_PHASE;
               const disabled = item.disabled || gated;
               const tip = gated
@@ -227,16 +226,16 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
     rbac: 'Roles & Permissions',
     'dev-inbox': 'Dev Inbox',
     sso: 'SSO Connections',
-    auth: 'Authentication',
+    auth: 'Identity',
     signing: 'Signing Keys',
-    settings: 'Settings',
+    settings: 'System',
     consents: 'Consents',
     tokens: 'Tokens',
     vault: 'Vault',
     explorer: 'API Explorer',
     debug: 'Session Debugger',
     schemas: 'Event Schemas',
-    proxy: 'Proxy',
+    proxy: 'Proxy Gateway',
     oidc: 'OIDC Provider',
     impersonation: 'Impersonation',
     compliance: 'Compliance',
@@ -313,4 +312,3 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
     </header>
   );
 }
-

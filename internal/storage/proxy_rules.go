@@ -12,7 +12,8 @@ import "time"
 // uppercased HTTP verbs. Exactly one of Require/Allow must be set; the
 // engine compiles them via the existing proxy.parseRequirement plumbing.
 type ProxyRule struct {
-	ID        string    `json:"id"`         // pxr_<hex>
+	ID        string    `json:"id"` // pxr_<hex>
+	AppID     string    `json:"app_id"`
 	Name      string    `json:"name"`
 	Pattern   string    `json:"pattern"`
 	Methods   []string  `json:"methods"`

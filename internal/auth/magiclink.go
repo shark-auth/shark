@@ -48,6 +48,11 @@ func (m *MagicLinkManager) Sender() email.Sender {
 	return m.email
 }
 
+// SetSender updates the email sender used by the manager.
+func (m *MagicLinkManager) SetSender(s email.Sender) {
+	m.email = s
+}
+
 // SendMagicLink generates a random token, stores its SHA-256 hash, and sends a magic link email.
 // Always returns nil to avoid leaking whether the email address exists.
 func (m *MagicLinkManager) SendMagicLink(ctx context.Context, emailAddr string) error {

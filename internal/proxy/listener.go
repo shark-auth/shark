@@ -19,8 +19,9 @@ import (
 // call whether Start succeeded, failed, or was never invoked — it always
 // returns a nil error in the never-started case.
 type Listener struct {
-	Bind     string
-	Upstream string
+	Bind          string
+	Upstream      string
+	IsTransparent bool
 
 	server   *http.Server
 	engine   *Engine
@@ -43,6 +44,8 @@ type Listener struct {
 type ListenerParams struct {
 	Bind           string
 	Upstream       string
+	IsTransparent  bool
+	Resolver       AppResolver
 	Timeout        time.Duration
 	TrustedHeaders []string
 	StripIncoming  bool
@@ -65,7 +68,7 @@ func NewListener(p ListenerParams) (*Listener, error) {
 	if p.Bind == "" {
 		return nil, errors.New("proxy listener: bind is required")
 	}
-	if p.Upstream == "" {
+	if !p.IsTransparent && p.Upstream == "" {
 		return nil, errors.New("proxy listener: upstream is required")
 	}
 	logger := p.Logger
@@ -92,6 +95,10 @@ func NewListener(p ListenerParams) (*Listener, error) {
 		return nil, fmt.Errorf("proxy listener %s: building reverse proxy: %w", p.Bind, err)
 	}
 
+	if p.Resolver != nil {
+		handler.SetResolver(p.Resolver)
+	}
+
 	var h http.Handler = handler
 	if p.AuthWrap != nil {
 		h = p.AuthWrap(handler)
@@ -104,14 +111,15 @@ func NewListener(p ListenerParams) (*Listener, error) {
 	}
 
 	return &Listener{
-		Bind:     p.Bind,
-		Upstream: p.Upstream,
-		server:   srv,
-		engine:   engine,
-		breaker:  breaker,
-		handler:  handler,
-		logger:   logger,
-		authWrap: p.AuthWrap,
+		Bind:          p.Bind,
+		Upstream:      p.Upstream,
+		IsTransparent: p.IsTransparent,
+		server:        srv,
+		engine:        engine,
+		breaker:       breaker,
+		handler:       handler,
+		logger:        logger,
+		authWrap:      p.AuthWrap,
 	}, nil
 }
 
@@ -120,6 +128,11 @@ func (l *Listener) Engine() *Engine { return l.engine }
 
 // Breaker returns the circuit breaker for admin dashboard consumption.
 func (l *Listener) Breaker() *Breaker { return l.breaker }
+
+// SetResolver installs a dynamic application resolver.
+func (l *Listener) SetResolver(res AppResolver) {
+	l.handler.SetResolver(res)
+}
 
 // SetAuthWrap installs the identity-resolution middleware. Callers that
 // need the listener's own Breaker to build their AuthWrap (the

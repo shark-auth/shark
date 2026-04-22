@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -16,10 +18,6 @@ import (
 )
 
 // adminHealthResponse is the response shape for GET /admin/health.
-//
-// The shape is consumed by the dashboard Overview page health card
-// (admin/src/components/overview.tsx, mapHealth). When changing fields
-// here, update both. Smoke section 25 asserts the contract.
 type adminHealthResponse struct {
 	Version        string            `json:"version"`
 	UptimeSeconds  int64             `json:"uptime_seconds"`
@@ -39,23 +37,19 @@ type healthDBSection struct {
 }
 
 // healthMigrations reports the current applied migration version.
-// Name is best-effort and may be empty when not derivable.
 type healthMigrations struct {
 	Current int64  `json:"current"`
 	Name    string `json:"name,omitempty"`
 }
 
 // healthJWTSection reports JWT signing mode + key info.
-// Mode is "session" (legacy/opaque) or "jwt".
 type healthJWTSection struct {
 	Mode       string `json:"mode"`
 	Algorithm  string `json:"algorithm,omitempty"`
 	ActiveKeys int    `json:"active_keys"`
 }
 
-// healthSMTPSection reports email provider info. SentToday/DailyLimit are
-// nullable because backend does not currently track per-day send counts;
-// frontend tolerates null and shows "—".
+// healthSMTPSection reports email provider info.
 type healthSMTPSection struct {
 	Host       string `json:"host,omitempty"`
 	Tier       string `json:"tier"`
@@ -67,23 +61,43 @@ type healthSMTPSection struct {
 // adminConfigSummary holds non-sensitive config fields exposed by GET /admin/config.
 type adminConfigSummary struct {
 	DevMode             bool     `json:"dev_mode"`
-	JWTMode             bool     `json:"jwt_mode"`
-	SessionMode         string   `json:"session_mode"`
-	SessionLifetime     string   `json:"session_lifetime"`
-	SMTPConfigured      bool     `json:"smtp_configured"`
-	OAuthProviders      []string `json:"oauth_providers"`
-	SocialProviders     []string `json:"social_providers"`
-	SSOConnectionsCount int      `json:"sso_connections_count"`
+	Environment         string   `json:"environment"`
 	BaseURL             string   `json:"base_url"`
 	CORSOrigins         []string `json:"cors_origins"`
+	SSOConnectionsCount int      `json:"sso_connections_count"`
+	OAuthProviders      []string `json:"oauth_providers"`
 
-	Passkey        adminPasskeyConfig        `json:"passkey"`
-	PasswordPolicy adminPasswordPolicyConfig `json:"password_policy"`
-	JWT            adminJWTConfig            `json:"jwt"`
-	MagicLink      adminMagicLinkConfig      `json:"magic_link"`
+	Auth     adminAuthConfig    `json:"auth"`
+	Passkey  adminPasskeyConfig `json:"passkey"`
+	Email    adminEmailConfig   `json:"email"`
+	Audit    adminAuditConfig   `json:"audit"`
+	JWT      adminJWTConfig     `json:"jwt"`
+	MagicLink adminMagicLinkConfig `json:"magic_link"`
+	PasswordReset adminPasswordResetConfig `json:"password_reset"`
+	Social   adminSocialConfig  `json:"social"`
 }
 
-// adminPasskeyConfig is the passkey/WebAuthn section of the config summary.
+type adminPasswordResetConfig struct {
+	TTL string `json:"ttl"`
+}
+
+type adminAuthConfig struct {
+	SessionLifetime   string `json:"session_lifetime"`
+	PasswordMinLength int    `json:"password_min_length"`
+}
+
+type adminAuditConfig struct {
+	Retention       string `json:"retention"`
+	CleanupInterval string `json:"cleanup_interval"`
+}
+
+type adminEmailConfig struct {
+	Provider string `json:"provider"`
+	APIKey   string `json:"api_key,omitempty"`
+	From     string `json:"from"`
+	FromName string `json:"from_name"`
+}
+
 type adminPasskeyConfig struct {
 	Enabled          bool   `json:"enabled"`
 	RPID             string `json:"rp_id"`
@@ -93,30 +107,33 @@ type adminPasskeyConfig struct {
 	Attestation      string `json:"attestation"`
 }
 
-// adminPasswordPolicyConfig is the password-policy section of the config summary.
-type adminPasswordPolicyConfig struct {
-	MinLength       int    `json:"min_length"`
-	RequireUpper    bool   `json:"require_upper"`
-	RequireLower    bool   `json:"require_lower"`
-	RequireDigit    bool   `json:"require_digit"`
-	RequireSymbol   bool   `json:"require_symbol"`
-	LockoutAttempts int    `json:"lockout_attempts"`
-	LockoutDuration string `json:"lockout_duration"`
-}
-
-// adminJWTConfig is the JWT section of the config summary.
 type adminJWTConfig struct {
+	Enabled    bool   `json:"enabled"`
+	Mode       string `json:"mode"`
+	Issuer     string `json:"issuer"`
+	Audience   string `json:"audience"`
+	ClockSkew  string `json:"clock_skew"`
 	Algorithm  string `json:"algorithm"`
 	Lifetime   string `json:"lifetime"`
 	ActiveKeys int    `json:"active_keys"`
 }
 
-// adminMagicLinkConfig is the magic-link section of the config summary.
 type adminMagicLinkConfig struct {
 	TTL string `json:"ttl"`
 }
 
-// resolveAppVersion returns the build-time or module version, falling back to "dev".
+type adminSocialConfig struct {
+	RedirectURL string           `json:"redirect_url"`
+	Google      adminOAuthCreds  `json:"google"`
+	GitHub      adminOAuthCreds  `json:"github"`
+}
+
+type adminOAuthCreds struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret,omitempty"` // only shown if set
+}
+
+// resolveAppVersion returns the build-time or module version.
 func resolveAppVersion() string {
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
 		return info.Main.Version
@@ -124,8 +141,7 @@ func resolveAppVersion() string {
 	return "dev"
 }
 
-// dbSizeBytes queries SQLite PRAGMA page_count * page_size to get the current
-// database file size in bytes. Returns 0 on error so health stays non-fatal.
+// dbSizeBytes queries SQLite PRAGMA page_count * page_size.
 func dbSizeBytes(ctx context.Context, db *sql.DB) int64 {
 	var pageCount, pageSize int64
 	if err := db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pageCount); err != nil {
@@ -137,34 +153,21 @@ func dbSizeBytes(ctx context.Context, db *sql.DB) int64 {
 	return pageCount * pageSize
 }
 
-// buildConfigSummary constructs the non-sensitive config snapshot from the server state.
+// buildConfigSummary constructs the non-sensitive config snapshot.
 func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 	cfg := s.Config
 
-	// Detect configured OAuth/social providers (mirrors logic in oauth_handlers.go).
 	var providers []string
-	if cfg.Social.Google.ClientID != "" && cfg.Social.Google.ClientSecret != "" {
+	if cfg.Social.Google.ClientID != "" {
 		providers = append(providers, "google")
 	}
-	if cfg.Social.GitHub.ClientID != "" && cfg.Social.GitHub.ClientSecret != "" {
+	if cfg.Social.GitHub.ClientID != "" {
 		providers = append(providers, "github")
-	}
-	if cfg.Social.Apple.ClientID != "" && cfg.Social.Apple.TeamID != "" {
-		providers = append(providers, "apple")
-	}
-	if cfg.Social.Discord.ClientID != "" && cfg.Social.Discord.ClientSecret != "" {
-		providers = append(providers, "discord")
 	}
 	if providers == nil {
 		providers = []string{}
 	}
 
-	// SMTP is configured when a real provider and credentials are present.
-	smtpConfigured := cfg.Email.Provider != "" &&
-		cfg.Email.Provider != "dev" &&
-		(cfg.Email.Host != "" || cfg.Email.APIKey != "")
-
-	// Count SSO connections (best-effort; 0 on error).
 	ssoCount, _ := s.Store.CountSSOConnections(ctx, false)
 
 	cors := cfg.Server.CORSOrigins
@@ -172,34 +175,6 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 		cors = []string{}
 	}
 
-	// Session mode: "jwt" when JWT mode is explicitly non-session, else "cookie".
-	jwtMode := cfg.Auth.JWT.Enabled && cfg.Auth.JWT.Mode != "session"
-	sessionMode := "cookie"
-	if jwtMode {
-		sessionMode = "jwt"
-	}
-	sessionLifetime := cfg.Auth.SessionLifetime
-	if sessionLifetime == "" {
-		sessionLifetime = "30d"
-	}
-
-	// Passkey section — enabled when rp_id or rp_name is set (passkey feature
-	// is always compiled in; presence of config signals operator intent).
-	passkeyEnabled := cfg.Passkeys.RPID != "" || cfg.Passkeys.RPName != ""
-	passkeyOrigin := cfg.Passkeys.Origin
-	if passkeyOrigin == "" {
-		passkeyOrigin = cfg.Server.BaseURL
-	}
-	passkeyUV := cfg.Passkeys.UserVerification
-	if passkeyUV == "" {
-		passkeyUV = "preferred"
-	}
-	passkeyAttestation := cfg.Passkeys.Attestation
-	if passkeyAttestation == "" {
-		passkeyAttestation = "none"
-	}
-
-	// JWT section — read active signing key from JWKS store for algorithm/count.
 	jwtAlg := ""
 	jwtKeys := 0
 	jwtLifetime := cfg.Auth.JWT.AccessTokenTTL
@@ -212,7 +187,6 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 			jwtAlg = keys[0].Algorithm
 		}
 	}
-	// Fall back to oauth_server signing algorithm when no JWKS keys exist yet.
 	if jwtAlg == "" {
 		jwtAlg = cfg.OAuthServer.SigningAlgorithm
 	}
@@ -220,15 +194,11 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 		jwtAlg = "ES256"
 	}
 
-	// Magic link TTL.
-	magicLinkTTL := cfg.MagicLink.TokenLifetime
-	if magicLinkTTL == "" {
-		magicLinkTTL = "10m"
+	sessionLifetime := cfg.Auth.SessionLifetime
+	if sessionLifetime == "" {
+		sessionLifetime = "30d"
 	}
 
-	// Password policy — MinLength comes from auth.password_min_length.
-	// The rest (complexity, lockout) are not yet stored in config so we use
-	// sensible defaults that match the validator in internal/auth/password.go.
 	minLength := cfg.Auth.PasswordMinLength
 	if minLength == 0 {
 		minLength = 8
@@ -236,46 +206,72 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 
 	return adminConfigSummary{
 		DevMode:             cfg.Server.DevMode,
-		JWTMode:             jwtMode,
-		SessionMode:         sessionMode,
-		SessionLifetime:     sessionLifetime,
-		SMTPConfigured:      smtpConfigured,
-		OAuthProviders:      providers,
-		SocialProviders:     providers,
-		SSOConnectionsCount: ssoCount,
+		Environment:         "production",
 		BaseURL:             cfg.Server.BaseURL,
 		CORSOrigins:         cors,
+		SSOConnectionsCount: ssoCount,
+		OAuthProviders:      providers,
 
+		Auth: adminAuthConfig{
+			SessionLifetime:   sessionLifetime,
+			PasswordMinLength: minLength,
+		},
 		Passkey: adminPasskeyConfig{
-			Enabled:          passkeyEnabled,
+			Enabled:          cfg.Passkeys.RPID != "" || cfg.Passkeys.RPName != "",
 			RPID:             cfg.Passkeys.RPID,
 			RPName:           cfg.Passkeys.RPName,
-			Origin:           passkeyOrigin,
-			UserVerification: passkeyUV,
-			Attestation:      passkeyAttestation,
+			Origin:           cfg.Passkeys.Origin,
+			UserVerification: cfg.Passkeys.UserVerification,
+			Attestation:      cfg.Passkeys.Attestation,
 		},
-		PasswordPolicy: adminPasswordPolicyConfig{
-			MinLength:       minLength,
-			RequireUpper:    false,
-			RequireLower:    false,
-			RequireDigit:    false,
-			RequireSymbol:   false,
-			LockoutAttempts: 0,
-			LockoutDuration: "",
+		Email: adminEmailConfig{
+			Provider: cfg.Email.Provider,
+			APIKey:   cfg.Email.APIKey,
+			From:     cfg.Email.From,
+			FromName: cfg.Email.FromName,
+		},
+		Audit: adminAuditConfig{
+			Retention:       cfg.Audit.Retention,
+			CleanupInterval: cfg.Audit.CleanupInterval,
 		},
 		JWT: adminJWTConfig{
+			Enabled:    cfg.Auth.JWT.Enabled,
+			Mode:       cfg.Auth.JWT.Mode,
+			Issuer:     cfg.Auth.JWT.Issuer,
+			Audience:   cfg.Auth.JWT.Audience,
+			ClockSkew:  cfg.Auth.JWT.ClockSkew,
 			Algorithm:  jwtAlg,
 			Lifetime:   jwtLifetime,
 			ActiveKeys: jwtKeys,
 		},
 		MagicLink: adminMagicLinkConfig{
-			TTL: magicLinkTTL,
+			TTL: cfg.MagicLink.TokenLifetime,
+		},
+		PasswordReset: adminPasswordResetConfig{
+			TTL: cfg.PasswordReset.TokenLifetime,
+		},
+		Social: adminSocialConfig{
+			RedirectURL: cfg.Social.RedirectURL,
+			Google: adminOAuthCreds{
+				ClientID:     cfg.Social.Google.ClientID,
+				ClientSecret: hideSecret(cfg.Social.Google.ClientSecret),
+			},
+			GitHub: adminOAuthCreds{
+				ClientID:     cfg.Social.GitHub.ClientID,
+				ClientSecret: hideSecret(cfg.Social.GitHub.ClientSecret),
+			},
 		},
 	}
 }
 
-// currentMigrationVersion returns the highest version_id from goose's tracking
-// table (goose_db_version). Returns 0 if the table is missing or empty.
+func hideSecret(s string) string {
+	if s == "" {
+		return ""
+	}
+	return "********"
+}
+
+// currentMigrationVersion returns the highest version_id.
 func currentMigrationVersion(ctx context.Context, db *sql.DB) int64 {
 	var v sql.NullInt64
 	err := db.QueryRowContext(ctx,
@@ -287,26 +283,20 @@ func currentMigrationVersion(ctx context.Context, db *sql.DB) int64 {
 }
 
 // handleAdminHealth handles GET /api/v1/admin/health.
-// Returns system diagnostics in the nested shape consumed by the dashboard
-// Overview health card (admin/src/components/overview.tsx mapHealth).
 func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	cfg := s.Config
 
-	// --- DB ---
 	bytes := dbSizeBytes(ctx, s.Store.DB())
 	sizeMB := float64(bytes) / (1024.0 * 1024.0)
-	// Round to 2 decimals.
 	sizeMB = float64(int64(sizeMB*100+0.5)) / 100.0
 	dbStatus := "ok"
 	if err := s.Store.DB().PingContext(ctx); err != nil {
 		dbStatus = "error"
 	}
 
-	// --- Migrations ---
 	migCurrent := currentMigrationVersion(ctx, s.Store.DB())
 
-	// --- JWT ---
 	jwtMode := "session"
 	if cfg.Auth.JWT.Enabled && cfg.Auth.JWT.Mode != "session" {
 		jwtMode = "jwt"
@@ -320,7 +310,6 @@ func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// --- SMTP ---
 	smtpConfigured := cfg.Email.Provider != "" &&
 		cfg.Email.Provider != "dev" &&
 		(cfg.Email.Host != "" || cfg.Email.APIKey != "")
@@ -329,7 +318,6 @@ func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 		smtpTier = "production"
 	}
 
-	// --- OAuth providers (reuse logic via config summary helper) ---
 	summary := s.buildConfigSummary(ctx)
 
 	resp := adminHealthResponse{
@@ -352,8 +340,6 @@ func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 			Host:       cfg.Email.Host,
 			Tier:       smtpTier,
 			Configured: smtpConfigured,
-			// sent_today/daily_limit not tracked yet — return null so
-			// the frontend renders "—" instead of a fabricated number.
 			SentToday:  nil,
 			DailyLimit: nil,
 		},
@@ -365,13 +351,11 @@ func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAdminConfig handles GET /api/v1/admin/config.
-// Returns the sanitised runtime configuration (no secrets).
 func (s *Server) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.buildConfigSummary(r.Context()))
 }
 
 // handleAdminListOrganizations handles GET /api/v1/admin/organizations.
-// Lists ALL organizations (admin view, not user-scoped).
 func (s *Server) handleAdminListOrganizations(w http.ResponseWriter, r *http.Request) {
 	orgs, err := s.Store.ListAllOrganizations(r.Context())
 	if err != nil {
@@ -408,7 +392,6 @@ func (s *Server) handleAdminListOrgMembers(w http.ResponseWriter, r *http.Reques
 }
 
 // handleAdminTestEmail handles POST /api/v1/admin/test-email.
-// Sends a test email to verify SMTP/email provider configuration.
 func (s *Server) handleAdminTestEmail(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		To string `json:"to"`
@@ -418,7 +401,6 @@ func (s *Server) handleAdminTestEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get email sender from MagicLinkManager (or dev inbox in dev mode)
 	var sender email.Sender
 	if s.MagicLinkManager != nil {
 		sender = s.MagicLinkManager.Sender()
@@ -431,12 +413,12 @@ func (s *Server) handleAdminTestEmail(w http.ResponseWriter, r *http.Request) {
 	msg := &email.Message{
 		To:      req.To,
 		Subject: "SharkAuth Test Email",
-		HTML:    "<h2>SharkAuth Email Test</h2><p>This is a test email from your SharkAuth instance.</p><p>If you received this, your email configuration is working correctly.</p>",
-		Text:    "SharkAuth Email Test\n\nThis is a test email from your SharkAuth instance.\nIf you received this, your email configuration is working correctly.",
+		HTML:    "<h2>SharkAuth Email Test</h2><p>This is a test email from your SharkAuth instance.</p>",
+		Text:    "SharkAuth Email Test\n\nThis is a test email from your SharkAuth instance.",
 	}
 
 	if err := sender.Send(msg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errPayload("send_failed", "Failed to send test email: "+err.Error()))
+		writeJSON(w, http.StatusInternalServerError, errPayload("send_failed", "Failed to send: "+err.Error()))
 		return
 	}
 
@@ -444,7 +426,6 @@ func (s *Server) handleAdminTestEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAdminListUserPasskeys handles GET /api/v1/users/{id}/passkeys.
-// Lists passkey credentials for a user (admin access).
 func (s *Server) handleAdminListUserPasskeys(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "id")
 	creds, err := s.Store.GetPasskeysByUserID(r.Context(), userID)
@@ -459,10 +440,6 @@ func (s *Server) handleAdminListUserPasskeys(w http.ResponseWriter, r *http.Requ
 }
 
 // handleAdminDisableUserMFA handles DELETE /api/v1/users/{id}/mfa.
-// Admin-only escape hatch when a user has lost their TOTP device — clears
-// the secret, recovery codes, and the enabled flag without requiring the
-// user's current TOTP code (the user-facing /auth/mfa endpoint requires it).
-// Audited as `admin.mfa.disabled` so the action is traceable.
 func (s *Server) handleAdminDisableUserMFA(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "id")
 
@@ -484,8 +461,6 @@ func (s *Server) handleAdminDisableUserMFA(w http.ResponseWriter, r *http.Reques
 		internal(w, err)
 		return
 	}
-	// Best-effort: clear recovery codes too. A failure here doesn't roll back
-	// the disable — admin already wanted MFA off.
 	_ = s.Store.DeleteAllMFARecoveryCodesByUserID(r.Context(), userID)
 
 	if s.AuditLogger != nil {
@@ -494,32 +469,19 @@ func (s *Server) handleAdminDisableUserMFA(w http.ResponseWriter, r *http.Reques
 			Action:     "admin.mfa.disabled",
 			TargetType: "user",
 			TargetID:   userID,
-			IP:         ipOf(r),
-			UserAgent:  uaOf(r),
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
 			Status:     "success",
 		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"mfa_enabled": false,
-		"user_id":     userID,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"mfa_enabled": false, "user_id": userID})
 }
 
 // handleAdminEmailPreview handles GET /api/v1/admin/email-preview/{template}.
-// Renders the requested transactional email template against canned sample
-// data and returns the resulting HTML so the dashboard can show a preview
-// pane on the Authentication page.
-//
-// Supported templates: magic_link, verify_email, password_reset,
-// organization_invitation. Unknown templates return 404.
 func (s *Server) handleAdminEmailPreview(w http.ResponseWriter, r *http.Request) {
 	tpl := chi.URLParam(r, "template")
 	appName := "SharkAuth"
-	if s.Config != nil && s.Config.Server.BaseURL != "" {
-		// Display name only — no real URL exposure needed in preview copy.
-		appName = "SharkAuth"
-	}
 
 	ctx := r.Context()
 	branding, _ := s.Store.ResolveBranding(ctx, "")
@@ -529,19 +491,19 @@ func (s *Server) handleAdminEmailPreview(w http.ResponseWriter, r *http.Request)
 	case "magic_link":
 		rendered, err = email.RenderMagicLink(ctx, s.Store, branding, email.MagicLinkData{
 			AppName:       appName,
-			MagicLinkURL:  "https://example.com/auth/magic?token=preview-token-not-real",
+			MagicLinkURL:  "https://example.com/auth/magic?token=preview",
 			ExpiryMinutes: 15,
 		})
 	case "verify_email":
 		rendered, err = email.RenderVerifyEmail(ctx, s.Store, branding, email.VerifyEmailData{
 			AppName:       appName,
-			VerifyURL:     "https://example.com/auth/verify?token=preview-token-not-real",
+			VerifyURL:     "https://example.com/auth/verify?token=preview",
 			ExpiryMinutes: 60,
 		})
 	case "password_reset":
 		rendered, err = email.RenderPasswordReset(ctx, s.Store, branding, email.PasswordResetData{
 			AppName:       appName,
-			ResetURL:      "https://example.com/auth/reset?token=preview-token-not-real",
+			ResetURL:      "https://example.com/auth/reset?token=preview",
 			ExpiryMinutes: 30,
 		})
 	case "organization_invitation":
@@ -560,7 +522,7 @@ func (s *Server) handleAdminEmailPreview(w http.ResponseWriter, r *http.Request)
 			DashboardURL: "https://example.com/dashboard",
 		})
 	default:
-		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Unknown email template: "+tpl))
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Unknown template: "+tpl))
 		return
 	}
 	if err != nil {
@@ -575,19 +537,17 @@ func (s *Server) handleAdminEmailPreview(w http.ResponseWriter, r *http.Request)
 }
 
 // handleAdminRotateSigningKey handles POST /api/v1/admin/auth/rotate-signing-key.
-// Generates a new JWT signing key and retires the current one.
 func (s *Server) handleAdminRotateSigningKey(w http.ResponseWriter, r *http.Request) {
 	if s.JWTManager == nil {
-		writeJSON(w, http.StatusServiceUnavailable, errPayload("jwt_not_configured", "JWT mode is not enabled"))
+		writeJSON(w, http.StatusServiceUnavailable, errPayload("jwt_not_configured", "JWT mode not enabled"))
 		return
 	}
 
 	if err := s.JWTManager.GenerateAndStore(r.Context(), true); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errPayload("rotation_failed", "Failed to rotate signing key: "+err.Error()))
+		writeJSON(w, http.StatusInternalServerError, errPayload("rotation_failed", err.Error()))
 		return
 	}
 
-	// Get the new active key info
 	key, err := s.Store.GetActiveSigningKey(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"rotated": true})
@@ -599,4 +559,208 @@ func (s *Server) handleAdminRotateSigningKey(w http.ResponseWriter, r *http.Requ
 		"kid":       key.KID,
 		"algorithm": key.Algorithm,
 	})
+}
+
+// handleAdminUpdateConfig handles PATCH /api/v1/admin/config.
+func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Auth struct {
+			SessionLifetime   *string `json:"session_lifetime"`
+			PasswordMinLength *int    `json:"password_min_length"`
+		} `json:"auth"`
+		Passkeys struct {
+			RPName           *string `json:"rp_name"`
+			RPID             *string `json:"rp_id"`
+			UserVerification *string `json:"user_verification"`
+		} `json:"passkeys"`
+		Email struct {
+			Provider *string `json:"provider"`
+			APIKey   *string `json:"api_key"`
+			From     *string `json:"from"`
+			FromName *string `json:"from_name"`
+		} `json:"email"`
+		Audit struct {
+			Retention       *string `json:"retention"`
+			CleanupInterval *string `json:"cleanup_interval"`
+		} `json:"audit"`
+		Social struct {
+			RedirectURL *string `json:"redirect_url"`
+			Google      *struct {
+				ClientID     *string `json:"client_id"`
+				ClientSecret *string `json:"client_secret"`
+			} `json:"google"`
+			GitHub      *struct {
+				ClientID     *string `json:"client_id"`
+				ClientSecret *string `json:"client_secret"`
+			} `json:"github"`
+		} `json:"social"`
+		JWT struct {
+			Enabled   *bool   `json:"enabled"`
+			Mode      *string `json:"mode"`
+			Issuer    *string `json:"issuer"`
+			Audience  *string `json:"audience"`
+			ClockSkew *string `json:"clock_skew"`
+		} `json:"jwt"`
+		PasswordReset struct {
+			TTL *string `json:"ttl"`
+		} `json:"password_reset"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+
+	cfg := s.Config
+	if req.Auth.SessionLifetime != nil {
+		cfg.Auth.SessionLifetime = *req.Auth.SessionLifetime
+	}
+	if req.Auth.PasswordMinLength != nil {
+		cfg.Auth.PasswordMinLength = *req.Auth.PasswordMinLength
+	}
+	if req.Passkeys.RPName != nil {
+		cfg.Passkeys.RPName = *req.Passkeys.RPName
+	}
+	if req.Passkeys.RPID != nil {
+		cfg.Passkeys.RPID = *req.Passkeys.RPID
+	}
+	if req.Passkeys.UserVerification != nil {
+		cfg.Passkeys.UserVerification = *req.Passkeys.UserVerification
+	}
+	if req.Email.Provider != nil {
+		cfg.Email.Provider = *req.Email.Provider
+	}
+	if req.Email.APIKey != nil {
+		cfg.Email.APIKey = *req.Email.APIKey
+	}
+	if req.Email.From != nil {
+		cfg.Email.From = *req.Email.From
+	}
+	if req.Email.FromName != nil {
+		cfg.Email.FromName = *req.Email.FromName
+	}
+	if req.Audit.Retention != nil {
+		cfg.Audit.Retention = *req.Audit.Retention
+	}
+	if req.Audit.CleanupInterval != nil {
+		cfg.Audit.CleanupInterval = *req.Audit.CleanupInterval
+	}
+
+	// Update Social
+	if req.Social.RedirectURL != nil {
+		cfg.Social.RedirectURL = *req.Social.RedirectURL
+	}
+	if req.Social.Google != nil {
+		if req.Social.Google.ClientID != nil {
+			cfg.Social.Google.ClientID = *req.Social.Google.ClientID
+		}
+		if req.Social.Google.ClientSecret != nil && *req.Social.Google.ClientSecret != "********" {
+			cfg.Social.Google.ClientSecret = *req.Social.Google.ClientSecret
+		}
+	}
+	if req.Social.GitHub != nil {
+		if req.Social.GitHub.ClientID != nil {
+			cfg.Social.GitHub.ClientID = *req.Social.GitHub.ClientID
+		}
+		if req.Social.GitHub.ClientSecret != nil && *req.Social.GitHub.ClientSecret != "********" {
+			cfg.Social.GitHub.ClientSecret = *req.Social.GitHub.ClientSecret
+		}
+	}
+
+	// Update JWT
+	if req.JWT.Enabled != nil {
+		cfg.Auth.JWT.Enabled = *req.JWT.Enabled
+	}
+	if req.JWT.Mode != nil {
+		cfg.Auth.JWT.Mode = *req.JWT.Mode
+	}
+	if req.JWT.Issuer != nil {
+		cfg.Auth.JWT.Issuer = *req.JWT.Issuer
+	}
+	if req.JWT.Audience != nil {
+		cfg.Auth.JWT.Audience = *req.JWT.Audience
+	}
+	if req.JWT.ClockSkew != nil {
+		cfg.Auth.JWT.ClockSkew = *req.JWT.ClockSkew
+	}
+	if req.PasswordReset.TTL != nil {
+		cfg.PasswordReset.TokenLifetime = *req.PasswordReset.TTL
+	}
+
+	if s.ConfigPath != "" {
+		if err := cfg.Save(s.ConfigPath); err != nil {
+			slog.Error("config: failed to save", "path", s.ConfigPath, "error", err)
+			writeJSON(w, http.StatusInternalServerError, errPayload("save_failed", "Failed to persist"))
+			return
+		}
+	}
+
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "admin.config.updated",
+			TargetType: "system",
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+		})
+	}
+
+	// Hot-reload services
+	if s.MagicLinkManager != nil && req.Email.Provider != nil {
+		var newSender email.Sender
+		switch *req.Email.Provider {
+		case "shark":
+			newSender = email.NewResendSender(cfg.SMTP)
+		case "resend":
+			newSender = email.NewResendSender(cfg.SMTP)
+		case "smtp":
+			newSender = email.NewSMTPSender(cfg.SMTP)
+		case "dev":
+			newSender = email.NewDevInboxSender(s.Store)
+		}
+		if newSender != nil {
+			s.MagicLinkManager.SetSender(newSender)
+			slog.Info("config: email sender re-initialized")
+		}
+	}
+
+	writeJSON(w, http.StatusOK, s.buildConfigSummary(r.Context()))
+}
+
+// handleAdminLogStream streams real-time audit logs via SSE.
+func (s *Server) handleAdminLogStream(w http.ResponseWriter, r *http.Request) {
+	if s.WebhookDispatcher == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errPayload("unavailable", "log streaming unavailable"))
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, errPayload("unsupported", "streaming unsupported"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ch := s.WebhookDispatcher.Subscribe()
+	defer s.WebhookDispatcher.Unsubscribe(ch)
+
+	fmt.Fprintf(w, "data: {\"event\":\"connected\"}\n\n")
+	flusher.Flush()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case env := <-ch:
+			if env.Event != "system.audit_log" {
+				continue
+			}
+			b, _ := json.Marshal(env.Data)
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			flusher.Flush()
+		}
+	}
 }

@@ -1,9 +1,12 @@
-.PHONY: build test lint vet run clean docker verify
+.PHONY: build test lint vet run clean docker verify frontend-build
 
 BINARY := sharkauth
 PKG    := ./cmd/shark
 
-build:
+frontend-build:
+	@cd admin && pnpm build
+
+build: frontend-build
 	go build -ldflags="-s -w" -o $(BINARY) $(PKG)
 
 test:
@@ -29,6 +32,7 @@ run: build
 
 clean:
 	rm -f $(BINARY)
+	rm -rf internal/admin/dist
 
 docker:
 	docker build -t sharkauth .

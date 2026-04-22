@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -190,14 +191,27 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	// Check if user is logged in via session middleware.
 	userID := getUserIDFromRequest(r)
 	if userID == "" {
-		// Not logged in. Return JSON directing the client to the login page.
-		loginURL := s.Issuer + "/login?return_to=" + r.URL.String()
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{ //#nosec G104
-			"error":     "login_required",
-			"login_url": loginURL,
-		})
+		// Not logged in. Redirect to the hosted login page for this application.
+		// We resolve the slug via the client_id (ar.GetClient().GetID()).
+		clientID := ar.GetClient().GetID()
+		app, err := s.RawStore.GetApplicationByClientID(ctx, clientID)
+		slug := "default"
+		if err == nil && app != nil {
+			slug = app.Slug
+		}
+
+		// Use issuer base URL to build the redirect.
+		loginURL := fmt.Sprintf("%s/hosted/%s/login?client_id=%s&redirect_uri=%s&state=%s&scope=%s&return_to=%s",
+			s.Issuer,
+			slug,
+			url.QueryEscape(clientID),
+			url.QueryEscape(ar.GetRedirectURI().String()),
+			url.QueryEscape(r.URL.Query().Get("state")),
+			url.QueryEscape(strings.Join(ar.GetRequestedScopes(), " ")),
+			url.QueryEscape(r.URL.String()),
+		)
+
+		http.Redirect(w, r, loginURL, http.StatusFound)
 		return
 	}
 
@@ -346,15 +360,10 @@ func (s *Server) completeAuthorize(w http.ResponseWriter, r *http.Request, ar fo
 	s.Provider.WriteAuthorizeResponse(ctx, w, ar, response)
 }
 
-// getUserIDFromRequest extracts the user ID from the request context.
-// Uses the session middleware's GetUserID helper, with a fallback to X-User-ID
-// header for testing / internal calls.
+// getUserIDFromRequest extracts the user ID from the request context set by
+// session middleware. Never trust client-controlled headers for identity.
 func getUserIDFromRequest(r *http.Request) string {
-	if uid := mw.GetUserID(r.Context()); uid != "" {
-		return uid
-	}
-	// Fallback: X-User-ID header (for testing).
-	return r.Header.Get("X-User-ID")
+	return mw.GetUserID(r.Context())
 }
 
 // storeDPoPJKT records the DPoP JWK thumbprint on the OAuthToken row created

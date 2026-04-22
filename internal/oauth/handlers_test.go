@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ory/fosite"
 
+	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
@@ -60,9 +61,22 @@ func newTestOAuthServer(t *testing.T) (*Server, storage.Store) {
 	return srv, db
 }
 
+// testUserMW reads the test-only "X-Test-Auth-User" header and injects it
+// as the authenticated user into the request context. Production code paths
+// never mount this middleware; real auth comes from the session middleware.
+func testUserMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if uid := req.Header.Get("X-Test-Auth-User"); uid != "" {
+			req = req.WithContext(context.WithValue(req.Context(), mw.UserIDKey, uid))
+		}
+		next.ServeHTTP(w, req)
+	})
+}
+
 // mountTestRouter sets up a chi router with the OAuth token and authorize endpoints.
 func mountTestRouter(srv *Server) chi.Router {
 	r := chi.NewRouter()
+	r.Use(testUserMW)
 	r.Post("/oauth/token", srv.HandleToken)
 	r.Get("/oauth/authorize", srv.HandleAuthorize)
 	r.Post("/oauth/authorize", srv.HandleAuthorizeDecision)
@@ -281,7 +295,8 @@ func TestAuthorizeEndpoint_ConsentRequired(t *testing.T) {
 	userID := seedUser(t, store, "consent@example.com")
 
 	r := chi.NewRouter()
-	// Simulate logged-in user via X-User-ID header.
+	r.Use(testUserMW)
+	// Simulate logged-in user via X-Test-Auth-User header.
 	r.Get("/oauth/authorize", srv.HandleAuthorize)
 
 	ts := httptest.NewServer(r)
@@ -296,7 +311,7 @@ func TestAuthorizeEndpoint_ConsentRequired(t *testing.T) {
 	}.Encode()
 
 	req, _ := http.NewRequest("GET", reqURL, nil)
-	req.Header.Set("X-User-ID", userID)
+	req.Header.Set("X-Test-Auth-User", userID)
 
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -426,6 +441,7 @@ func TestHandleAuthorizeDecision_Approved(t *testing.T) {
 	userID := seedUser(t, store, "approve@example.com")
 
 	r := chi.NewRouter()
+	r.Use(testUserMW)
 	r.Post("/oauth/authorize", srv.HandleAuthorizeDecision)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -447,7 +463,7 @@ func TestHandleAuthorizeDecision_Approved(t *testing.T) {
 	}
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/oauth/authorize", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-User-ID", userID)
+	req.Header.Set("X-Test-Auth-User", userID)
 
 	// Don't follow redirects — we want the 302 itself.
 	client := &http.Client{
@@ -506,6 +522,7 @@ func TestHandleAuthorizeDecision_Denied(t *testing.T) {
 	userID := seedUser(t, store, "deny@example.com")
 
 	r := chi.NewRouter()
+	r.Use(testUserMW)
 	r.Post("/oauth/authorize", srv.HandleAuthorizeDecision)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -526,7 +543,7 @@ func TestHandleAuthorizeDecision_Denied(t *testing.T) {
 	}
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/oauth/authorize", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-User-ID", userID)
+	req.Header.Set("X-Test-Auth-User", userID)
 
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -571,6 +588,7 @@ func TestHandleAuthorizeDecision_NoLogin(t *testing.T) {
 	seedAgent(t, store, "decision-nologin-client", false)
 
 	r := chi.NewRouter()
+	r.Use(testUserMW)
 	r.Post("/oauth/authorize", srv.HandleAuthorizeDecision)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -630,6 +648,7 @@ func TestAuthorizeEndpoint_ExistingConsent(t *testing.T) {
 	}
 
 	r := chi.NewRouter()
+	r.Use(testUserMW)
 	r.Get("/oauth/authorize", srv.HandleAuthorize)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -645,7 +664,7 @@ func TestAuthorizeEndpoint_ExistingConsent(t *testing.T) {
 	}.Encode()
 
 	req, _ := http.NewRequest(http.MethodGet, reqURL, nil)
-	req.Header.Set("X-User-ID", userID)
+	req.Header.Set("X-Test-Auth-User", userID)
 
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {

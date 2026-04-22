@@ -22,6 +22,7 @@ import (
 // dashboard's edit form needs every column to round-trip cleanly.
 type proxyRuleResponse struct {
 	ID        string    `json:"id"`
+	AppID     string    `json:"app_id"`
 	Name      string    `json:"name"`
 	Pattern   string    `json:"pattern"`
 	Methods   []string  `json:"methods"`
@@ -45,6 +46,7 @@ func proxyRuleToResponse(r *storage.ProxyRule) proxyRuleResponse {
 	}
 	return proxyRuleResponse{
 		ID:        r.ID,
+		AppID:     r.AppID,
 		Name:      r.Name,
 		Pattern:   r.Pattern,
 		Methods:   methods,
@@ -57,10 +59,10 @@ func proxyRuleToResponse(r *storage.ProxyRule) proxyRuleResponse {
 		UpdatedAt: r.UpdatedAt,
 	}
 }
-
 // --- requests ---
 
 type createProxyRuleRequest struct {
+	AppID    string   `json:"app_id"`
 	Name     string   `json:"name"`
 	Pattern  string   `json:"pattern"`
 	Methods  []string `json:"methods,omitempty"`
@@ -72,6 +74,7 @@ type createProxyRuleRequest struct {
 }
 
 type updateProxyRuleRequest struct {
+	AppID    *string   `json:"app_id,omitempty"`
 	Name     *string   `json:"name,omitempty"`
 	Pattern  *string   `json:"pattern,omitempty"`
 	Methods  *[]string `json:"methods,omitempty"`
@@ -89,7 +92,16 @@ type updateProxyRuleRequest struct {
 // before flipping the proxy on. Response shape matches other admin lists:
 // {data:[], total:N}.
 func (s *Server) handleListProxyRules(w http.ResponseWriter, r *http.Request) {
-	rules, err := s.Store.ListProxyRules(r.Context())
+	appID := r.URL.Query().Get("app_id")
+	var rules []*storage.ProxyRule
+	var err error
+
+	if appID != "" {
+		rules, err = s.Store.ListProxyRulesByAppID(r.Context(), appID)
+	} else {
+		rules, err = s.Store.ListProxyRules(r.Context())
+	}
+
 	if err != nil {
 		internal(w, err)
 		return
@@ -114,6 +126,11 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.AppID == "" {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_proxy_rule", "app_id is required"))
+		return
+	}
+
 	if err := validateProxyRulePayload(req.Name, req.Pattern, req.Methods, req.Require, req.Allow); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_proxy_rule", err.Error()))
 		return
@@ -127,6 +144,7 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC().Truncate(time.Second)
 	rule := &storage.ProxyRule{
 		ID:        newProxyRuleID(),
+		AppID:     req.AppID,
 		Name:      req.Name,
 		Pattern:   req.Pattern,
 		Methods:   normalizeMethods(req.Methods),
@@ -142,6 +160,17 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.CreateProxyRule(r.Context(), rule); err != nil {
 		internal(w, err)
 		return
+	}
+
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "proxy.rule.created",
+			TargetType: "proxy_rule",
+			TargetID:   rule.ID,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+		})
 	}
 
 	// Push the new rule set into the live engine. A refresh failure is
@@ -192,6 +221,9 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.AppID != nil {
+		rule.AppID = *req.AppID
+	}
 	if req.Name != nil {
 		if strings.TrimSpace(*req.Name) == "" {
 			writeJSON(w, http.StatusBadRequest, errPayload("invalid_proxy_rule", "name cannot be empty"))
@@ -234,6 +266,17 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "proxy.rule.updated",
+			TargetType: "proxy_rule",
+			TargetID:   id,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+		})
+	}
+
 	// Refresh the engine so the patched row goes live immediately. As with
 	// Create, a refresh failure is reported but doesn't roll back the DB.
 	refreshErr := s.refreshProxyEngineFromDB(r.Context())
@@ -249,7 +292,6 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
-
 // handleDeleteProxyRule removes a rule and refreshes the engine. 404 when
 // the id doesn't exist (so dashboards can distinguish a real success from a
 // stale id).
@@ -268,6 +310,17 @@ func (s *Server) handleDeleteProxyRule(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.DeleteProxyRule(r.Context(), id); err != nil {
 		internal(w, err)
 		return
+	}
+
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "proxy.rule.deleted",
+			TargetType: "proxy_rule",
+			TargetID:   id,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+		})
 	}
 
 	// Refresh the engine. Best-effort — the row is already gone; failing to
@@ -300,15 +353,17 @@ func (s *Server) refreshProxyEngineFromDB(ctx context.Context) error {
 		return err
 	}
 
-	// Compose specs: DB rules (enabled only) first, then YAML rules. Within
-	// each group we preserve list order; ListProxyRules already sorts by
-	// priority DESC + created_at ASC.
-	specs := make([]proxy.RuleSpec, 0, len(rows)+len(s.Config.Proxy.Rules))
+	// Compose specs: DB rules (enabled only) first, then YAML rules.
+	// For the global proxy engine, we only include truly global DB rules
+	// (those where app_id is empty). App-specific rules are loaded separately
+	// by the AppResolver when a request matches an app's proxy domain.
+	specs := make([]proxy.RuleSpec, 0, len(s.Config.Proxy.Rules))
 	for _, r := range rows {
-		if !r.Enabled {
+		if !r.Enabled || r.AppID != "" {
 			continue
 		}
 		specs = append(specs, proxy.RuleSpec{
+			AppID:   r.AppID,
 			Path:    r.Pattern,
 			Methods: r.Methods,
 			Require: r.Require,
@@ -328,7 +383,6 @@ func (s *Server) refreshProxyEngineFromDB(ctx context.Context) error {
 
 	return s.ProxyEngine.SetRules(specs)
 }
-
 // --- validation + helpers ---
 
 // validateProxyRulePayload runs the create-time ruleset against the supplied

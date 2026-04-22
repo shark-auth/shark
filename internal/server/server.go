@@ -249,23 +249,29 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		}
 	}
 
-	apiSrv := api.NewServer(store, cfg,
+	// W15: build multi-listener proxy set.
+	proxyListeners, err := buildProxyListeners(cfg, nil)
+	if err != nil {
+		store.Close()
+		return nil, fmt.Errorf("build proxy listeners: %w", err)
+	}
+
+	apiSrv := api.NewServer(store, cfg, opts.ConfigPath,
 		api.WithEmailSender(sender),
 		api.WithWebhookDispatcher(dispatcher),
 		api.WithJWTManager(jwtMgr),
 		api.WithOAuthServer(oauthSrv),
+		api.WithProxyListeners(proxyListeners),
 	)
 
-	// W15: build multi-listener proxy set. cfg.Proxy.Resolve() has already
-	// been called in config.Load; entries with empty Bind are legacy
-	// main-port mounts handled by the api router's catch-all and skipped
-	// here. Building (not binding) happens up front so config errors —
-	// missing upstream, bad rule glob — fail at Build time alongside the
-	// rest of the startup-critical checks.
-	proxyListeners, err := buildProxyListeners(cfg, apiSrv)
-	if err != nil {
-		store.Close() //#nosec G104 -- cleanup after listener build failure
-		return nil, fmt.Errorf("build proxy listeners: %w", err)
+	// Now that apiSrv exists, wire the AuthWrap and AppResolver for each listener.
+	for _, l := range proxyListeners {
+		if err := l.SetAuthWrap(apiSrv.ProxyAuthMiddlewareFor(l.Breaker())); err != nil {
+			return nil, fmt.Errorf("proxy listener %s: %w", l.Bind, err)
+		}
+		if apiSrv.AppResolver != nil {
+			l.SetResolver(apiSrv.AppResolver)
+		}
 	}
 
 	return &Bootstrap{
@@ -313,9 +319,16 @@ func buildProxyListeners(cfg *config.Config, apiSrv *api.Server) ([]*proxy.Liste
 			MissBehavior:     proxy.MissReject,
 		}
 
+		var resolver proxy.AppResolver
+		if apiSrv != nil {
+			resolver = apiSrv.AppResolver
+		}
+
 		params := proxy.ListenerParams{
 			Bind:           lc.Bind,
 			Upstream:       lc.Upstream,
+			IsTransparent:  true,
+			Resolver:       resolver,
 			Timeout:        lc.TimeoutDuration(),
 			TrustedHeaders: lc.TrustedHeaders,
 			StripIncoming:  lc.StripIncomingOrDefault(),

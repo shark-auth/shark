@@ -16,9 +16,9 @@ import { Webhooks } from './webhooks'
 import { RBAC } from './rbac'
 import { DevInbox } from './dev_inbox'
 import { SSO } from './sso'
-import { Authentication } from './authentication'
+import { IdentityHub } from './identity_hub'
 import { SigningKeys } from './signing_keys'
-import { Settings } from './settings'
+import { SystemSettings } from './system_settings'
 import { Consents } from './consents_manage'
 import { Vault } from './vault_manage'
 import { Tokens, APIExplorer, EventSchemas, OIDCProvider, Impersonation, Migrations } from './empty_shell'
@@ -55,9 +55,6 @@ function useTweaks() {
 export function App() {
   const [apiKey, setApiKey] = React.useState(() => sessionStorage.getItem('shark_admin_key') || '');
 
-  // Page id is the FIRST path segment under /admin/. Anything after (e.g.
-  // /admin/users/usr_abc/security) is preserved in the URL and exposed to
-  // the page via window.location.pathname so deep-link routing works.
   const getPageFromURL = () => {
     const path = window.location.pathname.replace(/^\/admin\/?/, '').replace(/\/$/, '');
     if (!path) return 'overview';
@@ -66,10 +63,6 @@ export function App() {
 
   const [page, setPageState] = React.useState(getPageFromURL);
 
-  // setPage(id, paramsOrSubpath?)
-  //   - id: page key (e.g. 'users')
-  //   - second arg, when an object, becomes ?key=value query params
-  //   - when a string, is appended as a sub-path (e.g. '/usr_abc/security')
   const setPage = (p, extra) => {
     let url = '/admin/' + p;
     if (typeof extra === 'string' && extra) {
@@ -127,8 +120,6 @@ export function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Fetch admin config to gate dev-only features.
-  // Defaults to null (unknown) until fetched; devMode gates render after first load.
   const [adminConfig, setAdminConfig] = React.useState(null);
   React.useEffect(() => {
     if (!apiKey) return;
@@ -139,15 +130,10 @@ export function App() {
   }, [apiKey]);
   const devMode = adminConfig?.dev_mode ?? false;
 
-  // First-login redirect: if the admin hasn't been onboarded yet AND there
-  // are zero users, route them to /admin/get-started automatically. We guard
-  // with a ref so the redirect fires at most once per session even if stats
-  // later return users=0 again (e.g. after a user is deleted).
   const redirectedRef = React.useRef(false);
   React.useEffect(() => {
     if (!apiKey || redirectedRef.current) return;
     if (sessionStorage.getItem('shark_admin_onboarded') === '1') return;
-    // Only auto-redirect from the default landing page; respect deep links.
     if (page !== 'overview') return;
     fetch('/api/v1/admin/stats', { headers: { Authorization: `Bearer ${apiKey}` } })
       .then(r => r.ok ? r.json() : null)
@@ -162,7 +148,6 @@ export function App() {
       .catch(() => {});
   }, [apiKey, page]);
 
-  // If user navigates to dev-inbox but dev_mode is known-false, redirect to overview.
   React.useEffect(() => {
     if (adminConfig !== null && !devMode && page === 'dev-inbox') {
       setPage('overview');
@@ -187,9 +172,9 @@ export function App() {
     rbac: RBAC,
     'dev-inbox': DevInbox,
     sso: SSO,
-    auth: Authentication,
+    auth: IdentityHub,
     signing: SigningKeys,
-    settings: Settings,
+    settings: SystemSettings,
     consents: Consents,
     tokens: Tokens,
     vault: Vault,
@@ -253,9 +238,6 @@ export function App() {
               <button className={!tweaks.showPreview ? 'on' : ''} onClick={() => setTweak('showPreview', false)}>Hidden</button>
               <button className={tweaks.showPreview ? 'on' : ''} onClick={() => setTweak('showPreview', true)}>Shown</button>
             </div>
-          </div>
-          <div className="faint" style={{ fontSize: 10.5, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--hairline)' }}>
-            Dark theme, B&W palette. Preview features show phase-gated pages that are not yet fully built.
           </div>
         </div>
       )}

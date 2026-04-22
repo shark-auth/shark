@@ -190,6 +190,19 @@ func (s *Server) handleHostedPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// LIVE PREVIEW OVERRIDES (Phase Wave E)
+	if q.Get("preview") == "true" {
+		if p := q.Get("primary"); p != "" {
+			brandInfo.PrimaryColor = p
+		}
+		if s := q.Get("secondary"); s != "" {
+			brandInfo.SecondaryColor = s
+		}
+		if f := q.Get("font"); f != "" {
+			brandInfo.FontFamily = f
+		}
+	}
+
 	cfg := hostedConfig{
 		App:            appInfo,
 		Branding:       brandInfo,

@@ -143,6 +143,15 @@ func (r *RBACManager) SeedDefaultRoles(ctx context.Context) error {
 
 // --- Org-scoped RBAC ---
 
+// IsOrgMember checks if a user is a member of the given organization.
+func (r *RBACManager) IsOrgMember(ctx context.Context, userID, orgID string) (bool, error) {
+	roles, err := r.store.GetOrgRolesByUserID(ctx, userID, orgID)
+	if err != nil {
+		return false, err
+	}
+	return len(roles) > 0, nil
+}
+
 // HasOrgPermission checks if a user has a specific (action, resource) permission
 // in the given org through any of their org roles. Wildcards are supported:
 // action="*" matches any action; resource="*" matches any resource.

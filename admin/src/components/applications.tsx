@@ -7,6 +7,7 @@ import { useToast } from './toast'
 import { usePageActions } from './useKeyboardShortcuts'
 import { TeachEmptyState } from './TeachEmptyState'
 import { useTabParam } from './useURLParams'
+import { ProxyWizard } from './proxy_wizard'
 
 // Applications page — OAuth/OIDC client registrations
 // Table view → slide-over detail → live consent-screen preview
@@ -18,27 +19,54 @@ const modalCard = { background:'var(--surface-1)', border:'1px solid var(--hairl
 const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: '0 0 8px' };
 
 export function Applications() {
-  const [selected, setSelected] = React.useState(null);
+  const [selectedId, setSelectedId] = React.useState(null);
   const [tab, setTab] = useTabParam('config');
-  const [filter, setFilter] = React.useState('all');
   const [query, setQuery] = React.useState('');
   const [rotateModal, setRotateModal] = React.useState(null);
   const [createOpen, setCreateOpen] = React.useState(false);
 
   const { data: appsRaw, loading, refresh } = useAPI('/admin/apps');
-  const apps = appsRaw?.applications || [];
+  const apps = appsRaw?.data || [];
 
+  // 1. Sync URL -> State on mount and when apps load
   React.useEffect(() => {
     const p = new URLSearchParams(window.location.search);
+    
+    // Handle "new" app flag
     if (p.get('new') === '1') {
       setCreateOpen(true);
       p.delete('new');
-      const s = p.toString();
-      window.history.replaceState(null, '', window.location.pathname + (s ? '?' + s : ''));
+      window.history.replaceState(null, '', window.location.pathname + '?' + p.toString());
     }
+
+    // Handle search query
     const s = p.get('search');
     if (s && !query) setQuery(s);
-  }, []);
+
+    // Initial selection from URL
+    const aid = p.get('id') || p.get('app_id');
+    if (aid && !selectedId) {
+       setSelectedId(aid);
+    }
+  }, [apps.length]); // only run once apps load initially
+
+  const selected = apps.find(a => a.id === selectedId || a.client_id === selectedId);
+
+  // 2. Sync State -> URL
+  React.useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (selectedId) {
+      if (p.get('id') !== selectedId) {
+        p.set('id', selectedId);
+        window.history.replaceState(null, '', window.location.pathname + '?' + p.toString());
+      }
+    } else {
+      if (p.has('id')) {
+        p.delete('id');
+        window.history.replaceState(null, '', window.location.pathname + '?' + p.toString());
+      }
+    }
+  }, [selectedId]);
 
   usePageActions({ onNew: () => setCreateOpen(true), onRefresh: refresh });
 
@@ -46,14 +74,6 @@ export function Applications() {
     if (query && !(a.name.toLowerCase().includes(query.toLowerCase()) || a.client_id.includes(query))) return false;
     return true;
   });
-
-  // Keep selected in sync after refresh
-  React.useEffect(() => {
-    if (selected) {
-      const fresh = apps.find(a => a.id === selected.id);
-      if (fresh) setSelected(fresh);
-    }
-  }, [apps]);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 560px' : '1fr', height: '100%', overflow: 'hidden' }}>
@@ -64,10 +84,9 @@ export function Applications() {
             <div style={{ flex: 1 }}>
               <h1 style={{ fontSize: 18, margin: 0, fontWeight: 600 }}>Applications</h1>
               <p className="faint" style={{ margin: '2px 0 0', fontSize: 11.5 }}>
-                OAuth/OIDC clients · {apps.length} registered
+                Identity mesh · {apps.length} registered
               </p>
             </div>
-            <button className="btn ghost"><Icon.Explorer width={11} height={11}/> Discovery</button>
             <button className="btn primary" onClick={() => setCreateOpen(true)}>
               <Icon.Plus width={11} height={11}/> New application
             </button>
@@ -91,16 +110,16 @@ export function Applications() {
 
         {/* Table */}
         <div style={{ flex: 1, overflow: 'auto' }}>
-          {loading ? (
+          {loading && apps.length === 0 ? (
             <div className="faint" style={{padding: 20, fontSize: 12}}>Loading applications…</div>
           ) : apps.length === 0 ? (
             <TeachEmptyState
               icon="App"
               title="No applications registered"
-              description="Applications are OAuth/OIDC clients (web apps, mobile, SPAs) that authenticate users via Shark."
+              description="Applications are deployment units (Gateway proxies or SDK-based apps) that use SharkAuth."
               createLabel="New Application"
               onCreate={() => setCreateOpen(true)}
-              cliSnippet="shark apps create --name 'My Web App'"
+              cliSnippet="shark apps create --name 'My Service'"
             />
           ) : filtered.length === 0 ? (
             <div className="faint" style={{padding: 40, fontSize: 12, textAlign: 'center'}}>
@@ -113,19 +132,18 @@ export function Applications() {
                   <th style={{...appThStyle, width: 28}}/>
                   <th style={appThStyle}>Name</th>
                   <th style={appThStyle}>Client ID</th>
-                  <th style={appThStyle}>Redirects</th>
-                  <th style={appThStyle}>CORS Origins</th>
+                  <th style={appThStyle}>Model</th>
+                  <th style={appThStyle}>Proxy Domain</th>
                   <th style={appThStyle}>Created</th>
-                  <th style={appThStyle}>Updated</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(a => (
                   <tr key={a.id}
-                    onClick={() => { setSelected(a); setTab('config'); }}
+                    onClick={() => setSelectedId(a.id)}
                     style={{
                       cursor:'pointer',
-                      background: selected?.id === a.id ? 'var(--surface-2)' : 'transparent',
+                      background: selectedId === a.id ? 'var(--surface-2)' : 'transparent',
                     }}>
                     <td style={appTdStyle}>
                       <div style={{
@@ -141,20 +159,17 @@ export function Applications() {
                       <span className="mono faint" style={{fontSize: 10.5}}>{a.client_id}</span>
                     </td>
                     <td style={appTdStyle}>
-                      <span className="mono faint" style={{fontSize: 10.5}}>
-                        {(a.redirect_uris || []).length} URI{(a.redirect_uris || []).length !== 1 && 's'}
+                      <span className={"chip sm " + (a.integration_mode === 'proxy' ? 'success' : 'ghost')}>
+                        {a.integration_mode === 'proxy' ? 'Proxy' : 'SDK'}
                       </span>
                     </td>
                     <td style={appTdStyle}>
-                      <span className="mono faint" style={{fontSize: 10.5}}>
-                        {(a.cors_origins || []).length} origin{(a.cors_origins || []).length !== 1 && 's'}
-                      </span>
+                      {a.proxy_public_domain ? (
+                        <span className="mono" style={{fontSize: 10.5}}>{a.proxy_public_domain}</span>
+                      ) : <span className="faint">—</span>}
                     </td>
                     <td style={appTdStyle}>
                       <span className="mono faint" style={{fontSize: 10.5}}>{relativeTime(a.created_at)}</span>
-                    </td>
-                    <td style={appTdStyle}>
-                      <span className="mono faint" style={{fontSize: 10.5}}>{relativeTime(a.updated_at)}</span>
                     </td>
                   </tr>
                 ))}
@@ -162,26 +177,17 @@ export function Applications() {
             </table>
           )}
         </div>
-
-        {/* CLI parity footer */}
-        <div className="row" style={{ padding: '8px 20px', borderTop: '1px solid var(--hairline)', fontSize: 10.5, gap: 10 }}>
-          <Icon.Debug width={11} height={11} style={{opacity:0.5}}/>
-          <span className="faint">CLI parity:</span>
-          <span className="mono faint">shark apps list</span>
-          <div style={{flex:1}}/>
-          <span className="faint mono">POST /admin/apps</span>
-        </div>
       </div>
 
       {selected && (
         <AppDetail
           app={selected}
           tab={tab} setTab={setTab}
-          onClose={() => setSelected(null)}
+          onClose={() => setSelectedId(null)}
           onRotate={() => setRotateModal(selected)}
           onDelete={async () => {
             await API.del('/admin/apps/' + selected.id);
-            setSelected(null);
+            setSelectedId(null);
             refresh();
           }}
           onUpdate={async (updates) => {
@@ -231,7 +237,6 @@ function relativeTime(val) {
 
 function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) {
   const [deleting, setDeleting] = React.useState(false);
-  const [deleteError, setDeleteError] = React.useState(null);
   const toast = useToast();
 
   const handleDelete = () => {
@@ -269,7 +274,6 @@ function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) 
         </div>
 
         <div className="row" style={{ gap: 6, marginTop: 10 }}>
-          <button className="btn ghost sm">Test sign-in</button>
           <button className="btn ghost sm" onClick={onRotate}>Rotate secret</button>
           <button className="btn danger sm" onClick={handleDelete} disabled={deleting}>
             {deleting ? 'Deleting…' : 'Delete'}
@@ -279,13 +283,13 @@ function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) 
             <span className="dot success"/>active
           </span>
         </div>
-        {deleteError && <div style={{color:'var(--danger)', fontSize: 11, marginTop: 6}}>{deleteError}</div>}
       </div>
 
       {/* Tabs */}
       <div className="row" style={{ borderBottom: '1px solid var(--hairline)', padding: '0 10px', gap: 2 }}>
         {[
           ['config', 'Config'],
+          ['rules', 'Proxy rules'],
           ['preview', 'Consent preview'],
           ['tokens', 'Tokens'],
           ['events', 'Events'],
@@ -302,6 +306,7 @@ function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) 
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {tab === 'config' && <AppConfig app={app} onUpdate={onUpdate}/>}
+        {tab === 'rules' && <AppProxyRules app={app}/>}
         {tab === 'preview' && <ConsentPreview app={app}/>}
         {tab === 'tokens' && <AppTokens app={app}/>}
         {tab === 'events' && <AppEvents app={app}/>}
@@ -316,10 +321,14 @@ function AppConfig({ app, onUpdate }) {
   const [saveError, setSaveError] = React.useState(null);
   const [saveOk, setSaveOk] = React.useState(false);
   const [redirectInput, setRedirectInput] = React.useState('');
-  const [corsInput, setCorsInput] = React.useState('');
+  
+  // Internal state for the form
+  const [mode, setMode] = React.useState(app.integration_mode === 'proxy' ? 'proxy' : 'sdk');
+  const [sdkSubMode, setSdkSubMode] = React.useState(app.integration_mode === 'proxy' ? 'hosted' : (app.integration_mode || 'custom'));
+  const [proxyPublicDomain, setProxyPublicDomain] = React.useState(app.proxy_public_domain || '');
+  const [proxyProtectedUrl, setProxyProtectedUrl] = React.useState(app.proxy_protected_url || '');
 
-  const redirectUris = app.redirect_uris || [];
-  const corsOrigins = app.cors_origins || [];
+  const redirectUris = app.allowed_callback_urls || [];
 
   const save = async (updates) => {
     setSaving(true);
@@ -337,72 +346,161 @@ function AppConfig({ app, onUpdate }) {
   };
 
   const removeRedirect = (uri) => {
-    save({ redirect_uris: redirectUris.filter(u => u !== uri) });
+    save({ allowed_callback_urls: redirectUris.filter(u => u !== uri) });
   };
 
   const addRedirect = () => {
     const val = redirectInput.trim();
     if (!val) return;
-    save({ redirect_uris: [...redirectUris, val] });
+    save({ allowed_callback_urls: [...redirectUris, val] });
     setRedirectInput('');
   };
 
-  const addCors = () => {
-    const val = corsInput.trim();
-    if (!val) return;
-    save({ cors_origins: [...corsOrigins, val] });
-    setCorsInput('');
+  const setIntegrationMode = (newMode) => {
+    setMode(newMode);
+    if (newMode === 'proxy') {
+      save({ integration_mode: 'proxy' });
+    } else {
+      save({ integration_mode: sdkSubMode });
+    }
+  };
+
+  const setSdkType = (type) => {
+    setSdkSubMode(type);
+    save({ integration_mode: type });
+  };
+
+  const saveProxy = () => {
+    save({
+      proxy_public_domain: proxyPublicDomain.trim(),
+      proxy_protected_url: proxyProtectedUrl.trim(),
+    });
   };
 
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {saveError && <div style={{color:'var(--danger)', fontSize: 11, padding: '6px 8px', background:'var(--surface-1)', borderRadius: 3}}>{saveError}</div>}
-      {saveOk && <div style={{color:'var(--success)', fontSize: 11}}>Saved.</div>}
-
-      <Section label="Redirect URIs" count={redirectUris.length}>
-        <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>
-          {redirectUris.map((uri, i) => (
-            <div key={i} className="row" style={{ padding: '7px 10px', gap: 8, borderBottom: i < redirectUris.length - 1 ? '1px solid var(--hairline)' : 0 }}>
-              <span className="mono" style={{ fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{uri}</span>
-              {uri.includes('localhost') && <span className="chip" style={{height:15, fontSize:9}}>dev</span>}
-              {uri.includes('*') && <span className="chip warn" style={{height:15, fontSize:9}}>wildcard</span>}
-              <button className="btn ghost icon sm" onClick={() => removeRedirect(uri)} disabled={saving}><Icon.X width={10} height={10}/></button>
-            </div>
-          ))}
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {saveError && <div style={{color:'var(--danger)', fontSize: 11, padding: '6px 8px', background:'var(--surface-1)', borderRadius: 3, border: '1px solid var(--danger)'}}>{saveError}</div>}
+      
+      <Section label="Deployment Model">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: 'var(--surface-1)', padding: 4, borderRadius: 6, border: '1px solid var(--hairline)' }}>
+          <button 
+            className={"btn sm " + (mode === 'proxy' ? 'primary' : 'ghost')}
+            onClick={() => setIntegrationMode('proxy')}
+            style={{ border: 0, fontWeight: mode === 'proxy' ? 600 : 400 }}
+          >
+            Proxy Gateway
+          </button>
+          <button 
+            className={"btn sm " + (mode === 'sdk' ? 'primary' : 'ghost')}
+            onClick={() => setIntegrationMode('sdk')}
+            style={{ border: 0, fontWeight: mode === 'sdk' ? 600 : 400 }}
+          >
+            SDK / Library
+          </button>
         </div>
-        <div className="row" style={{gap: 6, marginTop: 6}}>
-          <input
-            placeholder="https://…"
-            value={redirectInput}
-            onChange={e => setRedirectInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addRedirect()}
-            style={{flex:1, fontSize:11, padding:'4px 7px', border:'1px solid var(--hairline)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
-          />
-          <button className="btn ghost sm" onClick={addRedirect} disabled={saving || !redirectInput.trim()}><Icon.Plus width={10} height={10}/> Add</button>
+        <div className="faint" style={{ fontSize: 10.5, marginTop: 10, textAlign: 'center', minHeight: 14 }}>
+          {saving ? (
+             <span className="row" style={{ justifyContent: 'center', gap: 6 }}>
+               <Icon.Refresh width={10} style={{ animation: 'spin 800ms linear infinite' }}/> Saving deployment model…
+             </span>
+          ) : saveOk ? (
+             <span style={{ color: 'var(--success)' }}>✓ Deployment model updated</span>
+          ) : (
+            mode === 'proxy' 
+              ? "SharkAuth sits in front of your app. Zero code changes required." 
+              : "Your application code calls SharkAuth for authentication."
+          )}
         </div>
       </Section>
 
-      <Section label="Allowed origins (CORS)" count={corsOrigins.length}>
-        {corsOrigins.length ? (
-          <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>
-            {corsOrigins.map((o, i) => (
-              <div key={i} className="row" style={{ padding: '6px 10px', borderBottom: i < corsOrigins.length-1 ? '1px solid var(--hairline)' : 0 }}>
-                <span className="mono" style={{fontSize: 11, flex: 1}}>{o}</span>
+      {mode === 'proxy' ? (
+        <Section label="Proxy Settings">
+          <div style={{display:'flex', flexDirection:'column', gap: 12, background:'var(--surface-1)', padding: 16, borderRadius: 6, border:'1px solid var(--hairline)'}}>
+            <div className="col" style={{gap: 4}}>
+              <label style={{fontSize: 10.5, fontWeight: 500, color:'var(--fg-dim)'}}>Public Domain</label>
+              <input
+                placeholder="api.myapp.com"
+                value={proxyPublicDomain}
+                onChange={e => setProxyPublicDomain(e.target.value)}
+                className="mono"
+                style={{fontSize:11, padding:'6px 10px', border:'1px solid var(--hairline-strong)', borderRadius:4, background:'var(--surface-2)', color:'var(--fg)', outline:'none'}}
+              />
+              <div className="faint" style={{ fontSize: 9.5, marginTop: 2 }}>
+                Local testing: Set to <code style={{background:'var(--surface-3)', padding:'1px 4px', borderRadius:2}}>localhost:8080</code> or test via <code style={{background:'var(--surface-3)', padding:'1px 4px', borderRadius:2}}>curl -H "Host: {proxyPublicDomain || 'api.myapp.com'}" http://localhost:8080</code>
               </div>
-            ))}
+            </div>
+            <div className="col" style={{gap: 4}}>
+              <label style={{fontSize: 10.5, fontWeight: 500, color:'var(--fg-dim)'}}>Internal Protected URL</label>
+              <input
+                placeholder="http://localhost:3001"
+                value={proxyProtectedUrl}
+                onChange={e => setProxyProtectedUrl(e.target.value)}
+                className="mono"
+                style={{fontSize:11, padding:'6px 10px', border:'1px solid var(--hairline-strong)', borderRadius:4, background:'var(--surface-2)', color:'var(--fg)', outline:'none'}}
+              />
+            </div>
+            <div className="row" style={{marginTop: 4, justifyContent: 'space-between', alignItems: 'center'}}>
+              <button className="btn primary sm" onClick={saveProxy} disabled={saving || (proxyPublicDomain === app.proxy_public_domain && proxyProtectedUrl === app.proxy_protected_url)}>
+                {saving ? 'Updating…' : 'Update Proxy'}
+              </button>
+              {saveOk && <span style={{ color: 'var(--success)', fontSize: 11 }}>✓ Proxy settings saved</span>}
+            </div>
           </div>
-        ) : <div className="faint" style={{fontSize: 11.5, padding: '6px 0'}}>No origins — Authorization Code flow only.</div>}
-        <div className="row" style={{gap: 6, marginTop: 6}}>
-          <input
-            placeholder="https://…"
-            value={corsInput}
-            onChange={e => setCorsInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addCors()}
-            style={{flex:1, fontSize:11, padding:'4px 7px', border:'1px solid var(--hairline)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
-          />
-          <button className="btn ghost sm" onClick={addCors} disabled={saving || !corsInput.trim()}><Icon.Plus width={10} height={10}/> Add</button>
-        </div>
-      </Section>
+        </Section>
+      ) : (
+        <>
+          <Section label="SDK Integration Type">
+             <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+                <button className={"btn sm " + (sdkSubMode === 'hosted' ? 'solid' : 'ghost')} onClick={() => setSdkType('hosted')}>Hosted Pages</button>
+                <button className={"btn sm " + (sdkSubMode === 'components' ? 'solid' : 'ghost')} onClick={() => setSdkType('components')}>Components</button>
+                <button className={"btn sm " + (sdkSubMode === 'custom' ? 'solid' : 'ghost')} onClick={() => setSdkType('custom')}>Custom API</button>
+             </div>
+             <div className="faint" style={{ fontSize: 11, lineHeight: 1.4, minHeight: 30 }}>
+                {saving && sdkSubMode !== app.integration_mode ? (
+                   <span className="row" style={{ gap: 6 }}><Icon.Refresh width={10} style={{ animation: 'spin 800ms linear infinite' }}/> Updating type…</span>
+                ) : (
+                  <>
+                    {sdkSubMode === 'hosted' && "Use SharkAuth's pre-built login and user profile pages."}
+                    {sdkSubMode === 'components' && "Embed SharkAuth React/Vue components directly into your UI."}
+                    {sdkSubMode === 'custom' && "Build your own UI using the SharkAuth REST API."}
+                  </>
+                )}
+             </div>
+          </Section>
+
+          <Section label="SDK Credentials">
+             <div style={{ background: 'var(--surface-1)', padding: 12, borderRadius: 5, border: '1px solid var(--hairline)' }}>
+               <div className="faint" style={{ fontSize: 11, marginBottom: 8 }}>Client ID</div>
+               <CopyField value={app.client_id}/>
+               <div className="faint" style={{ fontSize: 11, marginTop: 12, marginBottom: 4 }}>Secret Prefix</div>
+               <span className="mono" style={{ fontSize: 12 }}>{app.client_secret_prefix}********</span>
+             </div>
+          </Section>
+
+          <Section label="OAuth Redirect URIs" count={redirectUris.length}>
+            <div style={{ border: '1px solid var(--hairline)', borderRadius: 4, background: 'var(--surface-1)', overflow: 'hidden' }}>
+              {redirectUris.length === 0 ? (
+                <div style={{ padding: '12px', fontSize: 11, color: 'var(--fg-dim)', textAlign: 'center' }}>No redirect URIs configured.</div>
+              ) : redirectUris.map((uri, i) => (
+                <div key={i} className="row" style={{ padding: '7px 10px', gap: 8, borderBottom: i < redirectUris.length - 1 ? '1px solid var(--hairline)' : 0 }}>
+                  <span className="mono" style={{ fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{uri}</span>
+                  <button className="btn ghost icon sm" onClick={() => removeRedirect(uri)} disabled={saving}><Icon.X width={10} height={10}/></button>
+                </div>
+              ))}
+            </div>
+            <div className="row" style={{gap: 6, marginTop: 8}}>
+              <input
+                placeholder="https://…"
+                value={redirectInput}
+                onChange={e => setRedirectInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addRedirect()}
+                style={{flex:1, fontSize:11, padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:4, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
+              />
+              <button className="btn ghost sm" onClick={addRedirect} disabled={saving || !redirectInput.trim()}><Icon.Plus width={10} height={10}/> Add</button>
+            </div>
+          </Section>
+        </>
+      )}
 
       <Section label="Metadata">
         <div style={{display:'grid', gridTemplateColumns:'auto 1fr', gap:'8px 14px', fontSize: 11.5}}>
@@ -410,10 +508,9 @@ function AppConfig({ app, onUpdate }) {
           <span className="mono">{app.id}</span>
           <span className="faint">Created</span>
           <span className="mono">{relativeTime(app.created_at)}</span>
-          <span className="faint">Last updated</span>
-          <span className="mono">{relativeTime(app.updated_at)}</span>
         </div>
       </Section>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -424,12 +521,9 @@ function ConsentPreview({ app }) {
     { scope: 'profile', desc: 'Read your name and profile picture' },
     { scope: 'email', desc: 'Read your primary email address' },
   ];
-  const redirectUris = app.redirect_uris || [];
+  const redirectUris = app.allowed_callback_urls || [];
   return (
     <div style={{ padding: 16 }}>
-      <div className="faint" style={{fontSize: 11, marginBottom: 10}}>
-        This is what users see when {app.name} requests authorization:
-      </div>
       <div style={{
         background: '#fff', color: '#0a0a0a',
         borderRadius: 10, padding: 24,
@@ -470,10 +564,6 @@ function ConsentPreview({ app }) {
           Redirects to <span style={{fontFamily:'var(--font-mono)'}}>{redirectUris[0] || '(no redirect URIs)'}</span>
         </div>
       </div>
-
-      <div className="faint" style={{fontSize: 11, marginTop: 14, padding: 10, background: 'var(--surface-1)', borderRadius: 2}}>
-        <b style={{color:'var(--fg)'}}>Tip:</b> consent is skipped on subsequent grants unless new scopes are requested. Test with <span className="mono">?prompt=consent</span>.
-      </div>
     </div>
   );
 }
@@ -494,7 +584,7 @@ function SevDot({ sev }) {
 }
 
 function AppEvents({ app }) {
-  const { data, loading } = useAPI('/audit-logs?limit=20');
+  const { data, loading } = useAPI('/admin/audit-logs?limit=20');
   const events = (data?.data || []).filter(e => e.action && (e.action.startsWith('app.') || e.action.startsWith('oauth.'))).slice(0, 10);
   return (
     <div style={{padding: 16}}>
@@ -581,6 +671,8 @@ function CreateAppSlideOver({ onClose, onCreate }) {
   const [name, setName] = React.useState('');
   const [redirectUris, setRedirectUris] = React.useState('');
   const [corsOrigins, setCorsOrigins] = React.useState('');
+  const [proxyPublicDomain, setProxyPublicDomain] = React.useState('');
+  const [proxyProtectedUrl, setProxyProtectedUrl] = React.useState('');
   const [creating, setCreating] = React.useState(false);
   const [error, setError] = React.useState(null);
   const [created, setCreated] = React.useState(null); // holds response with secret
@@ -592,8 +684,10 @@ function CreateAppSlideOver({ onClose, onCreate }) {
     try {
       const payload = {
         name: name.trim(),
-        redirect_uris: redirectUris.split('\n').map(s => s.trim()).filter(Boolean),
-        cors_origins: corsOrigins.split('\n').map(s => s.trim()).filter(Boolean),
+        allowed_callback_urls: redirectUris.split('\n').map(s => s.trim()).filter(Boolean),
+        allowed_origins: corsOrigins.split('\n').map(s => s.trim()).filter(Boolean),
+        proxy_public_domain: proxyPublicDomain.trim(),
+        proxy_protected_url: proxyProtectedUrl.trim(),
       };
       const result = await onCreate(payload);
       setCreated(result);
@@ -653,22 +747,40 @@ function CreateAppSlideOver({ onClose, onCreate }) {
                   style={{width:'100%', boxSizing:'border-box', fontSize:12, padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
                 />
               </div>
+
+              <div style={{padding:'12px 0', borderTop:HAIRLINE, borderBottom:HAIRLINE, display:'flex', flexDirection:'column', gap: 12}}>
+                <div style={{fontSize: 11, fontWeight: 600, textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--fg-muted)'}}>Proxy Mode (Codeless Auth)</div>
+                <div>
+                  <label style={{display:'block', fontSize: 11, fontWeight: 500, marginBottom: 4, color:'var(--fg-dim)'}}>Public Domain</label>
+                  <input
+                    value={proxyPublicDomain}
+                    onChange={e => setProxyPublicDomain(e.target.value)}
+                    placeholder="api.myapp.com"
+                    className="mono"
+                    style={{width:'100%', boxSizing:'border-box', fontSize:11.5, padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
+                  />
+                  <div className="faint" style={{ fontSize: 9.5, marginTop: 4 }}>
+                    Local testing: Set to <code style={{background:'var(--surface-2)', padding:'1px 4px', borderRadius:2}}>localhost:8080</code> or test via <code style={{background:'var(--surface-2)', padding:'1px 4px', borderRadius:2}}>curl -H "Host: {proxyPublicDomain || 'api.myapp.com'}" http://localhost:8080</code>
+                  </div>
+                </div>
+                <div>
+                  <label style={{display:'block', fontSize: 11, fontWeight: 500, marginBottom: 4, color:'var(--fg-dim)'}}>Protected Internal URL</label>
+                  <input
+                    value={proxyProtectedUrl}
+                    onChange={e => setProxyProtectedUrl(e.target.value)}
+                    placeholder="http://localhost:3001"
+                    className="mono"
+                    style={{width:'100%', boxSizing:'border-box', fontSize:11.5, padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
+                  />
+                </div>
+              </div>
+
               <div>
-                <label style={{display:'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4}}>Redirect URIs <span className="faint">(one per line)</span></label>
+                <label style={{display:'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4}}>OAuth Redirect URIs <span className="faint">(one per line)</span></label>
                 <textarea
                   value={redirectUris}
                   onChange={e => setRedirectUris(e.target.value)}
-                  placeholder={"https://app.example.com/callback\nhttps://localhost:3000/callback"}
-                  rows={4}
-                  style={{width:'100%', boxSizing:'border-box', fontSize:11.5, fontFamily:'var(--font-mono)', padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none', resize:'vertical'}}
-                />
-              </div>
-              <div>
-                <label style={{display:'block', fontSize: 11.5, fontWeight: 500, marginBottom: 4}}>CORS origins <span className="faint">(one per line, optional)</span></label>
-                <textarea
-                  value={corsOrigins}
-                  onChange={e => setCorsOrigins(e.target.value)}
-                  placeholder="https://app.example.com"
+                  placeholder={"https://app.example.com/callback"}
                   rows={3}
                   style={{width:'100%', boxSizing:'border-box', fontSize:11.5, fontFamily:'var(--font-mono)', padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:3, background:'var(--surface-1)', color:'var(--fg)', outline:'none', resize:'vertical'}}
                 />
@@ -695,6 +807,8 @@ function CreateAppSlideOver({ onClose, onCreate }) {
   );
 }
 
+const HAIRLINE = '1px solid var(--hairline)';
+
 function Section({ label, count, children }) {
   return (
     <div>
@@ -707,3 +821,85 @@ function Section({ label, count, children }) {
   );
 }
 
+function AppProxyRules({ app }) {
+  const { data, loading, refresh } = useAPI('/admin/proxy/rules/db?app_id=' + app.id, [app.id]);
+  const rules = data?.data || [];
+  const [creating, setCreating] = React.useState(false);
+
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this rule?')) return;
+    try {
+      await API.del('/admin/proxy/rules/db/' + id);
+      refresh();
+    } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div className="row" style={{ marginBottom: 12, gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <h4 style={{ ...sectionLabelStyle, margin: 0 }}>DB-backed route rules</h4>
+          <p className="faint" style={{ fontSize: 11, marginTop: 4 }}>
+            Rules for {app.proxy_public_domain || 'this app'} ordered by priority.
+          </p>
+        </div>
+        <button className="btn primary sm" onClick={() => setCreating(true)}>
+          <Icon.Plus width={11} height={11}/> Add rule
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="faint" style={{ fontSize: 11 }}>Loading rules…</div>
+      ) : rules.length === 0 ? (
+        <div style={{ padding: 32, textAlign: 'center', border: HAIRLINE, borderRadius: 5, background: 'var(--surface-1)' }}>
+          <div className="muted" style={{ fontSize: 13 }}>No custom rules for this app.</div>
+        </div>
+      ) : (
+        <div style={{ border: HAIRLINE, borderRadius: 5, overflow: 'hidden', background: 'var(--surface-1)' }}>
+          <table className="tbl" style={{ width: '100%', fontSize: 11.5 }}>
+            <thead>
+              <tr style={{ background: 'var(--surface-2)' }}>
+                <th style={{ padding: '6px 10px', textAlign: 'left' }}>Pattern</th>
+                <th style={{ padding: '6px 10px', textAlign: 'left' }}>Policy</th>
+                <th style={{ padding: '6px 10px', width: 40 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map(r => (
+                <tr key={r.id} style={{ borderTop: HAIRLINE }}>
+                  <td style={{ padding: '8px 10px' }}>
+                    <div className="mono" style={{ fontWeight: 500 }}>{r.pattern}</div>
+                    <div className="faint" style={{ fontSize: 10, marginTop: 2 }}>
+                      {r.methods?.length > 0 ? r.methods.join(', ') : 'ANY'}
+                    </div>
+                  </td>
+                  <td style={{ padding: '8px 10px' }}>
+                    <span className={"chip " + (r.require ? 'solid' : 'ghost')} style={{ height: 18, fontSize: 10 }}>
+                      {r.require || r.allow}
+                    </span>
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                    <button className="btn ghost icon sm" onClick={() => handleDelete(r.id)}>
+                      <Icon.X width={10} height={10}/>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {creating && (
+        <div style={modalBackdrop} onClick={() => setCreating(false)}>
+          <div style={{ width: 500 }} onClick={e => e.stopPropagation()}>
+            <ProxyWizard 
+              appId={app.id} 
+              onComplete={() => { setCreating(false); refresh(); }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

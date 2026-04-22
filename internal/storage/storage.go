@@ -233,6 +233,7 @@ type Store interface {
 	GetApplicationByID(ctx context.Context, id string) (*Application, error)
 	GetApplicationByClientID(ctx context.Context, clientID string) (*Application, error)
 	GetApplicationBySlug(ctx context.Context, slug string) (*Application, error)
+	GetApplicationByProxyDomain(ctx context.Context, domain string) (*Application, error)
 	GetDefaultApplication(ctx context.Context) (*Application, error)
 	ListApplications(ctx context.Context, limit, offset int) ([]*Application, error)
 	UpdateApplication(ctx context.Context, app *Application) error
@@ -349,6 +350,7 @@ type Store interface {
 	CreateProxyRule(ctx context.Context, rule *ProxyRule) error
 	GetProxyRuleByID(ctx context.Context, id string) (*ProxyRule, error)
 	ListProxyRules(ctx context.Context) ([]*ProxyRule, error)
+	ListProxyRulesByAppID(ctx context.Context, appID string) ([]*ProxyRule, error)
 	UpdateProxyRule(ctx context.Context, rule *ProxyRule) error
 	DeleteProxyRule(ctx context.Context, id string) error
 }
@@ -593,6 +595,7 @@ const (
 	WebhookEventOrgCreated     = "organization.created"
 	WebhookEventOrgDeleted     = "organization.deleted"
 	WebhookEventOrgMemberAdded = "organization.member_added"
+	WebhookEventSystemAuditLog = "system.audit_log"
 	WebhookEventTest           = "webhook.test"
 )
 
@@ -772,6 +775,12 @@ type Application struct {
 	// requests: "hosted" or "custom_url". Defaults to "hosted".
 	ProxyLoginFallback    string    `json:"proxy_login_fallback,omitempty"`
 	ProxyLoginFallbackURL string    `json:"proxy_login_fallback_url,omitempty"`
+
+	// ProxyPublicDomain is the external domain for transparent proxying (e.g. "api.myapp.com").
+	ProxyPublicDomain string `json:"proxy_public_domain,omitempty"`
+	// ProxyProtectedURL is the internal destination for transparent proxying (e.g. "http://localhost:3001").
+	ProxyProtectedURL string `json:"proxy_protected_url,omitempty"`
+
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }

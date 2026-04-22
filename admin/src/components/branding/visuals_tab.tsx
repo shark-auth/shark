@@ -341,29 +341,33 @@ export function BrandingVisualsTab() {
       </div>
 
       {/* ── Right: live preview ────────────────────────────────────── */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div
-          style={{
-            fontSize: 10,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--fg-dim)',
-          }}
-        >
-          Live preview — magic link email
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--hairline)', gap: 10 }}>
+           <button className="btn sm ghost" style={{ borderBottom: '2px solid var(--accent)', borderRadius: 0 }}>Login Page</button>
+           <button className="btn sm ghost" style={{ borderRadius: 0 }}>Magic Link Email</button>
         </div>
-        <iframe
-          title="Magic link email preview"
-          srcDoc={previewHTML}
-          sandbox=""
-          style={{
-            width: '100%',
-            height: 600,
-            border: '1px solid var(--hairline)',
-            borderRadius: 'var(--radius)',
-            background: '#fff',
-          }}
-        />
+
+        <div style={{ flex: 1, position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, pointerEvents: 'none' }}>
+            <span className="chip agent sm">LIVE PREVIEW</span>
+          </div>
+          
+          <iframe
+            title="Hosted Login Preview"
+            src={`/hosted/default/login?preview=true&primary=${encodeURIComponent(draft.primary_color)}&secondary=${encodeURIComponent(draft.secondary_color)}&font=${encodeURIComponent(draft.font_family)}`}
+            style={{
+              width: '100%',
+              height: 600,
+              border: '1px solid var(--hairline)',
+              borderRadius: 'var(--radius)',
+              background: '#fff',
+            }}
+          />
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--fg-dim)', textAlign: 'center' }}>
+          Real-time preview of your <b>Hosted Login Page</b>. Changes are applied via query params before saving.
+        </div>
       </div>
     </div>
   )

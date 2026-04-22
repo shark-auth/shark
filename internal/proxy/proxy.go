@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -36,14 +37,30 @@ func IdentityFromContext(ctx context.Context) (Identity, bool) {
 // caller-supplied data.
 const HeaderDenyReason = "X-Shark-Deny-Reason"
 
+// ResolvedApp is the result of a dynamic host lookup.
+type ResolvedApp struct {
+	ID              string
+	Slug            string
+	IntegrationMode string
+	UpstreamURL     *url.URL
+	Engine          *Engine // compiled rules for this specific application
+}
+
+// AppResolver is the interface for mapping a request Host to an upstream target.
+type AppResolver interface {
+	ResolveApp(ctx context.Context, host string) (*ResolvedApp, error)
+}
+
 // ReverseProxy is SharkAuth's reverse proxy. It wraps net/http/httputil's
 // ReverseProxy with identity header injection, panic recovery, and
 // sensible defaults for upstream timeouts. Construct instances with New.
 type ReverseProxy struct {
 	cfg      Config
-	upstream *url.URL
+	issuer   string   // base URL of SharkAuth for redirects
+	upstream *url.URL // static fallback or main upstream
+	resolver AppResolver
 	backend  *httputil.ReverseProxy
-	engine   *Engine
+	engine   *Engine // static fallback or main engine
 	logger   *slog.Logger
 }
 
@@ -105,6 +122,17 @@ func New(cfg Config, engine *Engine, logger *slog.Logger) (*ReverseProxy, error)
 	return p, nil
 }
 
+// SetIssuer sets the base URL used for redirects to the hosted login page.
+func (p *ReverseProxy) SetIssuer(issuer string) {
+	p.issuer = issuer
+}
+
+// SetResolver installs a dynamic application resolver. If set, the proxy
+// will prioritize host-based resolution over its static upstream.
+func (p *ReverseProxy) SetResolver(res AppResolver) {
+	p.resolver = res
+}
+
 // ServeHTTP implements http.Handler. It:
 //  1. recovers from panics and replies 503 so a buggy handler or
 //     transport never takes down the server;
@@ -141,12 +169,23 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		id = Identity{AuthMethod: "anonymous"}
 	}
 
-	// Route-level authorization. nil engine = passthrough (legacy P1
-	// behavior preserved so existing tests and disabled-rules deployments
-	// keep working). On deny, write the response here and return — the
-	// upstream must never be contacted.
-	if p.engine != nil {
-		decision := p.engine.Evaluate(r, id)
+	// Dynamic Resolution (W15 Transparent Mode)
+	var resolved *ResolvedApp
+	if p.resolver != nil {
+		app, err := p.resolver.ResolveApp(r.Context(), r.Host)
+		if err == nil && app != nil {
+			resolved = app
+		}
+	}
+
+	// Route-level authorization.
+	engine := p.engine
+	if resolved != nil && resolved.Engine != nil {
+		engine = resolved.Engine
+	}
+
+	if engine != nil {
+		decision := engine.Evaluate(r, id)
 		if !decision.Allow {
 			p.logger.Info("proxy denied",
 				"path", r.URL.Path,
@@ -154,17 +193,33 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"reason", decision.Reason,
 				"user_id", id.UserID,
 				"agent_id", id.AgentID,
+				"host", r.Host,
 			)
-			w.Header().Set(HeaderDenyReason, decision.Reason)
-			// W15b: unauthenticated callers get 401 — the spec semantics
-			// ("send credentials to proceed"). 403 is reserved for
-			// authenticated-but-unauthorized (authenticated caller missing
-			// a role, scope, or permission the rule demands).
-			status := http.StatusForbidden
+
+			// Porter Logic: Browser Redirect vs API 401/403
 			if isAnonymous(id) {
-				status = http.StatusUnauthorized
+				// We only redirect if the app is in "proxy" mode AND it's a browser.
+				// (Implicit: Codeless gateway = integration_mode:"proxy")
+				isProxyMode := resolved != nil && resolved.IntegrationMode == "proxy"
+				if isProxyMode && isBrowser(r) && p.issuer != "" {
+					slug := "default"
+					if resolved != nil && resolved.Slug != "" {
+						slug = resolved.Slug
+					}
+					loginURL := fmt.Sprintf("%s/hosted/%s/login?return_to=%s",
+						p.issuer, slug, url.QueryEscape(fullURL(r)))
+					http.Redirect(w, r, loginURL, http.StatusFound)
+					return
+				}
+
+				w.Header().Set(HeaderDenyReason, decision.Reason)
+				http.Error(w, "unauthorized: "+decision.Reason, http.StatusUnauthorized)
+				return
 			}
-			http.Error(w, statusText(status)+": "+decision.Reason, status)
+
+			// Authenticated but forbidden (missing role/scope)
+			w.Header().Set(HeaderDenyReason, decision.Reason)
+			http.Error(w, "forbidden: "+decision.Reason, http.StatusForbidden)
 			return
 		}
 	}
@@ -181,22 +236,51 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
+	// If resolved, stash it in context for the director
+	if resolved != nil {
+		ctx = context.WithValue(ctx, resolvedAppCtxKey{}, resolved)
+	}
+
 	p.backend.ServeHTTP(w, r.WithContext(ctx))
 }
+
+// isBrowser heuristically checks if the request is likely from a web browser
+// by looking for "text/html" in the Accept header.
+func isBrowser(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	return strings.Contains(accept, "text/html")
+}
+
+// fullURL reconstructs the full inbound URL for the return_to parameter.
+func fullURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.String())
+}
+
+type resolvedAppCtxKey struct{}
 
 // director rewrites the outbound request's Scheme/Host to target the
 // configured upstream while preserving the inbound Path and RawQuery.
 // It is called by httputil.ReverseProxy on every request.
 func (p *ReverseProxy) director(req *http.Request) {
-	if p.upstream == nil {
-		// Should be impossible once Validate has been called on a cfg
-		// with Enabled=true; defensive so a mis-wired disabled proxy
-		// doesn't panic.
+	target := p.upstream
+
+	// Priority 1: Dynamic resolved app from context
+	if res, ok := req.Context().Value(resolvedAppCtxKey{}).(*ResolvedApp); ok && res.UpstreamURL != nil {
+		target = res.UpstreamURL
+	}
+
+	if target == nil {
+		// No static upstream and resolution failed/missing.
 		return
 	}
-	req.URL.Scheme = p.upstream.Scheme
-	req.URL.Host = p.upstream.Host
-	req.Host = p.upstream.Host
+
+	req.URL.Scheme = target.Scheme
+	req.URL.Host = target.Host
+	req.Host = target.Host
 	// httputil.ReverseProxy's default director also sets User-Agent if
 	// missing; replicate that behavior so our custom director doesn't
 	// regress header handling.
