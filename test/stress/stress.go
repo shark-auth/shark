@@ -40,7 +40,8 @@ type Summary struct {
 	DurationSec  float64 `json:"duration_sec"`
 	Concurrency  int     `json:"concurrency"`
 	TotalReqs    int64   `json:"total_requests"`
-	FiveXXCount  int64   `json:"5xx_count"`
+	FiveXXCount       int64   `json:"5xx_count"`
+	NetworkErrorCount int64   `json:"network_error_count"`
 	ThroughputRPS float64 `json:"throughput_rps"`
 	P50MS        float64 `json:"p50_ms"`
 	P95MS        float64 `json:"p95_ms"`
@@ -61,10 +62,11 @@ func main() {
 	endpoints := buildEndpoints(*base, *adminToken, *clientID, *clientSecret)
 
 	var (
-		totalReqs   int64
-		fiveXXCount int64
-		mu          sync.Mutex
-		latencies   []float64
+		totalReqs    int64
+		fiveXXCount  int64
+		netErrCount  int64
+		mu           sync.Mutex
+		latencies    []float64
 	)
 
 	stop := make(chan struct{})
@@ -98,7 +100,9 @@ func main() {
 				latMS := float64(time.Since(t0).Microseconds()) / 1000.0
 
 				atomic.AddInt64(&totalReqs, 1)
-				if status >= 500 {
+				if status == 0 {
+					atomic.AddInt64(&netErrCount, 1)
+				} else if status >= 500 {
 					atomic.AddInt64(&fiveXXCount, 1)
 				}
 
@@ -121,18 +125,22 @@ func main() {
 	tput := float64(totalReqs) / elapsed
 
 	summary := Summary{
-		DurationSec:   elapsed,
-		Concurrency:   *concurrency,
-		TotalReqs:     totalReqs,
-		FiveXXCount:   fiveXXCount,
-		ThroughputRPS: tput,
-		P50MS:         p50,
-		P95MS:         p95,
-		P99MS:         p99,
+		DurationSec:       elapsed,
+		Concurrency:       *concurrency,
+		TotalReqs:         totalReqs,
+		FiveXXCount:       fiveXXCount,
+		NetworkErrorCount: netErrCount,
+		ThroughputRPS:     tput,
+		P50MS:             p50,
+		P95MS:             p95,
+		P99MS:             p99,
 	}
 
 	// --- Assertions ---
 	var failures []string
+	if netErrCount != 0 {
+		failures = append(failures, fmt.Sprintf("network errors = %d (want 0)", netErrCount))
+	}
 	if fiveXXCount != 0 {
 		failures = append(failures, fmt.Sprintf("5xx count = %d (want 0)", fiveXXCount))
 	}
