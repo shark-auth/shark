@@ -30,6 +30,14 @@ type Config struct {
 	Audit       AuditConfig       `koanf:"audit"`
 	OAuthServer OAuthServerConfig `koanf:"oauth_server"`
 	Proxy       ProxyConfig       `koanf:"proxy"`
+	Telemetry   TelemetryConfig   `koanf:"telemetry"`
+}
+
+// TelemetryConfig holds anonymous install-ping settings. Opt-out via
+// `telemetry.enabled: false` or SHARKAUTH_TELEMETRY__ENABLED=false.
+type TelemetryConfig struct {
+	Enabled  bool   `koanf:"enabled"`
+	Endpoint string `koanf:"endpoint"`
 }
 
 // ProxyConfig holds reverse-proxy settings consumed by internal/proxy. Koanf
@@ -467,6 +475,10 @@ func Load(path string) (*Config, error) {
 		"auth.jwt.refresh_token_ttl":         "30d",
 		"auth.jwt.clock_skew":                "30s",
 		"auth.jwt.revocation.check_per_request": false,
+		// Telemetry defaults: opt-out anonymous install ping. See
+		// internal/telemetry/ping.go for the exact payload shape.
+		"telemetry.enabled":  true,
+		"telemetry.endpoint": "https://telemetry.shark-auth.com/v1/ping",
 		// OAuth server defaults
 		"oauth_server.enabled":                true,
 		"oauth_server.signing_algorithm":      "ES256",

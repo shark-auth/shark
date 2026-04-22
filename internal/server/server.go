@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -24,6 +25,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/proxy"
 	"github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/sharkauth/sharkauth/internal/telemetry"
 	"github.com/sharkauth/sharkauth/internal/webhook"
 )
 
@@ -368,6 +370,15 @@ func Serve(ctx context.Context, opts Options) error {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// Kick off the anonymous install ping loop. No-op when telemetry.enabled
+	// is false. 24h cadence with 30s initial delay so startup never blocks.
+	telemetry.StartPingLoop(ctx, telemetry.Config{
+		Enabled:       b.Config.Telemetry.Enabled,
+		Endpoint:      b.Config.Telemetry.Endpoint,
+		Version:       resolveBuildVersion(),
+		InstallIDPath: filepath.Join(filepath.Dir(b.Config.Storage.Path), "install_id"),
+	}, slog.Default())
+
 	// W15: start each proxy listener BEFORE the main server so a port-
 	// in-use failure is surfaced synchronously as a fatal startup error.
 	// Partial bind is never acceptable — if any listener can't bind, the
@@ -421,6 +432,16 @@ func Serve(ctx context.Context, opts Options) error {
 		}
 		return nil
 	}
+}
+
+// resolveBuildVersion returns the module version if embedded via `go install`
+// or ldflags -X, falling back to "dev". Separate from the cobra `version` var
+// to avoid importing cmd/ from internal/.
+func resolveBuildVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
 }
 
 func bootstrapAdminKey(ctx context.Context, store *storage.SQLiteStore) (string, error) {

@@ -34,3 +34,11 @@ proxy:
     # Everything else = authed
     - path: /*
       require: authenticated
+
+# Telemetry — anonymous install ping so we can measure launch reach.
+# Payload: {install_id (random UUID, generated first boot), version,
+# os, arch, uptime_s, started_at, go_version}. No user data, no counts,
+# no IPs. Opt out by setting enabled: false.
+telemetry:
+  enabled: true
+  endpoint: "https://telemetry.shark-auth.com/v1/ping"
