@@ -40,6 +40,7 @@ node_modules/
 dashboard/build/
 dashboard/.svelte-kit/
 sdk/dist/
+packages/*/dist/
 
 # Test
 coverage.out
