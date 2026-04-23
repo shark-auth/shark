@@ -87,7 +87,7 @@ function AuditExport() {
   const download = async () => {
     setLoading(true);
     try {
-      const key = sessionStorage.getItem('shark_admin_key');
+      const key = localStorage.getItem('shark_admin_key');
       const fromISO = new Date(since + 'T00:00:00Z').toISOString();
       const toISO = new Date(until + 'T23:59:59Z').toISOString();
       const res = await fetch(`/api/v1/audit-logs/export`, {

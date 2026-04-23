@@ -1,6 +1,6 @@
 server:
   port: 8080
-  secret: e8bf0dba70d19c83dda9342eea70a53c532c675dc0083c702b813ef46ebdfecb
+  secret: 22d1eec299490549e4ae8c16df9d885e1348dcf16a68629679073199d692690b
   base_url: http://localhost:8080
   cors_origins: []
 storage:
@@ -15,7 +15,7 @@ auth:
     salt_length: 16
     key_length: 32
   jwt:
-    enabled: false
+    enabled: true
     mode: session
     issuer: ""
     audience: shark
@@ -46,9 +46,9 @@ smtp:
   from_name: SharkAuth
 email:
   provider: resend
-  api_key: re_aLGeEFpR_HjvFa8MAvwuqHpv5HwzgQe5D
+  api_key: http://localhost:8080/admin/overview
   from: raul@mail.buildersmty.com.mx
-  from_name: SharkAuth
+  from_name: BuildMancer
   host: ""
   port: 0
   username: ""
@@ -101,7 +101,12 @@ proxy:
   timeout_seconds: 0
   trusted_headers: []
   strip_incoming: null
-  rules: []
+  rules:
+    - path: /*
+      methods: []
+      require: authenticated
+      allow: ""
+      scopes: []
   listeners:
     - bind: ""
       upstream: http://localhost:3000
@@ -109,7 +114,12 @@ proxy:
       trusted_headers: []
       strip_incoming: null
       timeout_seconds: 0
-      rules: []
+      rules:
+        - path: /*
+          methods: []
+          require: authenticated
+          allow: ""
+          scopes: []
 telemetry:
   enabled: true
   endpoint: https://telemetry.shark-auth.com/v1/ping

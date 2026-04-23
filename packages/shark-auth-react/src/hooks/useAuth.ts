@@ -7,6 +7,7 @@ export function useAuth() {
   return {
     isLoaded: ctx.isLoaded,
     isAuthenticated: ctx.isAuthenticated,
+    getToken: ctx.getToken,
     signOut: ctx.signOut,
   }
 }

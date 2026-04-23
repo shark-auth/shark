@@ -3,6 +3,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"embed"
 	"errors"
@@ -10,11 +11,15 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/mattn/go-isatty"
 
 	"github.com/sharkauth/sharkauth/internal/api"
 	"github.com/sharkauth/sharkauth/internal/auth"
@@ -131,6 +136,16 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	if opts.ProxyUpstream != "" {
 		cfg.Proxy.Enabled = true
 		cfg.Proxy.Upstream = opts.ProxyUpstream
+		// If no rules are defined, provide a sensible default for the demo path:
+		// allow authenticated users for everything.
+		if len(cfg.Proxy.Rules) == 0 {
+			cfg.Proxy.Rules = []config.ProxyRule{
+				{
+					Path:    "/*",
+					Require: "authenticated",
+				},
+			}
+		}
 		// Drop any pre-existing listener set — the CLI flag is the
 		// single source of truth for the demo path, and Resolve() below
 		// will re-synthesise a single implicit main-port listener.
@@ -341,13 +356,6 @@ func buildProxyListeners(cfg *config.Config, apiSrv *api.Server) ([]*proxy.Liste
 		if err != nil {
 			return nil, fmt.Errorf("listeners[%d]: %w", i, err)
 		}
-		// Wire auth middleware using the listener's own breaker so a dead
-		// upstream on one listener can't tank sessions on another. Using
-		// the SetAuthWrap setter avoids a second NewListener call (which
-		// would recompile rules and allocate a second Breaker).
-		if err := l.SetAuthWrap(apiSrv.ProxyAuthMiddlewareFor(l.Breaker())); err != nil {
-			return nil, fmt.Errorf("listeners[%d]: %w", i, err)
-		}
 		out = append(out, l)
 	}
 	return out, nil
@@ -371,7 +379,24 @@ func Serve(ctx context.Context, opts Options) error {
 	if tok, err := b.API.MintBootstrapToken(ctx); err != nil {
 		slog.Warn("bootstrap token: mint failed", "err", err)
 	} else if tok != "" {
-		printBootstrapURL(b.Config.Server.Port, tok)
+		url := fmt.Sprintf("http://localhost:%d/admin/?bootstrap=%s", b.Config.Server.Port, tok)
+		printBootstrapURL(url)
+
+		// DX: First-time boot prompt. Only if 0 users and stdout is a TTY.
+		if isatty.IsTerminal(os.Stdout.Fd()) {
+			userCount, _ := b.Store.CountUsers(ctx)
+			if userCount == 0 {
+				fmt.Printf("  [?] No users detected. Open Dashboard to finish setup? [Y/n]: ")
+				reader := bufio.NewReader(os.Stdin)
+				answer, _ := reader.ReadString('\n')
+				answer = strings.ToLower(strings.TrimSpace(answer))
+				if answer == "" || answer == "y" || answer == "yes" {
+					if err := openBrowser(url); err != nil {
+						slog.Warn("failed to open browser", "err", err)
+					}
+				}
+			}
+		}
 	}
 
 	addr := fmt.Sprintf(":%d", b.Config.Server.Port)
@@ -544,8 +569,27 @@ func printAdminKey(key string) {
 // printBootstrapURL prints a clickable dashboard URL that auto-logs-in via
 // the T15 bootstrap token. Only called when no admin has ever acted on this
 // install. The token is single-use and expires in 10 minutes.
-func printBootstrapURL(port int, token string) {
+func printBootstrapURL(url string) {
 	fmt.Println()
-	fmt.Printf("  Open http://localhost:%d/admin/?bootstrap=%s  (expires in 10 minutes)\n", port, token)
+	fmt.Printf("  Open %s  (expires in 10 minutes)\n", url)
 	fmt.Println()
+}
+
+func openBrowser(url string) error {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "rundll32"
+		args = []string{"url.dll,FileProtocolHandler", url}
+	case "darwin":
+		cmd = "open"
+		args = []string{url}
+	default: // linux, freebsd, etc
+		cmd = "xdg-open"
+		args = []string{url}
+	}
+
+	return exec.Command(cmd, args...).Start()
 }

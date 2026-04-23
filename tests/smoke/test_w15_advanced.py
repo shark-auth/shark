@@ -99,11 +99,15 @@ def test_w15_multi_listener_isolation(toy_upstreams, tmp_path):
     with open(cfg_path, "w") as f:
         yaml.dump(cfg, f)
         
-    proc = subprocess.Popen([BIN_PATH, "serve", "--dev", "--config", cfg_path], 
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    with open("w15_server.log", "w") as log:
+        proc = subprocess.Popen([BIN_PATH, "serve", "--dev", "--config", cfg_path], 
+                                stdout=log, stderr=log)
     
     try:
-        assert wait_for_port(p_admin)
+        if not wait_for_port(p_admin):
+            if os.path.exists("w15_server.log"):
+                print(f"DEBUG: w15_server.log content:\n{open('w15_server.log').read()}")
+            pytest.fail(f"Server failed to start on port {p_admin}")
         assert wait_for_port(p_proxy_a)
         assert wait_for_port(p_proxy_b)
         

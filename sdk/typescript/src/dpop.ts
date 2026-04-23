@@ -177,10 +177,15 @@ export class DPoPProver {
    * @throws {@link DPoPError} if `method` or `url` is empty.
    */
   async createProof(opts: CreateProofOptions): Promise<string> {
-    const { method, url, nonce, accessToken, iat, jti } = opts;
+    const { method, nonce, accessToken, iat, jti } = opts;
+    let { url } = opts;
 
     if (!method) throw new DPoPError("method is required");
     if (!url) throw new DPoPError("url is required");
+
+    // RFC 9449 §4.2: The HTU claim MUST NOT contain any query or fragment.
+    if (url.includes("?")) url = url.split("?")[0]!;
+    if (url.includes("#")) url = url.split("#")[0]!;
 
     const claims: Record<string, unknown> = {
       jti: jti ?? _randomJti(),

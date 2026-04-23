@@ -107,7 +107,7 @@ func (s *Server) handleRevokeMySession(w http.ResponseWriter, r *http.Request) {
 		"session_id": sessID, "user_id": userID, "revoked_by": "user",
 	})
 
-	writeJSON(w, http.StatusOK, map[string]string{"message": "Session revoked"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Admin /admin/sessions ---
@@ -191,7 +191,7 @@ func (s *Server) handleAdminDeleteSession(w http.ResponseWriter, r *http.Request
 		"session_id": sessID, "user_id": sess.UserID, "revoked_by": "admin",
 	})
 
-	writeJSON(w, http.StatusOK, map[string]string{"message": "Session revoked"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Per-user session endpoints (admin scope) ---

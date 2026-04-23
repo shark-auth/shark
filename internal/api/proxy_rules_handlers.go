@@ -126,11 +126,6 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AppID == "" {
-		writeJSON(w, http.StatusBadRequest, errPayload("invalid_proxy_rule", "app_id is required"))
-		return
-	}
-
 	if err := validateProxyRulePayload(req.Name, req.Pattern, req.Methods, req.Require, req.Allow); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_proxy_rule", err.Error()))
 		return

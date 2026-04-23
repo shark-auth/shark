@@ -64,28 +64,48 @@ export interface TokenResponse {
   expires_at?: number
 }
 
-export async function exchangeCodeForToken(
-  code: string,
+export interface ExchangeOptions {
+  code?: string
+  refreshToken?: string
+  dpopProof?: string
+}
+
+export async function exchangeToken(
   authUrl: string,
   publishableKey: string,
+  opts: ExchangeOptions,
 ): Promise<TokenResponse> {
-  const verifier = getCodeVerifier()
-  if (!verifier) throw new Error('No code verifier found in storage')
-
   const base = authUrl.replace(/\/$/, '')
   const callbackUri = `${typeof window !== 'undefined' ? window.location.origin : ''}/shark/callback`
 
   const body = new URLSearchParams({
-    grant_type: 'authorization_code',
-    code,
-    code_verifier: verifier,
     client_id: publishableKey,
-    redirect_uri: callbackUri,
   })
+
+  if (opts.code) {
+    const verifier = getCodeVerifier()
+    if (!verifier) throw new Error('No code verifier found in storage')
+    body.set('grant_type', 'authorization_code')
+    body.set('code', opts.code)
+    body.set('code_verifier', verifier)
+    body.set('redirect_uri', callbackUri)
+  } else if (opts.refreshToken) {
+    body.set('grant_type', 'refresh_token')
+    body.set('refresh_token', opts.refreshToken)
+  } else {
+    throw new Error('Either code or refreshToken is required')
+  }
+
+  const headers = new Headers({
+    'Content-Type': 'application/x-www-form-urlencoded',
+  })
+  if (opts.dpopProof) {
+    headers.set('DPoP', opts.dpopProof)
+  }
 
   const resp = await fetch(`${base}/oauth/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers,
     body: body.toString(),
   })
 
@@ -99,6 +119,16 @@ export async function exchangeCodeForToken(
     ? data.expires_at * 1000
     : Date.now() + (data.expires_in ?? 3600) * 1000
 
-  setAccessToken(data.access_token, expiresAt)
+  setAccessToken(data.access_token, expiresAt, data.refresh_token)
   return data
 }
+
+/** @deprecated Use exchangeToken */
+export async function exchangeCodeForToken(
+  code: string,
+  authUrl: string,
+  publishableKey: string,
+): Promise<TokenResponse> {
+  return exchangeToken(authUrl, publishableKey, { code })
+}
+

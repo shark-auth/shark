@@ -47,15 +47,21 @@ def test_password_change(admin_client):
     # 1. Signup
     resp = requests.post(f"{BASE_URL}/api/v1/auth/signup", json={"email": email, "password": old_pw})
     assert resp.status_code in [200, 201], f"Signup failed: {resp.text}"
-    
-    # 2. Login
+    user_id = resp.json()["id"]
+
+    # 2. Verify via Admin API (required for password change)
+    resp = admin_client.patch(f"{BASE_URL}/api/v1/users/{user_id}", json={"email_verified": True})
+    assert resp.status_code == 200
+
+    # 3. Login
     sess = requests.Session()
     sess.post(f"{BASE_URL}/api/v1/auth/login", json={"email": email, "password": old_pw})
 
-    # 3. Change password multiple times to verify state
+    # 4. Change password multiple times to verify state
     for i in range(2):
         resp = sess.post(f"{BASE_URL}/api/v1/auth/password/change", json={
              "current_password": old_pw, "new_password": new_pw
         })
         assert resp.status_code == 200, f"Password change failed: {resp.text}"
-        old_pw, new_pw = new_pw, f"New{random.randint(1000, 9999)}!"
+        old_pw, new_pw = new_pw, old_pw # swap for next iteration
+

@@ -173,19 +173,38 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var resolved *ResolvedApp
 	if p.resolver != nil {
 		app, err := p.resolver.ResolveApp(r.Context(), r.Host)
-		if err == nil && app != nil {
+		if err != nil {
+			p.logger.Error("proxy resolution error", "host", r.Host, "err", err)
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if app != nil {
 			resolved = app
 		}
 	}
 
 	// Route-level authorization.
 	engine := p.engine
-	if resolved != nil && resolved.Engine != nil {
-		engine = resolved.Engine
+	if resolved != nil {
+		if resolved.Engine != nil {
+			engine = resolved.Engine
+		}
+		// In transparent mode, if the AppID header is missing, inject it so
+		// Engine.Evaluate can match rules scoped to this application.
+		if r.Header.Get("X-Shark-App-ID") == "" {
+			r.Header.Set("X-Shark-App-ID", resolved.ID)
+		}
 	}
 
 	if engine != nil {
 		decision := engine.Evaluate(r, id)
+
+		// If no rule matched in the (possibly app-specific) engine, fall back
+		// to the global engine if we're currently using an app-specific one.
+		if decision.MatchedRule == nil && resolved != nil && resolved.Engine != nil && p.engine != nil {
+			decision = p.engine.Evaluate(r, id)
+		}
+
 		if !decision.Allow {
 			p.logger.Info("proxy denied",
 				"path", r.URL.Path,
@@ -245,6 +264,18 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx = context.WithValue(ctx, resolvedAppCtxKey{}, resolved)
 	}
 
+	// Clear SharkAuth-specific security headers set by the global middleware
+	// so they don't interfere with the upstream application. If the upstream
+	// wants these headers, it will set them itself.
+	h := w.Header()
+	h.Del("Content-Security-Policy")
+	h.Del("X-Frame-Options")
+	h.Del("X-Content-Type-Options")
+	h.Del("Referrer-Policy")
+	h.Del("X-XSS-Protection")
+	h.Del("Permissions-Policy")
+	h.Del("Strict-Transport-Security")
+
 	p.backend.ServeHTTP(w, r.WithContext(ctx))
 }
 
@@ -293,13 +324,32 @@ func (p *ReverseProxy) director(req *http.Request) {
 
 	req.URL.Scheme = target.Scheme
 	req.URL.Host = target.Host
-	req.Host = target.Host
+
+	// Preserve and join the path from the upstream URL with the request path.
+	// This ensures that if upstream is http://localhost:8080/prefix, a request
+	// for /foo becomes /prefix/foo.
+	if target.Path != "" {
+		req.URL.Path = singleJoiningSlash(target.Path, req.URL.Path)
+	}
+
 	// httputil.ReverseProxy's default director also sets User-Agent if
 	// missing; replicate that behavior so our custom director doesn't
 	// regress header handling.
 	if _, ok := req.Header["User-Agent"]; !ok {
 		req.Header.Set("User-Agent", "")
 	}
+}
+
+func singleJoiningSlash(a, b string) string {
+	aslash := strings.HasSuffix(a, "/")
+	bslash := strings.HasPrefix(b, "/")
+	switch {
+	case aslash && bslash:
+		return a + b[1:]
+	case !aslash && !bslash:
+		return a + "/" + b
+	}
+	return a + b
 }
 
 // onUpstreamError is the ErrorHandler given to httputil.ReverseProxy. It

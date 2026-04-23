@@ -22,13 +22,19 @@ export type {
 export { VaultClient } from "./vault.js";
 export type { VaultToken, VaultClientOptions } from "./vault.js";
 
-export { decodeAgentToken } from "./tokens.js";
+export { SharkClient } from "./sharkClient.js";
+export type { SharkClientOptions } from "./sharkClient.js";
+
+export { exchangeToken } from "./exchange.js";
 export type {
   AgentTokenClaims,
   ActorClaim,
   ConfirmationClaim,
   AuthorizationDetail,
 } from "./tokens.js";
+
+export { exchangeToken } from "./exchange.js";
+export type { TokenExchangeOptions } from "./exchange.js";
 
 export {
   SharkAuthError,

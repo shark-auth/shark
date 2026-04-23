@@ -1,12 +1,8 @@
-# Binary (built binaries in repo root only — don't shadow cmd/shark/ source tree)
+# Binary
 /shark.exe
 /shark
 /sharkauth.exe
 /sharkauth
-sharkauth_old.yaml
-gosec_results.json
-config.json
-shark-auth
 
 # Database
 data/
@@ -20,6 +16,8 @@ sharkauth.local.yaml
 # Planning / workflow artifacts
 .planning/
 .claude/
+.agent/
+*.pen
 
 # IDE
 .idea/
@@ -41,6 +39,7 @@ dashboard/build/
 dashboard/.svelte-kit/
 sdk/dist/
 packages/*/dist/
+admin/dist/
 
 # Test
 coverage.out
@@ -51,17 +50,14 @@ cookies.txt
 server.log
 *.log
 resp.json
-cj*.txt
-sharkauth.yaml
-smoke.sh
-debug_admin.sh
+failure_report.txt
 
 # Build artifacts
 *.tsbuildinfo
 shark-*.exe
 shark-stripped
 
-# Smoke test scratch / helper scripts
+# Smoke test scratch
 scratch/
 
 # Docker
@@ -72,13 +68,3 @@ scratch/
 .env.*
 !.env.example
 .gstack/
-
-# superpowers brainstorm session dirs
-.superpowers/
-bin/
-
-# dev artifacts
-dev.db
-dev.db-*
-server.log
-failure_report.txt

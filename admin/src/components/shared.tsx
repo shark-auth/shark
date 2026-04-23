@@ -41,6 +41,7 @@ export const Icon = {
   Plus: (p) => <svg viewBox="0 0 16 16" fill="none" {...p}><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,
   Bell: (p) => <svg viewBox="0 0 16 16" fill="none" {...p}><path d="M4 6.5a4 4 0 018 0c0 3 1.5 4 1.5 4h-11s1.5-1 1.5-4z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   ChevronDown: (p) => <svg viewBox="0 0 16 16" fill="none" {...p}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  ChevronLeft: (p) => <svg viewBox="0 0 16 16" fill="none" {...p}><path d="M10 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   ChevronRight: (p) => <svg viewBox="0 0 16 16" fill="none" {...p}><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   ArrowUp: (p) => <svg viewBox="0 0 16 16" fill="none" {...p}><path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   ArrowDown: (p) => <svg viewBox="0 0 16 16" fill="none" {...p}><path d="M8 3v10M4 9l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,

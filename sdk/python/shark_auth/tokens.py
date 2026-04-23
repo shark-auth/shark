@@ -10,7 +10,12 @@ import jwt
 from jwt import PyJWKClient, PyJWKSet
 
 from . import _http
+from .device_flow import TokenResponse
+from .dpop import DPoPProver
 from .errors import TokenError
+
+TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
+ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 
 
 @dataclass
@@ -161,3 +166,95 @@ def decode_agent_token(
         authorization_details=claims.get("authorization_details"),
         raw=claims,
     )
+
+
+def exchange_token(
+    auth_url: str,
+    client_id: str,
+    subject_token: str,
+    *,
+    client_secret: Optional[str] = None,
+    subject_token_type: str = ACCESS_TOKEN_TYPE,
+    actor_token: Optional[str] = None,
+    actor_token_type: str = ACCESS_TOKEN_TYPE,
+    scope: Optional[str] = None,
+    requested_token_type: str = ACCESS_TOKEN_TYPE,
+    dpop_prover: Optional[DPoPProver] = None,
+    token_path: str = "/oauth/token",
+    session: Optional[object] = None,
+) -> TokenResponse:
+    """Perform an RFC 8693 Token Exchange.
+
+    This enables \"Act On Behalf Of\" delegation chains. An agent can exchange
+    a user's token (the subject) for a new token that identifies the agent
+    as the actor acting on that user's behalf.
+
+    Parameters
+    ----------
+    auth_url
+        Base URL of the SharkAuth server.
+    client_id
+        OAuth 2.0 client ID of the acting agent.
+    subject_token
+        The token representing the identity being acted upon.
+    client_secret
+        Optional client secret for confidential clients.
+    subject_token_type
+        Type of subject token. Default: access_token.
+    actor_token
+        Optional token representing the actor's own identity.
+    actor_token_type
+        Type of actor token. Default: access_token.
+    scope
+        Optional space-delimited scope string for the new token.
+    requested_token_type
+        Type of token requested. Default: access_token.
+    dpop_prover
+        Optional DPoPProver for generating a DPoP-bound token.
+    token_path
+        Override token endpoint path. Default: /oauth/token.
+    """
+    token_url = auth_url.rstrip("/") + token_path
+    sess = session or _http.new_session()
+
+    data = {
+        "grant_type": TOKEN_EXCHANGE_GRANT,
+        "client_id": client_id,
+        "subject_token": subject_token,
+        "subject_token_type": subject_token_type,
+        "requested_token_type": requested_token_type,
+    }
+
+    if client_secret:
+        data["client_secret"] = client_secret
+    if actor_token:
+        data["actor_token"] = actor_token
+        data["actor_token_type"] = actor_token_type
+    if scope:
+        data["scope"] = scope
+
+    headers = {}
+    if dpop_prover:
+        headers["DPoP"] = dpop_prover.make_proof("POST", token_url)
+
+    resp = _http.request(sess, "POST", token_url, data=data, headers=headers)
+
+    try:
+        payload = resp.json()
+    except ValueError:
+        raise TokenError(
+            f"token endpoint returned non-JSON: HTTP {resp.status_code}: {resp.text[:200]}"
+        )
+
+    if resp.status_code == 200:
+        return TokenResponse(
+            access_token=payload["access_token"],
+            token_type=payload.get("token_type", "Bearer"),
+            expires_in=payload.get("expires_in"),
+            refresh_token=payload.get("refresh_token"),
+            scope=payload.get("scope"),
+        )
+
+    err = payload.get("error", "unknown")
+    desc = payload.get("error_description", "")
+    raise TokenError(f"token exchange failed: {err} (HTTP {resp.status_code}): {desc}")

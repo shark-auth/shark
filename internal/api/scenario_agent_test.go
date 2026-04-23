@@ -40,7 +40,10 @@ func TestScenario_AutonomousArchivist(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(dcrResp.ClientID, dcrResp.ClientSecret)
 
-	resp = ts.Client.Do(req)
+	resp, err := ts.Client.Do(req)
+	if err != nil {
+		t.Fatalf("Do request failed: %v", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Token request failed: %d", resp.StatusCode)
 	}
@@ -93,7 +96,10 @@ func TestScenario_SwarmOrchestrator(t *testing.T) {
 	req, _ := http.NewRequest("POST", ts.URL("/oauth/token"), strings.NewReader(data.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(manager.ClientID, manager.ClientSecret)
-	resp := ts.Client.Do(req)
+	resp, err := ts.Client.Do(req)
+	if err != nil {
+		t.Fatalf("Do request failed: %v", err)
+	}
 	var managerToken struct {
 		AccessToken string `json:"access_token"`
 	}
@@ -112,7 +118,10 @@ func TestScenario_SwarmOrchestrator(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(worker.ClientID, worker.ClientSecret)
 
-	resp = ts.Client.Do(req)
+	resp, err = ts.Client.Do(req)
+	if err != nil {
+		t.Fatalf("Do request failed: %v", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		var errResp map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errResp)

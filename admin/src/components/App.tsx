@@ -28,6 +28,7 @@ import { CompliancePage } from './compliance'
 import { FlowBuilder } from './flow_builder'
 import { Proxy } from './proxy_config'
 import { GetStarted } from './get_started'
+import { Walkthrough } from './Walkthrough'
 import { useKeyboardShortcuts, KeyboardCheatsheet } from './useKeyboardShortcuts'
 import { CommandPalette } from './CommandPalette'
 import { HelpButton } from './HelpButton'
@@ -113,6 +114,13 @@ export function App() {
 
   const { cheatsheetOpen, setCheatsheetOpen } = useKeyboardShortcuts(setPage);
   const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (localStorage.getItem('shark_admin_onboarded') === '1' && !localStorage.getItem('shark_walkthrough_seen')) {
+      setWalkthroughOpen(true);
+    }
+  }, [page]);
 
   React.useEffect(() => {
     const handler = (e) => {
@@ -135,7 +143,7 @@ export function App() {
   const redirectedRef = React.useRef(false);
   React.useEffect(() => {
     if (!apiKey || redirectedRef.current) return;
-    if (sessionStorage.getItem('shark_admin_onboarded') === '1') return;
+    if (localStorage.getItem('shark_admin_onboarded') === '1') return;
     if (page !== 'overview') return;
     fetch('/api/v1/admin/stats', { headers: { Authorization: `Bearer ${apiKey}` } })
       .then(r => r.ok ? r.json() : null)
@@ -211,6 +219,12 @@ export function App() {
       {cheatsheetOpen && <KeyboardCheatsheet onClose={() => setCheatsheetOpen(false)}/>}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} setPage={setPage}/>
       <HelpButton/>
+      {walkthroughOpen && (
+        <Walkthrough onComplete={() => {
+          localStorage.setItem('shark_walkthrough_seen', '1');
+          setWalkthroughOpen(false);
+        }}/>
+      )}
 
       {tweaksOpen && (
         <div className="tweaks-panel">

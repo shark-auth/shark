@@ -27,7 +27,7 @@ importers:
         specifier: ^18.3.0
         version: 18.3.28
       '@types/react-dom':
-        specifier: ^18.3.0
+        specifier: ^18.3.7
         version: 18.3.7(@types/react@18.3.28)
       '@vitejs/plugin-react':
         specifier: ^4.3.0

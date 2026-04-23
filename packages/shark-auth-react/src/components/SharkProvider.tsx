@@ -1,13 +1,16 @@
 import React from 'react'
 import { createClient } from '../core/client'
-import { getAccessToken, clearAll } from '../core/storage'
+import { getAccessToken, getRefreshToken, clearAll } from '../core/storage'
 import { decodeClaims } from '../core/jwt'
-import { AuthContext } from '../hooks/context'
+import { exchangeToken } from '../core/auth'
+import { generateDPoPProver, type DPoPProver } from '../core/dpop'
+import { AuthContext, type GetTokenOptions, type GetTokenResult } from '../hooks/context'
 import type { User, Session, Organization } from '../core/types'
 
 export interface SharkProviderProps {
   publishableKey: string
   authUrl: string
+  dpop?: boolean
   children: React.ReactNode
 }
 
@@ -19,7 +22,7 @@ interface AuthState {
   organization: Organization | null
 }
 
-export function SharkProvider({ publishableKey, authUrl, children }: SharkProviderProps) {
+export function SharkProvider({ publishableKey, authUrl, dpop, children }: SharkProviderProps) {
   const [state, setState] = React.useState<AuthState>({
     isLoaded: false,
     isAuthenticated: false,
@@ -28,9 +31,58 @@ export function SharkProvider({ publishableKey, authUrl, children }: SharkProvid
     organization: null,
   })
 
+  const [prover, setProver] = React.useState<DPoPProver | null>(null)
+
+  React.useEffect(() => {
+    if (dpop && !prover) {
+      generateDPoPProver().then(setProver)
+    }
+  }, [dpop, prover])
+
   const client = React.useMemo(
     () => createClient(authUrl, publishableKey),
     [authUrl, publishableKey],
+  )
+
+  const getToken = React.useCallback(async (opts?: GetTokenOptions): Promise<string | GetTokenResult | null> => {
+    let token = getAccessToken()
+
+    // Auto-refresh logic
+    if (!token) {
+      const rt = getRefreshToken()
+      if (rt) {
+        try {
+          let dpopProof: string | undefined
+          if (prover && opts?.dpop) {
+            dpopProof = await prover.createProof('POST', `${authUrl}/oauth/token`)
+          }
+
+          const resp = await exchangeToken(authUrl, publishableKey, {
+            refreshToken: rt,
+            dpopProof,
+          })
+          token = resp.access_token
+        } catch {
+          clearAll()
+          setState(s => ({ ...s, isAuthenticated: false, user: null, session: null, organization: null }))
+          return null
+        }
+      }
+    }
+
+    if (!token) return null
+
+    if (opts?.dpop) {
+      if (!prover) throw new Error('DPoP is not enabled on SharkProvider')
+      if (!opts.method || !opts.url) throw new Error('method and url are required for DPoP tokens')
+
+      const proof = await prover.createProof(opts.method, opts.url, token)
+      return { token, dpop: proof }
+    }
+
+    return token
+  }, [authUrl, publishableKey, prover])
+
   )
 
   React.useEffect(() => {
@@ -115,8 +167,8 @@ export function SharkProvider({ publishableKey, authUrl, children }: SharkProvid
   }, [client])
 
   const value = React.useMemo(
-    () => ({ ...state, client, signOut, authUrl, publishableKey }),
-    [state, client, signOut, authUrl, publishableKey],
+    () => ({ ...state, client, getToken, signOut, authUrl, publishableKey }),
+    [state, client, getToken, signOut, authUrl, publishableKey],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

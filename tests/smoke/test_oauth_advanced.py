@@ -37,8 +37,10 @@ def test_refresh_token_rotation_and_reuse(admin_client, auth_session):
     agent = admin_client.post(f"{BASE_URL}/api/v1/agents", json={
         "name": "rt-rotation",
         "grant_types": ["authorization_code", "refresh_token"],
-        "scopes": ["openid", "offline_access"]
+        "scopes": ["openid", "offline_access"],
+        "redirect_uris": ["http://localhost:9999/callback"]
     }).json()
+    print(f"DEBUG: Agent response: {agent}")
     cid, secret = agent["client_id"], agent["client_secret"]
 
     # 2. Complete Code Flow to get RT
@@ -48,7 +50,7 @@ def test_refresh_token_rotation_and_reuse(admin_client, auth_session):
         "response_type": "code",
         "client_id": cid,
         "redirect_uri": "http://localhost:9999/callback",
-        "state": "s",
+        "state": "state12345",
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "scope": "openid offline_access"
@@ -56,11 +58,15 @@ def test_refresh_token_rotation_and_reuse(admin_client, auth_session):
     
     resp = auth_session.get(f"{BASE_URL}/oauth/authorize", params=qs_params, allow_redirects=False)
     if resp.status_code == 200: 
-        resp = auth_session.post(f"{BASE_URL}/oauth/authorize", data={
-            "client_id": cid, "state": "s", "approved": "true", "scope": "openid offline_access"
+        # Include original params in POST URL to satisfy synthetic request reconstruction
+        import urllib.parse
+        qs = urllib.parse.urlencode(qs_params)
+        resp = auth_session.post(f"{BASE_URL}/oauth/authorize?{qs}", data={
+            "client_id": cid, "state": "state12345", "approved": "true", "scope": "openid offline_access"
         }, allow_redirects=False)
     
     assert "Location" in resp.headers, f"Expected redirect, got {resp.status_code}: {resp.text}"
+    print(f"DEBUG: Location header: {resp.headers['Location']}")
     code = requests.utils.urlparse(resp.headers["Location"]).query.split("code=")[1].split("&")[0]
     
     # 3. Exchange for RT

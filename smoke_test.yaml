@@ -1,0 +1,14 @@
+auth:
+  jwt:
+    audience: shark-smoke
+    enabled: true
+    issuer: http://localhost:8080
+    mode: session
+proxy:
+  enabled: true
+  upstream: http://localhost:8080
+server:
+  base_url: http://localhost:8080
+  secret: change-me-this-secret-is-not-secure-at-all-abc123456789
+storage:
+  path: dev.db

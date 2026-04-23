@@ -67,6 +67,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		ClientType    string         `json:"client_type"`
 		AuthMethod    string         `json:"auth_method"`
 		RedirectURIs  []string       `json:"redirect_uris"`
+		AllowedCallbackURLs []string `json:"allowed_callback_urls"` // Alias for RedirectURIs
 		GrantTypes    []string       `json:"grant_types"`
 		ResponseTypes []string       `json:"response_types"`
 		Scopes        []string       `json:"scopes"`
@@ -117,6 +118,9 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	redirectURIs := req.RedirectURIs
 	if redirectURIs == nil {
 		redirectURIs = []string{}
+	}
+	if len(req.AllowedCallbackURLs) > 0 {
+		redirectURIs = append(redirectURIs, req.AllowedCallbackURLs...)
 	}
 	grantTypes := req.GrantTypes
 	if grantTypes == nil {
@@ -246,6 +250,7 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		Name          *string         `json:"name"`
 		Description   *string         `json:"description"`
 		RedirectURIs  *[]string       `json:"redirect_uris"`
+		AllowedCallbackURLs *[]string `json:"allowed_callback_urls"` // Alias for RedirectURIs
 		GrantTypes    *[]string       `json:"grant_types"`
 		Scopes        *[]string       `json:"scopes"`
 		TokenLifetime *int            `json:"token_lifetime"`
@@ -267,6 +272,9 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.RedirectURIs != nil {
 		agent.RedirectURIs = *req.RedirectURIs
+	}
+	if req.AllowedCallbackURLs != nil {
+		agent.RedirectURIs = append(agent.RedirectURIs, *req.AllowedCallbackURLs...)
 	}
 	if req.GrantTypes != nil {
 		agent.GrantTypes = *req.GrantTypes

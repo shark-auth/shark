@@ -7,7 +7,7 @@ import { useAPI } from './api'
 function useProxyConfigured() {
   const [configured, setConfigured] = React.useState(null); // null = unknown
   React.useEffect(() => {
-    const key = sessionStorage.getItem('shark_admin_key');
+    const key = localStorage.getItem('shark_admin_key');
     if (!key) return;
     let cancelled = false;
     fetch('/api/v1/admin/proxy/status', { headers: { Authorization: 'Bearer ' + key } })
@@ -67,7 +67,7 @@ function useRealtimeActivity() {
   const [retryCount, setRetryCount] = React.useState(0);
 
   React.useEffect(() => {
-    const key = sessionStorage.getItem('shark_admin_key');
+    const key = localStorage.getItem('shark_admin_key');
     if (!key) return;
 
     let timer = null;
@@ -115,7 +115,7 @@ export function Overview({ setPage } = {}) {
   const { data: statsRaw, loading: statsLoading } = useAPI('/admin/stats');
   const proxyConfigured = useProxyConfigured();
   const [heroHidden, setHeroHidden] = React.useState(
-    () => sessionStorage.getItem('shark_hide_hero') === '1'
+    () => localStorage.getItem('shark_hide_hero') === '1'
   );
   const usersZero = (statsRaw?.users?.total ?? null) === 0;
   const showHero = !heroHidden && usersZero && proxyConfigured === false;
@@ -130,7 +130,7 @@ export function Overview({ setPage } = {}) {
   };
   
   const dismissHero = () => {
-    try { sessionStorage.setItem('shark_hide_hero', '1'); } catch {}
+    try { localStorage.setItem('shark_hide_hero', '1'); } catch {}
     setHeroHidden(true);
   };
 

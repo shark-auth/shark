@@ -81,7 +81,7 @@ export function Audit() {
     if (!nextCursor) return;
     setLoadingMore(true);
     try {
-      const key = sessionStorage.getItem('shark_admin_key');
+      const key = localStorage.getItem('shark_admin_key');
       const url = `/api/v1${apiPath}&cursor=${encodeURIComponent(nextCursor)}`;
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${key}` } });
       if (res.ok) {
@@ -183,7 +183,7 @@ export function Audit() {
     if (!exportFrom || !exportTo) { setExportErr('Both dates are required.'); return; }
     setExporting(true);
     try {
-      const key = sessionStorage.getItem('shark_admin_key');
+      const key = localStorage.getItem('shark_admin_key');
       const res = await fetch('/api/v1/audit-logs/export', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },

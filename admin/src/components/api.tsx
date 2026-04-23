@@ -17,7 +17,7 @@ export const API = {
     if (body && method !== 'GET') opts.body = JSON.stringify(body);
     const res = await fetch(`/api/v1${path}`, opts);
     if (res.status === 401) {
-      if (path.startsWith('/admin/') || path.startsWith('/api-keys') || path.startsWith('/users') || path.startsWith('/roles') || path.startsWith('/audit-logs')) {
+      if (path.startsWith('/admin/') || path.startsWith('/agents') || path.startsWith('/api-keys') || path.startsWith('/users') || path.startsWith('/roles') || path.startsWith('/audit-logs')) {
         localStorage.removeItem('shark_admin_key');
         window.dispatchEvent(new Event('shark-auth-expired'));
       }

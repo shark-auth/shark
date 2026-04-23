@@ -19,6 +19,7 @@ import (
 
 // adminHealthResponse is the response shape for GET /admin/health.
 type adminHealthResponse struct {
+	Status         string            `json:"status"`
 	Version        string            `json:"version"`
 	UptimeSeconds  int64             `json:"uptime_seconds"`
 	DB             healthDBSection   `json:"db"`
@@ -67,6 +68,7 @@ type adminConfigSummary struct {
 	SSOConnectionsCount int      `json:"sso_connections_count"`
 	OAuthProviders      []string `json:"oauth_providers"`
 
+	Server   adminServerConfig  `json:"server"`
 	Auth     adminAuthConfig    `json:"auth"`
 	Passkey  adminPasskeyConfig `json:"passkey"`
 	Email    adminEmailConfig   `json:"email"`
@@ -75,6 +77,13 @@ type adminConfigSummary struct {
 	MagicLink adminMagicLinkConfig `json:"magic_link"`
 	PasswordReset adminPasswordResetConfig `json:"password_reset"`
 	Social   adminSocialConfig  `json:"social"`
+}
+
+type adminServerConfig struct {
+	Port        int      `json:"port"`
+	BaseURL     string   `json:"base_url"`
+	CORSOrigins []string `json:"cors_origins"`
+	DevMode     bool     `json:"dev_mode"`
 }
 
 type adminPasswordResetConfig struct {
@@ -212,6 +221,12 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 		SSOConnectionsCount: ssoCount,
 		OAuthProviders:      providers,
 
+		Server: adminServerConfig{
+			Port:        cfg.Server.Port,
+			BaseURL:     cfg.Server.BaseURL,
+			CORSOrigins: cors,
+			DevMode:     cfg.Server.DevMode,
+		},
 		Auth: adminAuthConfig{
 			SessionLifetime:   sessionLifetime,
 			PasswordMinLength: minLength,
@@ -321,6 +336,7 @@ func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	summary := s.buildConfigSummary(ctx)
 
 	resp := adminHealthResponse{
+		Status:        "ok",
 		Version:       resolveAppVersion(),
 		UptimeSeconds: int64(time.Since(s.startTime).Seconds()),
 		DB: healthDBSection{

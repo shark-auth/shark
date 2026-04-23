@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -166,15 +167,27 @@ type DBAppResolver struct {
 // ResolveApp implements proxy.AppResolver. It looks up the application by its
 // proxy_public_domain field and returns a ResolvedApp carrying its upstream URL.
 func (r *DBAppResolver) ResolveApp(ctx context.Context, host string) (*proxy.ResolvedApp, error) {
-	// Strip port if present (e.g. "api.myapp.com:80" -> "api.myapp.com").
-	h := host
-	if idx := strings.Index(host, ":"); idx != -1 {
-		h = host[:idx]
+	// Try full host first (e.g. "api.myapp.com:8080"). If that fails, try
+	// stripping the port (e.g. "api.myapp.com"). This ensures we match even
+	// if the DB row includes - or omits - the port.
+	app, err := r.Store.GetApplicationByProxyDomain(ctx, host)
+	if (err != nil || app == nil) && strings.Contains(host, ":") {
+		h := host
+		if idx := strings.Index(host, ":"); idx != -1 {
+			h = host[:idx]
+		}
+		app, err = r.Store.GetApplicationByProxyDomain(ctx, h)
 	}
 
-	app, err := r.Store.GetApplicationByProxyDomain(ctx, h)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
+	}
+
+	if app == nil {
+		return nil, nil
 	}
 
 	// ENFORCEMENT: Only resolve if the application is explicitly set to proxy mode.

@@ -113,7 +113,8 @@ class DPoPProver:
         htm
             HTTP method (e.g. ``"POST"``). Case-insensitive; normalized to upper.
         htu
-            Target URL (without query / fragment per RFC 9449 §4.2).
+            Target URL. Query and fragment components are automatically stripped
+            per RFC 9449 §4.2.
         nonce
             Optional DPoP nonce advertised by the server in a prior
             ``DPoP-Nonce`` response header.
@@ -125,6 +126,12 @@ class DPoPProver:
         """
         if not htm or not htu:
             raise DPoPError("htm and htu are required")
+
+        # RFC 9449 §4.2: The HTU claim MUST NOT contain any query or fragment.
+        if "?" in htu:
+            htu = htu.split("?")[0]
+        if "#" in htu:
+            htu = htu.split("#")[0]
 
         payload = {
             "jti": jti or _b64url(secrets.token_bytes(16)),

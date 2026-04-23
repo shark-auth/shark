@@ -3,6 +3,7 @@ const isBrowser = typeof window !== 'undefined'
 const KEYS = {
   ACCESS_TOKEN: 'shark_access_token',
   ACCESS_TOKEN_EXPIRES_AT: 'shark_access_token_expires_at',
+  REFRESH_TOKEN: 'shark_refresh_token',
   CODE_VERIFIER: 'shark_code_verifier',
   REDIRECT_AFTER: 'shark_redirect_after',
 } as const
@@ -38,16 +39,19 @@ export function getAccessToken(): string | null {
   const token = get(KEYS.ACCESS_TOKEN)
   const expiresAt = get(KEYS.ACCESS_TOKEN_EXPIRES_AT)
   if (!token || !expiresAt) return null
-  if (Date.now() > Number(expiresAt)) {
-    clearAll()
-    return null
-  }
+  // Return null if expired (allow caller to handle refresh)
+  if (Date.now() > Number(expiresAt)) return null
   return token
 }
 
-export function setAccessToken(token: string, expiresAt: number): void {
+export function getRefreshToken(): string | null {
+  return get(KEYS.REFRESH_TOKEN)
+}
+
+export function setAccessToken(token: string, expiresAt: number, refreshToken?: string): void {
   set(KEYS.ACCESS_TOKEN, token)
   set(KEYS.ACCESS_TOKEN_EXPIRES_AT, String(expiresAt))
+  if (refreshToken) set(KEYS.REFRESH_TOKEN, refreshToken)
 }
 
 export function clearAll(): void {

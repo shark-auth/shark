@@ -210,7 +210,7 @@ export function Login({ onLogin }) {
           textAlign: 'center',
           lineHeight: 1.5,
         }}>
-          Paste your admin API key. Stored in session only — cleared on tab close.
+          Paste your admin API key. Stored in local storage — persistent across tabs.
         </p>
       </div>
 

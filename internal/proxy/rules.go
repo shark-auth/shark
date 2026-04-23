@@ -111,6 +111,20 @@ type Rule struct {
 	Scopes  []string
 }
 
+// Matches reports whether r should be considered for request q. Path,
+// method and AppID must all match. requirement evaluation happens separately
+// in Engine.Evaluate so method/app misses fall through to subsequent rules
+// rather than hard-denying.
+func (r *Rule) Matches(method, urlPath, appID string) bool {
+	if r.AppID != "" && r.AppID != appID {
+		return false
+	}
+	if !r.MethodAllowed(method) {
+		return false
+	}
+	return r.pattern.match(urlPath)
+}
+
 // MethodAllowed reports whether method satisfies the rule's method
 // filter. Empty Methods means any method matches. Comparison is
 // case-insensitive so "get" in YAML still matches r.Method=="GET".
@@ -122,15 +136,9 @@ func (r *Rule) MethodAllowed(method string) bool {
 	return ok
 }
 
-// Matches reports whether r should be considered for request q. Path
-// and method must both match; requirement evaluation happens separately
-// in Engine.Evaluate so method misses fall through to subsequent rules
-// rather than hard-denying.
-func (r *Rule) Matches(method, urlPath string) bool {
-	if !r.MethodAllowed(method) {
-		return false
-	}
-	return r.pattern.match(urlPath)
+// method must matches; requirement evaluation happens separately
+func (r *Rule) MethodMatches(method string) bool {
+	return r.MethodAllowed(method)
 }
 
 // Decision is what Engine.Evaluate returns: the allow/deny bit, which
@@ -223,13 +231,18 @@ func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
 	rules := e.rules
 	defaultDeny := e.defaultDeny
 	e.mu.RUnlock()
+
+	// Extract AppID header if present
+	appID := r.Header.Get("X-Shark-App-ID")
+
 	for _, rule := range rules {
-		if !rule.Matches(r.Method, r.URL.Path) {
+		if !rule.Matches(r.Method, r.URL.Path, appID) {
 			continue
 		}
 		allow, reason := e.evaluateRequirement(rule.Require, rule.Scopes, id)
 		return Decision{Allow: allow, MatchedRule: rule, Reason: reason}
 	}
+
 	return Decision{Allow: !defaultDeny, Reason: "no rule matched"}
 }
 
@@ -398,6 +411,7 @@ func parseRequirement(require, allow string) (Requirement, error) {
 // The leading "/" is required — patterns without it are rejected so
 // typos like "api/foo" don't silently not match anything.
 func compilePath(p string) (pathPattern, error) {
+	p = strings.TrimSpace(p)
 	if p == "" {
 		return pathPattern{}, errors.New("path is required")
 	}

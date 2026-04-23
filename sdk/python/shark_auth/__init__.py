@@ -17,13 +17,15 @@ from .errors import (
     TokenError,
     VaultError,
 )
-from .tokens import AgentTokenClaims, clear_jwks_cache, decode_agent_token
+from .session import AgentSession
+from .tokens import AgentTokenClaims, clear_jwks_cache, decode_agent_token, exchange_token
 from .vault import VaultClient, VaultToken
 
 __version__ = "0.1.0"
 
 __all__ = [
     "DPoPProver",
+    "AgentSession",
     "DeviceFlow",
     "DeviceInit",
     "TokenResponse",
@@ -31,6 +33,7 @@ __all__ = [
     "VaultToken",
     "AgentTokenClaims",
     "decode_agent_token",
+    "exchange_token",
     "clear_jwks_cache",
     "SharkAuthError",
     "DPoPError",
