@@ -1,8 +1,10 @@
 # Binary
 /shark.exe
 /shark
+/shark-auth
 /sharkauth.exe
 /sharkauth
+bin/
 
 # Database
 data/
@@ -41,6 +43,13 @@ sdk/dist/
 packages/*/dist/
 admin/dist/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.pytest_cache/
+
 # Test
 coverage.out
 coverage*.out
@@ -48,9 +57,24 @@ coverage*.txt
 *.test
 cookies.txt
 server.log
+w15_server.log
+app.log
 *.log
 resp.json
 failure_report.txt
+smoke_full.exit
+gosec_results.json
+
+# Assets / Media (clutter)
+*.png
+*.svg
+*.mp4
+*.jpg
+*.jpeg
+
+# Temp
+*.txt
+install_id
 
 # Build artifacts
 *.tsbuildinfo
