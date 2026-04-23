@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -105,7 +106,9 @@ func (m *OAuthManager) HandleCallback(ctx context.Context, providerName, code, i
 		if info.AvatarURL != "" && (user.AvatarURL == nil || *user.AvatarURL != info.AvatarURL) {
 			user.AvatarURL = &info.AvatarURL
 			user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-			_ = m.store.UpdateUser(ctx, user)
+			if err := m.store.UpdateUser(ctx, user); err != nil {
+				slog.Warn("oauth: update user avatar failed", "user_id", user.ID, "err", err)
+			}
 		}
 		sess, err := m.sessions.CreateSession(ctx, user.ID, ip, userAgent, "oauth:"+providerName)
 		if err != nil {
@@ -143,7 +146,9 @@ func (m *OAuthManager) HandleCallback(ctx context.Context, providerName, code, i
 		// Existing user, first OAuth link — set avatar if missing
 		user.AvatarURL = &info.AvatarURL
 		user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-		_ = m.store.UpdateUser(ctx, user)
+		if err := m.store.UpdateUser(ctx, user); err != nil {
+			slog.Warn("oauth: update existing user avatar failed", "user_id", user.ID, "err", err)
+		}
 	}
 
 	// Link OAuth account to this user

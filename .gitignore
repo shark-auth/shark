@@ -35,14 +35,17 @@ Thumbs.db
 # Go
 vendor/
 
-# Node (dashboard & SDK)
+# Node (dashboard, admin, SDK)
 node_modules/
 dashboard/build/
 dashboard/.svelte-kit/
 sdk/dist/
+packages/*/dist/
 
 # Test
 coverage.out
+coverage*.out
+coverage*.txt
 *.test
 cookies.txt
 server.log
@@ -53,6 +56,14 @@ sharkauth.yaml
 smoke.sh
 debug_admin.sh
 
+# Build artifacts
+*.tsbuildinfo
+shark-*.exe
+shark-stripped
+
+# Smoke test scratch / helper scripts
+scratch/
+
 # Docker
 .docker/
 
@@ -60,3 +71,14 @@ debug_admin.sh
 .env
 .env.*
 !.env.example
+.gstack/
+
+# superpowers brainstorm session dirs
+.superpowers/
+bin/
+
+# dev artifacts
+dev.db
+dev.db-*
+server.log
+failure_report.txt

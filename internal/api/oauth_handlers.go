@@ -14,6 +14,7 @@ import (
 	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/auth/providers"
 	"github.com/sharkauth/sharkauth/internal/auth/redirect"
+	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 const (
@@ -128,6 +129,14 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Phase 6 F3: fire auth flow hook. OAuthManager.HandleCallback already
+	// created a session row for us; if the flow blocks/redirects we leave
+	// that session in place — the cookie below is the caller-visible gate
+	// and we skip it on a handled outcome.
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerOAuthCallback, user, "") {
+		return
+	}
+
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
@@ -158,7 +167,9 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 			if verr := redirect.Validate(&redirect.Application{
 				AllowedCallbackURLs: defaultApp.AllowedCallbackURLs,
 			}, redirect.KindCallback, requestedRedirect); verr != nil {
-				http.Error(w, "redirect_uri not allowed: "+verr.Error(), http.StatusBadRequest)
+				WriteError(w, http.StatusBadRequest,
+					NewError(CodeInvalidRequest, "redirect_uri not allowed: "+verr.Error()).
+						WithDocsURL(CodeInvalidRequest))
 				return
 			}
 			http.Redirect(w, r, requestedRedirect, http.StatusFound)

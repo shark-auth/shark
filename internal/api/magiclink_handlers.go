@@ -12,6 +12,7 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/auth"
 	"github.com/sharkauth/sharkauth/internal/auth/redirect"
+	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 // Re-export magic link errors for convenience.
@@ -164,6 +165,13 @@ func (s *Server) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Phase 6 F3: fire auth flow hook. Token has been consumed; a block
+	// here withholds the session cookie so the caller must retry with a
+	// fresh magic link to get past the flow requirement.
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerMagicLink, user, "") {
+		return
+	}
+
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
@@ -193,7 +201,9 @@ func (s *Server) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
 			if verr := redirect.Validate(&redirect.Application{
 				AllowedCallbackURLs: defaultApp.AllowedCallbackURLs,
 			}, redirect.KindCallback, requestedRedirect); verr != nil {
-				http.Error(w, "redirect_uri not allowed: "+verr.Error(), http.StatusBadRequest)
+				WriteError(w, http.StatusBadRequest,
+					NewError(CodeInvalidRequest, "redirect_uri not allowed: "+verr.Error()).
+						WithDocsURL(CodeInvalidRequest))
 				return
 			}
 			http.Redirect(w, r, requestedRedirect, http.StatusFound)

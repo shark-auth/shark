@@ -28,42 +28,106 @@ func (s *SQLiteStore) CreateApplication(ctx context.Context, app *Application) e
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
+	integrationMode := app.IntegrationMode
+	if integrationMode == "" {
+		integrationMode = "custom"
+	}
+	proxyFallback := app.ProxyLoginFallback
+	if proxyFallback == "" {
+		proxyFallback = "hosted"
+	}
+	var brandingOverride sql.NullString
+	if app.BrandingOverride != "" {
+		brandingOverride = sql.NullString{String: app.BrandingOverride, Valid: true}
+	}
+	var proxyFallbackURL sql.NullString
+	if app.ProxyLoginFallbackURL != "" {
+		proxyFallbackURL = sql.NullString{String: app.ProxyLoginFallbackURL, Valid: true}
+	}
+
+	var proxyPublicDomain sql.NullString
+	if app.ProxyPublicDomain != "" {
+		proxyPublicDomain = sql.NullString{String: app.ProxyPublicDomain, Valid: true}
+	}
+	var proxyProtectedURL sql.NullString
+	if app.ProxyProtectedURL != "" {
+		proxyProtectedURL = sql.NullString{String: app.ProxyProtectedURL, Valid: true}
+	}
+
+	var slugVal sql.NullString
+	if app.Slug != "" {
+		slugVal = sql.NullString{String: app.Slug, Valid: true}
+	}
+
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO applications
-		 (id, name, client_id, client_secret_hash, client_secret_prefix,
+		 (id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		  allowed_callback_urls, allowed_logout_urls, allowed_origins,
-		  is_default, metadata, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		app.ID, app.Name, app.ClientID, app.ClientSecretHash, app.ClientSecretPrefix,
+		  is_default, metadata, created_at, updated_at,
+		  integration_mode, branding_override, proxy_login_fallback, proxy_login_fallback_url,
+		  proxy_public_domain, proxy_protected_url)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		app.ID, app.Name, slugVal, app.ClientID, app.ClientSecretHash, app.ClientSecretPrefix,
 		callbackJSON, logoutJSON, originsJSON,
 		boolToInt(app.IsDefault), metaJSON,
 		app.CreatedAt.UTC().Format(time.RFC3339),
 		app.UpdatedAt.UTC().Format(time.RFC3339),
+		integrationMode, brandingOverride, proxyFallback, proxyFallbackURL,
+		proxyPublicDomain, proxyProtectedURL,
 	)
 	return err
 }
 
 func (s *SQLiteStore) GetApplicationByID(ctx context.Context, id string) (*Application, error) {
 	return s.scanApplication(s.db.QueryRowContext(ctx,
-		`SELECT id, name, client_id, client_secret_hash, client_secret_prefix,
+		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
-		        is_default, metadata, created_at, updated_at
+		        is_default, metadata, created_at, updated_at,
+		        integration_mode, branding_override, proxy_login_fallback, proxy_login_fallback_url,
+		        proxy_public_domain, proxy_protected_url
 		 FROM applications WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetApplicationByClientID(ctx context.Context, clientID string) (*Application, error) {
 	return s.scanApplication(s.db.QueryRowContext(ctx,
-		`SELECT id, name, client_id, client_secret_hash, client_secret_prefix,
+		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
-		        is_default, metadata, created_at, updated_at
+		        is_default, metadata, created_at, updated_at,
+		        integration_mode, branding_override, proxy_login_fallback, proxy_login_fallback_url,
+		        proxy_public_domain, proxy_protected_url
 		 FROM applications WHERE client_id = ?`, clientID))
+}
+
+// GetApplicationBySlug returns the application with the given slug.
+// Returns sql.ErrNoRows when no matching row exists.
+func (s *SQLiteStore) GetApplicationBySlug(ctx context.Context, slug string) (*Application, error) {
+	return s.scanApplication(s.db.QueryRowContext(ctx,
+		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
+		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
+		        is_default, metadata, created_at, updated_at,
+		        integration_mode, branding_override, proxy_login_fallback, proxy_login_fallback_url,
+		        proxy_public_domain, proxy_protected_url
+		 FROM applications WHERE slug = ?`, slug))
+}
+
+// GetApplicationByProxyDomain returns the application with the given public domain.
+func (s *SQLiteStore) GetApplicationByProxyDomain(ctx context.Context, domain string) (*Application, error) {
+	return s.scanApplication(s.db.QueryRowContext(ctx,
+		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
+		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
+		        is_default, metadata, created_at, updated_at,
+		        integration_mode, branding_override, proxy_login_fallback, proxy_login_fallback_url,
+		        proxy_public_domain, proxy_protected_url
+		 FROM applications WHERE proxy_public_domain = ?`, domain))
 }
 
 func (s *SQLiteStore) GetDefaultApplication(ctx context.Context) (*Application, error) {
 	return s.scanApplication(s.db.QueryRowContext(ctx,
-		`SELECT id, name, client_id, client_secret_hash, client_secret_prefix,
+		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
-		        is_default, metadata, created_at, updated_at
+		        is_default, metadata, created_at, updated_at,
+		        integration_mode, branding_override, proxy_login_fallback, proxy_login_fallback_url,
+		        proxy_public_domain, proxy_protected_url
 		 FROM applications WHERE is_default = 1 LIMIT 1`))
 }
 
@@ -75,9 +139,11 @@ func (s *SQLiteStore) ListApplications(ctx context.Context, limit, offset int) (
 		limit = 200
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, client_id, client_secret_hash, client_secret_prefix,
+		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
-		        is_default, metadata, created_at, updated_at
+		        is_default, metadata, created_at, updated_at,
+		        integration_mode, branding_override, proxy_login_fallback, proxy_login_fallback_url,
+		        proxy_public_domain, proxy_protected_url
 		 FROM applications ORDER BY created_at DESC LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
 		return nil, err
@@ -113,14 +179,50 @@ func (s *SQLiteStore) UpdateApplication(ctx context.Context, app *Application) e
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
+	integrationMode := app.IntegrationMode
+	if integrationMode == "" {
+		integrationMode = "custom"
+	}
+	proxyFallback := app.ProxyLoginFallback
+	if proxyFallback == "" {
+		proxyFallback = "hosted"
+	}
+	var brandingOverride sql.NullString
+	if app.BrandingOverride != "" {
+		brandingOverride = sql.NullString{String: app.BrandingOverride, Valid: true}
+	}
+	var proxyFallbackURL sql.NullString
+	if app.ProxyLoginFallbackURL != "" {
+		proxyFallbackURL = sql.NullString{String: app.ProxyLoginFallbackURL, Valid: true}
+	}
+
+	var proxyPublicDomain sql.NullString
+	if app.ProxyPublicDomain != "" {
+		proxyPublicDomain = sql.NullString{String: app.ProxyPublicDomain, Valid: true}
+	}
+	var proxyProtectedURL sql.NullString
+	if app.ProxyProtectedURL != "" {
+		proxyProtectedURL = sql.NullString{String: app.ProxyProtectedURL, Valid: true}
+	}
+
+	var slugVal sql.NullString
+	if app.Slug != "" {
+		slugVal = sql.NullString{String: app.Slug, Valid: true}
+	}
+
 	_, err = s.db.ExecContext(ctx,
 		`UPDATE applications SET
-		   name = ?, allowed_callback_urls = ?, allowed_logout_urls = ?,
+		   name = ?, slug = ?, allowed_callback_urls = ?, allowed_logout_urls = ?,
 		   allowed_origins = ?, is_default = ?, metadata = ?,
+		   integration_mode = ?, branding_override = ?,
+		   proxy_login_fallback = ?, proxy_login_fallback_url = ?,
+		   proxy_public_domain = ?, proxy_protected_url = ?,
 		   updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ?`,
-		app.Name, callbackJSON, logoutJSON, originsJSON,
+		app.Name, slugVal, callbackJSON, logoutJSON, originsJSON,
 		boolToInt(app.IsDefault), metaJSON,
+		integrationMode, brandingOverride, proxyFallback, proxyFallbackURL,
+		proxyPublicDomain, proxyProtectedURL,
 		app.ID,
 	)
 	return err
@@ -149,14 +251,35 @@ func (s *SQLiteStore) scanApplication(row *sql.Row) (*Application, error) {
 	var isDefault int
 	var callbackJSON, logoutJSON, originsJSON, metaJSON string
 	var createdAtStr, updatedAtStr string
+	var integrationMode, proxyFallback string
+	var slug, brandingOverride, proxyFallbackURL, proxyPublicDomain, proxyProtectedURL sql.NullString
 
 	err := row.Scan(
-		&app.ID, &app.Name, &app.ClientID, &app.ClientSecretHash, &app.ClientSecretPrefix,
+		&app.ID, &app.Name, &slug, &app.ClientID, &app.ClientSecretHash, &app.ClientSecretPrefix,
 		&callbackJSON, &logoutJSON, &originsJSON,
 		&isDefault, &metaJSON, &createdAtStr, &updatedAtStr,
+		&integrationMode, &brandingOverride, &proxyFallback, &proxyFallbackURL,
+		&proxyPublicDomain, &proxyProtectedURL,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if slug.Valid {
+		app.Slug = slug.String
+	}
+	app.IntegrationMode = integrationMode
+	app.ProxyLoginFallback = proxyFallback
+	if brandingOverride.Valid {
+		app.BrandingOverride = brandingOverride.String
+	}
+	if proxyFallbackURL.Valid {
+		app.ProxyLoginFallbackURL = proxyFallbackURL.String
+	}
+	if proxyPublicDomain.Valid {
+		app.ProxyPublicDomain = proxyPublicDomain.String
+	}
+	if proxyProtectedURL.Valid {
+		app.ProxyProtectedURL = proxyProtectedURL.String
 	}
 	return unmarshalApplication(&app, isDefault, callbackJSON, logoutJSON, originsJSON, metaJSON, createdAtStr, updatedAtStr)
 }
@@ -167,14 +290,35 @@ func (s *SQLiteStore) scanApplicationFromRows(rows *sql.Rows) (*Application, err
 	var isDefault int
 	var callbackJSON, logoutJSON, originsJSON, metaJSON string
 	var createdAtStr, updatedAtStr string
+	var integrationMode, proxyFallback string
+	var slug, brandingOverride, proxyFallbackURL, proxyPublicDomain, proxyProtectedURL sql.NullString
 
 	err := rows.Scan(
-		&app.ID, &app.Name, &app.ClientID, &app.ClientSecretHash, &app.ClientSecretPrefix,
+		&app.ID, &app.Name, &slug, &app.ClientID, &app.ClientSecretHash, &app.ClientSecretPrefix,
 		&callbackJSON, &logoutJSON, &originsJSON,
 		&isDefault, &metaJSON, &createdAtStr, &updatedAtStr,
+		&integrationMode, &brandingOverride, &proxyFallback, &proxyFallbackURL,
+		&proxyPublicDomain, &proxyProtectedURL,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if slug.Valid {
+		app.Slug = slug.String
+	}
+	app.IntegrationMode = integrationMode
+	app.ProxyLoginFallback = proxyFallback
+	if brandingOverride.Valid {
+		app.BrandingOverride = brandingOverride.String
+	}
+	if proxyFallbackURL.Valid {
+		app.ProxyLoginFallbackURL = proxyFallbackURL.String
+	}
+	if proxyPublicDomain.Valid {
+		app.ProxyPublicDomain = proxyPublicDomain.String
+	}
+	if proxyProtectedURL.Valid {
+		app.ProxyProtectedURL = proxyProtectedURL.String
 	}
 	return unmarshalApplication(&app, isDefault, callbackJSON, logoutJSON, originsJSON, metaJSON, createdAtStr, updatedAtStr)
 }

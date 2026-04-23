@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Error — SharkAuth</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000; color: #fafafa;
+    font-family: 'Manrope', -apple-system, sans-serif;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; padding: 20px;
+  }
+  .card {
+    background: #0c0c0c; border: 1px solid #1e1e1e; border-radius: 12px;
+    padding: 32px; max-width: 420px; width: 100%; text-align: center;
+  }
+  .error-icon { font-size: 48px; margin-bottom: 16px; }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  p { color: #a3a3a3; font-size: 13px; line-height: 1.5; }
+  .footer { margin-top: 24px; color: #4a4a4a; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="error-icon">&#x26A0;&#xFE0F;</div>
+  <h1>{{.Error}}</h1>
+  <p>{{.Description}}</p>
+  <div class="footer">SharkAuth</div>
+</div>
+</body>
+</html>

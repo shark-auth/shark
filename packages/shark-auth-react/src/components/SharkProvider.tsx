@@ -1,0 +1,123 @@
+import React from 'react'
+import { createClient } from '../core/client'
+import { getAccessToken, clearAll } from '../core/storage'
+import { decodeClaims } from '../core/jwt'
+import { AuthContext } from '../hooks/context'
+import type { User, Session, Organization } from '../core/types'
+
+export interface SharkProviderProps {
+  publishableKey: string
+  authUrl: string
+  children: React.ReactNode
+}
+
+interface AuthState {
+  isLoaded: boolean
+  isAuthenticated: boolean
+  user: User | null
+  session: Session | null
+  organization: Organization | null
+}
+
+export function SharkProvider({ publishableKey, authUrl, children }: SharkProviderProps) {
+  const [state, setState] = React.useState<AuthState>({
+    isLoaded: false,
+    isAuthenticated: false,
+    user: null,
+    session: null,
+    organization: null,
+  })
+
+  const client = React.useMemo(
+    () => createClient(authUrl, publishableKey),
+    [authUrl, publishableKey],
+  )
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    async function hydrate() {
+      const token = getAccessToken()
+      if (!token) {
+        if (!cancelled) setState(s => ({ ...s, isLoaded: true }))
+        return
+      }
+
+      try {
+        // Try /api/v1/users/me for live user data
+        const resp = await client.fetch('/api/v1/users/me')
+        if (resp.ok) {
+          const data = await resp.json() as { user?: User; session?: Session; organization?: Organization }
+          if (!cancelled) {
+            setState({
+              isLoaded: true,
+              isAuthenticated: true,
+              user: data.user ?? null,
+              session: data.session ?? null,
+              organization: data.organization ?? null,
+            })
+          }
+          return
+        }
+      } catch {
+        // network error — fall through to local decode
+      }
+
+      // Fallback: decode claims from JWT (offline / dev)
+      try {
+        const claims = decodeClaims(token)
+        const user: User = {
+          id: (claims.sub as string) ?? '',
+          email: (claims.email as string) ?? '',
+          firstName: claims.firstName as string | undefined,
+          lastName: claims.lastName as string | undefined,
+          imageUrl: claims.imageUrl as string | undefined,
+        }
+        const session: Session = {
+          id: (claims.jti as string) ?? '',
+          userId: user.id,
+          expiresAt: typeof claims.exp === 'number' ? claims.exp * 1000 : Date.now() + 3600_000,
+        }
+        if (!cancelled) {
+          setState({
+            isLoaded: true,
+            isAuthenticated: true,
+            user,
+            session,
+            organization: null,
+          })
+        }
+      } catch {
+        clearAll()
+        if (!cancelled) setState(s => ({ ...s, isLoaded: true }))
+      }
+    }
+
+    hydrate()
+    return () => { cancelled = true }
+  }, [authUrl, publishableKey, client])
+
+  const signOut = React.useCallback(async () => {
+    const token = getAccessToken()
+    if (token) {
+      try {
+        await client.fetch('/oauth/revoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `token=${encodeURIComponent(token)}`,
+        })
+      } catch {
+        // best-effort revoke
+      }
+    }
+    clearAll()
+    setState(s => ({ ...s, isAuthenticated: false, user: null, session: null, organization: null }))
+  }, [client])
+
+  const value = React.useMemo(
+    () => ({ ...state, client, signOut, authUrl, publishableKey }),
+    [state, client, signOut, authUrl, publishableKey],
+  )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}

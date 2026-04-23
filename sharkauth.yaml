@@ -1,13 +1,115 @@
 server:
+  port: 8080
+  secret: e8bf0dba70d19c83dda9342eea70a53c532c675dc0083c702b813ef46ebdfecb
   base_url: http://localhost:8080
-  secret: "change-me-this-secret-is-not-secure-at-all-abc123456789"
-  listen_addr: ":8080"
-auth:
-  jwt:
-    enabled: true
-    mode: "session"
-    audience: "shark"
+  cors_origins: []
 storage:
-  path: sharkauth.db
+  path: ./data/sharkauth.db
+auth:
+  session_lifetime: 30d
+  password_min_length: 8
+  argon2id:
+    memory: 65536
+    iterations: 3
+    parallelism: 2
+    salt_length: 16
+    key_length: 32
+  jwt:
+    enabled: false
+    mode: session
+    issuer: ""
+    audience: shark
+    access_token_ttl: 15m
+    refresh_token_ttl: 30d
+    clock_skew: 30s
+    revocation:
+      check_per_request: false
+passkeys:
+  rp_name: SharkAuth
+  rp_id: ""
+  origin: ""
+  attestation: none
+  resident_key: preferred
+  user_verification: preferred
+magic_link:
+  token_lifetime: 10m
+  redirect_url: http://localhost:3000/auth/callback
+password_reset:
+  redirect_url: http://localhost:3000/auth/reset-password
+  token_lifetime: 30m
+smtp:
+  host: ""
+  port: 587
+  username: ""
+  password: ""
+  from: ""
+  from_name: SharkAuth
 email:
-  provider: "shark_relay"
+  provider: resend
+  api_key: re_aLGeEFpR_HjvFa8MAvwuqHpv5HwzgQe5D
+  from: raul@mail.buildersmty.com.mx
+  from_name: SharkAuth
+  host: ""
+  port: 0
+  username: ""
+  password: ""
+mfa:
+  issuer: SharkAuth
+  recovery_codes: 10
+social:
+  redirect_url: ""
+  google:
+    client_id: ""
+    client_secret: ""
+    scopes: []
+  github:
+    client_id: ""
+    client_secret: ""
+    scopes: []
+  apple:
+    client_id: ""
+    team_id: ""
+    key_id: ""
+    private_key_path: ""
+  discord:
+    client_id: ""
+    client_secret: ""
+    scopes: []
+sso:
+  saml:
+    sp_entity_id: ""
+  oidc: {}
+api_keys:
+  default_rate_limit: 1000
+  key_max_lifetime: 365d
+audit:
+  retention: "0"
+  cleanup_interval: 1h
+oauth_server:
+  enabled: true
+  issuer: ""
+  signing_algorithm: ES256
+  access_token_lifetime: 15m
+  refresh_token_lifetime: 30d
+  auth_code_lifetime: 60s
+  device_code_lifetime: 15m
+  consent_template: ""
+  require_dpop: false
+proxy:
+  enabled: true
+  upstream: http://localhost:3000
+  timeout_seconds: 0
+  trusted_headers: []
+  strip_incoming: null
+  rules: []
+  listeners:
+    - bind: ""
+      upstream: http://localhost:3000
+      session_cookie_domain: ""
+      trusted_headers: []
+      strip_incoming: null
+      timeout_seconds: 0
+      rules: []
+telemetry:
+  enabled: true
+  endpoint: https://telemetry.shark-auth.com/v1/ping

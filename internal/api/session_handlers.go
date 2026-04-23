@@ -17,20 +17,22 @@ import (
 // sessionResponse is the wire representation of a session. Hides IP on
 // self-service endpoints by default — admin response embeds this + extras.
 type sessionResponse struct {
-	ID         string `json:"id"`
-	UserID     string `json:"user_id"`
-	IP         string `json:"ip,omitempty"`
-	UserAgent  string `json:"user_agent,omitempty"`
-	MFAPassed  bool   `json:"mfa_passed"`
-	AuthMethod string `json:"auth_method"`
-	ExpiresAt  string `json:"expires_at"`
-	CreatedAt  string `json:"created_at"`
-	Current    bool   `json:"current,omitempty"`
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+	IP             string `json:"ip,omitempty"`
+	UserAgent      string `json:"user_agent,omitempty"`
+	MFAPassed      bool   `json:"mfa_passed"`
+	AuthMethod     string `json:"auth_method"`
+	ExpiresAt      string `json:"expires_at"`
+	CreatedAt      string `json:"created_at"`
+	LastActivityAt string `json:"last_activity_at,omitempty"`
+	Current        bool   `json:"current,omitempty"`
 }
 
 type adminSessionResponse struct {
 	sessionResponse
 	UserEmail string `json:"user_email"`
+	JTI       string `json:"jti,omitempty"`
 }
 
 type sessionListResponse struct {
@@ -62,15 +64,16 @@ func (s *Server) handleListMySessions(w http.ResponseWriter, r *http.Request) {
 	out := make([]sessionResponse, 0, len(sessions))
 	for _, se := range sessions {
 		out = append(out, sessionResponse{
-			ID:         se.ID,
-			UserID:     se.UserID,
-			IP:         se.IP,
-			UserAgent:  se.UserAgent,
-			MFAPassed:  se.MFAPassed,
-			AuthMethod: se.AuthMethod,
-			ExpiresAt:  se.ExpiresAt,
-			CreatedAt:  se.CreatedAt,
-			Current:    se.ID == currentID,
+			ID:             se.ID,
+			UserID:         se.UserID,
+			IP:             se.IP,
+			UserAgent:      se.UserAgent,
+			MFAPassed:      se.MFAPassed,
+			AuthMethod:     se.AuthMethod,
+			ExpiresAt:      se.ExpiresAt,
+			CreatedAt:      se.CreatedAt,
+			LastActivityAt: se.CreatedAt,
+			Current:        se.ID == currentID,
 		})
 	}
 	writeJSON(w, http.StatusOK, sessionListResponse{Data: out})
@@ -141,14 +144,15 @@ func (s *Server) handleAdminListSessions(w http.ResponseWriter, r *http.Request)
 	for _, sw := range rows {
 		data = append(data, adminSessionResponse{
 			sessionResponse: sessionResponse{
-				ID:         sw.ID,
-				UserID:     sw.UserID,
-				IP:         sw.IP,
-				UserAgent:  sw.UserAgent,
-				MFAPassed:  sw.MFAPassed,
-				AuthMethod: sw.AuthMethod,
-				ExpiresAt:  sw.ExpiresAt,
-				CreatedAt:  sw.CreatedAt,
+				ID:             sw.ID,
+				UserID:         sw.UserID,
+				IP:             sw.IP,
+				UserAgent:      sw.UserAgent,
+				MFAPassed:      sw.MFAPassed,
+				AuthMethod:     sw.AuthMethod,
+				ExpiresAt:      sw.ExpiresAt,
+				CreatedAt:      sw.CreatedAt,
+				LastActivityAt: sw.CreatedAt,
 			},
 			UserEmail: sw.UserEmail,
 		})
@@ -203,14 +207,15 @@ func (s *Server) handleListUserSessions(w http.ResponseWriter, r *http.Request) 
 	out := make([]sessionResponse, 0, len(sessions))
 	for _, se := range sessions {
 		out = append(out, sessionResponse{
-			ID:         se.ID,
-			UserID:     se.UserID,
-			IP:         se.IP,
-			UserAgent:  se.UserAgent,
-			MFAPassed:  se.MFAPassed,
-			AuthMethod: se.AuthMethod,
-			ExpiresAt:  se.ExpiresAt,
-			CreatedAt:  se.CreatedAt,
+			ID:             se.ID,
+			UserID:         se.UserID,
+			IP:             se.IP,
+			UserAgent:      se.UserAgent,
+			MFAPassed:      se.MFAPassed,
+			AuthMethod:     se.AuthMethod,
+			ExpiresAt:      se.ExpiresAt,
+			CreatedAt:      se.CreatedAt,
+			LastActivityAt: se.CreatedAt,
 		})
 	}
 	writeJSON(w, http.StatusOK, sessionListResponse{Data: out})
@@ -243,6 +248,25 @@ func (s *Server) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// handleAdminRevokeAllSessions handles DELETE /api/v1/admin/sessions.
+// Revokes (deletes) every active session and returns {"revoked": N}.
+func (s *Server) handleAdminRevokeAllSessions(w http.ResponseWriter, r *http.Request) {
+	actor := actorID(r.Context())
+
+	count, err := s.Store.DeleteAllActiveSessions(r.Context())
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	// Single audit entry summarising the bulk action.
+	s.auditSessionRevoke(r.Context(), "admin", actor, "all", "all", ipOf(r), uaOf(r))
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"revoked": count,
+	})
+}
+
 // --- Helpers ---
 
 func (s *Server) auditSessionRevoke(ctx context.Context, actorType, actorID, targetUserID, sessionID, ip, ua string) {
@@ -264,6 +288,17 @@ func (s *Server) auditSessionRevoke(ctx context.Context, actorType, actorID, tar
 		Metadata:   string(meta),
 		Status:     "success",
 	})
+}
+
+// handlePurgeExpiredSessions handles POST /api/v1/admin/sessions/purge-expired.
+// Deletes all sessions whose expires_at is in the past and returns the count deleted.
+func (s *Server) handlePurgeExpiredSessions(w http.ResponseWriter, r *http.Request) {
+	count, err := s.Store.DeleteExpiredSessions(r.Context())
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int64{"deleted": count})
 }
 
 // effectiveLimit mirrors the clamp applied inside ListActiveSessions so the

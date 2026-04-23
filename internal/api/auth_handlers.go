@@ -159,6 +159,14 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Phase 6 F3: fire auth flow hook. Runs AFTER the user row lands so
+	// block/redirect outcomes leave the account in place but withhold the
+	// session — matches the documented "user created but login gated"
+	// semantics admins rely on.
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerSignup, user, req.Password) {
+		return
+	}
+
 	// Create session
 	sess, err := s.SessionManager.CreateSession(r.Context(), user.ID, r.RemoteAddr, r.UserAgent(), "password")
 	if err != nil {
@@ -220,6 +228,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	user, err := s.Store.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		s.LockoutManager.RecordFailure(req.Email)
+		s.recordLoginFailure(r, "", req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
@@ -230,6 +239,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// User must have a password
 	if user.PasswordHash == nil {
 		s.LockoutManager.RecordFailure(req.Email)
+		s.recordLoginFailure(r, user.ID, req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
@@ -241,6 +251,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	match, err := auth.VerifyPassword(req.Password, *user.PasswordHash)
 	if err != nil || !match {
 		s.LockoutManager.RecordFailure(req.Email)
+		s.recordLoginFailure(r, user.ID, req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "invalid_credentials",
 			"message": "Invalid email or password",
@@ -251,6 +262,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Clear lockout on successful login
 	s.LockoutManager.RecordSuccess(req.Email)
 
+	// Update last_login_at
+	now := time.Now().UTC().Format(time.RFC3339)
+	user.LastLoginAt = &now
+	_ = s.Store.UpdateUser(r.Context(), user)
+
 	// If password needs rehash (e.g. bcrypt from Auth0 migration), rehash to argon2id
 	if auth.NeedsRehash(*user.PasswordHash) {
 		newHash, err := auth.HashPassword(req.Password, s.Config.Auth.Argon2id)
@@ -260,6 +276,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 			_ = s.Store.UpdateUser(r.Context(), user)
 		}
+	}
+
+	// Phase 6 F3: fire auth flow hook. Runs after password (+ lockout) is
+	// cleared but before a session cookie is minted so block/redirect
+	// outcomes don't leak auth state to the client.
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerLogin, user, "") {
+		return
 	}
 
 	// Check if MFA is enabled
@@ -464,6 +487,13 @@ func (s *Server) handlePasswordReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Phase 6 F3: fire auth flow hook. The password has already rotated —
+	// block/redirect at this point gates the confirmation response only,
+	// which is the documented trade-off for "flow runs after the mutation".
+	if s.runAuthFlow(w, r, storage.AuthFlowTriggerPasswordReset, user, req.Password) {
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "Password has been reset successfully",
 	})
@@ -550,6 +580,27 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "Password changed successfully",
+	})
+}
+
+// recordLoginFailure emits a `user.login` audit row with status=failure so the
+// admin stats counter (failed_logins_24h) and the audit page reflect real
+// activity. actorID may be empty when the email doesn't match a user.
+func (s *Server) recordLoginFailure(r *http.Request, actorID, email string) {
+	if s == nil || s.AuditLogger == nil {
+		return
+	}
+	meta, _ := json.Marshal(map[string]string{"email": email})
+	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+		ActorID:    actorID,
+		ActorType:  "user",
+		Action:     "user.login",
+		TargetType: "user",
+		TargetID:   actorID,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		Metadata:   string(meta),
+		Status:     "failure",
 	})
 }
 

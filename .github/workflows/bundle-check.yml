@@ -1,0 +1,52 @@
+name: bundle-check
+
+# Guard against stale admin bundles: if the last commit that touched
+# admin/src/ is newer than the last commit that touched the built assets
+# under internal/admin/dist/assets/, the bundle was not rebuilt and the
+# admin dashboard will ship outdated JS. This has burned us twice (see
+# HANDOFF.md) — fail the build so the PR cannot land.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  bundle-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history is required so `git log` can walk back to the last
+          # commit that touched each path. Default fetch-depth=1 would make
+          # every lookup return the checkout commit.
+          fetch-depth: 0
+
+      - name: Compare admin source vs built bundle commit timestamps
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          src_ts=$(git log -1 --format=%ct -- admin/src/ || true)
+          dist_ts=$(git log -1 --format=%ct -- internal/admin/dist/assets/ || true)
+
+          if [[ -z "${src_ts}" ]]; then
+            echo "No commits touching admin/src/ — nothing to check."
+            exit 0
+          fi
+
+          if [[ -z "${dist_ts}" ]]; then
+            echo "::error::admin source exists but no committed bundle under internal/admin/dist/assets/. Run: cd admin && npm run build && git add internal/admin/dist/ && git commit --amend"
+            exit 1
+          fi
+
+          src_sha=$(git log -1 --format=%h -- admin/src/)
+          dist_sha=$(git log -1 --format=%h -- internal/admin/dist/assets/)
+          echo "admin/src/ last touched by ${src_sha} at $(date -u -d @${src_ts} '+%Y-%m-%d %H:%M:%SZ')"
+          echo "dist/assets/ last touched by ${dist_sha} at $(date -u -d @${dist_ts} '+%Y-%m-%d %H:%M:%SZ')"
+
+          if (( src_ts > dist_ts )); then
+            echo "::error::admin bundle stale. Run: cd admin && npm run build && git add internal/admin/dist/ && git commit --amend"
+            exit 1
+          fi
+
+          echo "admin bundle is up to date."

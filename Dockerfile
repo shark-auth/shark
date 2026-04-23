@@ -1,4 +1,19 @@
-# Build stage
+# Frontend build stage
+FROM node:22-alpine AS frontend-builder
+
+WORKDIR /src
+RUN npm install -g pnpm
+
+# Only copy what's needed for workspace dependency resolution
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY admin/package.json ./admin/
+RUN pnpm install
+
+# Build frontend
+COPY admin/ ./admin/
+RUN pnpm -C admin build
+
+# Go build stage
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
@@ -9,6 +24,9 @@ RUN go mod download
 
 # Build binary
 COPY . .
+# Copy production assets from frontend-builder
+COPY --from=frontend-builder /src/internal/admin/dist ./internal/admin/dist
+
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o sharkauth ./cmd/shark
 
 # Runtime stage

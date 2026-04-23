@@ -136,7 +136,7 @@ Moves toward configless:
 Net: self-host = 1-question init + `shark app create` once per relying party.
 Cloud = zero YAML, all dashboard, shark.email auto-provisioned per tenant.
 
-Phase 4 — Dashboard (7-10 days)
+Phase 4 — Dashboard (7-10 days) — Done
 
 - Svelte admin dashboard (existing DASHBOARD.md spec)
 - nextjs/react dashboard mimiccking svelte but for cloud *do not code this here, just keep a note*
@@ -146,44 +146,123 @@ Phase 4 — Dashboard (7-10 days)
 This is what turns Shark from an API into a product. The HN demo GIF comes from
 this.
 
-Phase 5 — SDK (5-7 days)
+Phase 4.5 — Dashboard Polish (3-5 days) — Done (except responsive)
 
-- TypeScript SDK (#54)
-- React/Svelte/Vue wrappers  
+**Spec:** `specdashby.md` — full gap analysis + phased execution plan (Waves A–G)
 
+- **Wave A ✅** — Global UX: Cmd+K, keyboard shortcuts, undo toasts, deep linking, CLI footers, phase shells
+- **Wave B ✅** — Settings + Auth config: session mode badge, shark.email tier, JWT toggle UI, passkey config, JWKS download, magic link shortcut
+- **Wave C ✅** — Users + Sessions: filter dropdowns, type-email delete, JTI column, revoke-by-JTI input, profile actions
+- **Wave D ✅** — Orgs + SSO: invitations tab, SSO enforcement, org audit, domain routing tester, connection detail
+- **Wave E ✅** — RBAC + Keys + Webhooks: permission explorer, check-permission tool, curl snippets, replay, test fire, sig verify
+- **Wave F ✅** — Teach empty states, user profile actions, API key audit, email preview stub, SSO detail. Responsive deferred.
+- **Wave G ✅** — Backend: test-email endpoint, admin passkeys endpoint, signing key rotation, last_login_at migration, user filters, SSO user counts, smoke test sections 14+15
 
-Now developers can actually integrate. Without this, Shark is unusable for most
-people.
+Remaining from specdashby.md: responsive design only. See specdashby.md for details.
 
+Phase 5 — OAuth 2.1 + Agent Auth — Done
 
+**Plan:** `docs/superpowers/plans/2026-04-18-oauth21-agent-auth.md`
+**Spec:** `AGENT_AUTH.md`
 
+Build core features FIRST, SDK on top LATER. Agents are first-class citizens.
 
-Phase 6 — Agent Auth (10-14 days)
+- ✅ Full OAuth 2.1 Authorization Server — fosite-based, ES256 signing
+- ✅ Agent identity (first-class, not user extension)
+- ✅ Auth Code + PKCE, Client Credentials, Refresh Token Rotation
+- ✅ Dynamic Client Registration (RFC 7591) — MCP discovery
+- ✅ Device Authorization Grant (RFC 8628) — headless agents
+- ✅ Token Exchange (RFC 8693) — agent-to-agent delegation chains
+- ✅ DPoP (RFC 9449) — proof-of-possession tokens
+- ✅ Token Introspection + Revocation (RFC 7662, 7009)
+- ✅ Resource Indicators (RFC 8707) — audience binding
+- ✅ AS Metadata (RFC 8414) — MCP compatibility
+- ✅ Consent UI (server-rendered + React)
+- ✅ Agent management dashboard + consent management + device flow React
+- ✅ Smoke tests: sections 26-42 (AS metadata, agent CRUD, all grants, DPoP, introspection, revocation, DCR, resource indicators, ES256 JWKS, consents) — 181 PASS, 0 FAIL
 
-- Full OAuth 2.1 server (#57) — client credentials, auth code + PKCE, device
-  flow, token exchange, DCR
-- Token Vault (#66) — managed third-party OAuth
-- This is the headline feature. "First OSS auth with native MCP agent support."
+Phase 5.5 — Token Vault — Done
 
-Phase 8 — Proxy + OIDC Provider (5-7 days)
+**Plan:** `docs/superpowers/plans/2026-04-18-token-vault.md`
 
-- Shark Proxy (#58) — shark proxy --upstream makes Shark usable without any SDK
-- OIDC Provider mode (#60) — shares OAuth 2.1 infrastructure from Phase 7  
+- ✅ Managed third-party OAuth tokens (Google, Slack, GitHub, Microsoft, Notion, Linear, Jira)
+- ✅ Agents request tokens via `/api/v1/vault/{provider}/token` (OAuth Bearer delegation)
+- ✅ Auto-refresh on retrieval, AES-256-GCM encryption at rest (FieldEncryptor)
+- ✅ 9 pre-built provider templates (snake_case API)
+- ✅ Dashboard UI: split grid, create wizard, rotate secret, type-to-confirm delete, audit tab
+- ✅ Smoke tests sections 43-48 (provider CRUD, templates, connect, bearer auth, connections, audit) — 222 PASS, 0 FAIL
 
+Phase 6 — Proxy + Visual Flow Builder — Done
 
-Phase 9 — Polish & enterprise (7-10 days)
+**Plan:** `docs/superpowers/plans/2026-04-18-proxy.md`
+**Plan:** `docs/superpowers/plans/2026-04-18-visual-flow-builder.md`
 
+- ✅ Shark Proxy (#58) — embedded `shark serve --proxy-upstream` + standalone `shark proxy`
+- ✅ Route-level rules engine (path wildcards, method filters, require/allow)
+- ✅ Circuit breaker: L1 JWT local verify (agents never down), L2 session cache, L3 health monitor
+- ✅ Identity header injection (X-User-ID, X-Agent-ID, X-User-Roles, X-Auth-Method, X-Shark-Cache-Age)
+- ✅ Admin API: /admin/proxy/status + /rules + /simulate + SSE status stream
+- ✅ Proxy dashboard: 3-gauge circuit strip, URL simulator hero, rules table, read-only MVP
+- ✅ Auth Flow Builder — 12 step types (6 wired, 6 stubbed), conditional branches, priority + conditions
+- ✅ Flow integration: signup / login / oauth_callback / password_reset / magic_link hooks
+- ✅ Flow dashboard: palette + canvas + config + Preview dry-run + History tab
+- ✅ Smoke tests sections 49-54 (proxy disabled admin 404s, flow CRUD, dry-run timeline, signup block/disable/runs) — 244 PASS, 0 FAIL
+
+Phase 6.5 — Dashboard Gap Fix — Done
+
+**Spec:** `DASHBOARD_GAPS.md` — full audit + ranked plan + wave breakdown
+
+Backend smoke 375 PASS. Dashboard ~90% wired after Waves A-G. All closed.
+
+Phase 6.6 — Dashboard Deep Audit + Shape Fixes — Done (2026-04-20)
+
+**Trigger:** Smoke green but user reported "malfunctioning." Deep investigation via parallel Sonnet subagents found 24 real bugs (P0/P1/P2) spanning shape mismatches, routing 404s, crashes, hardcoded lies, mock residue. All 24 shipped.
+
+Highlights:
+- 3 routing 404s fixed (`/admin/audit`, `/admin/orgs/{id}/roles`, `/admin/orgs/{id}/invitations`)
+- 5 JSON shape mismatches fixed (sessions.data, users camelCase→snake_case, proxy PascalCase→snake_case, overview stats triple-bug, orgs members/metadata)
+- 1 crash fixed (organizations.tsx ReferenceError)
+- 3 authflow stubs wired (assign_role, add_to_org, require_mfa_challenge + new POST /auth/flow/mfa/verify)
+- adminConfigSummary expanded (passkey/password_policy/jwt/magic_link/session_mode/social_providers)
+- Real CSV audit export + pagination + date-range UI
+- 8 new API endpoints (revoke-all sessions, rotate agent secret, batch permission usage, webhook events, delete org member, dev-mode gate, etc.)
+- New migration `00002_audit_logs_extended_filters.sql`
+- 8 swallowed `_ = store.X` errors now `slog.Warn`
+- Dead `agents.tsx` stub deleted
+
+Full detail: `CHANGELOG.internal.md` → Phase 6.6.
+Handoff: `HANDOFF.md`.
+
+Phase 7 — SDK (5-7 days)
+
+**Plan:** TBD (builds on OAuth 2.1 flows)
+**Spec:** `SDK.md`
+
+- TypeScript SDK (#54) — now a thin OAuth 2.1 client
+- React/Svelte/Vue/Next.js wrappers
+- Node/Python/Go admin SDKs
+- SDK builds on top of real OAuth flows, not custom cookie logic
+
+Phase 8 — OIDC Provider + Polish (5-7 days)
+
+- OIDC Provider mode (#60) — shares OAuth 2.1 infrastructure from Phase 5
 - Impersonation (#59)
 - Compliance toolkit (#61)
-- Email provider presets (#52) + shark.email relay (#56) (overlap with Phase 2)
+- Email provider presets (#52) + shark.email relay (#56)
 - docs_url in error responses (#49)
 - Migration tools — Auth0 (#55), Clerk (#63), Supabase (#64)
-- Pre-built UI components + dashboard editor (#68)  
 
+Phase 9 — Enterprise (P2 from AGENT_AUTH.md)
+
+- Rich Authorization Requests (RFC 9396)
+- Pushed Authorization Requests (RFC 9126)
+- Step-up authorization flow
+- Consent management UI (advanced)
+- Agent analytics dashboard
 
 Phase 10 — Moonshot (when ready)
 
-- Visual flow builder (#62)
+- Pre-built UI components + dashboard editor (#68)
 - Remaining cloud-only issues (#27, #29, #30, #31)  
 
 

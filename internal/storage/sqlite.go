@@ -75,13 +75,13 @@ func (s *SQLiteStore) CreateUser(ctx context.Context, u *User) error {
 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at
+		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at
 		 FROM users WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at
+		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at
 		 FROM users WHERE email = ?`, email))
 }
 
@@ -94,12 +94,45 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 	}
 
 	var args []interface{}
-	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at FROM users`
+	var conditions []string
 
+	if opts.RoleID != "" {
+		// Join through user_roles for role filter
+		conditions = append(conditions, `id IN (SELECT user_id FROM user_roles WHERE role_id = ?)`)
+		args = append(args, opts.RoleID)
+	}
 	if opts.Search != "" {
-		query += ` WHERE email LIKE ? OR name LIKE ?`
+		conditions = append(conditions, `(email LIKE ? OR name LIKE ?)`)
 		search := "%" + opts.Search + "%"
 		args = append(args, search, search)
+	}
+	if opts.MFAEnabled != nil {
+		conditions = append(conditions, `mfa_enabled = ?`)
+		args = append(args, boolToInt(*opts.MFAEnabled))
+	}
+	if opts.EmailVerified != nil {
+		conditions = append(conditions, `email_verified = ?`)
+		args = append(args, boolToInt(*opts.EmailVerified))
+	}
+	if opts.AuthMethod != "" {
+		// `password` is special-cased to "user has a password set" since
+		// fresh accounts never logged in still register as password users.
+		// All other methods derive from the sessions table.
+		if opts.AuthMethod == "password" {
+			conditions = append(conditions, `password_hash IS NOT NULL AND password_hash != ''`)
+		} else {
+			conditions = append(conditions, `id IN (SELECT DISTINCT user_id FROM sessions WHERE auth_method = ?)`)
+			args = append(args, opts.AuthMethod)
+		}
+	}
+	if opts.OrgID != "" {
+		conditions = append(conditions, `id IN (SELECT user_id FROM organization_members WHERE organization_id = ?)`)
+		args = append(args, opts.OrgID)
+	}
+
+	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at FROM users`
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
 	}
 
 	query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
@@ -124,11 +157,12 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 
 func (s *SQLiteStore) UpdateUser(ctx context.Context, u *User) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET email=?, email_verified=?, password_hash=?, hash_type=?, name=?, avatar_url=?, mfa_enabled=?, mfa_secret=?, mfa_verified=?, metadata=?, updated_at=?
+		`UPDATE users SET email=?, email_verified=?, password_hash=?, hash_type=?, name=?, avatar_url=?, mfa_enabled=?, mfa_secret=?, mfa_verified=?, mfa_verified_at=?, metadata=?, updated_at=?, last_login_at=?
 		 WHERE id=?`,
 		u.Email, boolToInt(u.EmailVerified), u.PasswordHash, u.HashType,
 		u.Name, u.AvatarURL, boolToInt(u.MFAEnabled), u.MFASecret, boolToInt(u.MFAVerified),
-		u.Metadata, u.UpdatedAt, u.ID,
+		u.MFAVerifiedAt,
+		u.Metadata, u.UpdatedAt, u.LastLoginAt, u.ID,
 	)
 	return err
 }
@@ -138,13 +172,31 @@ func (s *SQLiteStore) DeleteUser(ctx context.Context, id string) error {
 	return err
 }
 
+// MarkWelcomeEmailSent flips welcome_email_sent to 1 atomically. The WHERE
+// clause makes the UPDATE a no-op on the second call, so we return
+// sql.ErrNoRows as the "already sent / nothing to do" signal — the
+// verify-email handler reads that and skips the send goroutine.
+func (s *SQLiteStore) MarkWelcomeEmailSent(ctx context.Context, userID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET welcome_email_sent = 1 WHERE id = ? AND welcome_email_sent = 0`, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *SQLiteStore) scanUser(row *sql.Row) (*User, error) {
 	var u User
 	var emailVerified, mfaEnabled, mfaVerified int
 	err := row.Scan(
 		&u.ID, &u.Email, &emailVerified, &u.PasswordHash, &u.HashType,
 		&u.Name, &u.AvatarURL, &mfaEnabled, &u.MFASecret, &mfaVerified,
-		&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+		&u.Metadata, &u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
+		&u.MFAVerifiedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -161,7 +213,8 @@ func (s *SQLiteStore) scanUserFromRows(rows *sql.Rows) (*User, error) {
 	err := rows.Scan(
 		&u.ID, &u.Email, &emailVerified, &u.PasswordHash, &u.HashType,
 		&u.Name, &u.AvatarURL, &mfaEnabled, &u.MFASecret, &mfaVerified,
-		&u.Metadata, &u.CreatedAt, &u.UpdatedAt,
+		&u.Metadata, &u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
+		&u.MFAVerifiedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -575,6 +628,11 @@ func (s *SQLiteStore) GetPermissionByActionResource(ctx context.Context, action,
 	return &p, nil
 }
 
+func (s *SQLiteStore) DeletePermission(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM permissions WHERE id = ?`, id)
+	return err
+}
+
 // --- RolePermissions ---
 
 func (s *SQLiteStore) AttachPermissionToRole(ctx context.Context, roleID, permissionID string) error {
@@ -659,7 +717,7 @@ func (s *SQLiteStore) GetRolesByUserID(ctx context.Context, userID string) ([]*R
 
 func (s *SQLiteStore) GetUsersByRoleID(ctx context.Context, roleID string) ([]*User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at
+		`SELECT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at, u.mfa_verified_at
 		 FROM users u
 		 INNER JOIN user_roles ur ON ur.user_id = u.id
 		 WHERE ur.role_id = ?`, roleID)
@@ -677,6 +735,129 @@ func (s *SQLiteStore) GetUsersByRoleID(ctx context.Context, roleID string) ([]*U
 		users = append(users, u)
 	}
 	return users, rows.Err()
+}
+
+// GetRolesByPermissionID is the inverse of GetPermissionsByRoleID — returns
+// every role that grants the given permission. Used by the dashboard's
+// "where is this permission used?" reverse lookup.
+func (s *SQLiteStore) GetRolesByPermissionID(ctx context.Context, permissionID string) ([]*Role, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT r.id, r.name, r.description, r.created_at, r.updated_at
+		 FROM roles r
+		 INNER JOIN role_permissions rp ON rp.role_id = r.id
+		 WHERE rp.permission_id = ?
+		 ORDER BY r.name`, permissionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roles []*Role
+	for rows.Next() {
+		var r Role
+		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		roles = append(roles, &r)
+	}
+	return roles, rows.Err()
+}
+
+// GetUsersByPermissionID returns every user that has the given permission via
+// any role assignment. DISTINCT collapses duplicates when a user has the
+// permission through multiple roles. Used by the RBAC reverse-lookup card.
+func (s *SQLiteStore) GetUsersByPermissionID(ctx context.Context, permissionID string) ([]*User, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at, u.mfa_verified_at
+		 FROM users u
+		 INNER JOIN user_roles ur ON ur.user_id = u.id
+		 INNER JOIN role_permissions rp ON rp.role_id = ur.role_id
+		 WHERE rp.permission_id = ?
+		 ORDER BY u.email`, permissionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		u, err := s.scanUserFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+// BatchCountRolesByPermissionIDs returns a permission_id → role-count map for
+// the given permission IDs using a single SQL query. Missing IDs are not
+// included in the result (callers should initialise defaults).
+func (s *SQLiteStore) BatchCountRolesByPermissionIDs(ctx context.Context, permissionIDs []string) (map[string]int, error) {
+	if len(permissionIDs) == 0 {
+		return map[string]int{}, nil
+	}
+	placeholders := strings.Repeat("?,", len(permissionIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(permissionIDs))
+	for i, id := range permissionIDs {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx,
+		fmt.Sprintf(`SELECT permission_id, COUNT(DISTINCT role_id) AS cnt
+		             FROM role_permissions WHERE permission_id IN (%s)
+		             GROUP BY permission_id`, placeholders),
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int, len(permissionIDs))
+	for rows.Next() {
+		var permID string
+		var cnt int
+		if err := rows.Scan(&permID, &cnt); err != nil {
+			return nil, err
+		}
+		result[permID] = cnt
+	}
+	return result, rows.Err()
+}
+
+// BatchCountUsersByPermissionIDs returns a permission_id → user-count map for
+// the given permission IDs. Each user is counted once per permission even if
+// they hold it through multiple roles (DISTINCT user_id).
+func (s *SQLiteStore) BatchCountUsersByPermissionIDs(ctx context.Context, permissionIDs []string) (map[string]int, error) {
+	if len(permissionIDs) == 0 {
+		return map[string]int{}, nil
+	}
+	placeholders := strings.Repeat("?,", len(permissionIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(permissionIDs))
+	for i, id := range permissionIDs {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx,
+		fmt.Sprintf(`SELECT rp.permission_id, COUNT(DISTINCT ur.user_id) AS cnt
+		             FROM role_permissions rp
+		             INNER JOIN user_roles ur ON ur.role_id = rp.role_id
+		             WHERE rp.permission_id IN (%s)
+		             GROUP BY rp.permission_id`, placeholders),
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int, len(permissionIDs))
+	for rows.Next() {
+		var permID string
+		var cnt int
+		if err := rows.Scan(&permID, &cnt); err != nil {
+			return nil, err
+		}
+		result[permID] = cnt
+	}
+	return result, rows.Err()
 }
 
 // --- SSOConnections ---
@@ -894,9 +1075,10 @@ func (s *SQLiteStore) CountActiveAPIKeysByScope(ctx context.Context, scope strin
 
 func (s *SQLiteStore) CreateAuditLog(ctx context.Context, l *AuditLog) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.ActorID, l.ActorType, l.Action, l.TargetType, l.TargetID,
+		l.OrgID, l.SessionID, l.ResourceType, l.ResourceID,
 		l.IP, l.UserAgent, l.Metadata, l.Status, l.CreatedAt,
 	)
 	return err
@@ -905,9 +1087,10 @@ func (s *SQLiteStore) CreateAuditLog(ctx context.Context, l *AuditLog) error {
 func (s *SQLiteStore) GetAuditLogByID(ctx context.Context, id string) (*AuditLog, error) {
 	var l AuditLog
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at
+		`SELECT id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at
 		 FROM audit_logs WHERE id = ?`, id,
 	).Scan(&l.ID, &l.ActorID, &l.ActorType, &l.Action, &l.TargetType, &l.TargetID,
+		&l.OrgID, &l.SessionID, &l.ResourceType, &l.ResourceID,
 		&l.IP, &l.UserAgent, &l.Metadata, &l.Status, &l.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -940,9 +1123,29 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 		conditions = append(conditions, "actor_id = ?")
 		args = append(args, opts.ActorID)
 	}
+	if opts.ActorType != "" {
+		conditions = append(conditions, "actor_type = ?")
+		args = append(args, opts.ActorType)
+	}
 	if opts.TargetID != "" {
 		conditions = append(conditions, "target_id = ?")
 		args = append(args, opts.TargetID)
+	}
+	if opts.OrgID != "" {
+		conditions = append(conditions, "org_id = ?")
+		args = append(args, opts.OrgID)
+	}
+	if opts.SessionID != "" {
+		conditions = append(conditions, "session_id = ?")
+		args = append(args, opts.SessionID)
+	}
+	if opts.ResourceType != "" {
+		conditions = append(conditions, "resource_type = ?")
+		args = append(args, opts.ResourceType)
+	}
+	if opts.ResourceID != "" {
+		conditions = append(conditions, "resource_id = ?")
+		args = append(args, opts.ResourceID)
 	}
 	if opts.Status != "" {
 		conditions = append(conditions, "status = ?")
@@ -967,7 +1170,7 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 		args = append(args, opts.Cursor, opts.Cursor)
 	}
 
-	query := "SELECT id, actor_id, actor_type, action, target_type, target_id, ip, user_agent, metadata, status, created_at FROM audit_logs"
+	query := "SELECT id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at FROM audit_logs"
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ") //#nosec G202 -- conditions are compile-time constant predicates; user values pass through ? placeholders in args
 	}
@@ -984,6 +1187,7 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 	for rows.Next() {
 		var l AuditLog
 		if err := rows.Scan(&l.ID, &l.ActorID, &l.ActorType, &l.Action, &l.TargetType, &l.TargetID,
+			&l.OrgID, &l.SessionID, &l.ResourceType, &l.ResourceID,
 			&l.IP, &l.UserAgent, &l.Metadata, &l.Status, &l.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -1081,14 +1285,14 @@ func (s *SQLiteStore) CountActiveSessions(ctx context.Context) (int, error) {
 
 func (s *SQLiteStore) CountMFAEnabled(ctx context.Context) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE mfa_enabled = 1`).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE mfa_enabled = 1 AND mfa_verified = 1`).Scan(&n)
 	return n, err
 }
 
 func (s *SQLiteStore) CountFailedLoginsSince(ctx context.Context, since time.Time) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM audit_logs WHERE action = 'login' AND status = 'failure' AND created_at >= ?`,
+		`SELECT COUNT(*) FROM audit_logs WHERE action = 'user.login' AND status = 'failure' AND created_at >= ?`,
 		since.UTC().Format(time.RFC3339),
 	).Scan(&n)
 	return n, err
@@ -1120,6 +1324,26 @@ func (s *SQLiteStore) CountSSOConnections(ctx context.Context, enabledOnly bool)
 	var n int
 	err := s.db.QueryRowContext(ctx, q).Scan(&n)
 	return n, err
+}
+
+// CountSSOIdentitiesByConnection returns a map of connection_id → user count.
+func (s *SQLiteStore) CountSSOIdentitiesByConnection(ctx context.Context) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT connection_id, COUNT(*) FROM sso_identities GROUP BY connection_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int)
+	for rows.Next() {
+		var connID string
+		var count int
+		if err := rows.Scan(&connID, &count); err != nil {
+			return nil, err
+		}
+		result[connID] = count
+	}
+	return result, rows.Err()
 }
 
 func (s *SQLiteStore) GroupSessionsByAuthMethodSince(ctx context.Context, since time.Time) ([]MethodCount, error) {
@@ -1283,6 +1507,16 @@ func (s *SQLiteStore) DeleteSessionsByUserID(ctx context.Context, userID string)
 		return nil, err
 	}
 	return ids, nil
+}
+
+// DeleteAllActiveSessions removes every non-expired session and returns the count deleted.
+func (s *SQLiteStore) DeleteAllActiveSessions(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at > datetime('now')`)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 // --- Dev inbox ---

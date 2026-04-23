@@ -35,20 +35,20 @@ rotated_at + 2*access_token_ttl has elapsed.`,
 
 		cfg, err := config.Load(configPath)
 		if err != nil {
-			return fmt.Errorf("load config: %w", err)
+			return maybeJSONErr(cmd, "config_load_failed", fmt.Errorf("load config: %w", err))
 		}
 		if cfg.Server.Secret == "" {
-			return fmt.Errorf("server.secret is not set in config")
+			return maybeJSONErr(cmd, "invalid_config", fmt.Errorf("server.secret is not set in config"))
 		}
 
 		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
 		if err != nil {
-			return fmt.Errorf("open database: %w", err)
+			return maybeJSONErr(cmd, "database_open_failed", fmt.Errorf("open database: %w", err))
 		}
 		defer store.Close()
 
 		if err := storage.RunMigrations(store.DB(), migrationsFS, "migrations"); err != nil {
-			return fmt.Errorf("run migrations: %w", err)
+			return maybeJSONErr(cmd, "migration_failed", fmt.Errorf("run migrations: %w", err))
 		}
 
 		ctx := context.Background()
@@ -56,17 +56,27 @@ rotated_at + 2*access_token_ttl has elapsed.`,
 
 		if keysRotate {
 			if err := mgr.GenerateAndStore(ctx, true); err != nil {
-				return fmt.Errorf("rotate signing key: %w", err)
+				return maybeJSONErr(cmd, "key_rotate_failed", fmt.Errorf("rotate signing key: %w", err))
 			}
 		} else {
 			if err := mgr.GenerateAndStore(ctx, false); err != nil {
-				return fmt.Errorf("generate signing key: %w", err)
+				return maybeJSONErr(cmd, "key_generate_failed", fmt.Errorf("generate signing key: %w", err))
 			}
 		}
 
 		key, err := store.GetActiveSigningKey(ctx)
 		if err != nil {
-			return fmt.Errorf("get active key after generation: %w", err)
+			return maybeJSONErr(cmd, "key_lookup_failed", fmt.Errorf("get active key after generation: %w", err))
+		}
+
+		if jsonFlag(cmd) {
+			return writeJSON(cmd.OutOrStdout(), map[string]any{
+				"kid":       key.KID,
+				"algorithm": key.Algorithm,
+				"alg":       key.Algorithm,
+				"status":    key.Status,
+				"rotated":   keysRotate,
+			})
 		}
 
 		fmt.Printf("kid:       %s\n", key.KID)
@@ -85,5 +95,6 @@ func init() {
 	keysGenerateJWTCmd.Flags().BoolVar(&keysRotate, "rotate", false, "retire active key(s) and generate a new one")
 	// Inherit --config flag from parent context via PersistentFlags or use the global serve config
 	keysGenerateJWTCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
+	addJSONFlag(keysGenerateJWTCmd)
 	keysCmd.AddCommand(keysGenerateJWTCmd)
 }

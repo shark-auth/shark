@@ -7,16 +7,23 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/sharkauth/sharkauth/internal/webhook"
 )
 
 // Logger records and queries audit events.
 type Logger struct {
-	store storage.Store
+	store      storage.Store
+	dispatcher *webhook.Dispatcher
 }
 
 // NewLogger creates a new audit Logger backed by the given store.
 func NewLogger(store storage.Store) *Logger {
 	return &Logger{store: store}
+}
+
+// SetDispatcher wires a webhook dispatcher for real-time emission.
+func (l *Logger) SetDispatcher(d *webhook.Dispatcher) {
+	l.dispatcher = d
 }
 
 // Log records an audit event. It assigns an ID and timestamp if not already set.
@@ -37,7 +44,16 @@ func (l *Logger) Log(ctx context.Context, event *storage.AuditLog) error {
 	if event.ActorType == "" {
 		event.ActorType = "user"
 	}
-	return l.store.CreateAuditLog(ctx, event)
+	if err := l.store.CreateAuditLog(ctx, event); err != nil {
+		return err
+	}
+
+	// Real-time emission
+	if l.dispatcher != nil {
+		_ = l.dispatcher.Emit(ctx, "system.audit_log", event)
+	}
+
+	return nil
 }
 
 // Query retrieves audit logs with filters and cursor-based pagination.

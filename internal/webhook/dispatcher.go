@@ -62,6 +62,54 @@ type Dispatcher struct {
 	wg       sync.WaitGroup
 	ctx      context.Context
 	cancel   context.CancelFunc
+
+	subsMu sync.RWMutex
+	subs   []chan EventEnvelope
+}
+
+// EventEnvelope is the wrapper for real-time broadcast.
+type EventEnvelope struct {
+	Event     string    `json:"event"`
+	CreatedAt time.Time `json:"created_at"`
+	Data      any       `json:"data"`
+}
+
+// Subscribe returns a channel that receives every event emitted by this
+// dispatcher. The caller must drain the channel to avoid blocking other
+// subscribers (or the emitter).
+func (d *Dispatcher) Subscribe() chan EventEnvelope {
+	d.subsMu.Lock()
+	defer d.subsMu.Unlock()
+	ch := make(chan EventEnvelope, 100)
+	d.subs = append(d.subs, ch)
+	return ch
+}
+
+// Unsubscribe removes a channel from the subscriber list.
+func (d *Dispatcher) Unsubscribe(ch chan EventEnvelope) {
+	d.subsMu.Lock()
+	defer d.subsMu.Unlock()
+	for i, sub := range d.subs {
+		if sub == ch {
+			d.subs = append(d.subs[:i], d.subs[i+1:]...)
+			close(ch)
+			return
+		}
+	}
+}
+
+// broadcast sends the envelope to all active subscribers.
+func (d *Dispatcher) broadcast(env EventEnvelope) {
+	d.subsMu.RLock()
+	defer d.subsMu.RUnlock()
+	for _, ch := range d.subs {
+		select {
+		case ch <- env:
+		default:
+			// Subscriber is slow; drop the event for this specific sub
+			// rather than backpressuring the whole system.
+		}
+	}
 }
 
 // Option configures a Dispatcher.
@@ -121,6 +169,13 @@ func (d *Dispatcher) Stop() {
 // Emit records a pending delivery per matching webhook and enqueues immediate
 // delivery. Non-blocking — all I/O happens on workers.
 func (d *Dispatcher) Emit(ctx context.Context, event string, payload any) error {
+	env := EventEnvelope{
+		Event:     event,
+		CreatedAt: time.Now().UTC(),
+		Data:      payload,
+	}
+	d.broadcast(env)
+
 	hooks, err := d.store.ListEnabledWebhooksByEvent(ctx, event)
 	if err != nil {
 		return fmt.Errorf("list webhooks: %w", err)

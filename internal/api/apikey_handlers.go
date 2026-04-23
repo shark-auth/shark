@@ -37,11 +37,12 @@ type createAPIKeyResponse struct {
 }
 
 // apiKeyResponse is returned for list/get (never includes the full key).
-// Display masked key as: sk_live_AbCd...xK9f
 type apiKeyResponse struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
 	KeyDisplay string   `json:"key_display"` // Masked: sk_live_AbCd...xK9f
+	KeyPrefix  string   `json:"key_prefix"`
+	KeySuffix  string   `json:"key_suffix"`
 	Scopes     []string `json:"scopes"`
 	RateLimit  int      `json:"rate_limit"`
 	ExpiresAt  *string  `json:"expires_at,omitempty"`
@@ -60,8 +61,7 @@ type updateAPIKeyRequest struct {
 
 // --- Handlers ---
 
-// handleCreateAPIKey creates a new M2M API key. The full key is returned
-// once in the response and never stored or shown again.
+// handleCreateAPIKey creates a new M2M API key.
 func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	var req createAPIKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -147,6 +147,17 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "api_key.created",
+			TargetType: "api_key",
+			TargetID:   apiKey.ID,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+		})
+	}
+
 	writeJSON(w, http.StatusCreated, createAPIKeyResponse{
 		ID:        apiKey.ID,
 		Name:      apiKey.Name,
@@ -160,7 +171,7 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleListAPIKeys returns all API keys (prefix + metadata, never the full key).
+// handleListAPIKeys returns all API keys wrapped in an api_keys object.
 func (s *Server) handleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	keys, err := s.Store.ListAPIKeys(r.Context())
 	if err != nil {
@@ -171,15 +182,17 @@ func (s *Server) handleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make([]apiKeyResponse, 0, len(keys))
+	list := make([]apiKeyResponse, 0, len(keys))
 	for _, k := range keys {
-		resp = append(resp, toAPIKeyResponse(k))
+		list = append(list, toAPIKeyResponse(k))
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"api_keys": list,
+	})
 }
 
-// handleGetAPIKey returns a single API key's details (no full key).
+// handleGetAPIKey returns a single API key's details.
 func (s *Server) handleGetAPIKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -202,7 +215,7 @@ func (s *Server) handleGetAPIKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toAPIKeyResponse(key))
 }
 
-// handleUpdateAPIKey updates name, scopes, rate_limit, or expires_at on an API key.
+// handleUpdateAPIKey updates an API key.
 func (s *Server) handleUpdateAPIKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -222,7 +235,6 @@ func (s *Server) handleUpdateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cannot update a revoked key
 	if key.RevokedAt != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error":   "invalid_request",
@@ -281,7 +293,7 @@ func (s *Server) handleUpdateAPIKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toAPIKeyResponse(key))
 }
 
-// handleRevokeAPIKey soft-deletes an API key by setting revoked_at.
+// handleRevokeAPIKey soft-deletes an API key.
 func (s *Server) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -317,7 +329,7 @@ func (s *Server) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		if err == nil && count <= 1 {
 			writeJSON(w, http.StatusConflict, map[string]string{
 				"error":   "last_admin_key",
-				"message": "Cannot revoke the last admin API key. Create another admin key first.",
+				"message": "Cannot revoke the last admin API key.",
 			})
 			return
 		}
@@ -332,13 +344,24 @@ func (s *Server) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "api_key.revoked",
+			TargetType: "api_key",
+			TargetID:   id,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+		})
+	}
+
 	revokedAt := now.Format(time.RFC3339)
 	key.RevokedAt = &revokedAt
 
 	writeJSON(w, http.StatusOK, toAPIKeyResponse(key))
 }
 
-// handleRotateAPIKey atomically creates a new key and revokes the old one.
+// handleRotateAPIKey rotates an API key.
 func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -366,7 +389,6 @@ func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate new key
 	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
@@ -392,7 +414,6 @@ func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: nowStr,
 	}
 
-	// Create new key first, then revoke old one
 	if err := s.Store.CreateAPIKey(r.Context(), newKey); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
@@ -409,7 +430,17 @@ func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse scopes for response
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "api_key.rotated",
+			TargetType: "api_key",
+			TargetID:   newKey.ID,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+		})
+	}
+
 	var scopes []string
 	_ = json.Unmarshal([]byte(newKey.Scopes), &scopes)
 
@@ -428,19 +459,18 @@ func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // --- Helpers ---
 
-// toAPIKeyResponse converts a storage.APIKey to the public response type.
-// Never includes the key hash or the full key.
 func toAPIKeyResponse(k *storage.APIKey) apiKeyResponse {
 	var scopes []string
 	_ = json.Unmarshal([]byte(k.Scopes), &scopes)
 
-	// Masked display like OpenAI: sk_live_AbCd...xK9f
 	display := "sk_live_" + k.KeyPrefix + "..." + k.KeySuffix
 
 	return apiKeyResponse{
 		ID:         k.ID,
 		Name:       k.Name,
 		KeyDisplay: display,
+		KeyPrefix:  k.KeyPrefix,
+		KeySuffix:  k.KeySuffix,
 		Scopes:     scopes,
 		RateLimit:  k.RateLimit,
 		ExpiresAt:  k.ExpiresAt,
@@ -449,4 +479,3 @@ func toAPIKeyResponse(k *storage.APIKey) apiKeyResponse {
 		RevokedAt:  k.RevokedAt,
 	}
 }
-

@@ -1,0 +1,245 @@
+package cmd
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+
+	"github.com/sharkauth/sharkauth/internal/proxy"
+)
+
+var (
+	proxyUpstream     string
+	proxyPort         int
+	proxyAuthBase     string
+	proxyRulesFile    string
+	proxyAudiences    []string
+	proxyIssuer       string
+	proxyInsecureAuth bool
+)
+
+// proxyRulesFileSpec mirrors the rule YAML shape accepted by the shared
+// config package, duplicated locally so the standalone CLI doesn't have
+// to load a full sharkauth.yaml just to read a rules list.
+type proxyRulesFileSpec struct {
+	Rules []proxyRuleSpec `yaml:"rules"`
+}
+
+type proxyRuleSpec struct {
+	Path    string   `yaml:"path"`
+	Methods []string `yaml:"methods"`
+	Require string   `yaml:"require"`
+	Allow   string   `yaml:"allow"`
+	Scopes  []string `yaml:"scopes"`
+}
+
+var proxyCmd = &cobra.Command{
+	Use:   "proxy",
+	Short: "Run the standalone Shark reverse proxy",
+	Long: `Starts a reverse proxy that connects to a Shark auth instance
+for health monitoring and JWT verification. Useful when you want the
+proxy in a separate process from the auth server (e.g. an edge
+deployment).
+
+Authorization: Bearer <jwt> is verified on every request against the
+auth server's /.well-known/jwks.json, cached in-memory with a 15-minute
+refresh (plus an eager refresh on an unknown kid). Requests without a
+valid JWT are treated as anonymous; rules with require:authenticated
+will therefore return 401.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if proxyUpstream == "" {
+			return errors.New("--upstream is required")
+		}
+		if proxyAuthBase == "" {
+			return errors.New("--auth is required (Shark auth base URL)")
+		}
+		if err := validateAuthURL(proxyAuthBase, proxyInsecureAuth, slog.Default()); err != nil {
+			return err
+		}
+		// W15c: audience + issuer are mandatory for the standalone proxy.
+		// golang-jwt v5 does NOT validate aud/iss unless explicitly opted
+		// in; accepting a token from the auth server for a different
+		// audience or a different issuer would be a CVE-shape bug.
+		if len(proxyAudiences) == 0 {
+			return errors.New("--audience is required (repeatable; at least one expected audience)")
+		}
+		expectedIssuer := strings.TrimRight(proxyIssuer, "/")
+		if expectedIssuer == "" {
+			expectedIssuer = strings.TrimRight(proxyAuthBase, "/")
+		}
+
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+
+		logger := slog.Default()
+
+		engine, err := loadProxyRulesFile(proxyRulesFile)
+		if err != nil {
+			return fmt.Errorf("load rules: %w", err)
+		}
+
+		breakerCfg := proxy.BreakerConfig{
+			HealthURL:        proxyAuthBase + "/api/v1/admin/health",
+			HealthInterval:   10 * time.Second,
+			FailureThreshold: 3,
+			CacheSize:        10000,
+			CacheTTL:         5 * time.Minute,
+			NegativeTTL:      30 * time.Second,
+			MissBehavior:     proxy.MissReject,
+		}
+		breaker := proxy.NewBreaker(breakerCfg, logger)
+		breaker.Start(ctx)
+		defer breaker.Stop()
+
+		proxyCfg := proxy.Config{
+			Enabled:       true,
+			Upstream:      proxyUpstream,
+			Timeout:       30 * time.Second,
+			StripIncoming: true,
+		}
+		h, err := proxy.New(proxyCfg, engine, logger)
+		if err != nil {
+			return fmt.Errorf("build proxy: %w", err)
+		}
+
+		// W15c: fetch JWKS from the Shark auth server and verify Bearer
+		// tokens on every request. Falls back to anonymous identity when
+		// no Authorization header is present; an invalid/expired/tampered
+		// token short-circuits to 401 before the rules engine runs so
+		// callers get a clear error rather than an opaque forbidden.
+		jwks := newJWKSCache(proxyAuthBase, logger)
+		jwks.expectedAudiences = proxyAudiences
+		jwks.expectedIssuer = expectedIssuer
+		if err := jwks.Start(ctx); err != nil {
+			return fmt.Errorf("jwks: %w", err)
+		}
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			auth := r.Header.Get("Authorization")
+			if auth == "" {
+				r = r.WithContext(proxy.WithIdentity(r.Context(), proxy.Identity{AuthMethod: "anonymous"}))
+				h.ServeHTTP(w, r)
+				return
+			}
+			id, verr := jwks.verifyBearer(r.Context(), auth)
+			if verr != nil {
+				logger.Debug("standalone proxy: JWT verify failed", "err", verr)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			r = r.WithContext(proxy.WithIdentity(r.Context(), id))
+			h.ServeHTTP(w, r)
+		})
+
+		srv := &http.Server{
+			Addr:              fmt.Sprintf(":%d", proxyPort),
+			Handler:           handler,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+
+		errCh := make(chan error, 1)
+		go func() {
+			logger.Info("shark proxy listening",
+				"addr", srv.Addr,
+				"upstream", proxyUpstream,
+				"auth_base", proxyAuthBase,
+			)
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errCh <- err
+			}
+			close(errCh)
+		}()
+
+		select {
+		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return srv.Shutdown(shutdownCtx)
+		case err, ok := <-errCh:
+			if ok && err != nil {
+				return err
+			}
+			return nil
+		}
+	},
+}
+
+// validateAuthURL enforces the W15c HTTPS-for-auth guarantee. MITM on a
+// cleartext /.well-known/jwks.json response lets an attacker swap in
+// their own signing keys — turning every bearer token the proxy accepts
+// into a forgery. Refuse http:// unless the operator explicitly opts in
+// with --insecure-auth-http (kept for local dev + loopback test
+// fixtures), and loudly warn when they do.
+func validateAuthURL(authBase string, allowInsecure bool, logger *slog.Logger) error {
+	switch {
+	case strings.HasPrefix(authBase, "https://"):
+		return nil
+	case strings.HasPrefix(authBase, "http://"):
+		if !allowInsecure {
+			return errors.New("refusing http:// auth URL without --insecure-auth-http (dev/testing only)")
+		}
+		logger.Warn("using cleartext HTTP for auth server — DO NOT USE IN PRODUCTION", "auth", authBase)
+		return nil
+	default:
+		return errors.New("--auth must be an http:// or https:// URL")
+	}
+}
+
+// loadProxyRulesFile compiles the rule list at path into a proxy.Engine.
+// An empty path is permitted and yields an engine with no rules —
+// effectively "deny everything via the default-deny fall-through", which
+// matches the safe-by-default behavior for the standalone proxy.
+func loadProxyRulesFile(path string) (*proxy.Engine, error) {
+	if path == "" {
+		return proxy.NewEngine(nil)
+	}
+	raw, err := os.ReadFile(path) //#nosec G304 -- path comes from a CLI flag, not user input over the wire
+	if err != nil {
+		return nil, err
+	}
+	var spec proxyRulesFileSpec
+	if err := yaml.Unmarshal(raw, &spec); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	specs := make([]proxy.RuleSpec, len(spec.Rules))
+	for i, r := range spec.Rules {
+		specs[i] = proxy.RuleSpec{
+			Path:    r.Path,
+			Methods: r.Methods,
+			Require: r.Require,
+			Allow:   r.Allow,
+			Scopes:  r.Scopes,
+		}
+	}
+	return proxy.NewEngine(specs)
+}
+
+func init() {
+	proxyCmd.Flags().StringVar(&proxyUpstream, "upstream", "", "upstream URL to proxy to (required)")
+	proxyCmd.Flags().IntVar(&proxyPort, "port", 8081, "port to listen on")
+	proxyCmd.Flags().StringVar(&proxyAuthBase, "auth", "", "Shark auth base URL for health monitoring (required)")
+	proxyCmd.Flags().StringVar(&proxyRulesFile, "rules", "", "path to a YAML file with a 'rules:' list (optional)")
+	// W15c: aud + iss validation flags. Audience is repeatable — a token is
+	// accepted if any of its aud values matches any expected audience.
+	// Issuer defaults to --auth with trailing slash trimmed so operators
+	// running shark auth + shark proxy as a matched pair don't need to set
+	// both flags explicitly.
+	proxyCmd.Flags().StringSliceVar(&proxyAudiences, "audience", nil, "expected JWT audience (aud); repeatable, at least one required")
+	proxyCmd.Flags().StringVar(&proxyIssuer, "issuer", "", "expected JWT issuer (iss); defaults to --auth with trailing slash trimmed")
+	// W15c: HTTPS-by-default for --auth. Anyone flipping this flag on is
+	// accepting MITM-forged keys and should only do so for local dev /
+	// loopback test fixtures.
+	proxyCmd.Flags().BoolVar(&proxyInsecureAuth, "insecure-auth-http", false, "allow http:// --auth URL (MITM-exposed; dev/testing only)")
+
+	root.AddCommand(proxyCmd)
+}

@@ -30,6 +30,12 @@ type Store interface {
 	ListUsers(ctx context.Context, opts ListUsersOpts) ([]*User, error)
 	UpdateUser(ctx context.Context, user *User) error
 	DeleteUser(ctx context.Context, id string) error
+	// MarkWelcomeEmailSent atomically flips welcome_email_sent from 0 to 1 for
+	// the given user. Returns sql.ErrNoRows when the flag was already set (or
+	// the user doesn't exist) — callers treat that as "don't send" for
+	// idempotency. The UPDATE ... WHERE welcome_email_sent = 0 guard makes
+	// this race-safe across concurrent verifications.
+	MarkWelcomeEmailSent(ctx context.Context, userID string) error
 
 	// Sessions
 	CreateSession(ctx context.Context, sess *Session) error
@@ -40,6 +46,7 @@ type Store interface {
 	UpdateSessionMFAPassed(ctx context.Context, id string, mfaPassed bool) error
 	ListActiveSessions(ctx context.Context, opts ListSessionsOpts) ([]*SessionWithUser, error)
 	DeleteSessionsByUserID(ctx context.Context, userID string) ([]string, error)
+	DeleteAllActiveSessions(ctx context.Context) (int64, error)
 
 	// Stats / metrics
 	CountUsers(ctx context.Context) (int, error)
@@ -49,6 +56,7 @@ type Store interface {
 	CountFailedLoginsSince(ctx context.Context, since time.Time) (int, error)
 	CountExpiringAPIKeys(ctx context.Context, within time.Duration) (int, error)
 	CountSSOConnections(ctx context.Context, enabledOnly bool) (int, error)
+	CountSSOIdentitiesByConnection(ctx context.Context) (map[string]int, error)
 	GroupSessionsByAuthMethodSince(ctx context.Context, since time.Time) ([]MethodCount, error)
 	GroupUsersCreatedByDay(ctx context.Context, days int) ([]DayCount, error)
 
@@ -65,6 +73,7 @@ type Store interface {
 	UpdateOrganization(ctx context.Context, o *Organization) error
 	DeleteOrganization(ctx context.Context, id string) error
 	ListOrganizationsByUserID(ctx context.Context, userID string) ([]*Organization, error)
+	ListAllOrganizations(ctx context.Context) ([]*Organization, error)
 
 	// Organization members
 	CreateOrganizationMember(ctx context.Context, m *OrganizationMember) error
@@ -77,9 +86,12 @@ type Store interface {
 
 	// Organization invitations
 	CreateOrganizationInvitation(ctx context.Context, inv *OrganizationInvitation) error
+	GetOrganizationInvitationByID(ctx context.Context, id string) (*OrganizationInvitation, error)
 	GetOrganizationInvitationByTokenHash(ctx context.Context, tokenHash string) (*OrganizationInvitation, error)
 	MarkOrganizationInvitationAccepted(ctx context.Context, id string, acceptedAt string) error
 	ListOrganizationInvitationsByOrgID(ctx context.Context, orgID string) ([]*OrganizationInvitation, error)
+	UpdateOrganizationInvitationToken(ctx context.Context, id, tokenHash, expiresAt string) error
+	DeleteOrganizationInvitation(ctx context.Context, id string) error
 
 	// Webhooks
 	CreateWebhook(ctx context.Context, w *Webhook) error
@@ -135,11 +147,18 @@ type Store interface {
 	GetPermissionByID(ctx context.Context, id string) (*Permission, error)
 	ListPermissions(ctx context.Context) ([]*Permission, error)
 	GetPermissionByActionResource(ctx context.Context, action, resource string) (*Permission, error)
+	DeletePermission(ctx context.Context, id string) error
 
 	// RolePermissions
 	AttachPermissionToRole(ctx context.Context, roleID, permissionID string) error
 	DetachPermissionFromRole(ctx context.Context, roleID, permissionID string) error
 	GetPermissionsByRoleID(ctx context.Context, roleID string) ([]*Permission, error)
+	GetRolesByPermissionID(ctx context.Context, permissionID string) ([]*Role, error)
+	GetUsersByPermissionID(ctx context.Context, permissionID string) ([]*User, error)
+	// Batch variants return permission_id → count maps so the dashboard
+	// can request all counts in 2 SQL round-trips instead of 2N.
+	BatchCountRolesByPermissionIDs(ctx context.Context, permissionIDs []string) (map[string]int, error)
+	BatchCountUsersByPermissionIDs(ctx context.Context, permissionIDs []string) (map[string]int, error)
 
 	// UserRoles
 	AssignRoleToUser(ctx context.Context, userID, roleID string) error
@@ -199,6 +218,7 @@ type Store interface {
 	// JWT signing keys
 	InsertSigningKey(ctx context.Context, key *SigningKey) error
 	GetActiveSigningKey(ctx context.Context) (*SigningKey, error)
+	GetActiveSigningKeyByAlgorithm(ctx context.Context, algorithm string) (*SigningKey, error)
 	GetSigningKeyByKID(ctx context.Context, kid string) (*SigningKey, error)
 	RotateSigningKeys(ctx context.Context, newKey *SigningKey) error
 	ListJWKSCandidates(ctx context.Context, activeOnly bool, retiredCutoff time.Time) ([]*SigningKey, error)
@@ -212,11 +232,127 @@ type Store interface {
 	CreateApplication(ctx context.Context, app *Application) error
 	GetApplicationByID(ctx context.Context, id string) (*Application, error)
 	GetApplicationByClientID(ctx context.Context, clientID string) (*Application, error)
+	GetApplicationBySlug(ctx context.Context, slug string) (*Application, error)
+	GetApplicationByProxyDomain(ctx context.Context, domain string) (*Application, error)
 	GetDefaultApplication(ctx context.Context) (*Application, error)
 	ListApplications(ctx context.Context, limit, offset int) ([]*Application, error)
 	UpdateApplication(ctx context.Context, app *Application) error
 	RotateApplicationSecret(ctx context.Context, id, newHash, newPrefix string) error
 	DeleteApplication(ctx context.Context, id string) error
+
+	// Agents (OAuth 2.1 clients)
+	CreateAgent(ctx context.Context, agent *Agent) error
+	GetAgentByID(ctx context.Context, id string) (*Agent, error)
+	GetAgentByClientID(ctx context.Context, clientID string) (*Agent, error)
+	ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*Agent, int, error)
+	UpdateAgent(ctx context.Context, agent *Agent) error
+	UpdateAgentSecret(ctx context.Context, id, secretHash string) error
+	DeactivateAgent(ctx context.Context, id string) error
+	// RotateDCRClientSecret rotates the client secret for a DCR-registered agent,
+	// preserving the previous hash as old_secret_hash valid until oldSecretExpiresAt.
+	RotateDCRClientSecret(ctx context.Context, agentID, newSecretHash, oldSecretHash string, oldSecretExpiresAt time.Time) error
+
+	// OAuth Authorization Codes
+	CreateAuthorizationCode(ctx context.Context, code *OAuthAuthorizationCode) error
+	GetAuthorizationCode(ctx context.Context, codeHash string) (*OAuthAuthorizationCode, error)
+	DeleteAuthorizationCode(ctx context.Context, codeHash string) error
+	DeleteExpiredAuthorizationCodes(ctx context.Context) (int64, error)
+
+	// OAuth PKCE Sessions
+	CreatePKCESession(ctx context.Context, sess *OAuthPKCESession) error
+	GetPKCESession(ctx context.Context, signatureHash string) (*OAuthPKCESession, error)
+	DeletePKCESession(ctx context.Context, signatureHash string) error
+	DeleteExpiredPKCESessions(ctx context.Context) (int64, error)
+
+	// OAuth Tokens
+	CreateOAuthToken(ctx context.Context, token *OAuthToken) error
+	GetOAuthTokenByJTI(ctx context.Context, jti string) (*OAuthToken, error)
+	GetOAuthTokenByHash(ctx context.Context, tokenHash string) (*OAuthToken, error)
+	GetActiveOAuthTokenByRequestIDAndType(ctx context.Context, requestID, tokenType string) (*OAuthToken, error)
+	RevokeOAuthToken(ctx context.Context, id string) error
+	RevokeOAuthTokensByClientID(ctx context.Context, clientID string) (int64, error)
+	RevokeOAuthTokenFamily(ctx context.Context, familyID string) (int64, error)
+	ListOAuthTokensByAgentID(ctx context.Context, agentID string, limit int) ([]*OAuthToken, error)
+	DeleteExpiredOAuthTokens(ctx context.Context) (int64, error)
+	UpdateOAuthTokenDPoPJKT(ctx context.Context, id string, jkt string) error
+
+	// OAuth Consents
+	CreateOAuthConsent(ctx context.Context, consent *OAuthConsent) error
+	GetActiveConsent(ctx context.Context, userID, clientID string) (*OAuthConsent, error)
+	ListConsentsByUserID(ctx context.Context, userID string) ([]*OAuthConsent, error)
+	ListAllConsents(ctx context.Context) ([]*OAuthConsent, error)
+	RevokeOAuthConsent(ctx context.Context, id string) error
+
+	// Device Codes (RFC 8628)
+	CreateDeviceCode(ctx context.Context, dc *OAuthDeviceCode) error
+	GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*OAuthDeviceCode, error)
+	GetDeviceCodeByHash(ctx context.Context, hash string) (*OAuthDeviceCode, error)
+	ListPendingDeviceCodes(ctx context.Context) ([]*OAuthDeviceCode, error)
+	UpdateDeviceCodeStatus(ctx context.Context, hash string, status string, userID string) error
+	UpdateDeviceCodePolledAt(ctx context.Context, hash string) error
+	DeleteExpiredDeviceCodes(ctx context.Context) (int64, error)
+
+	// Dynamic Client Registration (RFC 7591)
+	CreateDCRClient(ctx context.Context, client *OAuthDCRClient) error
+	GetDCRClient(ctx context.Context, clientID string) (*OAuthDCRClient, error)
+	UpdateDCRClient(ctx context.Context, client *OAuthDCRClient) error
+	DeleteDCRClient(ctx context.Context, clientID string) error
+	// RotateDCRRegistrationToken replaces the registration_token_hash for a DCR client.
+	RotateDCRRegistrationToken(ctx context.Context, clientID, newTokenHash string) error
+
+	// Vault Providers (Token Vault — third-party OAuth providers)
+	CreateVaultProvider(ctx context.Context, p *VaultProvider) error
+	GetVaultProviderByID(ctx context.Context, id string) (*VaultProvider, error)
+	GetVaultProviderByName(ctx context.Context, name string) (*VaultProvider, error)
+	ListVaultProviders(ctx context.Context, activeOnly bool) ([]*VaultProvider, error)
+	UpdateVaultProvider(ctx context.Context, p *VaultProvider) error
+	DeleteVaultProvider(ctx context.Context, id string) error
+
+	// Vault Connections (per-user links to a provider, with encrypted tokens)
+	CreateVaultConnection(ctx context.Context, c *VaultConnection) error
+	GetVaultConnectionByID(ctx context.Context, id string) (*VaultConnection, error)
+	GetVaultConnection(ctx context.Context, providerID, userID string) (*VaultConnection, error)
+	ListVaultConnectionsByUserID(ctx context.Context, userID string) ([]*VaultConnection, error)
+	ListVaultConnectionsByProviderID(ctx context.Context, providerID string) ([]*VaultConnection, error)
+	ListAllVaultConnections(ctx context.Context) ([]*VaultConnection, error)
+	UpdateVaultConnection(ctx context.Context, c *VaultConnection) error
+	UpdateVaultConnectionTokens(ctx context.Context, id, accessEnc, refreshEnc string, expiresAt *time.Time) error
+	MarkVaultConnectionNeedsReauth(ctx context.Context, id string, needs bool) error
+	DeleteVaultConnection(ctx context.Context, id string) error
+
+	// Auth Flows (Phase 6 Visual Flow Builder)
+	CreateAuthFlow(ctx context.Context, flow *AuthFlow) error
+	GetAuthFlowByID(ctx context.Context, id string) (*AuthFlow, error)
+	ListAuthFlows(ctx context.Context) ([]*AuthFlow, error)
+	ListAuthFlowsByTrigger(ctx context.Context, trigger string) ([]*AuthFlow, error)
+	UpdateAuthFlow(ctx context.Context, flow *AuthFlow) error
+	DeleteAuthFlow(ctx context.Context, id string) error
+
+	// Auth Flow Runs (history for the Flow Builder dashboard)
+	CreateAuthFlowRun(ctx context.Context, run *AuthFlowRun) error
+	ListAuthFlowRunsByFlowID(ctx context.Context, flowID string, limit int) ([]*AuthFlowRun, error)
+
+	// Branding (global config + per-app overrides via applications.branding_override JSON)
+	GetBranding(ctx context.Context, id string) (*BrandingConfig, error)
+	UpdateBranding(ctx context.Context, id string, fields map[string]any) error
+	SetBrandingLogo(ctx context.Context, id, url, sha string) error
+	ClearBrandingLogo(ctx context.Context, id string) error
+	ResolveBranding(ctx context.Context, appID string) (*BrandingConfig, error)
+
+	// Email templates (editable copy for hosted emails)
+	ListEmailTemplates(ctx context.Context) ([]*EmailTemplate, error)
+	GetEmailTemplate(ctx context.Context, id string) (*EmailTemplate, error)
+	UpdateEmailTemplate(ctx context.Context, id string, fields map[string]any) error
+	SeedEmailTemplates(ctx context.Context) error
+
+	// Proxy Rules (Phase 6.6 / Wave D — runtime override layer for the
+	// reverse proxy rule engine; YAML stays the bootstrap source).
+	CreateProxyRule(ctx context.Context, rule *ProxyRule) error
+	GetProxyRuleByID(ctx context.Context, id string) (*ProxyRule, error)
+	ListProxyRules(ctx context.Context) ([]*ProxyRule, error)
+	ListProxyRulesByAppID(ctx context.Context, appID string) ([]*ProxyRule, error)
+	UpdateProxyRule(ctx context.Context, rule *ProxyRule) error
+	DeleteProxyRule(ctx context.Context, id string) error
 }
 
 // --- Entity types ---
@@ -233,9 +369,13 @@ type User struct {
 	MFAEnabled    bool    `json:"mfa_enabled"`
 	MFASecret     *string `json:"-"`
 	MFAVerified   bool    `json:"mfa_verified"`
+	// MFAVerifiedAt is set when the user successfully completes their first TOTP
+	// verification after enrollment (F3.2). NULL means enrolled but pending.
+	MFAVerifiedAt *string `json:"-"`
 	Metadata      string  `json:"metadata"`
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`
+	LastLoginAt   *string `json:"last_login_at,omitempty"`
 }
 
 // Session represents a user session.
@@ -357,17 +497,21 @@ type APIKey struct {
 
 // AuditLog represents an audit log entry.
 type AuditLog struct {
-	ID         string `json:"id"`
-	ActorID    string `json:"actor_id,omitempty"`
-	ActorType  string `json:"actor_type"`
-	Action     string `json:"action"`
-	TargetType string `json:"target_type,omitempty"`
-	TargetID   string `json:"target_id,omitempty"`
-	IP         string `json:"ip,omitempty"`
-	UserAgent  string `json:"user_agent,omitempty"`
-	Metadata   string `json:"metadata"`
-	Status     string `json:"status"`
-	CreatedAt  string `json:"created_at"`
+	ID           string  `json:"id"`
+	ActorID      string  `json:"actor_id,omitempty"`
+	ActorType    string  `json:"actor_type"`
+	Action       string  `json:"action"`
+	TargetType   string  `json:"target_type,omitempty"`
+	TargetID     string  `json:"target_id,omitempty"`
+	OrgID        *string `json:"org_id,omitempty"`
+	SessionID    *string `json:"session_id,omitempty"`
+	ResourceType *string `json:"resource_type,omitempty"`
+	ResourceID   *string `json:"resource_id,omitempty"`
+	IP           string  `json:"ip,omitempty"`
+	UserAgent    string  `json:"user_agent,omitempty"`
+	Metadata     string  `json:"metadata"`
+	Status       string  `json:"status"`
+	CreatedAt    string  `json:"created_at"`
 }
 
 // Migration represents an Auth0 import migration record.
@@ -442,11 +586,17 @@ const (
 // Webhook event names. Ship minimal set for real dev integration —
 // expand alongside SDK in Phase 5.
 const (
-	WebhookEventUserCreated        = "user.created"
-	WebhookEventUserDeleted        = "user.deleted"
-	WebhookEventSessionRevoked     = "session.revoked"
-	WebhookEventOrgCreated         = "organization.created"
-	WebhookEventOrgMemberAdded     = "organization.member_added"
+	WebhookEventUserCreated    = "user.created"
+	WebhookEventUserUpdated    = "user.updated"
+	WebhookEventUserDeleted    = "user.deleted"
+	WebhookEventSessionCreated = "session.created"
+	WebhookEventSessionRevoked = "session.revoked"
+	WebhookEventMFAEnabled     = "mfa.enabled"
+	WebhookEventOrgCreated     = "organization.created"
+	WebhookEventOrgDeleted     = "organization.deleted"
+	WebhookEventOrgMemberAdded = "organization.member_added"
+	WebhookEventSystemAuditLog = "system.audit_log"
+	WebhookEventTest           = "webhook.test"
 )
 
 // Webhook is an admin-registered outbound event endpoint.
@@ -512,9 +662,14 @@ type DayCount struct {
 
 // ListUsersOpts configures user list queries.
 type ListUsersOpts struct {
-	Limit  int
-	Offset int
-	Search string // optional email/name search
+	Limit         int
+	Offset        int
+	Search        string // optional email/name search
+	MFAEnabled    *bool  // filter by mfa_enabled
+	EmailVerified *bool  // filter by email_verified
+	RoleID        string // filter by role assignment
+	AuthMethod    string // filter by auth_method (password|oauth|passkey|magic_link|sso)
+	OrgID         string // filter by organization membership
 }
 
 // ListSessionsOpts configures admin session list queries with cursor pagination.
@@ -536,15 +691,20 @@ type ListSessionsOpts struct {
 
 // AuditLogQuery configures audit log queries with cursor-based pagination.
 type AuditLogQuery struct {
-	Action   string // filter by event type
-	ActorID  string // filter by actor
-	TargetID string // filter by target
-	Status   string // "success" or "failure"
-	IP       string // filter by IP
-	From     string // start of date range (RFC3339)
-	To       string // end of date range (RFC3339)
-	Limit    int    // page size (default 50, max 200)
-	Cursor   string // cursor-based pagination (ID of last item)
+	Action       string // filter by event type
+	ActorID      string // filter by actor
+	ActorType    string // filter by actor type (user|agent|system|admin)
+	TargetID     string // filter by target
+	OrgID        string // filter by organization
+	SessionID    string // filter by session
+	ResourceType string // filter by resource type
+	ResourceID   string // filter by resource id
+	Status       string // "success" or "failure"
+	IP           string // filter by IP
+	From         string // start of date range (RFC3339)
+	To           string // end of date range (RFC3339)
+	Limit        int    // page size (default 50, max 200)
+	Cursor       string // cursor-based pagination (ID of last item)
 }
 
 // SigningKey represents a JWT signing keypair stored in the database.
@@ -560,12 +720,42 @@ type SigningKey struct {
 	Status        string  `json:"status"` // "active" | "retired"
 }
 
+// EmailTemplate is the editable copy for one hosted email (magic_link, etc).
+// BodyParagraphs is stored as a JSON string in SQLite but surfaced as []string.
+type EmailTemplate struct {
+	ID             string   `json:"id"`
+	Subject        string   `json:"subject"`
+	Preheader      string   `json:"preheader"`
+	HeaderText     string   `json:"header_text"`
+	BodyParagraphs []string `json:"body_paragraphs"`
+	CTAText        string   `json:"cta_text"`
+	CTAURLTemplate string   `json:"cta_url_template"`
+	FooterText     string   `json:"footer_text"`
+	UpdatedAt      string   `json:"updated_at"`
+}
+
+// BrandingConfig is the resolved branding (global + app override merged).
+type BrandingConfig struct {
+	LogoURL          string `json:"logo_url,omitempty"`
+	LogoSHA          string `json:"logo_sha,omitempty"`
+	PrimaryColor     string `json:"primary_color"`
+	SecondaryColor   string `json:"secondary_color"`
+	FontFamily       string `json:"font_family"`
+	FooterText       string `json:"footer_text"`
+	EmailFromName    string `json:"email_from_name"`
+	EmailFromAddress string `json:"email_from_address"`
+}
+
 // Application represents a registered OAuth 2.x / OIDC client application.
 // JSON columns (AllowedCallbackURLs, AllowedLogoutURLs, AllowedOrigins, Metadata)
 // are serialized/deserialized in the storage layer; callers use native Go types.
 type Application struct {
 	ID                  string         `json:"id"`           // app_<nanoid>
 	Name                string         `json:"name"`
+	// Slug is the URL-safe identifier used in hosted login page routing.
+	// Auto-generated from Name on create if not supplied; must match
+	// ^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$ and be unique across all applications.
+	Slug                string         `json:"slug"`
 	ClientID            string         `json:"client_id"`    // shark_app_<nanoid>
 	ClientSecretHash    string         `json:"-"`            // SHA-256 hex, never exposed
 	ClientSecretPrefix  string         `json:"client_secret_prefix"` // first 8 chars (UX only)
@@ -574,6 +764,23 @@ type Application struct {
 	AllowedOrigins      []string       `json:"allowed_origins"`
 	IsDefault           bool           `json:"is_default"`
 	Metadata            map[string]any `json:"metadata"`
-	CreatedAt           time.Time      `json:"created_at"`
-	UpdatedAt           time.Time      `json:"updated_at"`
+	// IntegrationMode is the per-app login-surface picker. One of
+	// "hosted", "components", "proxy", "custom". Defaults to "custom".
+	IntegrationMode string `json:"integration_mode"`
+	// BrandingOverride is a JSON object of per-app branding overrides
+	// that merge over the global branding row in ResolveBranding.
+	// Empty string means "no override; use global".
+	BrandingOverride string `json:"branding_override,omitempty"`
+	// ProxyLoginFallback controls where proxy-mode apps send unauthed
+	// requests: "hosted" or "custom_url". Defaults to "hosted".
+	ProxyLoginFallback    string    `json:"proxy_login_fallback,omitempty"`
+	ProxyLoginFallbackURL string    `json:"proxy_login_fallback_url,omitempty"`
+
+	// ProxyPublicDomain is the external domain for transparent proxying (e.g. "api.myapp.com").
+	ProxyPublicDomain string `json:"proxy_public_domain,omitempty"`
+	// ProxyProtectedURL is the internal destination for transparent proxying (e.g. "http://localhost:3001").
+	ProxyProtectedURL string `json:"proxy_protected_url,omitempty"`
+
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }

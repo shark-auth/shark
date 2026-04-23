@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -364,6 +365,33 @@ func (s *Server) handleListPermissions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (s *Server) handleDeletePermission(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	_, err := s.Store.GetPermissionByID(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "Permission not found",
+		})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+	if err := s.Store.DeletePermission(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // --- Role-Permission handlers ---
 
 func (s *Server) handleAttachPermission(w http.ResponseWriter, r *http.Request) {
@@ -610,4 +638,125 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, checkPermissionResponse{Allowed: allowed})
+}
+
+// handleListRolesByPermission handles GET /api/v1/permissions/{id}/roles.
+// Reverse lookup — given a permission, return every role that grants it.
+// Used by the dashboard's "where is this permission used?" card.
+func (s *Server) handleListRolesByPermission(w http.ResponseWriter, r *http.Request) {
+	permID := chi.URLParam(r, "id")
+	_, err := s.Store.GetPermissionByID(r.Context(), permID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Permission not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	roles, err := s.Store.GetRolesByPermissionID(r.Context(), permID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	out := make([]*roleResponse, 0, len(roles))
+	for _, role := range roles {
+		out = append(out, roleToResponse(role))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": out, "total": len(out)})
+}
+
+// handleListUsersByPermission handles GET /api/v1/permissions/{id}/users.
+// Reverse lookup — every user that has this permission via any role
+// assignment. Mirrors handleListRolesByPermission's contract.
+func (s *Server) handleListUsersByPermission(w http.ResponseWriter, r *http.Request) {
+	permID := chi.URLParam(r, "id")
+	_, err := s.Store.GetPermissionByID(r.Context(), permID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Permission not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	users, err := s.Store.GetUsersByPermissionID(r.Context(), permID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	out := make([]adminUserResponse, 0, len(users))
+	for _, u := range users {
+		out = append(out, adminUserToResponse(u))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": out, "total": len(out)})
+}
+
+// permissionUsage holds the lightweight counts the dashboard needs to
+// render "Used by N roles · M users" without 2 per-row round-trips.
+type permissionUsage struct {
+	Roles int `json:"roles"`
+	Users int `json:"users"`
+}
+
+// handlePermissionsBatchUsage handles GET /api/v1/admin/permissions/batch-usage.
+// Query ?ids=a,b,c returns a map of permission_id → {roles, users} counts.
+// A single SQL pass per dimension replaces N×2 per-row API calls from the
+// PermissionRow component, cutting 20-perm pages from 40 concurrent requests
+// down to 2 (or 0 when ids is empty).
+func (s *Server) handlePermissionsBatchUsage(w http.ResponseWriter, r *http.Request) {
+	raw := r.URL.Query().Get("ids")
+	if raw == "" {
+		writeJSON(w, http.StatusOK, map[string]any{})
+		return
+	}
+
+	ids := strings.Split(raw, ",")
+	// Deduplicate and sanitise. Empty strings from trailing commas, etc.
+	seen := make(map[string]bool, len(ids))
+	clean := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			clean = append(clean, id)
+		}
+	}
+	if len(clean) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{})
+		return
+	}
+
+	// Build {id: usage} map, initialising every requested id to zero so the
+	// frontend never has to handle a missing key.
+	result := make(map[string]*permissionUsage, len(clean))
+	for _, id := range clean {
+		result[id] = &permissionUsage{}
+	}
+
+	// Role counts: one SQL with an IN list, GROUP BY permission_id.
+	roleCounts, err := s.Store.BatchCountRolesByPermissionIDs(r.Context(), clean)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	for id, n := range roleCounts {
+		if u, ok := result[id]; ok {
+			u.Roles = n
+		}
+	}
+
+	// User counts: analogous query.
+	userCounts, err := s.Store.BatchCountUsersByPermissionIDs(r.Context(), clean)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	for id, n := range userCounts {
+		if u, ok := result[id]; ok {
+			u.Users = n
+		}
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }

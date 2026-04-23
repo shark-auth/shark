@@ -18,20 +18,25 @@ import (
 func AdminAPIKeyFromStore(store storage.Store, rateLimiter *auth.TokenBucket) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Read Authorization header
+			// Read Authorization header or token query param (for SSE)
+			rawKey := ""
 			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "Missing Authorization header")
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+					rawKey = parts[1]
+				}
+			}
+
+			if rawKey == "" {
+				rawKey = r.URL.Query().Get("token")
+			}
+
+			if rawKey == "" {
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "Missing API key")
 				return
 			}
 
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "Invalid Authorization header format")
-				return
-			}
-
-			rawKey := parts[1]
 			if !strings.HasPrefix(rawKey, "sk_live_") {
 				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "Invalid API key format")
 				return

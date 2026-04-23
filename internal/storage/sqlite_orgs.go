@@ -66,6 +66,26 @@ func (s *SQLiteStore) ListOrganizationsByUserID(ctx context.Context, userID stri
 	return out, rows.Err()
 }
 
+func (s *SQLiteStore) ListAllOrganizations(ctx context.Context) ([]*Organization, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, slug, metadata, created_at, updated_at
+		 FROM organizations ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*Organization
+	for rows.Next() {
+		var o Organization
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Metadata, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &o)
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) scanOrg(row *sql.Row) (*Organization, error) {
 	var o Organization
 	if err := row.Scan(&o.ID, &o.Name, &o.Slug, &o.Metadata, &o.CreatedAt, &o.UpdatedAt); err != nil {
@@ -167,6 +187,38 @@ func (s *SQLiteStore) CreateOrganizationInvitation(ctx context.Context, inv *Org
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		inv.ID, inv.OrganizationID, strings.ToLower(inv.Email), inv.Role, inv.TokenHash,
 		inv.InvitedBy, inv.ExpiresAt, inv.CreatedAt,
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetOrganizationInvitationByID(ctx context.Context, id string) (*OrganizationInvitation, error) {
+	var inv OrganizationInvitation
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, organization_id, email, role, token_hash, invited_by, accepted_at, expires_at, created_at
+		 FROM organization_invitations WHERE id = ?`, id,
+	).Scan(&inv.ID, &inv.OrganizationID, &inv.Email, &inv.Role, &inv.TokenHash,
+		&inv.InvitedBy, &inv.AcceptedAt, &inv.ExpiresAt, &inv.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &inv, nil
+}
+
+// UpdateOrganizationInvitationToken rotates the stored token hash + expiry. Used
+// when an admin resends an invitation so the previous link is invalidated and
+// the new email carries a fresh, single-use token.
+func (s *SQLiteStore) UpdateOrganizationInvitationToken(ctx context.Context, id, tokenHash, expiresAt string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE organization_invitations SET token_hash = ?, expires_at = ? WHERE id = ?`,
+		tokenHash, expiresAt, id,
+	)
+	return err
+}
+
+// DeleteOrganizationInvitation removes a pending or accepted invitation row.
+func (s *SQLiteStore) DeleteOrganizationInvitation(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM organization_invitations WHERE id = ?`, id,
 	)
 	return err
 }

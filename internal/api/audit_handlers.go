@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -40,15 +42,20 @@ func (s *Server) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	opts := storage.AuditLogQuery{
-		Action:   q.Get("action"),
-		ActorID:  q.Get("actor_id"),
-		TargetID: q.Get("target_id"),
-		Status:   q.Get("status"),
-		IP:       q.Get("ip"),
-		From:     q.Get("from"),
-		To:       q.Get("to"),
-		Limit:    limit + 1, // fetch one extra to determine has_more
-		Cursor:   q.Get("cursor"),
+		Action:       q.Get("action"),
+		ActorID:      q.Get("actor_id"),
+		ActorType:    q.Get("actor_type"),
+		TargetID:     q.Get("target_id"),
+		OrgID:        q.Get("org_id"),
+		SessionID:    q.Get("session_id"),
+		ResourceType: q.Get("resource_type"),
+		ResourceID:   q.Get("resource_id"),
+		Status:       q.Get("status"),
+		IP:           q.Get("ip"),
+		From:         q.Get("from"),
+		To:           q.Get("to"),
+		Limit:        limit + 1, // fetch one extra to determine has_more
+		Cursor:       q.Get("cursor"),
 	}
 
 	// Validate date formats if provided
@@ -286,16 +293,80 @@ func (s *Server) handleExportAuditLogs(w http.ResponseWriter, r *http.Request) {
 		allLogs = []*storage.AuditLog{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", "attachment; filename=audit-logs-export.json")
+	filename := fmt.Sprintf("audit-logs-%s-to-%s.csv",
+		req.From[:10], req.To[:10])
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{ //#nosec G104 -- write to ResponseWriter; no actionable recovery
-		"exported_at": time.Now().UTC().Format(time.RFC3339),
-		"from":        req.From,
-		"to":          req.To,
-		"count":       len(allLogs),
-		"data":        allLogs,
+
+	cw := csv.NewWriter(w)
+	// Header row
+	_ = cw.Write([]string{
+		"id", "created_at", "actor_id", "actor_type", "action",
+		"target_type", "target_id", "org_id", "session_id",
+		"resource_type", "resource_id", "status", "ip", "user_agent", "metadata",
 	})
+	for _, l := range allLogs {
+		_ = cw.Write([]string{
+			l.ID, l.CreatedAt, l.ActorID, l.ActorType, l.Action,
+			l.TargetType, l.TargetID,
+			strPtrVal(l.OrgID), strPtrVal(l.SessionID),
+			strPtrVal(l.ResourceType), strPtrVal(l.ResourceID),
+			l.Status, l.IP, l.UserAgent, l.Metadata,
+		})
+	}
+	cw.Flush()
+}
+
+// strPtrVal dereferences a *string safely, returning "" for nil.
+func strPtrVal(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// purgeAuditLogsRequest is the request body for POST /api/v1/admin/audit-logs/purge.
+type purgeAuditLogsRequest struct {
+	Before string `json:"before"` // RFC3339 timestamp; logs created before this are deleted
+}
+
+// handlePurgeAuditLogs handles POST /api/v1/admin/audit-logs/purge.
+// Deletes all audit log entries created before the given timestamp.
+func (s *Server) handlePurgeAuditLogs(w http.ResponseWriter, r *http.Request) {
+	var body purgeAuditLogsRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "Invalid JSON body",
+		})
+		return
+	}
+
+	if body.Before == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_request",
+			"message": "'before' timestamp is required (RFC3339 format)",
+		})
+		return
+	}
+
+	before, err := time.Parse(time.RFC3339, body.Before)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "invalid_parameter",
+			"message": "Invalid 'before' timestamp format, expected RFC3339",
+		})
+		return
+	}
+
+	count, err := s.Store.DeleteAuditLogsBefore(r.Context(), before)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]int64{"deleted": count})
 }
 
 // sortAuditLogsByCreatedAtDesc sorts audit logs by created_at descending.

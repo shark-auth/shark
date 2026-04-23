@@ -18,13 +18,14 @@ import (
 type adminUserResponse struct {
 	ID            string  `json:"id"`
 	Email         string  `json:"email"`
-	EmailVerified bool    `json:"emailVerified"`
+	EmailVerified bool    `json:"email_verified"`
 	Name          *string `json:"name,omitempty"`
-	AvatarURL     *string `json:"avatarUrl,omitempty"`
-	MFAEnabled    bool    `json:"mfaEnabled"`
+	AvatarURL     *string `json:"avatar_url,omitempty"`
+	MFAEnabled    bool    `json:"mfa_enabled"`
 	Metadata      string  `json:"metadata"`
-	CreatedAt     string  `json:"createdAt"`
-	UpdatedAt     string  `json:"updatedAt"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+	LastLoginAt   *string `json:"last_login_at,omitempty"`
 }
 
 func adminUserToResponse(u *storage.User) adminUserResponse {
@@ -38,24 +39,45 @@ func adminUserToResponse(u *storage.User) adminUserResponse {
 		Metadata:      u.Metadata,
 		CreatedAt:     u.CreatedAt,
 		UpdatedAt:     u.UpdatedAt,
+		LastLoginAt:   u.LastLoginAt,
 	}
 }
 
 // handleListUsers handles GET /api/v1/users
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	search := r.URL.Query().Get("search")
+	q := r.URL.Query()
 
+	// Accept both limit/offset and dashboard's page/per_page.
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	if perPage, _ := strconv.Atoi(q.Get("per_page")); perPage > 0 {
+		limit = perPage
+	}
+	if page, _ := strconv.Atoi(q.Get("page")); page > 0 && limit > 0 {
+		offset = (page - 1) * limit
+	}
 	if limit <= 0 {
 		limit = 50
 	}
 
-	users, err := s.Store.ListUsers(r.Context(), storage.ListUsersOpts{
-		Limit:  limit,
-		Offset: offset,
-		Search: search,
-	})
+	opts := storage.ListUsersOpts{
+		Limit:      limit,
+		Offset:     offset,
+		Search:     q.Get("search"),
+		RoleID:     q.Get("role_id"),
+		AuthMethod: q.Get("auth_method"),
+		OrgID:      q.Get("org_id"),
+	}
+	if v := q.Get("mfa_enabled"); v == "true" || v == "false" {
+		b := v == "true"
+		opts.MFAEnabled = &b
+	}
+	if v := q.Get("email_verified"); v == "true" || v == "false" {
+		b := v == "true"
+		opts.EmailVerified = &b
+	}
+
+	users, err := s.Store.ListUsers(r.Context(), opts)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
@@ -64,11 +86,24 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Total count uses the same filters but ignores limit/offset.
+	totalOpts := opts
+	totalOpts.Limit = 1000000
+	totalOpts.Offset = 0
+	allUsers, err := s.Store.ListUsers(r.Context(), totalOpts)
+	total := 0
+	if err == nil {
+		total = len(allUsers)
+	}
+
 	resp := make([]adminUserResponse, len(users))
 	for i, u := range users {
 		resp[i] = adminUserToResponse(u)
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users": resp,
+		"total": total,
+	})
 }
 
 // handleGetUser handles GET /api/v1/users/{id}
@@ -191,6 +226,52 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, adminUserToResponse(user))
+}
+
+// handleListUserOAuthAccounts handles GET /api/v1/users/{id}/oauth-accounts.
+// Returns all OAuth provider accounts linked to the user.
+func (s *Server) handleListUserOAuthAccounts(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+
+	accounts, err := s.Store.GetOAuthAccountsByUserID(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	if accounts == nil {
+		accounts = []*storage.OAuthAccount{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"oauth_accounts": accounts,
+	})
+}
+
+// handleDeleteUserOAuthAccount handles DELETE /api/v1/users/{id}/oauth-accounts/{oauthId}.
+// Unlinks a specific OAuth provider account from the user. Returns 204 on success.
+func (s *Server) handleDeleteUserOAuthAccount(w http.ResponseWriter, r *http.Request) {
+	oauthID := chi.URLParam(r, "oauthId")
+
+	if err := s.Store.DeleteOAuthAccount(r.Context(), oauthID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, http.StatusNotFound, map[string]string{
+				"error":   "not_found",
+				"message": "OAuth account not found",
+			})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleDeleteMe handles DELETE /api/v1/auth/me (user self-deletion)

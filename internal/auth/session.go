@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -121,7 +122,9 @@ func (sm *SessionManager) ValidateSession(ctx context.Context, sessionID string)
 
 	if time.Now().UTC().After(expiresAt) {
 		// Clean up expired session
-		_ = sm.store.DeleteSession(ctx, sessionID)
+		if err := sm.store.DeleteSession(ctx, sessionID); err != nil {
+			slog.Warn("session: delete expired session failed", "session_id", sessionID, "err", err)
+		}
 		return nil, ErrSessionExpired
 	}
 

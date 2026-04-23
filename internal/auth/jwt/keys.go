@@ -84,6 +84,18 @@ func encryptPEM(plainPEM []byte, serverSecret string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
+// EncryptPEM encrypts plaintext PEM bytes with AES-GCM using the server secret.
+// Returns base64(nonce || ciphertext). Exported for use by the OAuth server.
+func EncryptPEM(plainPEM []byte, serverSecret string) (string, error) {
+	return encryptPEM(plainPEM, serverSecret)
+}
+
+// DecryptPEM decrypts a base64(nonce||ciphertext) blob back to PEM bytes.
+// Exported for use by the OAuth server.
+func DecryptPEM(encrypted, serverSecret string) ([]byte, error) {
+	return decryptPEM(encrypted, serverSecret)
+}
+
 // decryptPEM decrypts a base64(nonce||ciphertext) blob back to PEM bytes.
 // The caller is responsible for wiping the returned slice after use.
 func decryptPEM(encrypted, serverSecret string) ([]byte, error) {

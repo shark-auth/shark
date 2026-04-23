@@ -48,6 +48,11 @@ func (m *MagicLinkManager) Sender() email.Sender {
 	return m.email
 }
 
+// SetSender updates the email sender used by the manager.
+func (m *MagicLinkManager) SetSender(s email.Sender) {
+	m.email = s
+}
+
 // SendMagicLink generates a random token, stores its SHA-256 hash, and sends a magic link email.
 // Always returns nil to avoid leaking whether the email address exists.
 func (m *MagicLinkManager) SendMagicLink(ctx context.Context, emailAddr string) error {
@@ -100,8 +105,9 @@ func (m *MagicLinkManager) SendMagicLink(ctx context.Context, emailAddr string) 
 		appName = m.cfg.SMTP.FromName
 	}
 
-	// Render the email template
-	htmlBody, err := email.RenderMagicLink(email.MagicLinkData{
+	// Render the email template (DB-backed with embedded fallback).
+	branding, _ := m.store.ResolveBranding(ctx, "")
+	rendered, err := email.RenderMagicLink(ctx, m.store, branding, email.MagicLinkData{
 		AppName:       appName,
 		MagicLinkURL:  magicLinkURL,
 		ExpiryMinutes: expiryMinutes,
@@ -113,8 +119,8 @@ func (m *MagicLinkManager) SendMagicLink(ctx context.Context, emailAddr string) 
 	// Send the email
 	msg := &email.Message{
 		To:      emailAddr,
-		Subject: fmt.Sprintf("Sign in to %s", appName),
-		HTML:    htmlBody,
+		Subject: rendered.Subject,
+		HTML:    rendered.HTML,
 	}
 
 	if err := m.email.Send(msg); err != nil {
@@ -162,7 +168,8 @@ func (m *MagicLinkManager) SendPasswordReset(ctx context.Context, emailAddr stri
 		appName = m.cfg.SMTP.FromName
 	}
 
-	htmlBody, err := email.RenderPasswordReset(email.PasswordResetData{
+	branding, _ := m.store.ResolveBranding(ctx, "")
+	rendered, err := email.RenderPasswordReset(ctx, m.store, branding, email.PasswordResetData{
 		AppName:       appName,
 		ResetURL:      resetURL,
 		ExpiryMinutes: int(lifetime.Minutes()),
@@ -173,8 +180,8 @@ func (m *MagicLinkManager) SendPasswordReset(ctx context.Context, emailAddr stri
 
 	msg := &email.Message{
 		To:      emailAddr,
-		Subject: fmt.Sprintf("Reset your %s password", appName),
-		HTML:    htmlBody,
+		Subject: rendered.Subject,
+		HTML:    rendered.HTML,
 	}
 
 	if err := m.email.Send(msg); err != nil {
@@ -246,14 +253,15 @@ func (m *MagicLinkManager) SendEmailVerification(ctx context.Context, emailAddr 
 	}
 
 	baseURL := strings.TrimRight(m.cfg.Server.BaseURL, "/")
-	verifyURL := fmt.Sprintf("%s/api/v1/auth/email/verify?token=%s", baseURL, rawToken)
+	verifyURL := fmt.Sprintf("%s/hosted/default/verify?token=%s", baseURL, rawToken)
 
 	appName := "SharkAuth"
 	if m.cfg.SMTP.FromName != "" {
 		appName = m.cfg.SMTP.FromName
 	}
 
-	htmlBody, err := email.RenderVerifyEmail(email.VerifyEmailData{
+	branding, _ := m.store.ResolveBranding(ctx, "")
+	rendered, err := email.RenderVerifyEmail(ctx, m.store, branding, email.VerifyEmailData{
 		AppName:       appName,
 		VerifyURL:     verifyURL,
 		ExpiryMinutes: int(lifetime.Minutes()),
@@ -264,8 +272,8 @@ func (m *MagicLinkManager) SendEmailVerification(ctx context.Context, emailAddr 
 
 	msg := &email.Message{
 		To:      emailAddr,
-		Subject: fmt.Sprintf("Verify your %s email", appName),
-		HTML:    htmlBody,
+		Subject: rendered.Subject,
+		HTML:    rendered.HTML,
 	}
 
 	if err := m.email.Send(msg); err != nil {

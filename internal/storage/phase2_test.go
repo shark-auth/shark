@@ -14,7 +14,7 @@ func seedUser(t *testing.T, store *storage.SQLiteStore, id, email string, create
 	ts := createdAt.UTC().Format(time.RFC3339)
 	u := &storage.User{
 		ID: id, Email: email, HashType: "argon2id", Metadata: "{}",
-		CreatedAt: ts, UpdatedAt: ts, MFAEnabled: mfa,
+		CreatedAt: ts, UpdatedAt: ts, MFAEnabled: mfa, MFAVerified: mfa,
 	}
 	if err := store.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("seed user %s: %v", id, err)
@@ -90,9 +90,9 @@ func TestCountFailedLoginsSince(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().UTC()
-	seedAudit(t, store, "aud_1", "login", "failure", now.Add(-30*time.Minute))
-	seedAudit(t, store, "aud_2", "login", "failure", now.Add(-2*time.Hour))
-	seedAudit(t, store, "aud_3", "login", "success", now)
+	seedAudit(t, store, "aud_1", "user.login", "failure", now.Add(-30*time.Minute))
+	seedAudit(t, store, "aud_2", "user.login", "failure", now.Add(-2*time.Hour))
+	seedAudit(t, store, "aud_3", "user.login", "success", now)
 	seedAudit(t, store, "aud_4", "signup", "failure", now)
 
 	n, err := store.CountFailedLoginsSince(ctx, now.Add(-time.Hour))

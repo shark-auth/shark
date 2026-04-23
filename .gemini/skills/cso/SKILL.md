@@ -1,0 +1,1 @@
+/home/raul/Desktop/projects/shark/.gemini/skills/gstack/cso/SKILL.md

@@ -8,6 +8,34 @@ import (
 	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
 )
 
+// RequireOrgMembership returns HTTP middleware that enforces that the caller is
+// a member of the organization specified by the "id" URL parameter.
+func RequireOrgMembership(mgr *RBACManager) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			orgID := chi.URLParam(r, "id")
+			userID := mw.GetUserID(r.Context())
+
+			if userID == "" {
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "No valid session")
+				return
+			}
+
+			isMember, err := mgr.IsOrgMember(r.Context(), userID, orgID)
+			if err != nil {
+				writeJSONError(w, http.StatusForbidden, "forbidden", "Membership check failed")
+				return
+			}
+			if !isMember {
+				writeJSONError(w, http.StatusNotFound, "not_found", "Organization not found")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RequireOrgPermission returns HTTP middleware that enforces an org-scoped RBAC
 // check. The org ID is read from the chi URL parameter "org_id"; if not set it
 // falls back to "id" (for legacy routes). The caller's user ID is read from the

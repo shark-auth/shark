@@ -394,7 +394,7 @@ func peekAlg(tokenStr string) error {
 
 	alg := strings.ToUpper(header.Alg)
 	switch alg {
-	case "RS256":
+	case "RS256", "ES256":
 		return nil
 	case "NONE", "":
 		return ErrAlgMismatch
@@ -403,7 +403,6 @@ func peekAlg(tokenStr string) error {
 		if strings.HasPrefix(alg, "HS") {
 			return ErrAlgMismatch
 		}
-		// Only RS256 is accepted
 		return ErrAlgMismatch
 	}
 }

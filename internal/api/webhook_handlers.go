@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,10 +24,16 @@ import (
 // typos surface on create rather than silently never firing.
 var KnownWebhookEvents = map[string]bool{
 	storage.WebhookEventUserCreated:    true,
+	storage.WebhookEventUserUpdated:    true,
 	storage.WebhookEventUserDeleted:    true,
+	storage.WebhookEventSessionCreated: true,
 	storage.WebhookEventSessionRevoked: true,
+	storage.WebhookEventMFAEnabled:     true,
 	storage.WebhookEventOrgCreated:     true,
+	storage.WebhookEventOrgDeleted:     true,
 	storage.WebhookEventOrgMemberAdded: true,
+	storage.WebhookEventSystemAuditLog: true,
+	storage.WebhookEventTest:           true,
 }
 
 type webhookResponse struct {
@@ -104,6 +111,19 @@ func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, resp)
 }
 
+// handleListWebhookEvents returns the canonical set of known webhook event
+// names. The frontend uses this to populate the event picker without
+// hardcoding a list that can drift from the backend.
+func (s *Server) handleListWebhookEvents(w http.ResponseWriter, _ *http.Request) {
+	events := make([]string, 0, len(KnownWebhookEvents))
+	for ev := range KnownWebhookEvents {
+		events = append(events, ev)
+	}
+	// Sort for a stable response — maps iterate in random order.
+	slices.Sort(events)
+	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+}
+
 func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 	hooks, err := s.Store.ListWebhooks(r.Context())
 	if err != nil {
@@ -114,7 +134,7 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 	for _, h := range hooks {
 		out = append(out, webhookToResponse(h))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": out})
+	writeJSON(w, http.StatusOK, map[string]any{"webhooks": out})
 }
 
 func (s *Server) handleGetWebhook(w http.ResponseWriter, r *http.Request) {
@@ -194,8 +214,16 @@ func (s *Server) handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleTestWebhook emits a synthetic `webhook.test` event so admins can verify
-// signature + network reachability without triggering a real flow.
+// testWebhookRequest lets admins pick which event the test fire emits so the
+// frontend dropdown is real, not decorative. Empty EventType => default
+// `webhook.test`. Unknown EventType => 400 (matches create-time validation).
+type testWebhookRequest struct {
+	EventType string `json:"event_type,omitempty"`
+}
+
+// handleTestWebhook emits a synthetic event so admins can verify signature +
+// network reachability without triggering a real flow. Honors `event_type`
+// in the body when set; otherwise falls back to `webhook.test`.
 func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, err := s.Store.GetWebhookByID(r.Context(), id); errors.Is(err, sql.ErrNoRows) {
@@ -209,8 +237,30 @@ func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, errPayload("dispatcher_unavailable", "Webhook dispatcher not initialized"))
 		return
 	}
-	deliveryID, err := s.WebhookDispatcher.Redeliver(r.Context(), id, "webhook.test", map[string]string{
+
+	event := storage.WebhookEventTest
+	// Body is optional — keep backward compatibility with empty POST.
+	if r.ContentLength > 0 || r.Header.Get("Content-Type") != "" {
+		var req testWebhookRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, http.ErrBodyReadAfterClose) {
+			// Tolerate empty body / EOF; only reject malformed JSON.
+			if err.Error() != "EOF" {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+				return
+			}
+		}
+		if req.EventType != "" {
+			if !KnownWebhookEvents[req.EventType] {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_event", "unknown event: "+req.EventType))
+				return
+			}
+			event = req.EventType
+		}
+	}
+
+	deliveryID, err := s.WebhookDispatcher.Redeliver(r.Context(), id, event, map[string]string{
 		"webhook_id": id,
+		"event":      event,
 		"note":       "This is a test event triggered from the admin API.",
 	})
 	if err != nil {
@@ -220,6 +270,7 @@ func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{
 		"message":     "Test event enqueued",
 		"delivery_id": deliveryID,
+		"event":       event,
 	})
 }
 
@@ -249,6 +300,68 @@ func (s *Server) handleListDeliveries(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data":        dels,
 		"next_cursor": next,
+	})
+}
+
+// handleReplayWebhookDelivery enqueues a fresh delivery using the original
+// event + payload from a past delivery row. Frontend wires the per-row replay
+// button against this. We validate that the URL `{id}` matches the delivery's
+// webhook_id so an admin can't replay across webhooks via URL tampering.
+func (s *Server) handleReplayWebhookDelivery(w http.ResponseWriter, r *http.Request) {
+	webhookID := chi.URLParam(r, "id")
+	deliveryID := chi.URLParam(r, "deliveryId")
+
+	if _, err := s.Store.GetWebhookByID(r.Context(), webhookID); errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Webhook not found"))
+		return
+	} else if err != nil {
+		internal(w, err)
+		return
+	}
+
+	del, err := s.Store.GetWebhookDeliveryByID(r.Context(), deliveryID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Delivery not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	if del.WebhookID != webhookID {
+		// URL-mismatch: caller asked for a delivery that belongs to a
+		// different webhook. Treat as not found rather than leak the truth.
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Delivery not found"))
+		return
+	}
+
+	if s.WebhookDispatcher == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errPayload("dispatcher_unavailable", "Webhook dispatcher not initialized"))
+		return
+	}
+
+	// Original payload is `{event, created_at, data}`. We re-emit using the
+	// stored `data` so retries are byte-faithful to the original event body.
+	// Falls back to the raw payload if it doesn't decode to the envelope.
+	var envelope struct {
+		Data any `json:"data"`
+	}
+	var data any
+	if err := json.Unmarshal([]byte(del.Payload), &envelope); err == nil && envelope.Data != nil {
+		data = envelope.Data
+	} else {
+		data = json.RawMessage(del.Payload)
+	}
+
+	newDeliveryID, err := s.WebhookDispatcher.Redeliver(r.Context(), webhookID, del.Event, data)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"message":         "Delivery replay enqueued",
+		"new_delivery_id": newDeliveryID,
+		"event":           del.Event,
 	})
 }
 

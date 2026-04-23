@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -20,8 +21,11 @@ import (
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/sharkauth/sharkauth/internal/oauth"
+	"github.com/sharkauth/sharkauth/internal/proxy"
 	"github.com/sharkauth/sharkauth/internal/rbac"
 	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/sharkauth/sharkauth/internal/telemetry"
 	"github.com/sharkauth/sharkauth/internal/webhook"
 )
 
@@ -46,6 +50,13 @@ type Options struct {
 	// EmailSenderOverride, when non-nil, replaces the sender chosen from cfg.SMTP.
 	// Used by tests to inject MemoryEmailSender.
 	EmailSenderOverride email.Sender
+
+	// ProxyUpstream, when non-empty, enables embedded proxy mode: the
+	// reverse proxy is mounted as a catch-all AFTER every other route, and
+	// cfg.Proxy is overridden to {Enabled: true, Upstream: <this>} with
+	// rules and other knobs still coming from the YAML config. Set via the
+	// `shark serve --proxy-upstream URL` flag.
+	ProxyUpstream string
 }
 
 // Bootstrap builds all components (config, store, migrations, admin key, API server)
@@ -56,6 +67,12 @@ type Bootstrap struct {
 	API        *api.Server
 	Dispatcher *webhook.Dispatcher
 	AdminKey   string // populated only when a new admin key was generated
+
+	// ProxyListeners holds the W15 multi-listener set. One entry per
+	// proxy.listeners[] config block with a non-empty bind. Legacy
+	// main-port mode uses the catch-all mount inside api.Server and
+	// does not populate this slice.
+	ProxyListeners []*proxy.Listener
 }
 
 // Close releases resources.
@@ -77,11 +94,48 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
+	// W15a: warn when legacy proxy fields coexist with the new listeners
+	// block. Resolve() already decided listeners win; surfacing the warning
+	// here (not inside config/) keeps the config package logger-free while
+	// giving operators a clear signal their legacy config is being ignored.
+	if cfg.Proxy.Enabled && cfg.Proxy.Upstream != "" && len(cfg.Proxy.Listeners) > 0 {
+		// Dual-config is only a real conflict when the legacy fields don't
+		// match a Resolve()-synthesised implicit listener. When Listeners was
+		// originally empty, Resolve() synthesises one from the legacy fields
+		// — that case is not a dual config even though all three are now set.
+		// Detect the "user explicitly set both" case by checking that at
+		// least one listener has a non-empty Bind (i.e. listeners was set by
+		// the user, not synthesised).
+		userAuthoredListeners := false
+		for _, l := range cfg.Proxy.Listeners {
+			if l.Bind != "" {
+				userAuthoredListeners = true
+				break
+			}
+		}
+		if userAuthoredListeners {
+			slog.Warn("proxy: both legacy and listeners fields set, listeners win")
+		}
+	}
+
 	if opts.SecretOverride != "" {
 		cfg.Server.Secret = opts.SecretOverride
 	}
 	if len(cfg.Server.Secret) < 32 {
 		return nil, fmt.Errorf("server.secret must be at least 32 characters (got %d)", len(cfg.Server.Secret))
+	}
+
+	// --proxy-upstream override. Keeps rules + other ProxyConfig fields
+	// from YAML but flips Enabled on and pins the upstream URL so a single
+	// CLI flag is all an operator needs to demo embedded mode.
+	if opts.ProxyUpstream != "" {
+		cfg.Proxy.Enabled = true
+		cfg.Proxy.Upstream = opts.ProxyUpstream
+		// Drop any pre-existing listener set — the CLI flag is the
+		// single source of truth for the demo path, and Resolve() below
+		// will re-synthesise a single implicit main-port listener.
+		cfg.Proxy.Listeners = nil
+		cfg.Proxy.Resolve()
 	}
 
 	cfg.Server.DevMode = opts.DevMode
@@ -140,6 +194,13 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		// Non-fatal: server continues; roles will be missing until next boot fixes it.
 	}
 
+	// Seed editable copies for hosted email templates. Idempotent via INSERT OR
+	// IGNORE — only fills rows that don't already exist, so operator edits stick.
+	if err := store.SeedEmailTemplates(seedCtx); err != nil {
+		slog.Warn("email: failed to seed email templates", "error", err)
+		// Non-fatal: server continues; renderer falls back to bundled defaults.
+	}
+
 	adminKey, err := bootstrapAdminKey(ctx, store)
 	if err != nil {
 		store.Close() //#nosec G104 -- cleanup after bootstrap failure; primary error returned
@@ -178,19 +239,118 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("seed default application: %w", err)
 	}
 
-	apiSrv := api.NewServer(store, cfg,
+	// OAuth 2.1 server
+	var oauthSrv *oauth.Server
+	if cfg.OAuthServer.Enabled {
+		oauthSrv, err = oauth.NewServer(store, cfg)
+		if err != nil {
+			slog.Warn("oauth: failed to initialize", "error", err)
+			// Non-fatal: server runs without OAuth if initialization fails.
+		}
+	}
+
+	// W15: build multi-listener proxy set.
+	proxyListeners, err := buildProxyListeners(cfg, nil)
+	if err != nil {
+		store.Close()
+		return nil, fmt.Errorf("build proxy listeners: %w", err)
+	}
+
+	apiSrv := api.NewServer(store, cfg, opts.ConfigPath,
 		api.WithEmailSender(sender),
 		api.WithWebhookDispatcher(dispatcher),
 		api.WithJWTManager(jwtMgr),
+		api.WithOAuthServer(oauthSrv),
+		api.WithProxyListeners(proxyListeners),
 	)
 
+	// Now that apiSrv exists, wire the AuthWrap and AppResolver for each listener.
+	for _, l := range proxyListeners {
+		if err := l.SetAuthWrap(apiSrv.ProxyAuthMiddlewareFor(l.Breaker())); err != nil {
+			return nil, fmt.Errorf("proxy listener %s: %w", l.Bind, err)
+		}
+		if apiSrv.AppResolver != nil {
+			l.SetResolver(apiSrv.AppResolver)
+		}
+	}
+
 	return &Bootstrap{
-		Config:     cfg,
-		Store:      store,
-		API:        apiSrv,
-		Dispatcher: dispatcher,
-		AdminKey:   adminKey,
+		Config:         cfg,
+		Store:          store,
+		API:            apiSrv,
+		Dispatcher:     dispatcher,
+		AdminKey:       adminKey,
+		ProxyListeners: proxyListeners,
 	}, nil
+}
+
+// buildProxyListeners constructs one *proxy.Listener per config entry with
+// a non-empty Bind. Legacy mount-on-main-port entries (Bind=="") are
+// skipped — api.Server.initProxy handles them via the router catch-all.
+func buildProxyListeners(cfg *config.Config, apiSrv *api.Server) ([]*proxy.Listener, error) {
+	out := make([]*proxy.Listener, 0, len(cfg.Proxy.Listeners))
+	for i, lc := range cfg.Proxy.Listeners {
+		if lc.Bind == "" {
+			// Legacy main-port mount — handled inside api.Server.
+			continue
+		}
+		if lc.Upstream == "" {
+			return nil, fmt.Errorf("listeners[%d] %s: upstream is required", i, lc.Bind)
+		}
+
+		ruleSpecs := make([]proxy.RuleSpec, len(lc.Rules))
+		for j, pr := range lc.Rules {
+			ruleSpecs[j] = proxy.RuleSpec{
+				Path:    pr.Path,
+				Methods: pr.Methods,
+				Require: pr.Require,
+				Allow:   pr.Allow,
+				Scopes:  pr.Scopes,
+			}
+		}
+
+		breakerCfg := proxy.BreakerConfig{
+			HealthURL:        cfg.Server.BaseURL + "/api/v1/admin/health",
+			HealthInterval:   10 * time.Second,
+			FailureThreshold: 3,
+			CacheSize:        10000,
+			CacheTTL:         5 * time.Minute,
+			NegativeTTL:      30 * time.Second,
+			MissBehavior:     proxy.MissReject,
+		}
+
+		var resolver proxy.AppResolver
+		if apiSrv != nil {
+			resolver = apiSrv.AppResolver
+		}
+
+		params := proxy.ListenerParams{
+			Bind:           lc.Bind,
+			Upstream:       lc.Upstream,
+			IsTransparent:  true,
+			Resolver:       resolver,
+			Timeout:        lc.TimeoutDuration(),
+			TrustedHeaders: lc.TrustedHeaders,
+			StripIncoming:  lc.StripIncomingOrDefault(),
+			Rules:          ruleSpecs,
+			BreakerConfig:  breakerCfg,
+			Logger:         slog.Default(),
+		}
+
+		l, err := proxy.NewListener(params)
+		if err != nil {
+			return nil, fmt.Errorf("listeners[%d]: %w", i, err)
+		}
+		// Wire auth middleware using the listener's own breaker so a dead
+		// upstream on one listener can't tank sessions on another. Using
+		// the SetAuthWrap setter avoids a second NewListener call (which
+		// would recompile rules and allocate a second Breaker).
+		if err := l.SetAuthWrap(apiSrv.ProxyAuthMiddlewareFor(l.Breaker())); err != nil {
+			return nil, fmt.Errorf("listeners[%d]: %w", i, err)
+		}
+		out = append(out, l)
+	}
+	return out, nil
 }
 
 // Serve runs Build then binds the HTTP listener. Blocks until ctx is cancelled.
@@ -205,6 +365,15 @@ func Serve(ctx context.Context, opts Options) error {
 		printAdminKey(b.AdminKey)
 	}
 
+	// T15: mint a one-time bootstrap token if no admin has ever acted on
+	// this install. Prints a URL the operator can click to log in without
+	// pasting the sk_live_ key. Best-effort — failures just skip the print.
+	if tok, err := b.API.MintBootstrapToken(ctx); err != nil {
+		slog.Warn("bootstrap token: mint failed", "err", err)
+	} else if tok != "" {
+		printBootstrapURL(b.Config.Server.Port, tok)
+	}
+
 	addr := fmt.Sprintf(":%d", b.Config.Server.Port)
 	httpServer := &http.Server{
 		Addr:         addr,
@@ -212,6 +381,32 @@ func Serve(ctx context.Context, opts Options) error {
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
+	}
+
+	// Kick off the anonymous install ping loop. No-op when telemetry.enabled
+	// is false. 24h cadence with 30s initial delay so startup never blocks.
+	telemetry.StartPingLoop(ctx, telemetry.Config{
+		Enabled:       b.Config.Telemetry.Enabled,
+		Endpoint:      b.Config.Telemetry.Endpoint,
+		Version:       resolveBuildVersion(),
+		InstallIDPath: filepath.Join(filepath.Dir(b.Config.Storage.Path), "install_id"),
+	}, slog.Default())
+
+	// W15: start each proxy listener BEFORE the main server so a port-
+	// in-use failure is surfaced synchronously as a fatal startup error.
+	// Partial bind is never acceptable — if any listener can't bind, the
+	// entire server exits non-zero so the operator can fix config and
+	// retry rather than run half-protected.
+	for _, pl := range b.ProxyListeners {
+		if err := pl.Start(ctx); err != nil {
+			// Best-effort drain any listeners that already bound.
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			for _, x := range b.ProxyListeners {
+				_ = x.Shutdown(shutdownCtx) //#nosec G104 -- cleanup after fatal bind failure
+			}
+			cancel()
+			return fmt.Errorf("proxy listener %s: %w", pl.Bind, err)
+		}
 	}
 
 	errCh := make(chan error, 1)
@@ -230,6 +425,15 @@ func Serve(ctx context.Context, opts Options) error {
 		slog.Info("shutting down server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		// Fan-out shutdown to proxy listeners first so they stop
+		// accepting new connections before the main API server starts
+		// draining (upstream auth calls still work while listeners
+		// drain).
+		for _, pl := range b.ProxyListeners {
+			if err := pl.Shutdown(shutdownCtx); err != nil {
+				slog.Warn("proxy listener shutdown", "bind", pl.Bind, "err", err)
+			}
+		}
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("shutdown: %w", err)
 		}
@@ -241,6 +445,16 @@ func Serve(ctx context.Context, opts Options) error {
 		}
 		return nil
 	}
+}
+
+// resolveBuildVersion returns the module version if embedded via `go install`
+// or ldflags -X, falling back to "dev". Separate from the cobra `version` var
+// to avoid importing cmd/ from internal/.
+func resolveBuildVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
 }
 
 func bootstrapAdminKey(ctx context.Context, store *storage.SQLiteStore) (string, error) {
@@ -324,5 +538,14 @@ func printAdminKey(key string) {
 	fmt.Printf("    %s\n", key)
 	fmt.Println()
 	fmt.Println("  Use as: Authorization: Bearer <key>")
+	fmt.Println()
+}
+
+// printBootstrapURL prints a clickable dashboard URL that auto-logs-in via
+// the T15 bootstrap token. Only called when no admin has ever acted on this
+// install. The token is single-use and expires in 10 minutes.
+func printBootstrapURL(port int, token string) {
+	fmt.Println()
+	fmt.Printf("  Open http://localhost:%d/admin/?bootstrap=%s  (expires in 10 minutes)\n", port, token)
 	fmt.Println()
 }

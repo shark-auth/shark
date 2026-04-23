@@ -1,0 +1,1 @@
+/home/raul/Desktop/projects/shark/.gemini/skills/gstack/land-and-deploy/SKILL.md

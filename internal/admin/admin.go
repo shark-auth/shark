@@ -12,6 +12,22 @@ import (
 //go:embed dist
 var distFS embed.FS
 
+// adminCSP defines the Content-Security-Policy for the admin dashboard route.
+// The dashboard is a Vite-bundled React SPA — no runtime compilation, so
+// 'unsafe-eval' is not needed. 'unsafe-inline' stays for style-src because
+// the bundle uses inline styles extensively.
+const adminCSP = "default-src 'self'; " +
+	"script-src 'self'; " +
+	"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+	"font-src 'self' https://fonts.gstatic.com; " +
+	"img-src 'self' data:; " +
+	"connect-src 'self'; " +
+	"frame-ancestors 'none'"
+
+// DistFS returns the embedded dist filesystem so sibling packages (e.g.
+// internal/api) can reach into dist/hosted/assets/ without re-embedding.
+func DistFS() embed.FS { return distFS }
+
 // Handler returns an http.Handler that serves the embedded admin dashboard.
 // Unknown paths fall back to index.html so client-side routing works.
 func Handler() http.Handler {
@@ -26,6 +42,11 @@ func Handler() http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Override the strict default CSP set by mw.SecurityHeaders() for this
+		// route only. The admin dashboard is a Vite-built React SPA that loads
+		// Google Fonts. The rest of the API keeps the strict policy.
+		w.Header().Set("Content-Security-Policy", adminCSP)
+
 		clean := strings.TrimPrefix(r.URL.Path, "/")
 		if clean == "" {
 			clean = "index.html"

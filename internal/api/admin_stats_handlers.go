@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -20,6 +21,7 @@ type statsResponse struct {
 		Active int `json:"active"`
 	} `json:"sessions"`
 	MFA struct {
+		Total        int     `json:"total"`
 		Enabled      int     `json:"enabled"`
 		AdoptionPct  float64 `json:"adoption_pct"`
 	} `json:"mfa"`
@@ -29,8 +31,9 @@ type statsResponse struct {
 		Expiring7d  int `json:"expiring_7d"`
 	} `json:"api_keys"`
 	SSOConnections struct {
-		Total   int `json:"total"`
-		Enabled int `json:"enabled"`
+		Total      int            `json:"total"`
+		Enabled    int            `json:"enabled"`
+		UserCounts map[string]int `json:"user_counts,omitempty"`
 	} `json:"sso_connections"`
 }
 
@@ -101,6 +104,7 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	resp.Users.Total = total
 	resp.Users.CreatedLast7d = recent
 	resp.Sessions.Active = active
+	resp.MFA.Total = total
 	resp.MFA.Enabled = mfa
 	if total > 0 {
 		resp.MFA.AdoptionPct = float64(mfa) / float64(total) * 100
@@ -110,6 +114,7 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	resp.APIKeys.Expiring7d = expiring
 	resp.SSOConnections.Total = ssoTotal
 	resp.SSOConnections.Enabled = ssoEnabled
+	resp.SSOConnections.UserCounts, _ = s.Store.CountSSOIdentitiesByConnection(ctx)
 
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -189,7 +194,10 @@ func fillDailyGaps(sparse []storage.DayCount, days int) []dayBucket {
 }
 
 // internal writes a 500 with a generic message. Keeps err off the wire.
-func internal(w http.ResponseWriter, _ error) {
+func internal(w http.ResponseWriter, err error) {
+	if err != nil {
+		slog.Error("internal server error", "error", err)
+	}
 	writeJSON(w, http.StatusInternalServerError, map[string]string{
 		"error":   "internal_error",
 		"message": "Internal server error",

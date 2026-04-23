@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -23,6 +24,7 @@ import (
 type applicationResponse struct {
 	ID                  string         `json:"id"`
 	Name                string         `json:"name"`
+	Slug                string         `json:"slug"`
 	ClientID            string         `json:"client_id"`
 	ClientSecretPrefix  string         `json:"client_secret_prefix"`
 	AllowedCallbackURLs []string       `json:"allowed_callback_urls"`
@@ -30,8 +32,16 @@ type applicationResponse struct {
 	AllowedOrigins      []string       `json:"allowed_origins"`
 	IsDefault           bool           `json:"is_default"`
 	Metadata            map[string]any `json:"metadata"`
-	CreatedAt           string         `json:"created_at"`
-	UpdatedAt           string         `json:"updated_at"`
+
+	IntegrationMode       string          `json:"integration_mode"`
+	BrandingOverride      json.RawMessage `json:"branding_override,omitempty"`
+	ProxyLoginFallback    string          `json:"proxy_login_fallback,omitempty"`
+	ProxyLoginFallbackURL string          `json:"proxy_login_fallback_url,omitempty"`
+	ProxyPublicDomain     string          `json:"proxy_public_domain,omitempty"`
+	ProxyProtectedURL     string          `json:"proxy_protected_url,omitempty"`
+
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type applicationResponseWithSecret struct {
@@ -40,19 +50,48 @@ type applicationResponseWithSecret struct {
 }
 
 func appToResponse(a *storage.Application) applicationResponse {
-	return applicationResponse{
-		ID:                  a.ID,
-		Name:                a.Name,
-		ClientID:            a.ClientID,
-		ClientSecretPrefix:  a.ClientSecretPrefix,
-		AllowedCallbackURLs: a.AllowedCallbackURLs,
-		AllowedLogoutURLs:   a.AllowedLogoutURLs,
-		AllowedOrigins:      a.AllowedOrigins,
-		IsDefault:           a.IsDefault,
-		Metadata:            a.Metadata,
-		CreatedAt:           a.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:           a.UpdatedAt.UTC().Format(time.RFC3339),
+	var override json.RawMessage
+	if a.BrandingOverride != "" {
+		override = json.RawMessage(a.BrandingOverride)
 	}
+	return applicationResponse{
+		ID:                    a.ID,
+		Name:                  a.Name,
+		Slug:                  a.Slug,
+		ClientID:              a.ClientID,
+		ClientSecretPrefix:    a.ClientSecretPrefix,
+		AllowedCallbackURLs:   a.AllowedCallbackURLs,
+		AllowedLogoutURLs:     a.AllowedLogoutURLs,
+		AllowedOrigins:        a.AllowedOrigins,
+		IsDefault:             a.IsDefault,
+		Metadata:              a.Metadata,
+		IntegrationMode:       a.IntegrationMode,
+		BrandingOverride:      override,
+		ProxyLoginFallback:    a.ProxyLoginFallback,
+		ProxyLoginFallbackURL: a.ProxyLoginFallbackURL,
+		ProxyPublicDomain:     a.ProxyPublicDomain,
+		ProxyProtectedURL:     a.ProxyProtectedURL,
+		CreatedAt:             a.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:             a.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+// validIntegrationMode checks the enum for integration_mode.
+func validIntegrationMode(m string) bool {
+	switch m {
+	case "hosted", "components", "proxy", "custom":
+		return true
+	}
+	return false
+}
+
+// validProxyLoginFallback checks the enum for proxy_login_fallback.
+func validProxyLoginFallback(m string) bool {
+	switch m {
+	case "hosted", "custom_url":
+		return true
+	}
+	return false
 }
 
 // validateAppURL parses a URL and enforces http/https scheme.
@@ -173,10 +212,14 @@ func (s *Server) auditApp(r *http.Request, action, targetID string) {
 // POST /api/v1/admin/apps
 func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name      string   `json:"name"`
-		Callbacks []string `json:"allowed_callback_urls"`
-		Logouts   []string `json:"allowed_logout_urls"`
-		Origins   []string `json:"allowed_origins"`
+		Name              string   `json:"name"`
+		Slug              string   `json:"slug"`
+		Callbacks         []string `json:"allowed_callback_urls"`
+		Logouts           []string `json:"allowed_logout_urls"`
+		Origins           []string `json:"allowed_origins"`
+		IntegrationMode   string   `json:"integration_mode"`
+		ProxyPublicDomain string   `json:"proxy_public_domain"`
+		ProxyProtectedURL string   `json:"proxy_protected_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -197,6 +240,36 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	if err := validateAppURLs(req.Origins); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", err.Error()))
 		return
+	}
+	if req.ProxyProtectedURL != "" {
+		if err := validateAppURL(req.ProxyProtectedURL); err != nil {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", "proxy_protected_url: "+err.Error()))
+			return
+		}
+	}
+
+	mode := req.IntegrationMode
+	if mode == "" {
+		if req.ProxyPublicDomain != "" {
+			mode = "proxy"
+		} else {
+			mode = "custom"
+		}
+	}
+	if !validIntegrationMode(mode) {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "invalid integration_mode"))
+		return
+	}
+
+	// Resolve slug: auto-generate from name if not provided, validate if provided.
+	slug := req.Slug
+	if slug == "" {
+		slug = generateSlug(req.Name)
+	} else {
+		if err := validateSlug(slug); err != nil {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_slug", err.Error()))
+			return
+		}
 	}
 
 	nid, err := gonanoid.New(21)
@@ -231,12 +304,16 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	app := &storage.Application{
 		ID:                  "app_" + appNid,
 		Name:                req.Name,
+		Slug:                slug,
 		ClientID:            clientID,
 		ClientSecretHash:    secretHash,
 		ClientSecretPrefix:  secretPrefix,
 		AllowedCallbackURLs: callbacks,
 		AllowedLogoutURLs:   logouts,
 		AllowedOrigins:      origins,
+		IntegrationMode:     mode,
+		ProxyPublicDomain:   req.ProxyPublicDomain,
+		ProxyProtectedURL:   req.ProxyProtectedURL,
 		IsDefault:           false,
 		Metadata:            map[string]any{},
 		CreatedAt:           now,
@@ -244,6 +321,10 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.Store.CreateApplication(r.Context(), app); err != nil {
+		if isDuplicateErr(err) {
+			writeJSON(w, http.StatusConflict, errPayload("slug_conflict", "An application with this slug already exists"))
+			return
+		}
 		internal(w, err)
 		return
 	}
@@ -313,10 +394,17 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name      *string   `json:"name"`
-		Callbacks *[]string `json:"allowed_callback_urls"`
-		Logouts   *[]string `json:"allowed_logout_urls"`
-		Origins   *[]string `json:"allowed_origins"`
+		Name                  *string         `json:"name"`
+		Slug                  *string         `json:"slug,omitempty"`
+		Callbacks             *[]string       `json:"allowed_callback_urls"`
+		Logouts               *[]string       `json:"allowed_logout_urls"`
+		Origins               *[]string       `json:"allowed_origins"`
+		IntegrationMode       *string         `json:"integration_mode,omitempty"`
+		BrandingOverride      json.RawMessage `json:"branding_override,omitempty"`
+		ProxyLoginFallback    *string         `json:"proxy_login_fallback,omitempty"`
+		ProxyLoginFallbackURL *string         `json:"proxy_login_fallback_url,omitempty"`
+		ProxyPublicDomain     *string         `json:"proxy_public_domain"`
+		ProxyProtectedURL     *string         `json:"proxy_protected_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -324,6 +412,13 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Name != nil {
 		app.Name = *req.Name
+	}
+	if req.Slug != nil {
+		if err := validateSlug(*req.Slug); err != nil {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_slug", err.Error()))
+			return
+		}
+		app.Slug = *req.Slug
 	}
 	if req.Callbacks != nil {
 		if err := validateAppURLs(*req.Callbacks); err != nil {
@@ -346,8 +441,65 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 		}
 		app.AllowedOrigins = *req.Origins
 	}
+	if req.IntegrationMode != nil {
+		if !validIntegrationMode(*req.IntegrationMode) {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request",
+				"integration_mode must be one of: hosted, components, proxy, custom"))
+			return
+		}
+		app.IntegrationMode = *req.IntegrationMode
+	}
+	if req.BrandingOverride != nil {
+		// Normalise: null or "" clears the override. Otherwise must be a JSON object.
+		raw := strings.TrimSpace(string(req.BrandingOverride))
+		switch raw {
+		case "", "null", `""`:
+			app.BrandingOverride = ""
+		default:
+			var probe map[string]any
+			if err := json.Unmarshal([]byte(raw), &probe); err != nil {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_request",
+					"branding_override must be a JSON object"))
+				return
+			}
+			app.BrandingOverride = raw
+		}
+	}
+	if req.ProxyLoginFallback != nil {
+		if !validProxyLoginFallback(*req.ProxyLoginFallback) {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request",
+				"proxy_login_fallback must be one of: hosted, custom_url"))
+			return
+		}
+		app.ProxyLoginFallback = *req.ProxyLoginFallback
+	}
+	if req.ProxyLoginFallbackURL != nil {
+		if *req.ProxyLoginFallbackURL != "" {
+			if err := validateAppURL(*req.ProxyLoginFallbackURL); err != nil {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", err.Error()))
+				return
+			}
+		}
+		app.ProxyLoginFallbackURL = *req.ProxyLoginFallbackURL
+	}
+	if req.ProxyPublicDomain != nil {
+		app.ProxyPublicDomain = *req.ProxyPublicDomain
+	}
+	if req.ProxyProtectedURL != nil {
+		if *req.ProxyProtectedURL != "" {
+			if err := validateAppURL(*req.ProxyProtectedURL); err != nil {
+				writeJSON(w, http.StatusBadRequest, errPayload("invalid_url", "proxy_protected_url: "+err.Error()))
+				return
+			}
+		}
+		app.ProxyProtectedURL = *req.ProxyProtectedURL
+	}
 
 	if err := s.Store.UpdateApplication(r.Context(), app); err != nil {
+		if isDuplicateErr(err) {
+			writeJSON(w, http.StatusConflict, errPayload("slug_conflict", "An application with this slug already exists"))
+			return
+		}
 		internal(w, err)
 		return
 	}

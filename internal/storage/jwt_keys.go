@@ -26,6 +26,14 @@ func (s *SQLiteStore) GetActiveSigningKey(ctx context.Context) (*SigningKey, err
 		 FROM jwt_signing_keys WHERE status = 'active' LIMIT 1`))
 }
 
+// GetActiveSigningKeyByAlgorithm returns the active signing key for a specific
+// algorithm (e.g. "ES256", "RS256"), or sql.ErrNoRows if none exists.
+func (s *SQLiteStore) GetActiveSigningKeyByAlgorithm(ctx context.Context, algorithm string) (*SigningKey, error) {
+	return s.scanSigningKey(s.db.QueryRowContext(ctx,
+		`SELECT id, kid, algorithm, public_key_pem, private_key_pem, created_at, rotated_at, status
+		 FROM jwt_signing_keys WHERE status = 'active' AND algorithm = ? LIMIT 1`, algorithm))
+}
+
 // GetSigningKeyByKID returns a key by its kid (active or retired).
 func (s *SQLiteStore) GetSigningKeyByKID(ctx context.Context, kid string) (*SigningKey, error) {
 	return s.scanSigningKey(s.db.QueryRowContext(ctx,

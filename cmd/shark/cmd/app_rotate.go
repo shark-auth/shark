@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -24,28 +25,39 @@ var appRotateCmd = &cobra.Command{
 		}
 		cfg, err := config.Load(configPath)
 		if err != nil {
-			return fmt.Errorf("load config: %w", err)
+			return maybeJSONErr(cmd, "config_load_failed", fmt.Errorf("load config: %w", err))
 		}
 
 		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
 		if err != nil {
-			return fmt.Errorf("open database: %w", err)
+			return maybeJSONErr(cmd, "database_open_failed", fmt.Errorf("open database: %w", err))
 		}
 		defer store.Close()
 
 		ctx := context.Background()
 		app, err := lookupApp(ctx, store, idOrClientID)
 		if err != nil {
-			return err
+			return maybeJSONErr(cmd, "app_not_found", err)
 		}
 
 		newSecret, newHash, newPrefix, err := generateCLISecret()
 		if err != nil {
-			return fmt.Errorf("generate secret: %w", err)
+			return maybeJSONErr(cmd, "secret_generation_failed", fmt.Errorf("generate secret: %w", err))
 		}
 
 		if err := store.RotateApplicationSecret(ctx, app.ID, newHash, newPrefix); err != nil {
-			return fmt.Errorf("rotate secret: %w", err)
+			return maybeJSONErr(cmd, "rotate_failed", fmt.Errorf("rotate secret: %w", err))
+		}
+
+		rotatedAt := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+
+		if jsonFlag(cmd) {
+			return writeJSON(cmd.OutOrStdout(), map[string]any{
+				"id":         app.ID,
+				"client_id":  app.ClientID,
+				"secret":     newSecret,
+				"rotated_at": rotatedAt,
+			})
 		}
 
 		fmt.Println()
@@ -63,5 +75,6 @@ var appRotateCmd = &cobra.Command{
 
 func init() {
 	appRotateCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
+	addJSONFlag(appRotateCmd)
 	appCmd.AddCommand(appRotateCmd)
 }
