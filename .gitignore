@@ -81,3 +81,4 @@ bin/
 dev.db
 dev.db-*
 server.log
+failure_report.txt
