@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"sync/atomic"
+
+	"github.com/sharkauth/sharkauth/internal/identity"
 )
 
 // RuleSpec is the raw, pre-compile shape of a rule. It mirrors the
@@ -20,6 +22,13 @@ type RuleSpec struct {
 	Require string
 	Allow   string
 	Scopes  []string
+	// M2M, when true, restricts the rule to agent callers
+	// (Identity.ActorType == identity.ActorTypeAgent). A human caller
+	// that matches path + method + Require still fails with a forbidden
+	// deny whose reason is "rule requires agent (m2m)". Used to carve
+	// out machine-only surfaces (e.g. background webhooks, service-to-
+	// service RPCs) that a phished human session must not reach.
+	M2M bool
 }
 
 // RequirementKind enumerates the predicate family for a rule. Each kind
@@ -126,6 +135,11 @@ type Rule struct {
 	Methods map[string]struct{} // empty = any method
 	Require Requirement
 	Scopes  []string
+	// M2M is the compiled mirror of RuleSpec.M2M. Evaluate checks it
+	// up-front — before evaluating Require — so a phished human session
+	// carrying every other required attribute still fails with a clear
+	// "rule requires agent (m2m)" reason rather than slipping through.
+	M2M bool
 }
 
 // Matches reports whether r should be considered for request q. Path,
@@ -302,6 +316,19 @@ func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
 	for _, rule := range rules {
 		if !rule.Matches(r.Method, r.URL.Path, appID) {
 			continue
+		}
+		// M2M gate evaluated before Require so a rule that requires
+		// agent-typed callers still returns its characteristic reason
+		// ("rule requires agent (m2m)") even when the caller also
+		// lacks the Require-side predicate. The two checks are
+		// semantically AND, not OR — both must pass for Allow.
+		if rule.M2M && id.ActorType != identity.ActorTypeAgent {
+			return Decision{
+				Allow:       false,
+				MatchedRule: rule,
+				Kind:        DecisionDenyForbidden,
+				Reason:      "rule requires agent (m2m)",
+			}
 		}
 		d := e.evaluateRequirement(rule.Require, rule.Scopes, id)
 		d.MatchedRule = rule
@@ -481,6 +508,7 @@ func compileRule(spec RuleSpec) (*Rule, error) {
 		Methods: methods,
 		Require: req,
 		Scopes:  append([]string(nil), spec.Scopes...),
+		M2M:     spec.M2M,
 	}, nil
 }
 

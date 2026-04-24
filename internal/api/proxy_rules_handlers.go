@@ -31,6 +31,8 @@ type proxyRuleResponse struct {
 	Scopes    []string  `json:"scopes"`
 	Enabled   bool      `json:"enabled"`
 	Priority  int       `json:"priority"`
+	TierMatch string    `json:"tier_match,omitempty"`
+	M2M       bool      `json:"m2m"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -55,6 +57,8 @@ func proxyRuleToResponse(r *storage.ProxyRule) proxyRuleResponse {
 		Scopes:    scopes,
 		Enabled:   r.Enabled,
 		Priority:  r.Priority,
+		TierMatch: r.TierMatch,
+		M2M:       r.M2M,
 		CreatedAt: r.CreatedAt,
 		UpdatedAt: r.UpdatedAt,
 	}
@@ -62,27 +66,31 @@ func proxyRuleToResponse(r *storage.ProxyRule) proxyRuleResponse {
 // --- requests ---
 
 type createProxyRuleRequest struct {
-	AppID    string   `json:"app_id"`
-	Name     string   `json:"name"`
-	Pattern  string   `json:"pattern"`
-	Methods  []string `json:"methods,omitempty"`
-	Require  string   `json:"require,omitempty"`
-	Allow    string   `json:"allow,omitempty"`
-	Scopes   []string `json:"scopes,omitempty"`
-	Enabled  *bool    `json:"enabled,omitempty"`
-	Priority int      `json:"priority,omitempty"`
+	AppID     string   `json:"app_id"`
+	Name      string   `json:"name"`
+	Pattern   string   `json:"pattern"`
+	Methods   []string `json:"methods,omitempty"`
+	Require   string   `json:"require,omitempty"`
+	Allow     string   `json:"allow,omitempty"`
+	Scopes    []string `json:"scopes,omitempty"`
+	Enabled   *bool    `json:"enabled,omitempty"`
+	Priority  int      `json:"priority,omitempty"`
+	TierMatch string   `json:"tier_match,omitempty"`
+	M2M       bool     `json:"m2m,omitempty"`
 }
 
 type updateProxyRuleRequest struct {
-	AppID    *string   `json:"app_id,omitempty"`
-	Name     *string   `json:"name,omitempty"`
-	Pattern  *string   `json:"pattern,omitempty"`
-	Methods  *[]string `json:"methods,omitempty"`
-	Require  *string   `json:"require,omitempty"`
-	Allow    *string   `json:"allow,omitempty"`
-	Scopes   *[]string `json:"scopes,omitempty"`
-	Enabled  *bool     `json:"enabled,omitempty"`
-	Priority *int      `json:"priority,omitempty"`
+	AppID     *string   `json:"app_id,omitempty"`
+	Name      *string   `json:"name,omitempty"`
+	Pattern   *string   `json:"pattern,omitempty"`
+	Methods   *[]string `json:"methods,omitempty"`
+	Require   *string   `json:"require,omitempty"`
+	Allow     *string   `json:"allow,omitempty"`
+	Scopes    *[]string `json:"scopes,omitempty"`
+	Enabled   *bool     `json:"enabled,omitempty"`
+	Priority  *int      `json:"priority,omitempty"`
+	TierMatch *string   `json:"tier_match,omitempty"`
+	M2M       *bool     `json:"m2m,omitempty"`
 }
 
 // --- handlers ---
@@ -148,6 +156,8 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 		Scopes:    req.Scopes,
 		Enabled:   enabled,
 		Priority:  req.Priority,
+		TierMatch: req.TierMatch,
+		M2M:       req.M2M,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -246,6 +256,12 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Priority != nil {
 		rule.Priority = *req.Priority
+	}
+	if req.TierMatch != nil {
+		rule.TierMatch = *req.TierMatch
+	}
+	if req.M2M != nil {
+		rule.M2M = *req.M2M
 	}
 
 	// Re-validate the full row before persisting — partial PATCH could land
@@ -361,6 +377,7 @@ func (s *Server) refreshProxyEngineFromDB(ctx context.Context) error {
 			Require: r.Require,
 			Allow:   r.Allow,
 			Scopes:  r.Scopes,
+			M2M:     r.M2M,
 		})
 	}
 

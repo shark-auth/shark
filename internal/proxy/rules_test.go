@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/sharkauth/sharkauth/internal/identity"
 )
 
 // mustEngine compiles specs and fails the test on error. Used in the
@@ -235,6 +237,63 @@ func TestEngine_AgentRequired(t *testing.T) {
 	}
 	if d := e.Evaluate(newGetReq("/webhooks/in"), Identity{UserID: "u1"}); d.Allow {
 		t.Error("user (non-agent) should be denied by agent rule")
+	}
+}
+
+// TestEngine_M2M_RuleAllowsAgent confirms an M2M rule accepts an
+// agent-typed identity that also satisfies Require (authenticated).
+// Covers the happy path — machine-to-machine calls against an
+// M2M-gated surface must not be regressed into a deny.
+func TestEngine_M2M_RuleAllowsAgent(t *testing.T) {
+	e := mustEngine(t, RuleSpec{
+		Path:    "/m2m/*",
+		Require: "authenticated",
+		M2M:     true,
+	})
+
+	agent := Identity{
+		ActorType: identity.ActorTypeAgent,
+		AgentID:   "agt_123",
+	}
+	d := e.Evaluate(newGetReq("/m2m/ingest"), agent)
+	if !d.Allow {
+		t.Fatalf("m2m rule should allow agent caller, got deny: %q (kind=%v)", d.Reason, d.Kind)
+	}
+	if d.Kind != DecisionAllow {
+		t.Errorf("expected DecisionAllow, got %v", d.Kind)
+	}
+}
+
+// TestEngine_M2M_RuleDeniesHuman confirms an M2M rule rejects a
+// human-typed caller even when every other predicate (path, method,
+// Require) would otherwise permit. The deny must be DecisionDenyForbidden
+// (not DecisionDenyAnonymous — the caller IS authenticated, just the
+// wrong kind) and the reason string must contain "m2m" so operators
+// can distinguish this deny class from a generic "authentication
+// required" or "scope X required" surface.
+func TestEngine_M2M_RuleDeniesHuman(t *testing.T) {
+	e := mustEngine(t, RuleSpec{
+		Path:    "/m2m/*",
+		Require: "authenticated",
+		M2M:     true,
+	})
+
+	human := Identity{
+		ActorType: identity.ActorTypeHuman,
+		UserID:    "usr_123",
+	}
+	d := e.Evaluate(newGetReq("/m2m/ingest"), human)
+	if d.Allow {
+		t.Fatalf("m2m rule must deny human caller, got allow")
+	}
+	if d.Kind != DecisionDenyForbidden {
+		t.Errorf("expected DecisionDenyForbidden, got %v", d.Kind)
+	}
+	if !strings.Contains(d.Reason, "m2m") {
+		t.Errorf("reason should mention m2m, got %q", d.Reason)
+	}
+	if d.MatchedRule == nil {
+		t.Errorf("MatchedRule must be populated on m2m deny so audit logs can attribute the decision")
 	}
 }
 
