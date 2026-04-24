@@ -353,6 +353,13 @@ type Store interface {
 	ListProxyRulesByAppID(ctx context.Context, appID string) ([]*ProxyRule, error)
 	UpdateProxyRule(ctx context.Context, rule *ProxyRule) error
 	DeleteProxyRule(ctx context.Context, id string) error
+
+	// User tier (PROXYV1_5 §4.10) — tier lives inside users.metadata JSON
+	// rather than a dedicated column so the schema doesn't fork for a
+	// free/pro split. Helpers round-trip through metadata so existing
+	// fields (e.g. custom app data) are preserved.
+	SetUserTier(ctx context.Context, userID, tier string) error
+	GetUserTier(ctx context.Context, userID string) (string, error)
 }
 
 // --- Entity types ---

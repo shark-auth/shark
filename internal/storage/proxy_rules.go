@@ -20,6 +20,18 @@ type ProxyRule struct {
 	Require   string    `json:"require"`
 	Allow     string    `json:"allow"`
 	Scopes    []string  `json:"scopes"`
+	// TierMatch, if non-empty, constrains the rule to callers whose
+	// Identity.Tier equals this value. The engine treats a mismatch as a
+	// paywall redirect (DecisionPaywallRedirect) rather than a generic
+	// 403 so the proxy can route browsers to an upgrade page. Lane A
+	// migration 00023 added the column; v1.5 wires it through the CRUD
+	// + engine paths.
+	TierMatch string `json:"tier_match"`
+	// M2M, when true, requires the caller's identity to be agent-typed
+	// (ActorType == ActorTypeAgent). Humans carrying a valid JWT are
+	// denied with "rule requires agent (m2m)". Added in PROXYV1_5 §4.17
+	// so operators can lock endpoints to service-to-service traffic.
+	M2M       bool      `json:"m2m"`
 	Enabled   bool      `json:"enabled"`
 	Priority  int       `json:"priority"`   // higher = evaluated first
 	CreatedAt time.Time `json:"created_at"`
