@@ -66,6 +66,7 @@ func proxyRuleToResponse(r *storage.ProxyRule) proxyRuleResponse {
 // --- requests ---
 
 type createProxyRuleRequest struct {
+	ID        string   `json:"id,omitempty"`
 	AppID     string   `json:"app_id"`
 	Name      string   `json:"name"`
 	Pattern   string   `json:"pattern"`
@@ -145,8 +146,29 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
+	ruleID := req.ID
+
+	if ruleID != "" {
+		existing, err := s.Store.GetProxyRuleByID(r.Context(), ruleID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			internal(w, err)
+			return
+		}
+		if existing != nil {
+			if proxyRuleMatchesCreate(existing, &req, enabled) {
+				writeJSON(w, http.StatusOK, map[string]any{"data": proxyRuleToResponse(existing)})
+				return
+			}
+			writeJSON(w, http.StatusConflict, errPayload("id_conflict",
+				"Rule with this id already exists with a different payload"))
+			return
+		}
+	} else {
+		ruleID = newProxyRuleID()
+	}
+
 	rule := &storage.ProxyRule{
-		ID:        newProxyRuleID(),
+		ID:        ruleID,
 		AppID:     req.AppID,
 		Name:      req.Name,
 		Pattern:   req.Pattern,
@@ -188,6 +210,37 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 		resp["engine_refresh_error"] = refreshErr.Error()
 	}
 	writeJSON(w, http.StatusCreated, resp)
+}
+
+// proxyRuleMatchesCreate compares a stored rule against a create request
+// for idempotency detection. Ordering-sensitive slices (methods, scopes)
+// are normalized before comparison to match storage's own normalization.
+func proxyRuleMatchesCreate(existing *storage.ProxyRule, req *createProxyRuleRequest, enabled bool) bool {
+	if existing.AppID != req.AppID ||
+		existing.Name != req.Name ||
+		existing.Pattern != req.Pattern ||
+		existing.Require != req.Require ||
+		existing.Allow != req.Allow ||
+		existing.Enabled != enabled ||
+		existing.Priority != req.Priority ||
+		existing.TierMatch != req.TierMatch ||
+		existing.M2M != req.M2M {
+		return false
+	}
+	return stringSlicesEqual(existing.Methods, normalizeMethods(req.Methods)) &&
+		stringSlicesEqual(existing.Scopes, req.Scopes)
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // handleGetProxyRule returns a single rule by id, 404 when missing.
