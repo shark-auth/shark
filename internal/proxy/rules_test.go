@@ -566,6 +566,170 @@ func TestEngine_SetRulesAtomicSwap(t *testing.T) {
 	}
 }
 
+// -----------------------------------------------------------------------------
+// Tier + GlobalRole + Decision kinds (Lane A A3)
+// -----------------------------------------------------------------------------
+
+// TestEngine_TierPredicates is the table-driven home for tier:X rule
+// behavior. Covers exact match, mismatch → PaywallRedirect,
+// anonymous → DenyAnonymous (paywall suppressed), and ensures
+// RequiredTier is populated on the deny decision.
+func TestEngine_TierPredicates(t *testing.T) {
+	type tc struct {
+		name         string
+		require      string
+		id           Identity
+		wantAllow    bool
+		wantKind     DecisionKind
+		wantReqTier  string
+		wantInReason string
+	}
+	cases := []tc{
+		{
+			name:      "tier match allows",
+			require:   "tier:pro",
+			id:        Identity{UserID: "u1", Tier: "pro"},
+			wantAllow: true,
+			wantKind:  DecisionAllow,
+		},
+		{
+			name:         "tier mismatch → PaywallRedirect",
+			require:      "tier:pro",
+			id:           Identity{UserID: "u1", Tier: "free"},
+			wantKind:     DecisionPaywallRedirect,
+			wantReqTier:  "pro",
+			wantInReason: "tier",
+		},
+		{
+			name:         "tier mismatch empty tier → PaywallRedirect",
+			require:      "tier:pro",
+			id:           Identity{UserID: "u1"},
+			wantKind:     DecisionPaywallRedirect,
+			wantReqTier:  "pro",
+			wantInReason: "tier",
+		},
+		{
+			name:         "anonymous tier → DenyAnonymous (paywall suppressed)",
+			require:      "tier:pro",
+			id:           Identity{},
+			wantKind:     DecisionDenyAnonymous,
+			wantReqTier:  "pro",
+			wantInReason: "tier",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := mustEngine(t, RuleSpec{Path: "/premium/*", Require: c.require})
+			d := e.Evaluate(newGetReq("/premium/x"), c.id)
+			if d.Allow != c.wantAllow {
+				t.Errorf("Allow = %v, want %v (reason=%q)", d.Allow, c.wantAllow, d.Reason)
+			}
+			if d.Kind != c.wantKind {
+				t.Errorf("Kind = %d, want %d", d.Kind, c.wantKind)
+			}
+			if !c.wantAllow && d.RequiredTier != c.wantReqTier {
+				t.Errorf("RequiredTier = %q, want %q", d.RequiredTier, c.wantReqTier)
+			}
+			if c.wantInReason != "" && !strings.Contains(d.Reason, c.wantInReason) {
+				t.Errorf("Reason %q does not contain %q", d.Reason, c.wantInReason)
+			}
+		})
+	}
+}
+
+// TestEngine_GlobalRolePredicate covers global_role:X — distinct kind
+// from role:X but identical membership check against Identity.Roles.
+// Also verifies the back-compat alias: role:X still works.
+func TestEngine_GlobalRolePredicate(t *testing.T) {
+	e := mustEngine(t, RuleSpec{Path: "/ops/*", Require: "global_role:admin"})
+
+	if d := e.Evaluate(newGetReq("/ops/x"), Identity{UserID: "u1", Roles: []string{"admin"}}); !d.Allow {
+		t.Errorf("global_role match must allow, got reason=%q", d.Reason)
+	} else if d.Kind != DecisionAllow {
+		t.Errorf("Kind = %d, want DecisionAllow", d.Kind)
+	}
+
+	d := e.Evaluate(newGetReq("/ops/x"), Identity{UserID: "u1", Roles: []string{"user"}})
+	if d.Allow {
+		t.Error("global_role miss must deny")
+	}
+	if d.Kind != DecisionDenyForbidden {
+		t.Errorf("authenticated-miss Kind = %d, want DecisionDenyForbidden", d.Kind)
+	}
+	if !strings.Contains(d.Reason, "global_role") {
+		t.Errorf("reason should mention global_role, got %q", d.Reason)
+	}
+
+	// Anonymous caller on role/global_role rule → DenyAnonymous, not
+	// Forbidden. The proxy uses this to pick 401 vs 403.
+	anonD := e.Evaluate(newGetReq("/ops/x"), Identity{})
+	if anonD.Kind != DecisionDenyAnonymous {
+		t.Errorf("anonymous Kind = %d, want DecisionDenyAnonymous", anonD.Kind)
+	}
+
+	// role: alias still resolves to the same underlying check.
+	aliasE := mustEngine(t, RuleSpec{Path: "/ops/*", Require: "role:admin"})
+	if d := aliasE.Evaluate(newGetReq("/ops/x"), Identity{UserID: "u1", Roles: []string{"admin"}}); !d.Allow {
+		t.Errorf("role: alias must still allow on match: %q", d.Reason)
+	}
+}
+
+// TestEngine_DecisionKind_NoMatch covers the default-deny path's Kind:
+// anonymous → DenyAnonymous, authenticated → DenyForbidden.
+func TestEngine_DecisionKind_NoMatch(t *testing.T) {
+	e := mustEngine(t, RuleSpec{Path: "/matches/nothing", Allow: "anonymous"})
+
+	anon := e.Evaluate(newGetReq("/other"), Identity{})
+	if anon.Kind != DecisionDenyAnonymous {
+		t.Errorf("anon no-match Kind = %d, want DenyAnonymous", anon.Kind)
+	}
+	auth := e.Evaluate(newGetReq("/other"), Identity{UserID: "u1"})
+	if auth.Kind != DecisionDenyForbidden {
+		t.Errorf("auth no-match Kind = %d, want DenyForbidden", auth.Kind)
+	}
+}
+
+// TestParseRequirement_NewKinds pins the parser's handling of tier:X and
+// global_role:X including empty-value errors.
+func TestParseRequirement_NewKinds(t *testing.T) {
+	r, err := parseRequirement("tier:pro", "")
+	if err != nil {
+		t.Fatalf("tier:pro: %v", err)
+	}
+	if r.Kind != ReqTier || r.Value != "pro" {
+		t.Errorf("tier:pro parsed as %+v", r)
+	}
+
+	r, err = parseRequirement("global_role:admin", "")
+	if err != nil {
+		t.Fatalf("global_role:admin: %v", err)
+	}
+	if r.Kind != ReqGlobalRole || r.Value != "admin" {
+		t.Errorf("global_role:admin parsed as %+v", r)
+	}
+
+	if _, err := parseRequirement("tier:", ""); err == nil {
+		t.Error("empty tier value must fail")
+	}
+	if _, err := parseRequirement("global_role:", ""); err == nil {
+		t.Error("empty global_role value must fail")
+	}
+}
+
+// TestRequirementKind_String pins the diagnostic spelling for the new
+// kinds so YAML authors see predictable reasons in deny messages.
+func TestRequirementKind_String(t *testing.T) {
+	cases := map[RequirementKind]string{
+		ReqTier:       "tier",
+		ReqGlobalRole: "global_role",
+	}
+	for k, want := range cases {
+		if got := k.String(); got != want {
+			t.Errorf("%d.String() = %q, want %q", k, got, want)
+		}
+	}
+}
+
 // TestEngine_ConcurrentReadWrite exercises the atomic.Pointer swap under
 // concurrent readers and writers. The test passes when -race is clean
 // and every Evaluate call observes a consistent (non-torn) snapshot.

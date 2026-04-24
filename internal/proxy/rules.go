@@ -45,6 +45,17 @@ const (
 	ReqAgent
 	// ReqScope matches callers whose Scopes contains Value.
 	ReqScope
+	// ReqTier matches callers whose Identity.Tier equals Value. A
+	// mismatch produces a DecisionPaywallRedirect instead of a generic
+	// deny so the proxy can route the caller to an upgrade/paywall app
+	// instead of surfacing a 403 page.
+	ReqTier
+	// ReqGlobalRole matches callers whose Identity.Roles (the global-role
+	// slice baked into the access JWT) contains Value. Distinct kind from
+	// ReqRole because v1.5 plans to add ReqOrgRole as a parallel
+	// org-scoped predicate; keeping them as separate enum values avoids a
+	// later breaking rename.
+	ReqGlobalRole
 )
 
 // String renders a RequirementKind for diagnostic messages. Uses the
@@ -64,6 +75,10 @@ func (k RequirementKind) String() string {
 		return "agent"
 	case ReqScope:
 		return "scope"
+	case ReqTier:
+		return "tier"
+	case ReqGlobalRole:
+		return "global_role"
 	default:
 		return "unknown"
 	}
@@ -143,14 +158,46 @@ func (r *Rule) MethodMatches(method string) bool {
 	return r.MethodAllowed(method)
 }
 
+// DecisionKind classifies the outcome of Engine.Evaluate. The proxy
+// dispatches on Kind to decide between allowing the request, returning
+// 401 (anonymous), returning 403 (authenticated but forbidden), or
+// redirecting to a paywall/upgrade surface when a tier predicate fails.
+type DecisionKind int
+
+const (
+	// DecisionAllow — rule matched and all predicates passed. Forward to
+	// upstream.
+	DecisionAllow DecisionKind = iota
+	// DecisionDenyAnonymous — rule matched but caller carried no
+	// authenticated principal. Proxy replies 401 (or redirects browsers
+	// to the hosted login page when configured).
+	DecisionDenyAnonymous
+	// DecisionDenyForbidden — caller was authenticated but lacked the
+	// required role, scope, agent flag, etc. Proxy replies 403.
+	DecisionDenyForbidden
+	// DecisionPaywallRedirect — caller was authenticated but on the wrong
+	// tier for this rule (e.g. rule requires tier:pro, caller is on
+	// "free"). Proxy redirects to PaywallApp when set; otherwise 403.
+	DecisionPaywallRedirect
+)
+
 // Decision is what Engine.Evaluate returns: the allow/deny bit, which
-// rule drove the decision (nil if nothing matched), and a human-readable
-// reason surfaced to operators via the X-Shark-Deny-Reason response
-// header and logs.
+// rule drove the decision (nil if nothing matched), a classification
+// Kind the proxy dispatches on, and a human-readable reason surfaced to
+// operators via the X-Shark-Deny-Reason response header and logs.
+//
+// PaywallApp and RequiredTier are populated only when Kind ==
+// DecisionPaywallRedirect — PaywallApp is the app slug to redirect to
+// (empty string means "no paywall configured, fall back to 403"), and
+// RequiredTier is the tier name the rule required, surfaced so the
+// paywall page can tailor its copy.
 type Decision struct {
-	Allow       bool
-	MatchedRule *Rule
-	Reason      string
+	Allow        bool
+	MatchedRule  *Rule
+	Reason       string
+	Kind         DecisionKind
+	PaywallApp   string
+	RequiredTier string
 }
 
 // Engine is the compiled rule set. Rules are stored behind an
@@ -240,6 +287,11 @@ func (e *Engine) Rules() []*Rule {
 // request and returns its decision. If no rule matches, the default
 // behavior is deny with a clear reason so the operator's logs explain
 // the 403.
+//
+// The returned Decision always carries a Kind: DecisionAllow on success,
+// DecisionDenyAnonymous when the caller carried no principal,
+// DecisionPaywallRedirect when a ReqTier predicate mismatched, and
+// DecisionDenyForbidden for every other deny.
 func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
 	// Single atomic load — no lock contention on the request hot path.
 	rules := e.loadRules()
@@ -251,66 +303,138 @@ func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
 		if !rule.Matches(r.Method, r.URL.Path, appID) {
 			continue
 		}
-		allow, reason := e.evaluateRequirement(rule.Require, rule.Scopes, id)
-		return Decision{Allow: allow, MatchedRule: rule, Reason: reason}
+		d := e.evaluateRequirement(rule.Require, rule.Scopes, id)
+		d.MatchedRule = rule
+		return d
 	}
 
-	return Decision{Allow: !e.defaultDeny, Reason: "no rule matched"}
+	// No rule matched — default deny. An anonymous caller gets 401 so
+	// the proxy can redirect browsers to the hosted login page; an
+	// authenticated caller gets 403.
+	kind := DecisionDenyForbidden
+	if id.IsAnonymous() {
+		kind = DecisionDenyAnonymous
+	}
+	return Decision{
+		Allow:  !e.defaultDeny,
+		Reason: "no rule matched",
+		Kind:   kind,
+	}
 }
 
 // evaluateRequirement runs the predicate for req plus the AND-combined
 // extraScopes list against id. Extracted from Evaluate so rule-testing
 // tools can call it directly with a synthetic Identity (simulator API).
-func (e *Engine) evaluateRequirement(req Requirement, extraScopes []string, id Identity) (bool, string) {
+// Returns a Decision with Kind populated; the caller (Evaluate) fills
+// in MatchedRule.
+func (e *Engine) evaluateRequirement(req Requirement, extraScopes []string, id Identity) Decision {
 	// Primary requirement first. If it fails, skip extra-scope evaluation
 	// — the reason the operator cares about is the primary one.
-	if ok, reason := evaluatePrimary(req, id); !ok {
-		return false, reason
+	if d, ok := evaluatePrimary(req, id); !ok {
+		return d
 	}
 	// Extra scopes AND with the primary. Every listed scope must be
-	// granted; the first missing one is surfaced.
+	// granted; the first missing one is surfaced. A missing extra scope
+	// on an authenticated caller is forbidden (403), not anonymous.
 	for _, s := range extraScopes {
 		if !containsString(id.Scopes, s) {
-			return false, fmt.Sprintf("scope %q required", s)
+			return Decision{
+				Reason: fmt.Sprintf("scope %q required", s),
+				Kind:   denyKindForIdentity(id),
+			}
 		}
 	}
-	return true, ""
+	return Decision{Allow: true, Kind: DecisionAllow}
+}
+
+// denyKindForIdentity picks the deny classification for a failed
+// predicate given id: DenyAnonymous when no principal, DenyForbidden
+// otherwise. Shared helper so every predicate's deny path is consistent.
+func denyKindForIdentity(id Identity) DecisionKind {
+	if id.IsAnonymous() {
+		return DecisionDenyAnonymous
+	}
+	return DecisionDenyForbidden
 }
 
 // evaluatePrimary dispatches on the requirement kind. Split out from
 // evaluateRequirement so the control flow reads top-to-bottom and each
 // predicate's reason string lives next to its check.
-func evaluatePrimary(req Requirement, id Identity) (bool, string) {
+//
+// The second return reports whether the primary predicate passed. When
+// false, the returned Decision is fully populated (Kind + Reason + any
+// tier-specific fields) so the caller can return it verbatim.
+func evaluatePrimary(req Requirement, id Identity) (Decision, bool) {
 	switch req.Kind {
 	case ReqAnonymous:
-		return true, ""
+		return Decision{Allow: true, Kind: DecisionAllow}, true
 	case ReqAuthenticated:
 		if id.UserID != "" || id.AgentID != "" {
-			return true, ""
+			return Decision{Allow: true, Kind: DecisionAllow}, true
 		}
-		return false, "authentication required"
-	case ReqRole:
+		return Decision{
+			Reason: "authentication required",
+			Kind:   DecisionDenyAnonymous,
+		}, false
+	case ReqRole, ReqGlobalRole:
+		// ReqRole is an alias for ReqGlobalRole — both test membership
+		// in id.Roles. The diagnostic reason uses the literal predicate
+		// string so YAML authors see "role" vs "global_role" reflected
+		// back when they pick one.
 		if containsString(id.Roles, req.Value) {
-			return true, ""
+			return Decision{Allow: true, Kind: DecisionAllow}, true
 		}
-		return false, fmt.Sprintf("role %q required", req.Value)
+		return Decision{
+			Reason: fmt.Sprintf("%s %q required", req.Kind.String(), req.Value),
+			Kind:   denyKindForIdentity(id),
+		}, false
 	case ReqPermission:
 		// Phase 6.5 will wire in the RBAC permission store. Until then
 		// we fail closed — better a visible deny in dev than a silent
 		// allow in prod.
-		return false, fmt.Sprintf("permission %q required (permission-based rules not yet implemented)", req.Value)
+		return Decision{
+			Reason: fmt.Sprintf("permission %q required (permission-based rules not yet implemented)", req.Value),
+			Kind:   denyKindForIdentity(id),
+		}, false
 	case ReqAgent:
 		if id.AgentID != "" {
-			return true, ""
+			return Decision{Allow: true, Kind: DecisionAllow}, true
 		}
-		return false, "agent authentication required"
+		return Decision{
+			Reason: "agent authentication required",
+			Kind:   denyKindForIdentity(id),
+		}, false
 	case ReqScope:
 		if containsString(id.Scopes, req.Value) {
-			return true, ""
+			return Decision{Allow: true, Kind: DecisionAllow}, true
 		}
-		return false, fmt.Sprintf("scope %q required", req.Value)
+		return Decision{
+			Reason: fmt.Sprintf("scope %q required", req.Value),
+			Kind:   denyKindForIdentity(id),
+		}, false
+	case ReqTier:
+		if id.Tier == req.Value {
+			return Decision{Allow: true, Kind: DecisionAllow}, true
+		}
+		// Tier mismatch is semantically "wrong plan, not wrong
+		// person" — surface PaywallRedirect so the proxy can route to
+		// an upgrade page instead of a generic 403. If the caller is
+		// anonymous, they need to sign in first, so override to
+		// DenyAnonymous regardless of the tier mismatch.
+		kind := DecisionPaywallRedirect
+		if id.IsAnonymous() {
+			kind = DecisionDenyAnonymous
+		}
+		return Decision{
+			Reason:       fmt.Sprintf("tier %q required", req.Value),
+			Kind:         kind,
+			RequiredTier: req.Value,
+		}, false
 	default:
-		return false, "unknown requirement"
+		return Decision{
+			Reason: "unknown requirement",
+			Kind:   DecisionDenyForbidden,
+		}, false
 	}
 }
 
@@ -395,6 +519,18 @@ func parseRequirement(require, allow string) (Requirement, error) {
 			return Requirement{}, errors.New("role: requires a value, e.g. role:admin")
 		}
 		return Requirement{Kind: ReqRole, Value: value}, nil
+	case strings.HasPrefix(require, "global_role:"):
+		value := strings.TrimPrefix(require, "global_role:")
+		if value == "" {
+			return Requirement{}, errors.New("global_role: requires a value, e.g. global_role:admin")
+		}
+		return Requirement{Kind: ReqGlobalRole, Value: value}, nil
+	case strings.HasPrefix(require, "tier:"):
+		value := strings.TrimPrefix(require, "tier:")
+		if value == "" {
+			return Requirement{}, errors.New("tier: requires a value, e.g. tier:pro")
+		}
+		return Requirement{Kind: ReqTier, Value: value}, nil
 	case strings.HasPrefix(require, "permission:"):
 		value := strings.TrimPrefix(require, "permission:")
 		if value == "" {
@@ -408,7 +544,7 @@ func parseRequirement(require, allow string) (Requirement, error) {
 		}
 		return Requirement{Kind: ReqScope, Value: value}, nil
 	default:
-		return Requirement{}, fmt.Errorf("unknown require %q (expected anonymous, authenticated, agent, role:X, permission:X:Y, or scope:X)", require)
+		return Requirement{}, fmt.Errorf("unknown require %q (expected anonymous, authenticated, agent, role:X, global_role:X, tier:X, permission:X:Y, or scope:X)", require)
 	}
 }
 
