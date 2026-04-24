@@ -802,6 +802,70 @@ function Input({ value, ...rest }) {
   );
 }
 
+function TierSection({ user, onUpdated }) {
+  const TIERS = ['free', 'pro'];
+  const current = user.metadata?.tier || user.tier || 'free';
+  const [selected, setSelected] = React.useState(current);
+  const [saving, setSaving] = React.useState(false);
+  const toast = useToast();
+
+  const save = async () => {
+    if (selected === current) return;
+    setSaving(true);
+    try {
+      await API.patch('/admin/users/' + user.id + '/tier', { tier: selected });
+      toast.success('Tier updated to ' + selected);
+      if (onUpdated) onUpdated();
+    } catch (e) {
+      toast.error(e.message || 'Failed to update tier');
+      setSelected(current);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const upgradeAt = user.metadata?.tier_upgraded_at || user.tier_upgraded_at;
+
+  return (
+    <div style={{ padding: 12, background: 'var(--surface-1)', border: '1px solid var(--hairline)', borderRadius: 5 }}>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 10, fontWeight: 600 }}>Billing tier</div>
+      <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+        <div className="seg" style={{ display: 'flex' }}>
+          {TIERS.map(t => (
+            <button key={t} type="button"
+              className={'seg-btn' + (selected === t ? ' on' : '')}
+              style={{
+                padding: '4px 14px', fontSize: 12,
+                background: selected === t ? 'var(--fg)' : 'transparent',
+                color: selected === t ? 'var(--bg)' : 'var(--fg-muted)',
+                border: '1px solid var(--hairline-strong)',
+                borderRadius: 4, marginRight: -1, cursor: 'pointer',
+                fontWeight: selected === t ? 600 : 400,
+              }}
+              onClick={() => setSelected(t)}
+            >
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
+        </div>
+        {selected !== current && (
+          <button className="btn primary sm" disabled={saving} onClick={save}>
+            {saving ? 'Saving…' : 'Apply'}
+          </button>
+        )}
+        {upgradeAt && (
+          <span className="faint mono" style={{ fontSize: 10 }}>
+            Last changed {new Date(upgradeAt).toLocaleDateString()}
+          </span>
+        )}
+      </div>
+      <div className="faint" style={{ fontSize: 11, marginTop: 6 }}>
+        Tokens carry tier at issue time — force a session logout for immediate cutover.
+      </div>
+    </div>
+  );
+}
+
 function ProfileTab({ user, onDelete, onRefreshList }) {
   const [nameVal, setNameVal] = React.useState(user.name || '');
   const [emailVal, setEmailVal] = React.useState(user.email || '');
@@ -861,6 +925,11 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
           </div>
         </Field>
         <Field label="User ID"><CopyField value={user.id} truncate={0}/></Field>
+      </div>
+
+      {/* Tier — billing tier management */}
+      <div style={{ marginTop: 20 }}>
+        <TierSection user={user} onUpdated={onRefreshList}/>
       </div>
 
       {/* Metadata — separated section */}
