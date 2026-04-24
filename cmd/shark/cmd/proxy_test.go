@@ -32,20 +32,23 @@ func TestProxyCommand_DeprecationMessageContainsMigrationHint(t *testing.T) {
 	}
 }
 
-// TestProxyCommand_IsRegistered confirms the stub is still wired into
-// the root command tree. If a future refactor drops the init() call,
-// `shark proxy` would start emitting cobra's generic "unknown command"
-// message instead of the migration hint — caught here.
+// TestProxyCommand_IsRegistered confirms the proxy command is still wired into
+// the root command tree with a real subcommand tree (Lane E upgrade).
 func TestProxyCommand_IsRegistered(t *testing.T) {
 	found := false
 	for _, c := range root.Commands() {
 		if c.Name() == "proxy" {
 			found = true
-			if !strings.Contains(strings.ToLower(c.Short), "deprecated") {
-				t.Errorf("proxy command Short should mention deprecation, got %q", c.Short)
+			// Lane E upgraded proxy from deprecation stub to a real command.
+			// Verify key subcommands are present.
+			subNames := make(map[string]bool)
+			for _, sub := range c.Commands() {
+				subNames[sub.Name()] = true
 			}
-			if c.RunE == nil {
-				t.Errorf("proxy command must have a RunE stub so invocations do not fall through to cobra help")
+			for _, want := range []string{"start", "stop", "reload", "status", "rules"} {
+				if !subNames[want] {
+					t.Errorf("proxy subcommand %q not registered; got %v", want, subNames)
+				}
 			}
 			break
 		}
