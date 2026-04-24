@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/sharkauth/sharkauth/internal/proxy"
 	"github.com/sharkauth/sharkauth/internal/testutil"
 )
 
@@ -42,9 +43,28 @@ func newProxyTestServer(t *testing.T, rules []config.ProxyRule) (*httptest.Serve
 		cfg.Proxy = config.ProxyConfig{
 			Enabled:  true,
 			Upstream: upstream.URL,
-			Rules:    rules,
 		}
 	})
+
+	// v1.5: proxy rules are no longer loaded from YAML. The test server
+	// spins up with an empty engine; push the test's desired ruleset in
+	// directly so the rest of the assertions behave as they did before.
+	if ts.APIServer != nil && ts.APIServer.ProxyEngine != nil {
+		specs := make([]proxy.RuleSpec, len(rules))
+		for i, r := range rules {
+			specs[i] = proxy.RuleSpec{
+				Path:    r.Path,
+				Methods: r.Methods,
+				Require: r.Require,
+				Allow:   r.Allow,
+				Scopes:  r.Scopes,
+			}
+		}
+		if err := ts.APIServer.ProxyEngine.SetRules(specs); err != nil {
+			t.Fatalf("proxy engine SetRules: %v", err)
+		}
+	}
+
 	return ts.Server, upstream, ts.AdminKey
 }
 

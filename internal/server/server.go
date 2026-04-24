@@ -99,6 +99,18 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
+	// v1.5 B5c: emit a deprecation warning when the on-disk YAML still
+	// carries a `proxy.rules:` section. The field was removed from the
+	// Go struct in B5a so `cfg.Proxy.Rules` no longer exists; a raw file
+	// scan is the only way to surface the deprecation without reintroducing
+	// the field. Never blocks startup — rules are simply ignored.
+	if opts.ConfigPath != "" && yamlHasLegacyProxyRules(opts.ConfigPath) {
+		fmt.Fprintln(os.Stderr,
+			"WARNING: proxy.rules YAML section is deprecated in v1.5; "+
+				"move rules to the DB via POST /api/v1/admin/proxy/rules. "+
+				"See docs/proxy_v1_5/migration/yaml_deprecation.md")
+	}
+
 	// W15a: warn when legacy proxy fields coexist with the new listeners
 	// block. Resolve() already decided listeners win; surfacing the warning
 	// here (not inside config/) keeps the config package logger-free while
@@ -130,22 +142,14 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("server.secret must be at least 32 characters (got %d)", len(cfg.Server.Secret))
 	}
 
-	// --proxy-upstream override. Keeps rules + other ProxyConfig fields
-	// from YAML but flips Enabled on and pins the upstream URL so a single
-	// CLI flag is all an operator needs to demo embedded mode.
+	// --proxy-upstream override. Flips Enabled on and pins the upstream
+	// URL so a single CLI flag is all an operator needs to demo embedded
+	// mode. Rules are DB-sourced in v1.5 — operators add rules post-boot
+	// via `/api/v1/admin/proxy/rules`; until then the engine is empty and
+	// default-deny surfaces 403s, which matches the safe-by-default stance.
 	if opts.ProxyUpstream != "" {
 		cfg.Proxy.Enabled = true
 		cfg.Proxy.Upstream = opts.ProxyUpstream
-		// If no rules are defined, provide a sensible default for the demo path:
-		// allow authenticated users for everything.
-		if len(cfg.Proxy.Rules) == 0 {
-			cfg.Proxy.Rules = []config.ProxyRule{
-				{
-					Path:    "/*",
-					Require: "authenticated",
-				},
-			}
-		}
 		// Drop any pre-existing listener set — the CLI flag is the
 		// single source of truth for the demo path, and Resolve() below
 		// will re-synthesise a single implicit main-port listener.
@@ -313,16 +317,9 @@ func buildProxyListeners(cfg *config.Config, apiSrv *api.Server) ([]*proxy.Liste
 			return nil, fmt.Errorf("listeners[%d] %s: upstream is required", i, lc.Bind)
 		}
 
-		ruleSpecs := make([]proxy.RuleSpec, len(lc.Rules))
-		for j, pr := range lc.Rules {
-			ruleSpecs[j] = proxy.RuleSpec{
-				Path:    pr.Path,
-				Methods: pr.Methods,
-				Require: pr.Require,
-				Allow:   pr.Allow,
-				Scopes:  pr.Scopes,
-			}
-		}
+		// v1.5: listener rules are DB-sourced — the engine starts empty
+		// and admin API mutations refresh it via refreshProxyEngineFromDB.
+		var ruleSpecs []proxy.RuleSpec
 
 		breakerCfg := proxy.BreakerConfig{
 			HealthURL:        cfg.Server.BaseURL + "/api/v1/admin/health",
@@ -573,6 +570,52 @@ func printBootstrapURL(url string) {
 	fmt.Println()
 	fmt.Printf("  Open %s  (expires in 10 minutes)\n", url)
 	fmt.Println()
+}
+
+// yamlHasLegacyProxyRules reports whether the on-disk YAML at path still
+// carries a top-level `proxy.rules:` key. Implemented as a line-level
+// scan because the Go struct no longer has a Rules field (removed in
+// v1.5 B5a) so a koanf round-trip would silently drop the key without
+// surfacing it to the deprecation warning. Best-effort: any I/O error
+// returns false so a missing / unreadable file never blocks startup.
+//
+// The scanner tracks indentation to avoid false positives from a
+// `rules:` key nested under an unrelated top-level block (e.g.
+// `rbac.roles[].rules:` in a future schema). It fires only when
+// `rules:` appears with two-space indentation directly beneath a
+// top-level `proxy:` block.
+func yamlHasLegacyProxyRules(path string) bool {
+	f, err := os.Open(path) //#nosec G304 -- path comes from opts.ConfigPath, operator-controlled
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	inProxy := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		// Top-level key (no leading whitespace). Record whether we've
+		// just entered the proxy block.
+		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			inProxy = strings.HasPrefix(trimmed, "proxy:")
+			continue
+		}
+		if !inProxy {
+			continue
+		}
+		// Inside proxy: check for a direct-child `rules:` key. Accept
+		// either 2-space or tab indentation to tolerate operator style.
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if indent <= 2 && strings.HasPrefix(trimmed, "rules:") {
+			return true
+		}
+	}
+	return false
 }
 
 func openBrowser(url string) error {

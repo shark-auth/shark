@@ -796,17 +796,10 @@ func (s *Server) initProxy() {
 
 	logger := slog.Default()
 
-	ruleSpecs := make([]proxy.RuleSpec, len(cfg.Proxy.Rules))
-	for i, pr := range cfg.Proxy.Rules {
-		ruleSpecs[i] = proxy.RuleSpec{
-			Path:    pr.Path,
-			Methods: pr.Methods,
-			Require: pr.Require,
-			Allow:   pr.Allow,
-			Scopes:  pr.Scopes,
-		}
-	}
-	engine, err := proxy.NewEngine(ruleSpecs)
+	// v1.5: rules are DB-sourced. Start with an empty rule set; the
+	// refreshProxyEngineFromDB call below loads the canonical set from
+	// the proxy_rules table.
+	engine, err := proxy.NewEngine(nil)
 	if err != nil {
 		panic("proxy: compiling rules: " + err.Error())
 	}

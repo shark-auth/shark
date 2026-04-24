@@ -329,15 +329,16 @@ func (s *Server) handleDeleteProxyRule(w http.ResponseWriter, r *http.Request) {
 // --- engine wiring ---
 
 // refreshProxyEngineFromDB recompiles the proxy engine's rule set from
-// (YAML rules ++ DB rules), with DB rules layered first since they have
-// higher priority by virtue of admin intent. No-op when the proxy engine
-// isn't initialised (proxy disabled in YAML).
+// the DB (the v1.5 source of truth). No-op when the proxy engine isn't
+// initialised (proxy disabled in YAML).
 //
-// Both YAML and DB rules are sorted into a single slice ordered by the
-// rule's Priority (DESC) — DB rows default to priority 0 unless the admin
-// bumps them, and YAML rows are also priority 0, so for unbumped rules the
-// effective ordering is DB-rows-first then YAML, which matches the override
-// intent: a DB row with the same path as a YAML row wins via first-match.
+// Rules are ordered by Priority (DESC) in the underlying storage; the
+// engine evaluates in list order and the first match wins, so the sort
+// order from ListProxyRules is the effective precedence.
+//
+// For the global proxy engine, we only include truly global DB rules
+// (those where app_id is empty). App-specific rules are loaded separately
+// by the AppResolver when a request matches an app's proxy domain.
 func (s *Server) refreshProxyEngineFromDB(ctx context.Context) error {
 	if s.ProxyEngine == nil {
 		return nil
@@ -348,11 +349,7 @@ func (s *Server) refreshProxyEngineFromDB(ctx context.Context) error {
 		return err
 	}
 
-	// Compose specs: DB rules (enabled only) first, then YAML rules.
-	// For the global proxy engine, we only include truly global DB rules
-	// (those where app_id is empty). App-specific rules are loaded separately
-	// by the AppResolver when a request matches an app's proxy domain.
-	specs := make([]proxy.RuleSpec, 0, len(s.Config.Proxy.Rules))
+	specs := make([]proxy.RuleSpec, 0, len(rows))
 	for _, r := range rows {
 		if !r.Enabled || r.AppID != "" {
 			continue
@@ -364,15 +361,6 @@ func (s *Server) refreshProxyEngineFromDB(ctx context.Context) error {
 			Require: r.Require,
 			Allow:   r.Allow,
 			Scopes:  r.Scopes,
-		})
-	}
-	for _, pr := range s.Config.Proxy.Rules {
-		specs = append(specs, proxy.RuleSpec{
-			Path:    pr.Path,
-			Methods: pr.Methods,
-			Require: pr.Require,
-			Allow:   pr.Allow,
-			Scopes:  pr.Scopes,
 		})
 	}
 

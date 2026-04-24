@@ -1,47 +1,56 @@
 package cmd
 
 import (
-	"log/slog"
 	"strings"
 	"testing"
 )
 
-// TestValidateAuthURL covers the W15c HTTPS-for-auth guard. The
-// standalone proxy trusts /.well-known/jwks.json to bootstrap every
-// bearer-token verification; letting --auth point at a cleartext URL
-// without an explicit opt-in is a MITM footgun — an attacker on the
-// path can swap signing keys and forge tokens. Each sub-test pins one
-// (url, insecure-flag) combination to its required outcome.
-func TestValidateAuthURL(t *testing.T) {
-	cases := []struct {
-		name       string
-		url        string
-		insecure   bool
-		wantErr    bool
-		wantSubstr string
-	}{
-		{"https ok", "https://auth.example", false, false, ""},
-		{"https ok with insecure flag (ignored)", "https://auth.example", true, false, ""},
-		{"http rejected without flag", "http://auth.example", false, true, "insecure-auth-http"},
-		{"http allowed with explicit opt-in", "http://auth.example", true, false, ""},
-		{"bare hostname rejected", "auth.example", false, true, "must be an http:// or https://"},
-		{"ftp rejected", "ftp://auth.example", false, true, "must be an http:// or https://"},
+// TestProxyCommand_DeprecationMessageContainsMigrationHint sanity-checks
+// the constant printed to stderr so CI regressions that accidentally
+// truncate the message surface immediately. Mirrors the substrings the
+// orchestrator doc promises dashboards / CI banners can rely on.
+//
+// Why not exercise RunE directly: the stub's RunE calls os.Exit(2) by
+// design — it's the deprecation exit convention (usage error). Invoking
+// RunE under `go test` would tear down the test process. The content
+// guard below plus the registration guard in
+// TestProxyCommand_IsRegistered cover the observable behaviour without
+// needing a subprocess dance.
+func TestProxyCommand_DeprecationMessageContainsMigrationHint(t *testing.T) {
+	wantSubstrings := []string{
+		"deprecated",
+		"shark serve",
+		"/api/v1/admin/proxy/rules",
+		"/api/v1/admin/proxy/start|stop|reload",
+		"docs/proxy_v1_5/",
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := validateAuthURL(tc.url, tc.insecure, slog.Default())
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
-				if tc.wantSubstr != "" && !strings.Contains(err.Error(), tc.wantSubstr) {
-					t.Fatalf("error %q does not contain %q", err.Error(), tc.wantSubstr)
-				}
-				return
+	for _, want := range wantSubstrings {
+		if !strings.Contains(proxyDeprecationMessage, want) {
+			t.Errorf("proxyDeprecationMessage missing substring %q\nfull message:\n%s",
+				want, proxyDeprecationMessage)
+		}
+	}
+}
+
+// TestProxyCommand_IsRegistered confirms the stub is still wired into
+// the root command tree. If a future refactor drops the init() call,
+// `shark proxy` would start emitting cobra's generic "unknown command"
+// message instead of the migration hint — caught here.
+func TestProxyCommand_IsRegistered(t *testing.T) {
+	found := false
+	for _, c := range root.Commands() {
+		if c.Name() == "proxy" {
+			found = true
+			if !strings.Contains(strings.ToLower(c.Short), "deprecated") {
+				t.Errorf("proxy command Short should mention deprecation, got %q", c.Short)
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			if c.RunE == nil {
+				t.Errorf("proxy command must have a RunE stub so invocations do not fall through to cobra help")
 			}
-		})
+			break
+		}
+	}
+	if !found {
+		t.Errorf("proxy command not registered under root")
 	}
 }

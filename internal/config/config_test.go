@@ -126,10 +126,12 @@ func TestSessionLifetimeDuration(t *testing.T) {
 }
 
 func TestProxyConfig_Resolve_LegacyToListener(t *testing.T) {
+	// v1.5: rules no longer live in YAML — the Resolve fan-out only
+	// propagates Enabled/Upstream/TrustedHeaders/StripIncoming/Timeout
+	// to the synthesised main-port listener.
 	cfg := &ProxyConfig{
 		Enabled:  true,
 		Upstream: "http://localhost:3001",
-		Rules:    []ProxyRule{{Path: "/*", Require: "authenticated"}},
 	}
 	cfg.Resolve()
 	if len(cfg.Listeners) != 1 {
@@ -141,9 +143,6 @@ func TestProxyConfig_Resolve_LegacyToListener(t *testing.T) {
 	}
 	if l.Upstream != "http://localhost:3001" {
 		t.Errorf("upstream not carried over: %q", l.Upstream)
-	}
-	if len(l.Rules) != 1 || l.Rules[0].Path != "/*" {
-		t.Errorf("rules not carried over: %+v", l.Rules)
 	}
 }
 

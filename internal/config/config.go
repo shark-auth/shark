@@ -57,25 +57,32 @@ type TelemetryConfig struct {
 }
 
 // ProxyConfig holds reverse-proxy settings consumed by internal/proxy.
+//
+// Deprecated: the `rules` YAML field was removed in v1.5. Proxy rules
+// now live in the DB and are managed via the Admin API
+// (`/api/v1/admin/proxy/rules`). The legacy `rules:` YAML block is
+// ignored on load; a warning is emitted at server startup when it is
+// still present on disk. See docs/proxy_v1_5/migration/yaml_deprecation.md.
 type ProxyConfig struct {
 	Enabled        bool                  `koanf:"enabled" yaml:"enabled"`
 	Upstream       string                `koanf:"upstream" yaml:"upstream"`
 	Timeout        int                   `koanf:"timeout_seconds" yaml:"timeout_seconds"`
 	TrustedHeaders []string              `koanf:"trusted_headers" yaml:"trusted_headers"`
 	StripIncoming  *bool                 `koanf:"strip_incoming" yaml:"strip_incoming"`
-	Rules          []ProxyRule           `koanf:"rules" yaml:"rules"`
 	Listeners      []ProxyListenerConfig `koanf:"listeners" yaml:"listeners"`
 }
 
 // ProxyListenerConfig is one reverse-proxy listener in the W15 multi-listener design.
+//
+// The legacy `rules:` sub-field was removed in v1.5; per-listener rules
+// are now sourced from the DB via the shared proxy engine.
 type ProxyListenerConfig struct {
-	Bind                string      `koanf:"bind" yaml:"bind"`
-	Upstream            string      `koanf:"upstream" yaml:"upstream"`
-	SessionCookieDomain string      `koanf:"session_cookie_domain" yaml:"session_cookie_domain"`
-	TrustedHeaders      []string    `koanf:"trusted_headers" yaml:"trusted_headers"`
-	StripIncoming       *bool       `koanf:"strip_incoming" yaml:"strip_incoming"`
-	Timeout             int         `koanf:"timeout_seconds" yaml:"timeout_seconds"`
-	Rules               []ProxyRule `koanf:"rules" yaml:"rules"`
+	Bind                string   `koanf:"bind" yaml:"bind"`
+	Upstream            string   `koanf:"upstream" yaml:"upstream"`
+	SessionCookieDomain string   `koanf:"session_cookie_domain" yaml:"session_cookie_domain"`
+	TrustedHeaders      []string `koanf:"trusted_headers" yaml:"trusted_headers"`
+	StripIncoming       *bool    `koanf:"strip_incoming" yaml:"strip_incoming"`
+	Timeout             int      `koanf:"timeout_seconds" yaml:"timeout_seconds"`
 }
 
 func (l *ProxyListenerConfig) TimeoutDuration() time.Duration {
@@ -105,10 +112,18 @@ func (p *ProxyConfig) Resolve() {
 		TrustedHeaders: p.TrustedHeaders,
 		StripIncoming:  p.StripIncoming,
 		Timeout:        p.Timeout,
-		Rules:          p.Rules,
 	}}
 }
 
+// ProxyRule is the historical rule shape that used to be loaded from the
+// `proxy.rules:` YAML section.
+//
+// Deprecated: v1.5 moved proxy rules into the DB (table `proxy_rules`,
+// managed via `/api/v1/admin/proxy/rules`). This struct is retained for
+// backward compatibility with callers that still import the type name
+// (e.g. the legacy YAML import handler) but is no longer populated by
+// config.Load. Any new code should use `storage.ProxyRule` or
+// `proxy.RuleSpec` directly.
 type ProxyRule struct {
 	Path    string   `koanf:"path" yaml:"path"`
 	Methods []string `koanf:"methods" yaml:"methods"`
