@@ -67,6 +67,12 @@ def toy_upstreams():
     
     yield (p1, p2)
 
+@pytest.mark.xfail(
+    reason="v1.5 Lane B deprecated per-listener YAML `rules:` — Lane D will port "
+           "this test to push rules via POST /api/v1/admin/proxy/rules after boot. "
+           "See docs/proxy_v1_5/migration/yaml_deprecation.md.",
+    strict=True,
+)
 def test_w15_multi_listener_isolation(toy_upstreams, tmp_path):
     """Section 72: W15 multi-listener proxy (embedded)."""
     p_upstream_a, p_upstream_b = toy_upstreams
@@ -133,6 +139,14 @@ def test_w15_multi_listener_isolation(toy_upstreams, tmp_path):
         proc.terminate()
         proc.wait()
 
+@pytest.mark.xfail(
+    reason="v1.5 Lane B deprecated the standalone `shark proxy` command; it now "
+           "prints a deprecation stub + exits 2. The reverse proxy runs inside "
+           "`shark serve` and is configured via the Admin API. Lane D will port "
+           "this test (or delete it if the standalone path stays permanently "
+           "gone). See docs/proxy_v1_5/migration/yaml_deprecation.md.",
+    strict=True,
+)
 def test_w15_standalone_proxy_jwt_verify(smoke_user, tmp_path):
     """Section 73: W15 standalone shark proxy JWT verify."""
     import http.server
