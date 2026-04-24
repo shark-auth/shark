@@ -287,5 +287,122 @@ func mustReq(t *testing.T, method, url string, body io.Reader) *http.Request {
 	return req
 }
 
+// TestHandlePaywallPage_Renders402WithCSSVars checks that the paywall page
+// returns 402 Payment Required and inlines the branding CSS custom
+// properties.
+func TestHandlePaywallPage_Renders402WithCSSVars(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	defer ts.Server.Close()
+
+	createHostedApp(t, ts.Store, "paywall-test", "hosted")
+
+	// Set a custom primary color so we can assert the CSS var flowed through.
+	patchResp := ts.PatchJSONWithAdminKey("/api/v1/admin/branding",
+		map[string]string{"primary_color": "#ff00ee"})
+	patchResp.Body.Close()
+
+	resp := ts.Get("/paywall/paywall-test?tier=pro&return=%2Fapp%2Fdashboard")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("status: got %d, want 402", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "text/html") {
+		t.Fatalf("Content-Type: got %q, want text/html*", ct)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	bs := string(body)
+	if !strings.Contains(bs, "--shark-primary: #ff00ee") {
+		t.Fatalf("body missing --shark-primary css var; body=%s", bs[:min(len(bs), 1500)])
+	}
+	if !strings.Contains(bs, "Upgrade to pro") {
+		t.Fatalf("body missing headline; body=%s", bs[:min(len(bs), 1500)])
+	}
+	if !strings.Contains(bs, "/app/dashboard?upgrade=pro") {
+		t.Fatalf("body missing upgrade href; body=%s", bs[:min(len(bs), 1500)])
+	}
+}
+
+// TestHandlePaywallPage_MissingTierReturns400 verifies the required
+// ?tier= param produces a 400.
+func TestHandlePaywallPage_MissingTierReturns400(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	defer ts.Server.Close()
+
+	createHostedApp(t, ts.Store, "no-tier", "hosted")
+
+	resp := ts.Get("/paywall/no-tier")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want 400", resp.StatusCode)
+	}
+}
+
+// TestHandlePaywallPage_UnknownSlug_Returns404 verifies an unregistered
+// app slug falls through to 404.
+func TestHandlePaywallPage_UnknownSlug_Returns404(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	defer ts.Server.Close()
+
+	resp := ts.Get("/paywall/ghost?tier=pro")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status: got %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestHandlePaywallPage_MaliciousReturn_Sanitized verifies that a
+// javascript: scheme in ?return= is replaced with "/" before embedding.
+func TestHandlePaywallPage_MaliciousReturn_Sanitized(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	defer ts.Server.Close()
+
+	createHostedApp(t, ts.Store, "xss-test", "hosted")
+
+	// URL-encoded javascript:alert(1) as the return value.
+	resp := ts.Get("/paywall/xss-test?tier=pro&return=javascript%3Aalert%281%29")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("status: got %d, want 402", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	bs := string(body)
+	if strings.Contains(bs, "javascript:") {
+		t.Fatalf("body must not contain javascript:, got: %s", bs[:min(len(bs), 1500)])
+	}
+	if !strings.Contains(bs, "/?upgrade=pro") {
+		t.Fatalf("expected fallback upgrade href /?upgrade=pro, got body: %s", bs[:min(len(bs), 1500)])
+	}
+}
+
+// TestHandlePaywallPage_MaliciousTier_Sanitized verifies that a tier
+// value containing HTML-breaking chars is replaced with the fallback
+// label.
+func TestHandlePaywallPage_MaliciousTier_Sanitized(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	defer ts.Server.Close()
+
+	createHostedApp(t, ts.Store, "xss-tier", "hosted")
+
+	resp := ts.Get("/paywall/xss-tier?tier=%3Cscript%3Ealert%281%29%3C%2Fscript%3E")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("status: got %d, want 402", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	bs := string(body)
+	if strings.Contains(bs, "<script>") {
+		t.Fatalf("body must not contain <script>, got: %s", bs[:min(len(bs), 1500)])
+	}
+	if !strings.Contains(bs, "Upgrade to upgrade") {
+		t.Fatalf("expected fallback tier label 'upgrade', got: %s", bs[:min(len(bs), 1500)])
+	}
+}
+
 // Ensure api package is used (import cycle check).
 var _ = api.Server{}

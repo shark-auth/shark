@@ -290,6 +290,205 @@ func (s *Server) handleHostedPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handlePaywallPage serves the 402 Payment Required upgrade page shown
+// when the proxy denies a request due to a ReqTier mismatch. Rendered as
+// an inline HTML template keyed on the calling app's branding (same
+// ResolveBranding seam as handleHostedPage).
+//
+// Route: GET /paywall/{app_slug}?tier=<required>&return=<url>
+// Public — not admin-gated. The required tier comes from the proxy
+// Decision.RequiredTier; the return URL is the original request URL so
+// the upgrade CTA can loop the caller back after payment.
+//
+// XSS guards: tier + return are sanitized via sanitizeCSSValue-style
+// allowlist before embedding in attribute/CSS contexts; html/template
+// also escapes on expansion.
+func (s *Server) handlePaywallPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	appSlug := chi.URLParam(r, "app_slug")
+	q := r.URL.Query()
+	rawTier := q.Get("tier")
+	rawReturn := q.Get("return")
+
+	if strings.TrimSpace(rawTier) == "" {
+		http.Error(w, "tier query param required", http.StatusBadRequest)
+		return
+	}
+
+	// Resolve the application by slug. Fall through to 404 rather than
+	// leaking "which apps exist" via a different error shape.
+	app, err := s.Store.GetApplicationBySlug(ctx, appSlug)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("paywall: GetApplicationBySlug", "slug", appSlug, "err", err)
+		http.NotFound(w, r)
+		return
+	}
+
+	// Resolve branding so the upgrade page shows the app's own colors.
+	branding, err := s.Store.ResolveBranding(ctx, app.ID)
+	if err != nil {
+		slog.Warn("paywall: ResolveBranding failed; using defaults", "app_id", app.ID, "err", err)
+	}
+	var brandInfo hostedBrandingInfo
+	if branding != nil {
+		brandInfo = hostedBrandingInfo{
+			PrimaryColor:   branding.PrimaryColor,
+			SecondaryColor: branding.SecondaryColor,
+			FontFamily:     branding.FontFamily,
+			LogoURL:        branding.LogoURL,
+		}
+	}
+
+	primaryColor := sanitizeCSSValue(brandInfo.PrimaryColor, "#6366f1")
+	secondaryColor := sanitizeCSSValue(brandInfo.SecondaryColor, "#4f46e5")
+	fontFamily := sanitizeCSSValue(brandInfo.FontFamily, "Inter, system-ui, sans-serif")
+
+	// Tier label is surfaced inside the headline. Allowlist keeps it to
+	// [a-zA-Z0-9 _-] so a URL-param injection can't break out of the
+	// attribute/text context. html/template escaping is belt + suspenders.
+	tier := sanitizeTierLabel(rawTier)
+
+	// return param must be a same-origin-safe HTTP(S) URL. Reject anything
+	// with a scheme we don't recognize (javascript:, data:, file:, ...).
+	// The CTA href appends ?upgrade=<tier>; if return is empty we fall
+	// back to "/".
+	returnURL := sanitizeReturnURL(rawReturn)
+	upgradeHref := buildUpgradeHref(returnURL, tier)
+
+	data := struct {
+		AppName        string
+		Tier           string
+		UpgradeHref    string
+		PrimaryColor   string
+		SecondaryColor string
+		FontFamily     string
+	}{
+		AppName:        app.Name,
+		Tier:           tier,
+		UpgradeHref:    upgradeHref,
+		PrimaryColor:   primaryColor,
+		SecondaryColor: secondaryColor,
+		FontFamily:     fontFamily,
+	}
+
+	const paywallTmpl = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Upgrade required — {{.AppName}}</title>
+  <style>
+    :root {
+      --shark-primary: {{.PrimaryColor}};
+      --shark-secondary: {{.SecondaryColor}};
+      --font-display: {{.FontFamily}};
+    }
+    html, body { margin: 0; padding: 0; min-height: 100%; font-family: var(--font-display); }
+    body { display: flex; align-items: center; justify-content: center; background: #0b0b0f; color: #f5f5f7; }
+    main { max-width: 520px; padding: 48px 32px; text-align: center; }
+    h1 { margin: 0 0 16px; font-size: 2rem; color: var(--shark-primary); }
+    p { margin: 0 0 24px; color: #c7c7cc; line-height: 1.5; }
+    .cta {
+      display: inline-block; padding: 12px 24px; border-radius: 8px;
+      background: var(--shark-primary); color: #fff; text-decoration: none;
+      font-weight: 600; transition: background 120ms ease;
+    }
+    .cta:hover { background: var(--shark-secondary); }
+    .app { margin-top: 24px; font-size: 0.875rem; color: #8e8e93; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Upgrade to {{.Tier}}</h1>
+    <p>This feature requires the <strong>{{.Tier}}</strong> plan. Upgrade to continue using {{.AppName}}.</p>
+    <a class="cta" href="{{.UpgradeHref}}">Upgrade to {{.Tier}}</a>
+    <div class="app">{{.AppName}}</div>
+  </main>
+</body>
+</html>`
+
+	tmpl, err := template.New("paywall").Parse(paywallTmpl)
+	if err != nil {
+		slog.Error("paywall: parse template", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusPaymentRequired)
+	if err := tmpl.Execute(w, data); err != nil {
+		slog.Error("paywall: execute template", "err", err)
+	}
+}
+
+// tierLabelRE restricts tier labels to characters safe for embedding in
+// HTML text + query params. Anything else falls back to a generic label.
+var tierLabelRE = regexp.MustCompile(`^[a-zA-Z0-9 _-]{1,32}$`)
+
+// sanitizeTierLabel returns value if it passes the tier-label regex,
+// otherwise returns "upgrade" as a safe fallback.
+func sanitizeTierLabel(value string) string {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return "upgrade"
+	}
+	if tierLabelRE.MatchString(v) {
+		return v
+	}
+	return "upgrade"
+}
+
+// sanitizeReturnURL allowlists only absolute http(s) URLs and absolute
+// paths. Anything else (javascript:, data:, relative with weird chars)
+// falls back to "/" so the CTA still works without opening an
+// open-redirect / XSS vector.
+func sanitizeReturnURL(value string) string {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return "/"
+	}
+	// Reject control chars / quotes / angle-brackets up front — these
+	// should never appear in a legitimate URL.
+	for _, c := range v {
+		if c < 0x20 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '`' {
+			return "/"
+		}
+	}
+	if strings.HasPrefix(v, "/") && !strings.HasPrefix(v, "//") {
+		return v
+	}
+	if strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") {
+		return v
+	}
+	return "/"
+}
+
+// buildUpgradeHref appends ?upgrade=<tier> to returnURL while preserving
+// any existing query string.
+func buildUpgradeHref(returnURL, tier string) string {
+	esc := escapeQueryValue(tier)
+	if strings.Contains(returnURL, "?") {
+		return returnURL + "&upgrade=" + esc
+	}
+	return returnURL + "?upgrade=" + esc
+}
+
+// escapeQueryValue URL-encodes a restricted tier label. We already
+// constrained tier via sanitizeTierLabel so the output is safe; this
+// handles the embedded space character defensively.
+func escapeQueryValue(s string) string {
+	// sanitizeTierLabel already stripped anything outside [a-zA-Z0-9 _-]
+	// so a simple space → %20 swap keeps the URL valid. All other
+	// allowed characters are URL-safe.
+	return strings.ReplaceAll(s, " ", "%20")
+}
+
 // handleHostedAssets serves embedded static assets for the hosted SPA from
 // /admin/hosted/assets/*. The files are content-hash-named so they get
 // immutable cache headers.

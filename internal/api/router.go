@@ -756,6 +756,12 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 	r.Get("/hosted/{app_slug}/{page}", s.handleHostedPage)
 	r.Get("/admin/hosted/assets/*", s.handleHostedAssets)
 
+	// Paywall upgrade page (PROXYV1_5 §4.7). Public — the proxy redirects
+	// unauthed/tier-mismatched callers here with ?tier=X&return=<url> and
+	// the 402 response is intentionally cache-less + user-scope-less so a
+	// CDN in front can't serve a stale copy to a different caller.
+	r.Get("/paywall/{app_slug}", s.handlePaywallPage)
+
 	// Admin dashboard (Phase 4) — embedded HTML/React bundle, SPA fallback.
 	r.Handle("/admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))
 	r.Handle("/admin/*", http.StripPrefix("/admin/", admin.Handler()))

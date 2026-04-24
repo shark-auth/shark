@@ -241,8 +241,30 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"reason", decision.Reason,
 				"user_id", id.UserID,
 				"agent_id", id.AgentID,
+				"actor_type", string(id.ActorType),
 				"host", r.Host,
 			)
+
+			// PROXYV1_5 §4.7: tier mismatch for an authenticated caller
+			// redirects to the hosted paywall page so they can upgrade.
+			// Anonymous tier-mismatches fall through to the standard
+			// 401/redirect-to-login path below — upgrading before signing
+			// in has no meaning.
+			if decision.Kind == DecisionPaywallRedirect && !isAnonymous(id) && p.issuer != "" {
+				slug := "default"
+				if resolved != nil && resolved.Slug != "" {
+					slug = resolved.Slug
+				}
+				paywallURL := fmt.Sprintf("%s/paywall/%s?tier=%s&return=%s",
+					p.issuer,
+					url.PathEscape(slug),
+					url.QueryEscape(decision.RequiredTier),
+					url.QueryEscape(fullURL(r)),
+				)
+				w.Header().Set(HeaderDenyReason, decision.Reason)
+				http.Redirect(w, r, paywallURL, http.StatusFound)
+				return
+			}
 
 			// Porter Logic: Browser Redirect vs API 401/403
 			if isAnonymous(id) {
