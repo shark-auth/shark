@@ -33,3 +33,21 @@ export class VaultError extends SharkAuthError {
 
 /** Error decoding or verifying a Shark-issued agent token. */
 export class TokenError extends SharkAuthError {}
+
+/**
+ * Error returned by admin API calls when the server responds with a non-2xx
+ * status. Carries the server's `error.code` string and the HTTP status code
+ * so callers can branch on either.
+ */
+export class SharkAPIError extends SharkAuthError {
+  /** Server-supplied error code, e.g. `"invalid_proxy_rule"`. */
+  readonly code: string;
+  /** HTTP status code (e.g. 400, 401, 404). */
+  readonly status: number;
+
+  constructor(message: string, code: string, status: number) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
