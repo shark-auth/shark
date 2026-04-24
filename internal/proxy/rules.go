@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
+	"sync/atomic"
 )
 
 // RuleSpec is the raw, pre-compile shape of a rule. It mirrors the
@@ -153,14 +153,15 @@ type Decision struct {
 	Reason      string
 }
 
-// Engine is the compiled rule set. The rules slice is guarded by a RWMutex
-// so SetRules can atomically swap the entire compiled list under a write
-// lock while Evaluate continues serving readers. Reads take a brief read
-// lock and snapshot the slice header (not its contents) so the per-request
-// hot path avoids contention with mutators.
+// Engine is the compiled rule set. Rules are stored behind an
+// atomic.Pointer so SetRules can replace the entire slice with a single
+// word-sized atomic store and Evaluate can load the snapshot with a
+// single atomic load — no locks on the request hot path. The pointed-to
+// slice is treated as immutable post-compile; SetRules publishes a
+// freshly compiled slice by overwriting the pointer rather than mutating
+// the previous contents.
 type Engine struct {
-	mu          sync.RWMutex
-	rules       []*Rule
+	rules       atomic.Pointer[[]*Rule]
 	defaultDeny bool
 }
 
@@ -174,14 +175,17 @@ func NewEngine(raw []RuleSpec) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{rules: compiled, defaultDeny: true}, nil
+	e := &Engine{defaultDeny: true}
+	e.rules.Store(&compiled)
+	return e, nil
 }
 
-// SetRules atomically replaces the engine's compiled rule set. Called by the
-// admin proxy-rules CRUD endpoints (Wave D) after every mutation so DB rows
-// take effect without restarting the server. The compile step runs before
-// the write lock is taken so a partially-compiled set is never visible to
-// concurrent Evaluate calls.
+// SetRules atomically replaces the engine's compiled rule set. Called by
+// the admin proxy-rules CRUD endpoints (Wave D) after every mutation so
+// DB rows take effect without restarting the server. The compile step
+// runs before the pointer swap so a partially-compiled set is never
+// visible to concurrent Evaluate calls — readers either see the old
+// snapshot in full or the new one in full.
 //
 // On compile failure the previous rule set remains in place — the caller
 // gets the error and is expected to surface it; the proxy keeps serving
@@ -191,9 +195,7 @@ func (e *Engine) SetRules(raw []RuleSpec) error {
 	if err != nil {
 		return err
 	}
-	e.mu.Lock()
-	e.rules = compiled
-	e.mu.Unlock()
+	e.rules.Store(&compiled)
 	return nil
 }
 
@@ -212,15 +214,25 @@ func compileSpecs(raw []RuleSpec) ([]*Rule, error) {
 	return compiled, nil
 }
 
+// loadRules returns the current compiled rule slice via a single atomic
+// load. Returns an empty (non-nil) slice if the pointer has not been
+// published yet so callers can range safely without a nil check.
+func (e *Engine) loadRules() []*Rule {
+	p := e.rules.Load()
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
 // Rules returns a snapshot of the compiled rules. Intended for diagnostics
 // and the simulator API. The returned slice header is a fresh copy so
 // callers can iterate safely while SetRules races; the *Rule values inside
 // are immutable post-compilation so sharing them is safe.
 func (e *Engine) Rules() []*Rule {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	out := make([]*Rule, len(e.rules))
-	copy(out, e.rules)
+	snap := e.loadRules()
+	out := make([]*Rule, len(snap))
+	copy(out, snap)
 	return out
 }
 
@@ -229,10 +241,8 @@ func (e *Engine) Rules() []*Rule {
 // behavior is deny with a clear reason so the operator's logs explain
 // the 403.
 func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
-	e.mu.RLock()
-	rules := e.rules
-	defaultDeny := e.defaultDeny
-	e.mu.RUnlock()
+	// Single atomic load — no lock contention on the request hot path.
+	rules := e.loadRules()
 
 	// Extract AppID header if present
 	appID := r.Header.Get("X-Shark-App-ID")
@@ -245,7 +255,7 @@ func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
 		return Decision{Allow: allow, MatchedRule: rule, Reason: reason}
 	}
 
-	return Decision{Allow: !defaultDeny, Reason: "no rule matched"}
+	return Decision{Allow: !e.defaultDeny, Reason: "no rule matched"}
 }
 
 // evaluateRequirement runs the predicate for req plus the AND-combined

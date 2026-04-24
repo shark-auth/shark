@@ -530,3 +530,118 @@ func TestReverseProxy_DenyReasonInHeader(t *testing.T) {
 		t.Error("upstream must not be called on deny")
 	}
 }
+
+// -----------------------------------------------------------------------------
+// atomic.Pointer swap — lock-free concurrency
+// -----------------------------------------------------------------------------
+
+// TestEngine_SetRulesAtomicSwap verifies the pointer-swap semantics: after
+// SetRules returns, subsequent Evaluate calls observe the new rule set;
+// a failed compile leaves the previous snapshot untouched.
+func TestEngine_SetRulesAtomicSwap(t *testing.T) {
+	e := mustEngine(t, RuleSpec{Path: "/a", Allow: "anonymous"})
+
+	// Initial snapshot has exactly one rule.
+	if got := len(e.Rules()); got != 1 {
+		t.Fatalf("initial Rules() len = %d, want 1", got)
+	}
+
+	// Successful swap — new snapshot replaces the old one.
+	if err := e.SetRules([]RuleSpec{
+		{Path: "/a", Allow: "anonymous"},
+		{Path: "/b", Allow: "anonymous"},
+	}); err != nil {
+		t.Fatalf("SetRules: %v", err)
+	}
+	if got := len(e.Rules()); got != 2 {
+		t.Errorf("after swap Rules() len = %d, want 2", got)
+	}
+
+	// Failed compile — previous snapshot must remain in place.
+	if err := e.SetRules([]RuleSpec{{Path: "no-slash", Allow: "anonymous"}}); err == nil {
+		t.Fatal("expected compile error for missing leading slash")
+	}
+	if got := len(e.Rules()); got != 2 {
+		t.Errorf("after failed swap Rules() len = %d, want 2 (last-good retained)", got)
+	}
+}
+
+// TestEngine_ConcurrentReadWrite exercises the atomic.Pointer swap under
+// concurrent readers and writers. The test passes when -race is clean
+// and every Evaluate call observes a consistent (non-torn) snapshot.
+func TestEngine_ConcurrentReadWrite(t *testing.T) {
+	e := mustEngine(t, RuleSpec{Path: "/a", Allow: "anonymous"})
+
+	stop := make(chan struct{})
+	done := make(chan struct{}, 8)
+
+	// Four readers: hammer Evaluate, assert Decision is coherent.
+	for i := 0; i < 4; i++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				d := e.Evaluate(newGetReq("/a"), Identity{})
+				// Matched rule's AppID must be empty (that's what we wrote);
+				// if we ever saw a torn value this would flip.
+				if d.MatchedRule != nil && d.MatchedRule.AppID != "" {
+					t.Errorf("torn MatchedRule.AppID = %q", d.MatchedRule.AppID)
+					return
+				}
+			}
+		}()
+	}
+
+	// Four writers: flip between two distinct rule sets.
+	for i := 0; i < 4; i++ {
+		go func(n int) {
+			defer func() { done <- struct{}{} }()
+			specA := []RuleSpec{{Path: "/a", Allow: "anonymous"}}
+			specB := []RuleSpec{
+				{Path: "/a", Allow: "anonymous"},
+				{Path: "/b", Allow: "anonymous"},
+			}
+			for iter := 0; iter < 200; iter++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				var err error
+				if iter%2 == 0 {
+					err = e.SetRules(specA)
+				} else {
+					err = e.SetRules(specB)
+				}
+				if err != nil {
+					t.Errorf("SetRules: %v", err)
+					return
+				}
+			}
+		}(i)
+	}
+
+	// Let them race briefly, then stop.
+	time.Sleep(50 * time.Millisecond)
+	close(stop)
+	for i := 0; i < 8; i++ {
+		<-done
+	}
+
+	// Post-condition: Rules() returns a fresh copy distinct from the
+	// internal pointer. Mutating the returned slice must not affect the
+	// next Evaluate.
+	snap := e.Rules()
+	if len(snap) == 0 {
+		t.Fatal("expected at least one rule after races settle")
+	}
+	snap[0] = nil // corrupt caller-owned copy
+	d := e.Evaluate(newGetReq("/a"), Identity{})
+	if d.MatchedRule == nil {
+		t.Error("mutating Rules() return value must not affect Evaluate")
+	}
+}
