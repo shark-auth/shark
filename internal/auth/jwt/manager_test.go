@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -467,3 +468,169 @@ func TestKeyRotation_BothInJWKS(t *testing.T) {
 	}
 }
 
+// -----------------------------------------------------------------------------
+// Lane A A6 — Claims bake Tier + Roles
+// -----------------------------------------------------------------------------
+
+// userWithMetadata returns a fresh User, persisted in store, with the
+// given metadata JSON. Used by the enrichment tests so each scenario
+// can set (or omit) the "tier" field.
+func userWithMetadata(t *testing.T, store *storage.SQLiteStore, id, metadataJSON string) *storage.User {
+	t.Helper()
+	u := &storage.User{
+		ID:       id,
+		Email:    id + "@example.com",
+		Metadata: metadataJSON,
+	}
+	if err := store.CreateUser(context.Background(), u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	return u
+}
+
+// TestIssueSession_BakesTierAndRoles covers the happy path: user with
+// tier in metadata + two roles → Claims carry both, role names survive
+// the JSON round-trip in the expected order.
+func TestIssueSession_BakesTierAndRoles(t *testing.T) {
+	store := testutil.NewTestDB(t)
+	mgr := newTestManager(t, store, false)
+	ctx := context.Background()
+
+	u := userWithMetadata(t, store, "user_tierpro", `{"tier":"pro"}`)
+	rAdmin := testutil.CreateRole(t, store, "admin")
+	rBilling := testutil.CreateRole(t, store, "billing")
+	if err := store.AssignRoleToUser(ctx, u.ID, rAdmin.ID); err != nil {
+		t.Fatalf("assign admin: %v", err)
+	}
+	if err := store.AssignRoleToUser(ctx, u.ID, rBilling.ID); err != nil {
+		t.Fatalf("assign billing: %v", err)
+	}
+
+	token, err := mgr.IssueSessionJWT(ctx, u, "sess_abc", true)
+	if err != nil {
+		t.Fatalf("IssueSessionJWT: %v", err)
+	}
+	claims, err := mgr.Validate(ctx, token)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	if claims.Tier != "pro" {
+		t.Errorf("Tier = %q, want %q", claims.Tier, "pro")
+	}
+	if len(claims.Roles) != 2 {
+		t.Fatalf("Roles len = %d, want 2 (got %v)", len(claims.Roles), claims.Roles)
+	}
+	// Collect into a set — ordering depends on store iteration order
+	// which is not part of the contract.
+	got := map[string]bool{}
+	for _, r := range claims.Roles {
+		got[r] = true
+	}
+	if !got["admin"] || !got["billing"] {
+		t.Errorf("Roles = %v, want admin+billing", claims.Roles)
+	}
+}
+
+// TestIssueAccessRefreshPair_BakesTierAndRoles mirrors the session test
+// for the access/refresh issuer: access token carries Tier + Roles;
+// refresh token deliberately does not.
+func TestIssueAccessRefreshPair_BakesTierAndRoles(t *testing.T) {
+	store := testutil.NewTestDB(t)
+	mgr := newTestManager(t, store, false)
+	ctx := context.Background()
+
+	u := userWithMetadata(t, store, "user_accpro", `{"tier":"enterprise"}`)
+	r := testutil.CreateRole(t, store, "ops")
+	if err := store.AssignRoleToUser(ctx, u.ID, r.ID); err != nil {
+		t.Fatalf("assign ops: %v", err)
+	}
+
+	access, refresh, err := mgr.IssueAccessRefreshPair(ctx, u, "sess_acc", false)
+	if err != nil {
+		t.Fatalf("IssueAccessRefreshPair: %v", err)
+	}
+
+	accessClaims, err := mgr.Validate(ctx, access)
+	if err != nil {
+		t.Fatalf("Validate access: %v", err)
+	}
+	if accessClaims.Tier != "enterprise" {
+		t.Errorf("access Tier = %q, want enterprise", accessClaims.Tier)
+	}
+	if len(accessClaims.Roles) != 1 || accessClaims.Roles[0] != "ops" {
+		t.Errorf("access Roles = %v, want [ops]", accessClaims.Roles)
+	}
+
+	// Refresh token is used by Refresh() which deliberately allows
+	// refresh-type tokens. Parse it directly so we can inspect Tier/Roles.
+	parsed, _, err := new(gojwt.Parser).ParseUnverified(refresh, &jwtpkg.Claims{})
+	if err != nil {
+		t.Fatalf("ParseUnverified refresh: %v", err)
+	}
+	refreshClaims, ok := parsed.Claims.(*jwtpkg.Claims)
+	if !ok {
+		t.Fatalf("refresh claims type = %T", parsed.Claims)
+	}
+	if refreshClaims.Tier != "" || len(refreshClaims.Roles) != 0 {
+		t.Errorf("refresh must not carry enrichment: tier=%q roles=%v", refreshClaims.Tier, refreshClaims.Roles)
+	}
+}
+
+// TestIssueSession_DefaultTier covers a user whose metadata does not
+// set "tier" (empty string, malformed JSON, missing field): the default
+// tier is baked so downstream rules can match tier:free.
+func TestIssueSession_DefaultTier(t *testing.T) {
+	store := testutil.NewTestDB(t)
+	mgr := newTestManager(t, store, false)
+	ctx := context.Background()
+
+	cases := []struct {
+		name     string
+		metadata string
+	}{
+		{"empty metadata", ""},
+		{"json without tier", `{"other":"x"}`},
+		{"malformed json", `{not json`},
+		{"explicit empty tier", `{"tier":""}`},
+	}
+	for i, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			u := userWithMetadata(t, store, fmt.Sprintf("user_def_%d", i), c.metadata)
+			token, err := mgr.IssueSessionJWT(ctx, u, "sess_def", false)
+			if err != nil {
+				t.Fatalf("IssueSessionJWT: %v", err)
+			}
+			claims, err := mgr.Validate(ctx, token)
+			if err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+			if claims.Tier != "free" {
+				t.Errorf("default Tier = %q, want \"free\"", claims.Tier)
+			}
+		})
+	}
+}
+
+// TestIssueSession_NoRolesReturnsEmpty verifies a user with zero role
+// assignments produces an empty (or absent) Roles slice — not a nil
+// panic, not a slice with stray entries.
+func TestIssueSession_NoRolesReturnsEmpty(t *testing.T) {
+	store := testutil.NewTestDB(t)
+	mgr := newTestManager(t, store, false)
+	ctx := context.Background()
+
+	u := userWithMetadata(t, store, "user_noroles", `{"tier":"free"}`)
+
+	token, err := mgr.IssueSessionJWT(ctx, u, "sess_noroles", false)
+	if err != nil {
+		t.Fatalf("IssueSessionJWT: %v", err)
+	}
+	claims, err := mgr.Validate(ctx, token)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if len(claims.Roles) != 0 {
+		t.Errorf("no-role user should produce empty Roles, got %v", claims.Roles)
+	}
+}

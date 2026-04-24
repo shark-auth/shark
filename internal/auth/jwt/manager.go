@@ -34,11 +34,20 @@ var (
 )
 
 // Claims is the combined registered + custom claim set.
+//
+// Tier, Roles, and Scope are emitted omitempty so existing consumers
+// parsing the legacy shape continue to work, and so refresh tokens
+// (which don't need the enrichment) stay small. They are populated at
+// issuance time from the RBAC store + user metadata — see
+// IssueSessionJWT / IssueAccessRefreshPair.
 type Claims struct {
 	gojwt.RegisteredClaims
-	MFAPassed bool   `json:"mfa_passed"`
-	SessionID string `json:"session_id"`
-	TokenType string `json:"token_type"` // "session" | "access" | "refresh"
+	MFAPassed bool     `json:"mfa_passed"`
+	SessionID string   `json:"session_id"`
+	TokenType string   `json:"token_type"` // "session" | "access" | "refresh"
+	Tier      string   `json:"tier,omitempty"`
+	Roles     []string `json:"roles,omitempty"`
+	Scope     []string `json:"scope,omitempty"`
 }
 
 // Manager handles JWT lifecycle: issuance, validation, key management.
@@ -47,6 +56,75 @@ type Manager struct {
 	store  storage.Store
 	base   string // server.base_url — fallback issuer
 	secret string // server.secret — used for AES-GCM key derivation
+}
+
+// defaultUserTier is what we bake into Claims.Tier when the user's
+// metadata JSON does not set a "tier" field. Kept as a constant so
+// downstream rule authors have a documented default to match against
+// (e.g. a rule that requires tier:free matches freshly signed-up users
+// before any upgrade writes their metadata).
+const defaultUserTier = "free"
+
+// userEnrichment is the Tier + Roles slice baked into an issued JWT for
+// a given user. Returned by resolveEnrichment so IssueSessionJWT and
+// IssueAccessRefreshPair share exactly one code path for role + tier
+// lookup. On partial failure we still return a best-effort struct —
+// issuance must not fail just because a side-table read blew up.
+type userEnrichment struct {
+	Tier  string
+	Roles []string
+}
+
+// resolveEnrichment loads roles + tier for user so every issuance site
+// bakes the same claim set. Role lookup errors are logged through the
+// returned error; tier parsing is best-effort — an unreadable metadata
+// JSON yields the default tier rather than failing issuance.
+//
+// Returns (_, nil) on success. A non-nil error means roles could not be
+// fetched; the returned Roles slice will be nil in that case so the
+// caller can decide whether to fail closed or proceed with an empty
+// role list.
+func (m *Manager) resolveEnrichment(ctx context.Context, user *storage.User) (userEnrichment, error) {
+	if user == nil {
+		return userEnrichment{Tier: defaultUserTier}, nil
+	}
+
+	out := userEnrichment{Tier: userTierFromMetadata(user.Metadata)}
+
+	roles, err := m.store.GetRolesByUserID(ctx, user.ID)
+	if err != nil {
+		// Bubble up so the caller can log/reject; we still return the
+		// tier we already resolved.
+		return out, fmt.Errorf("get roles by user id: %w", err)
+	}
+	names := make([]string, 0, len(roles))
+	for _, r := range roles {
+		if r == nil {
+			continue
+		}
+		names = append(names, r.Name)
+	}
+	out.Roles = names
+	return out, nil
+}
+
+// userTierFromMetadata parses the user's metadata JSON and returns the
+// "tier" field if present and non-empty. On any parse failure we return
+// defaultUserTier — invalid metadata must not break issuance.
+func userTierFromMetadata(metadataJSON string) string {
+	if metadataJSON == "" {
+		return defaultUserTier
+	}
+	var md struct {
+		Tier string `json:"tier"`
+	}
+	if err := json.Unmarshal([]byte(metadataJSON), &md); err != nil {
+		return defaultUserTier
+	}
+	if md.Tier == "" {
+		return defaultUserTier
+	}
+	return md.Tier
 }
 
 // NewManager creates a Manager. baseURL is used as the fallback issuer when
@@ -174,6 +252,13 @@ func (m *Manager) IssueSessionJWT(ctx context.Context, user *storage.User, sessi
 	ttl := 30 * 24 * time.Hour
 	aud := gojwt.ClaimStrings{m.cfg.Audience}
 
+	// Bake Tier + Roles into the session JWT so downstream consumers
+	// (proxy rules, admin handlers) can authorize without re-hitting the
+	// RBAC store on every request. A fetch error here falls through with
+	// empty roles rather than failing issuance — the rules engine will
+	// treat it as "no roles" and deny any role:/global_role: predicate.
+	enrich, _ := m.resolveEnrichment(ctx, user)
+
 	claims := Claims{
 		RegisteredClaims: gojwt.RegisteredClaims{
 			Issuer:    m.issuer(),
@@ -187,6 +272,8 @@ func (m *Manager) IssueSessionJWT(ctx context.Context, user *storage.User, sessi
 		MFAPassed: mfaPassed,
 		SessionID: sessionID,
 		TokenType: "session",
+		Tier:      enrich.Tier,
+		Roles:     enrich.Roles,
 	}
 
 	return m.issueToken(ctx, claims)
@@ -208,6 +295,11 @@ func (m *Manager) IssueAccessRefreshPair(ctx context.Context, user *storage.User
 	refreshTTL := m.cfg.RefreshTokenTTLDuration()
 	aud := gojwt.ClaimStrings{m.cfg.Audience}
 
+	// Enrichment only rides on the access token — the refresh token is
+	// opaque-ish and only used to mint new access tokens, so baking
+	// roles/tier in would just make refresh payloads larger for no gain.
+	enrich, _ := m.resolveEnrichment(ctx, user)
+
 	accessClaims := Claims{
 		RegisteredClaims: gojwt.RegisteredClaims{
 			Issuer:    m.issuer(),
@@ -221,6 +313,8 @@ func (m *Manager) IssueAccessRefreshPair(ctx context.Context, user *storage.User
 		MFAPassed: mfaPassed,
 		SessionID: sessionID,
 		TokenType: "access",
+		Tier:      enrich.Tier,
+		Roles:     enrich.Roles,
 	}
 
 	refreshClaims := Claims{
