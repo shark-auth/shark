@@ -411,7 +411,7 @@ func validateProxyRulePayload(name, pattern string, methods []string, require, a
 		return errors.New(`allow only supports "anonymous"`)
 	}
 	if require != "" && !validRequireString(require) {
-		return errors.New("require must be one of: anonymous, authenticated, agent, role:<name>, permission:<resource>:<action>, scope:<name>")
+		return errors.New("require must be one of: anonymous, authenticated, agent, role:<name>, global_role:<name>, tier:<name>, permission:<resource>:<action>, scope:<name>")
 	}
 	for _, m := range methods {
 		if strings.TrimSpace(m) == "" {
@@ -424,11 +424,17 @@ func validateProxyRulePayload(name, pattern string, methods []string, require, a
 // validRequireString accepts the same require strings that
 // proxy.parseRequirement accepts. Keeping a slim duplicate here lets us
 // surface a 400 with a helpful message before the row is even persisted.
+// Parity with internal/proxy/rules.go parseRequirement — keep the two in
+// sync; docs/proxy_v1_5/contracts/require_grammar.md is the public spec.
 func validRequireString(require string) bool {
 	switch {
 	case require == "anonymous", require == "authenticated", require == "agent":
 		return true
 	case strings.HasPrefix(require, "role:") && len(require) > len("role:"):
+		return true
+	case strings.HasPrefix(require, "global_role:") && len(require) > len("global_role:"):
+		return true
+	case strings.HasPrefix(require, "tier:") && len(require) > len("tier:"):
 		return true
 	case strings.HasPrefix(require, "permission:") && len(require) > len("permission:"):
 		return true

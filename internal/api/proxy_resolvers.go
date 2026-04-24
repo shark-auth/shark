@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -65,6 +66,15 @@ func (r *JWTResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 	id := proxy.Identity{
 		UserID:     claims.Subject,
 		AuthMethod: "jwt",
+		// Proxy v1.5: bake the tier + scopes from JWT claims so the
+		// rules engine can evaluate ReqTier / scope predicates entirely
+		// from crypto on the hot path (see contracts/require_grammar.md).
+		// Roles are hydrated from the store below for symmetry with the
+		// LiveResolver path; the JWT-carried roles would also work but
+		// the store read is cheap and keeps a single source of truth
+		// while RBAC evolves.
+		Tier:   claims.Tier,
+		Scopes: append([]string(nil), claims.Scope...),
 	}
 
 	// Best-effort email + role expansion. If the store round-trip fails we
@@ -81,6 +91,11 @@ func (r *JWTResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 				}
 			}
 		}
+	}
+	// Fall back to claims.Roles if the store returned nothing — the
+	// JWT is the authoritative copy for tokens minted with enrichment.
+	if len(id.Roles) == 0 && len(claims.Roles) > 0 {
+		id.Roles = append([]string(nil), claims.Roles...)
 	}
 
 	return id, nil
@@ -122,10 +137,16 @@ func (r *LiveResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 	var (
 		email string
 		roles []string
+		tier  string
 	)
 	if r.Store != nil {
 		if u, err := r.Store.GetUserByID(req.Context(), sess.UserID); err == nil && u != nil {
 			email = u.Email
+			// Proxy v1.5: read tier from users.metadata so the rules
+			// engine's ReqTier predicate evaluates against the latest
+			// persisted value for session-cookie flows. Parity with
+			// JWTResolver which reads the baked Claims.Tier.
+			tier = tierFromMetadata(u.Metadata)
 		}
 		if rs, err := r.Store.GetRolesByUserID(req.Context(), sess.UserID); err == nil {
 			for _, role := range rs {
@@ -140,8 +161,27 @@ func (r *LiveResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 		UserID:     sess.UserID,
 		UserEmail:  email,
 		Roles:      roles,
+		Tier:       tier,
 		AuthMethod: "session-live",
 	}, nil
+}
+
+// tierFromMetadata pulls the "tier" key out of the user's metadata JSON
+// blob. Mirrors the shape the JWT manager bakes in on issuance — see
+// internal/auth/jwt/manager.go userTierFromMetadata. Duplicated here
+// (rather than imported) so the proxy-resolvers file stays decoupled
+// from jwt.*, and the one-liner cost is negligible.
+func tierFromMetadata(metadataJSON string) string {
+	if strings.TrimSpace(metadataJSON) == "" {
+		return ""
+	}
+	var md struct {
+		Tier string `json:"tier"`
+	}
+	// Best-effort: corrupted JSON → empty tier (the engine's ReqTier
+	// compares strings equal, so empty just fails the predicate).
+	_ = json.Unmarshal([]byte(metadataJSON), &md)
+	return md.Tier
 }
 
 // extractBearer returns the token part of a bearer Authorization header, or
