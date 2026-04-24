@@ -245,8 +245,16 @@ func TestTokenEndpoint_AuthCode_MissingPKCE(t *testing.T) {
 	}
 }
 
-// TestAuthorizeEndpoint_NotLoggedIn tests that the authorize endpoint returns
-// login_required when no session is present.
+// TestAuthorizeEndpoint_NotLoggedIn verifies that an unauthenticated
+// GET /oauth/authorize 302-redirects to the hosted login page for the
+// client's application, carrying the original authorize URL in
+// return_to so post-login the caller resumes the OAuth flow.
+//
+// This is the current product behaviour (see HandleAuthorize: when
+// getUserIDFromRequest returns "", we resolve the app by client_id
+// and redirect to /hosted/<slug>/login?...&return_to=<orig>). Replaces
+// the earlier 401 JSON expectation which pre-dates the hosted-login
+// UX. See LANE_D_SCOPE.md §D8.
 func TestAuthorizeEndpoint_NotLoggedIn(t *testing.T) {
 	srv, store := newTestOAuthServer(t)
 	seedAgent(t, store, "test-auth-client", false)
@@ -254,13 +262,14 @@ func TestAuthorizeEndpoint_NotLoggedIn(t *testing.T) {
 	ts := httptest.NewServer(mountTestRouter(srv))
 	defer ts.Close()
 
-	reqURL := ts.URL + "/oauth/authorize?" + url.Values{
+	originalQuery := url.Values{
 		"response_type": {"code"},
 		"client_id":     {"test-auth-client"},
 		"redirect_uri":  {"https://example.com/callback"},
 		"scope":         {"openid"},
 		"state":         {"test-state"},
 	}.Encode()
+	reqURL := ts.URL + "/oauth/authorize?" + originalQuery
 
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -273,17 +282,30 @@ func TestAuthorizeEndpoint_NotLoggedIn(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
+	if resp.StatusCode != http.StatusFound {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 401, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 302, got %d: %s", resp.StatusCode, body)
 	}
 
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding response: %v", err)
+	loc := resp.Header.Get("Location")
+	if loc == "" {
+		t.Fatalf("expected Location header on 302, got none")
 	}
-	if result["error"] != "login_required" {
-		t.Errorf("expected error=login_required, got %q", result["error"])
+	if !strings.Contains(loc, "/hosted/") {
+		t.Errorf("expected Location to point at /hosted/<slug>/login, got %q", loc)
+	}
+	if !strings.Contains(loc, "/login") {
+		t.Errorf("expected Location to land on /login, got %q", loc)
+	}
+	if !strings.Contains(loc, "return_to=") {
+		t.Errorf("expected return_to= in Location, got %q", loc)
+	}
+	// The authorize URL should be embedded (URL-encoded) in return_to so the
+	// login page can bounce the caller back. Cheap substring check on the
+	// client_id is enough — if return_to is correctly populated, this
+	// substring will appear (URL-encoded form of the original query).
+	if !strings.Contains(loc, "test-auth-client") {
+		t.Errorf("expected return_to to carry original authorize URL params (client_id), got %q", loc)
 	}
 }
 
