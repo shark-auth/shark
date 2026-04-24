@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/sharkauth/sharkauth/internal/identity"
 )
 
 func TestStripIdentityHeaders_RemovesPrefixed(t *testing.T) {
@@ -82,10 +84,10 @@ func TestInjectIdentity_EmitsSetFields(t *testing.T) {
 	id := Identity{
 		UserID:     "user-1",
 		UserEmail:  "alice@example.com",
-		UserRoles:  []string{"admin", "user"},
+		Roles:      []string{"admin", "user"},
 		AgentID:    "agent-7",
 		AgentName:  "claude",
-		AuthMethod: "jwt",
+		AuthMethod: identity.AuthMethodJWT,
 		CacheAge:   5 * time.Second,
 	}
 	InjectIdentity(h, id)
@@ -114,7 +116,7 @@ func TestInjectIdentity_OmitsEmptyFields(t *testing.T) {
 	h.Set(HeaderUserEmail, "stale@example.com")
 	h.Set(HeaderUserRoles, "stale-role")
 
-	InjectIdentity(h, Identity{UserID: "user-1", AuthMethod: "jwt"})
+	InjectIdentity(h, Identity{UserID: "user-1", AuthMethod: identity.AuthMethodJWT})
 
 	if got := h.Get(HeaderUserID); got != "user-1" {
 		t.Errorf("X-User-ID: got %q, want user-1", got)
@@ -138,7 +140,7 @@ func TestInjectIdentity_OmitsEmptyFields(t *testing.T) {
 
 func TestInjectIdentity_EncodesRolesAsCommaJoined(t *testing.T) {
 	h := http.Header{}
-	InjectIdentity(h, Identity{UserRoles: []string{"admin", "user", "ops"}})
+	InjectIdentity(h, Identity{Roles: []string{"admin", "user", "ops"}})
 	if got := h.Get(HeaderUserRoles); got != "admin,user,ops" {
 		t.Errorf("X-User-Roles: got %q, want admin,user,ops", got)
 	}
@@ -165,7 +167,7 @@ func TestInjectIdentity_OverwritesClientSuppliedHeaders(t *testing.T) {
 	h.Set(HeaderUserID, "attacker")
 	h.Set(HeaderAuthMethod, "spoofed")
 
-	InjectIdentity(h, Identity{UserID: "real-user", AuthMethod: "jwt"})
+	InjectIdentity(h, Identity{UserID: "real-user", AuthMethod: identity.AuthMethodJWT})
 
 	if got := h.Get(HeaderUserID); got != "real-user" {
 		t.Errorf("X-User-ID should be overwritten, got %q", got)

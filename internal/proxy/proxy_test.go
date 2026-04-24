@@ -75,7 +75,7 @@ func TestReverseProxy_InjectsIdentity(t *testing.T) {
 	id := Identity{
 		UserID:     "user-42",
 		UserEmail:  "alice@example.com",
-		UserRoles:  []string{"admin"},
+		Roles:      []string{"admin"},
 		AuthMethod: "jwt",
 	}
 	req = req.WithContext(WithIdentity(req.Context(), id))

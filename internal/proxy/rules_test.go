@@ -207,12 +207,12 @@ func TestEngine_AuthenticatedRequiresAuth(t *testing.T) {
 func TestEngine_RoleRequired(t *testing.T) {
 	e := mustEngine(t, RuleSpec{Path: "/admin/*", Require: "role:admin"})
 
-	d := e.Evaluate(newGetReq("/admin/dash"), Identity{UserID: "u1", UserRoles: []string{"admin"}})
+	d := e.Evaluate(newGetReq("/admin/dash"), Identity{UserID: "u1", Roles:     []string{"admin"}})
 	if !d.Allow {
 		t.Errorf("admin should be allowed: %q", d.Reason)
 	}
 
-	d = e.Evaluate(newGetReq("/admin/dash"), Identity{UserID: "u1", UserRoles: []string{"user"}})
+	d = e.Evaluate(newGetReq("/admin/dash"), Identity{UserID: "u1", Roles:     []string{"user"}})
 	if d.Allow {
 		t.Error("non-admin should be denied")
 	}
@@ -517,7 +517,7 @@ func TestReverseProxy_DenyReasonInHeader(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := newGetReq("/admin/dash")
-	req = req.WithContext(WithIdentity(req.Context(), Identity{UserID: "u1", UserRoles: []string{"user"}}))
+	req = req.WithContext(WithIdentity(req.Context(), Identity{UserID: "u1", Roles:     []string{"user"}}))
 	p.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusForbidden {

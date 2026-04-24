@@ -4,30 +4,14 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/sharkauth/sharkauth/internal/identity"
 )
 
-// Identity is the resolved identity for an inbound request. The auth
-// middleware places it into the request context via WithIdentity before
-// ReverseProxy serves the request. Zero values for individual fields are
-// valid — InjectIdentity simply omits the corresponding header.
-type Identity struct {
-	UserID     string
-	UserEmail  string
-	UserRoles  []string
-	AgentID    string
-	AgentName  string
-	AuthMethod string        // "jwt" | "session-live" | "session-cached" | "anonymous"
-	CacheAge   time.Duration // 0 if live; >0 if served from circuit-breaker cache
-
-	// Scopes lists the OAuth/agent scopes granted to this request. The
-	// rules engine (Task P2) uses it for ReqScope and the extra-scopes
-	// AND constraint. Intentionally NOT emitted as an upstream header by
-	// InjectIdentity — scopes drive authorization decisions in front of
-	// the upstream, not inside it. If a future use case needs scopes on
-	// the wire we'll add a dedicated header then.
-	Scopes []string
-}
+// Identity is a package-local alias for identity.Identity so existing
+// proxy-internal call sites keep compiling after the extract. New code
+// should import internal/identity directly.
+type Identity = identity.Identity
 
 // Canonical header names injected by InjectIdentity and recognized by
 // StripIdentityHeaders. Upstream services should trust these as the
@@ -106,18 +90,18 @@ func StripIdentityHeaders(h http.Header, trusted []string) {
 func InjectIdentity(h http.Header, id Identity) {
 	setOrDelete(h, HeaderUserID, id.UserID)
 	setOrDelete(h, HeaderUserEmail, id.UserEmail)
-	if len(id.UserRoles) > 0 {
-		h.Set(HeaderUserRoles, strings.Join(id.UserRoles, ","))
+	if len(id.Roles) > 0 {
+		h.Set(HeaderUserRoles, strings.Join(id.Roles, ","))
 	} else {
 		h.Del(HeaderUserRoles)
 	}
 	setOrDelete(h, HeaderAgentID, id.AgentID)
 	setOrDelete(h, HeaderAgentName, id.AgentName)
-	setOrDelete(h, HeaderAuthMethod, id.AuthMethod)
+	setOrDelete(h, HeaderAuthMethod, string(id.AuthMethod))
 	// X-Shark-Auth-Mode mirrors X-Auth-Method for upstream clarity; kept
 	// as a distinct header so the rules engine can tag requests without
 	// colliding with consumer-facing auth-method semantics.
-	setOrDelete(h, HeaderAuthMode, id.AuthMethod)
+	setOrDelete(h, HeaderAuthMode, string(id.AuthMethod))
 
 	if id.CacheAge > 0 {
 		h.Set(HeaderCacheAge, fmt.Sprintf("%d", int(id.CacheAge.Seconds())))

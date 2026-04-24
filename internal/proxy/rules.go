@@ -33,7 +33,9 @@ const (
 	ReqAnonymous RequirementKind = iota
 	// ReqAuthenticated matches any caller with a resolved user or agent.
 	ReqAuthenticated
-	// ReqRole matches callers whose UserRoles contains Value.
+	// ReqRole matches callers whose Roles contains Value. Kept as a
+	// back-compat alias for ReqGlobalRole; both dispatch to the same
+	// check in evaluatePrimary.
 	ReqRole
 	// ReqPermission is the RBAC hook (Phase 6.5). MVP: always deny with a
 	// clear reason so operators know the rule is recognized but the
@@ -278,7 +280,7 @@ func evaluatePrimary(req Requirement, id Identity) (bool, string) {
 		}
 		return false, "authentication required"
 	case ReqRole:
-		if containsString(id.UserRoles, req.Value) {
+		if containsString(id.Roles, req.Value) {
 			return true, ""
 		}
 		return false, fmt.Sprintf("role %q required", req.Value)

@@ -9,26 +9,22 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/sharkauth/sharkauth/internal/identity"
 )
 
-// identityCtxKey is the private context key used to stash the resolved
-// Identity on a request. A struct type (not a string) is used to prevent
-// collisions with other packages per the context.WithValue convention.
-type identityCtxKey struct{}
-
-// WithIdentity returns a copy of ctx carrying id. The auth middleware
-// calls this once it has resolved the request's principal; the proxy
-// retrieves the value via IdentityFromContext.
+// WithIdentity is a back-compat wrapper that forwards to
+// identity.WithIdentity. New code should import internal/identity
+// directly and call identity.WithIdentity.
 func WithIdentity(ctx context.Context, id Identity) context.Context {
-	return context.WithValue(ctx, identityCtxKey{}, id)
+	return identity.WithIdentity(ctx, id)
 }
 
-// IdentityFromContext returns the Identity stashed by WithIdentity and
-// whether one was present. When ok is false callers should treat the
-// request as anonymous.
+// IdentityFromContext is a back-compat wrapper that forwards to
+// identity.FromContext. New code should import internal/identity
+// directly and call identity.FromContext.
 func IdentityFromContext(ctx context.Context) (Identity, bool) {
-	id, ok := ctx.Value(identityCtxKey{}).(Identity)
-	return id, ok
+	return identity.FromContext(ctx)
 }
 
 // HeaderDenyReason is the response header set when the rules engine
@@ -166,7 +162,7 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Passthrough for anonymous traffic. The rules engine decides
 		// whether this is permitted; annotating happens whether the
 		// engine allows or denies.
-		id = Identity{AuthMethod: "anonymous"}
+		id = Identity{AuthMethod: identity.AuthMethodAnonymous}
 	}
 
 	// Dynamic Resolution (W15 Transparent Mode)
