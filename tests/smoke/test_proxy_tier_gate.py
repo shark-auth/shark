@@ -353,3 +353,82 @@ def test_tier_gate_anonymous_denied_not_paywall(tier_gate_env):
         f"expected 401 anonymous deny, got {r.status_code}: {r.text[:200]}"
     )
     assert "/paywall/" not in r.headers.get("Location", "")
+
+
+def test_tier_gate_match_agent_vs_human(tier_gate_env):
+    """Tier match + m2m flag interaction (D2 — tier_match_agent_vs_human).
+
+    Two rules both require tier:pro. One has m2m=true (agent-only), the
+    other doesn't (human-inclusive). A pro-upgraded human user should pass
+    the human-inclusive rule and hit the upstream (200), but the m2m rule
+    must deny with DecisionDenyForbidden (403) because the human caller's
+    ActorType != agent — even though the tier check would otherwise pass.
+    See contracts/m2m_rule_flag.md.
+    """
+    base = tier_gate_env["base"]
+    admin_key = tier_gate_env["admin_key"]
+
+    slug = f"tier-actor-{int(time.time()*1000)}"
+    _create_app(base, admin_key, slug)
+
+    _create_rule(
+        base,
+        admin_key,
+        {
+            "name": "pro-human",
+            "pattern": "/prohuman/*",
+            "methods": ["GET"],
+            "require": "tier:pro",
+            "priority": 100,
+        },
+    )
+    _create_rule(
+        base,
+        admin_key,
+        {
+            "name": "pro-agent-only",
+            "pattern": "/proagent/*",
+            "methods": ["GET"],
+            "require": "tier:pro",
+            "m2m": True,
+            "priority": 100,
+        },
+    )
+    _reload_proxy(base, admin_key)
+
+    email = f"tier_actor_user_{int(time.time()*1000)}@test.com"
+    user_id, _t0 = _signup(base, email)
+    # Upgrade to pro.
+    r = requests.patch(
+        f"{base}/api/v1/admin/users/{user_id}/tier",
+        headers=_admin_headers(admin_key),
+        json={"tier": "pro"},
+        timeout=5,
+    )
+    assert r.status_code == 200, r.text
+    token = _login(base, email)
+
+    # Human-inclusive pro rule: passes → 200.
+    r = requests.get(
+        f"{base}/prohuman/ping",
+        headers={"Authorization": f"Bearer {token}"},
+        allow_redirects=False,
+        timeout=5,
+    )
+    assert r.status_code == 200, (
+        f"expected human pro to pass, got {r.status_code}: {r.text[:200]}"
+    )
+
+    # m2m=true rule: human caller denied with 403 (DecisionDenyForbidden).
+    r = requests.get(
+        f"{base}/proagent/ping",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        },
+        allow_redirects=False,
+        timeout=5,
+    )
+    assert r.status_code == 403, (
+        f"expected 403 (m2m blocks human), got {r.status_code}: {r.text[:200]}"
+    )
