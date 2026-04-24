@@ -65,6 +65,11 @@ type Server struct {
 	// ProxyListeners holds the W15 multi-listener set.
 	ProxyListeners []*proxy.Listener
 
+	// ProxyManager owns the proxy subsystem lifecycle. Wired in initProxy.
+	// nil-safe at admin call sites that need to 404 when the proxy was
+	// never configured (Proxy.Enabled=false at boot).
+	ProxyManager *proxy.Manager
+
 	// AppResolver maps inbound request Host to Application upstreams.
 	AppResolver proxy.AppResolver
 
@@ -681,6 +686,24 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 			r.Get("/proxy/rules/db/{id}", s.handleGetProxyRule)
 			r.Patch("/proxy/rules/db/{id}", s.handleUpdateProxyRule)
 			r.Delete("/proxy/rules/db/{id}", s.handleDeleteProxyRule)
+			r.Post("/proxy/rules/import", s.handleImportYAMLRules)
+
+			// PROXYV1_5 §4.9 — lifecycle control. Separate /lifecycle/*
+			// namespace so the legacy /proxy/status (breaker stats) route
+			// keeps its existing semantics for the pre-v1.5 dashboard.
+			r.Get("/proxy/lifecycle", s.handleProxyLifecycleStatus)
+			r.Post("/proxy/start", s.handleProxyLifecycleStart)
+			r.Post("/proxy/stop", s.handleProxyLifecycleStop)
+			r.Post("/proxy/reload", s.handleProxyLifecycleReload)
+
+			// PROXYV1_5 §4.10 — per-user tier mutator. Tier gates paywall
+			// rule matching at the proxy and feeds the Claims baker.
+			r.Patch("/users/{id}/tier", s.handleSetUserTier)
+
+			// PROXYV1_5 §4.11 — design token overrides on branding. Deep
+			// design tokens live in branding.metadata so they survive the
+			// existing GetBranding/ResolveBranding path unchanged.
+			r.Patch("/branding/design-tokens", s.handleSetDesignTokens)
 
 			// Phase 6 F3: Auth flow CRUD + dry-run + history. Mounted under
 			// the admin group so admin-key auth gates everything.
@@ -819,6 +842,20 @@ func (s *Server) initProxy() {
 	}
 	h.SetIssuer(cfg.Server.BaseURL)
 	s.ProxyHandler = h
+
+	// PROXYV1_5 §4.9: wire the lifecycle Manager so admin routes can
+	// Start/Stop/Reload the subsystem at runtime. The builder closure
+	// materialises listeners on demand from s.ProxyListeners; if the
+	// caller hasn't provided any (legacy single-listener mount), Start
+	// is a no-op that still flips the Manager into StateRunning so the
+	// dashboard's control toggle works consistently.
+	builder := func(ctx context.Context) ([]*proxy.Listener, error) {
+		if len(s.ProxyListeners) > 0 {
+			return s.ProxyListeners, nil
+		}
+		return nil, nil
+	}
+	s.ProxyManager = proxy.NewManager(builder)
 }
 
 // proxyAuthMiddleware resolves the inbound request's identity (via
