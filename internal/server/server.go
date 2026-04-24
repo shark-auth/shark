@@ -62,6 +62,11 @@ type Options struct {
 	// rules and other knobs still coming from the YAML config. Set via the
 	// `shark serve --proxy-upstream URL` flag.
 	ProxyUpstream string
+
+	// NoPrompt suppresses the first-boot "Open dashboard?" [Y/n] prompt
+	// unconditionally. Use for CI / headless environments or when piping
+	// stdin. Set via `shark serve --no-prompt`.
+	NoPrompt bool
 }
 
 // Bootstrap builds all components (config, store, migrations, admin key, API server)
@@ -379,18 +384,24 @@ func Serve(ctx context.Context, opts Options) error {
 		url := fmt.Sprintf("http://localhost:%d/admin/?bootstrap=%s", b.Config.Server.Port, tok)
 		printBootstrapURL(url)
 
-		// DX: First-time boot prompt. Only if 0 users and stdout is a TTY.
-		if isatty.IsTerminal(os.Stdout.Fd()) {
-			userCount, _ := b.Store.CountUsers(ctx)
-			if userCount == 0 {
-				fmt.Printf("  [?] No users detected. Open Dashboard to finish setup? [Y/n]: ")
-				reader := bufio.NewReader(os.Stdin)
-				answer, _ := reader.ReadString('\n')
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer == "" || answer == "y" || answer == "yes" {
-					if err := openBrowser(url); err != nil {
-						slog.Warn("failed to open browser", "err", err)
+		// DX: First-boot prompt. Only when: no --no-prompt flag, stdout is a TTY,
+		// 0 users detected, and the first-boot sentinel hasn't been written yet.
+		if !opts.NoPrompt && isatty.IsTerminal(os.Stdout.Fd()) {
+			markerPath := filepath.Join(filepath.Dir(b.Config.Storage.Path), ".shark-first-boot")
+			if _, statErr := os.Stat(markerPath); os.IsNotExist(statErr) {
+				userCount, _ := b.Store.CountUsers(ctx)
+				if userCount == 0 {
+					fmt.Printf("  Open dashboard in browser? [Y/n]: ")
+					reader := bufio.NewReader(os.Stdin)
+					answer, _ := reader.ReadString('\n')
+					answer = strings.ToLower(strings.TrimSpace(answer))
+					if answer == "" || answer == "y" || answer == "yes" {
+						if err := openBrowser(url); err != nil {
+							slog.Warn("failed to open browser", "err", err)
+						}
 					}
+					// Write sentinel so the prompt never shows again.
+					_ = os.WriteFile(markerPath, []byte("1"), 0600) //#nosec G306 -- marker file, not secret
 				}
 			}
 		}

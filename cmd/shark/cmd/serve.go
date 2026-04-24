@@ -16,6 +16,7 @@ var (
 	serveDev           bool
 	serveDevReset      bool
 	serveProxyUpstream string
+	serveNoPrompt      bool
 )
 
 var serveCmd = &cobra.Command{
@@ -39,6 +40,7 @@ var serveCmd = &cobra.Command{
 			ConfigPath:    configPath,
 			MigrationsFS:  migrationsFS,
 			MigrationsDir: "migrations",
+			NoPrompt:      serveNoPrompt,
 		}
 		if serveDev {
 			if err := applyDevMode(&opts, serveDevReset); err != nil {
@@ -58,4 +60,5 @@ func init() {
 	serveCmd.Flags().BoolVar(&serveDev, "dev", false, "enable dev mode (ephemeral storage, dev inbox, relaxed CORS)")
 	serveCmd.Flags().BoolVar(&serveDevReset, "reset", false, "wipe dev.db before starting (requires --dev)")
 	serveCmd.Flags().StringVar(&serveProxyUpstream, "proxy-upstream", "", "mount reverse proxy to this upstream URL (e.g. http://localhost:3000)")
+	serveCmd.Flags().BoolVar(&serveNoPrompt, "no-prompt", false, "skip first-boot browser-open prompt (for CI / headless environments)")
 }
