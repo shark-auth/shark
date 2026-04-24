@@ -37,12 +37,29 @@ func (s *SQLiteStore) UpdateBranding(ctx context.Context, id string, fields map[
 	allowed := map[string]bool{
 		"primary_color": true, "secondary_color": true, "font_family": true,
 		"footer_text": true, "email_from_name": true, "email_from_address": true,
+		// PROXYV1_5 §4.11: design tokens are a JSON blob stringified
+		// here at the allowlist boundary so the dashboard can send a
+		// nested object without ad-hoc column fan-out.
+		"design_tokens": true,
 	}
 	setParts := []string{}
 	args := []any{}
 	for k, v := range fields {
 		if !allowed[k] {
 			continue
+		}
+		// design_tokens accepts a JSON object; encode to string before
+		// INSERT so the column (TEXT NOT NULL) always has a valid value.
+		if k == "design_tokens" {
+			if v == nil {
+				v = ""
+			} else if _, ok := v.(string); !ok {
+				b, err := json.Marshal(v)
+				if err != nil {
+					return fmt.Errorf("marshal design_tokens: %w", err)
+				}
+				v = string(b)
+			}
 		}
 		setParts = append(setParts, k+" = ?")
 		args = append(args, v)
