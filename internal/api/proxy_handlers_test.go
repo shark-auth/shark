@@ -21,7 +21,7 @@ import (
 // upstream. Returns the httptest.Server, the upstream's server, and the
 // admin bearer key. The upstream echoes identity headers back in its JSON
 // response so catch-all tests can assert on what the proxy injected.
-func newProxyTestServer(t *testing.T, rules []config.ProxyRule) (*httptest.Server, *httptest.Server, string) {
+func newProxyTestServer(t *testing.T, rules []proxy.RuleSpec) (*httptest.Server, *httptest.Server, string) {
 	t.Helper()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,17 +50,7 @@ func newProxyTestServer(t *testing.T, rules []config.ProxyRule) (*httptest.Serve
 	// spins up with an empty engine; push the test's desired ruleset in
 	// directly so the rest of the assertions behave as they did before.
 	if ts.APIServer != nil && ts.APIServer.ProxyEngine != nil {
-		specs := make([]proxy.RuleSpec, len(rules))
-		for i, r := range rules {
-			specs[i] = proxy.RuleSpec{
-				Path:    r.Path,
-				Methods: r.Methods,
-				Require: r.Require,
-				Allow:   r.Allow,
-				Scopes:  r.Scopes,
-			}
-		}
-		if err := ts.APIServer.ProxyEngine.SetRules(specs); err != nil {
+		if err := ts.APIServer.ProxyEngine.SetRules(rules); err != nil {
 			t.Fatalf("proxy engine SetRules: %v", err)
 		}
 	}
@@ -117,7 +107,7 @@ func doPostJSON(t *testing.T, ts *httptest.Server, path, bearer string, body any
 }
 
 func TestProxyStatus_ReturnsStats(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/api/foo/*", Require: "authenticated"},
 		{Path: "/public/*", Allow: "anonymous"},
 	}
@@ -148,7 +138,7 @@ func TestProxyStatus_404WhenProxyDisabled(t *testing.T) {
 }
 
 func TestProxyRules_ListsRules(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/api/foo/*", Require: "authenticated", Methods: []string{"GET", "POST"}},
 		{Path: "/public/*", Allow: "anonymous"},
 	}
@@ -178,7 +168,7 @@ func TestProxyRules_ListsRules(t *testing.T) {
 }
 
 func TestProxySimulate_AllowsAuthenticatedUser(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/api/foo/*", Require: "authenticated"},
 	}
 	ts, _, adminKey := newProxyTestServer(t, rules)
@@ -213,7 +203,7 @@ func TestProxySimulate_AllowsAuthenticatedUser(t *testing.T) {
 }
 
 func TestProxySimulate_DeniesAnonymous(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/api/foo/*", Require: "authenticated"},
 	}
 	ts, _, adminKey := newProxyTestServer(t, rules)
@@ -240,7 +230,7 @@ func TestProxySimulate_DeniesAnonymous(t *testing.T) {
 }
 
 func TestProxySimulate_MatchesCorrectRule(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/api/foo/*", Require: "authenticated"},
 		{Path: "/public/*", Allow: "anonymous"},
 	}
@@ -267,7 +257,7 @@ func TestProxySimulate_MatchesCorrectRule(t *testing.T) {
 }
 
 func TestProxySimulate_NoMatchIsDeny(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/api/foo/*", Require: "authenticated"},
 	}
 	ts, _, adminKey := newProxyTestServer(t, rules)
@@ -291,7 +281,7 @@ func TestProxySimulate_NoMatchIsDeny(t *testing.T) {
 }
 
 func TestProxySimulate_InjectedHeadersReflectIdentity(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/api/*", Require: "authenticated"},
 	}
 	ts, _, adminKey := newProxyTestServer(t, rules)
@@ -318,7 +308,7 @@ func TestProxySimulate_InjectedHeadersReflectIdentity(t *testing.T) {
 }
 
 func TestProxyStatusStream_SendsEvents(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/api/*", Require: "authenticated"},
 	}
 	ts, _, adminKey := newProxyTestServer(t, rules)
@@ -363,7 +353,7 @@ func TestProxyStatusStream_SendsEvents(t *testing.T) {
 }
 
 func TestProxyIntegration_CatchAllForwardsAuthedRequest(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/other/*", Allow: "anonymous"},
 	}
 	ts, upstream, _ := newProxyTestServer(t, rules)
@@ -390,7 +380,7 @@ func TestProxyIntegration_CatchAllForwardsAuthedRequest(t *testing.T) {
 }
 
 func TestProxyIntegration_AuthRoutesBypassProxy(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/*", Require: "authenticated"},
 	}
 	ts, _, _ := newProxyTestServer(t, rules)
@@ -415,7 +405,7 @@ func TestProxyIntegration_DeniedAnonymousReturns401(t *testing.T) {
 	// is anonymous (no cookie, no bearer) so the proxy translates the deny
 	// into a 401 per W15b ("authentication required" semantics — 403 is
 	// reserved for authenticated-but-unauthorized).
-	rules := []config.ProxyRule{}
+	rules := []proxy.RuleSpec{}
 	ts, _, _ := newProxyTestServer(t, rules)
 
 	resp, err := http.Get(ts.URL + "/somewhere/else")
@@ -435,7 +425,7 @@ func TestProxyIntegration_DeniedAnonymousReturns401(t *testing.T) {
 // a sub-ms evaluation time — if eval_us is negative or insanely large it
 // signals a clock regression.
 func TestProxySimulate_EvalTimeIsRecorded(t *testing.T) {
-	rules := []config.ProxyRule{
+	rules := []proxy.RuleSpec{
 		{Path: "/*", Allow: "anonymous"},
 	}
 	ts, _, adminKey := newProxyTestServer(t, rules)

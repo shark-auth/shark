@@ -57,12 +57,11 @@ type TelemetryConfig struct {
 }
 
 // ProxyConfig holds reverse-proxy settings consumed by internal/proxy.
-//
-// Deprecated: the `rules` YAML field was removed in v1.5. Proxy rules
-// now live in the DB and are managed via the Admin API
-// (`/api/v1/admin/proxy/rules`). The legacy `rules:` YAML block is
-// ignored on load; a warning is emitted at server startup when it is
-// still present on disk. See docs/proxy_v1_5/migration/yaml_deprecation.md.
+// The legacy `rules:` sub-field was removed in v1.5 — rules now live in
+// the DB and are managed via the Admin API
+// (`/api/v1/admin/proxy/rules`). A warning is emitted at server startup
+// when a legacy `proxy.rules:` block is still present on disk. See
+// docs/proxy_v1_5/migration/yaml_deprecation.md.
 type ProxyConfig struct {
 	Enabled        bool                  `koanf:"enabled" yaml:"enabled"`
 	Upstream       string                `koanf:"upstream" yaml:"upstream"`
