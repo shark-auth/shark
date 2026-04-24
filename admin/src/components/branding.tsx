@@ -69,6 +69,10 @@ const SECTIONS: { id: string; label: string; icon: string; surfaces: { id: strin
     { id: 'email-verify',     label: 'Email verify' },
     { id: 'error-page',       label: 'Error page' },
   ]},
+  { id: 'design-tokens', label: 'Design Tokens', icon: 'Bolt', surfaces: [
+    { id: 'tokens',  label: 'Token editor' },
+    { id: 'paywall', label: 'Paywall preview' },
+  ]},
   { id: 'email', label: 'Email templates', icon: 'Mail', surfaces: [] /* populated dynamically */ },
   { id: 'integrations', label: 'Integrations', icon: 'Webhook', surfaces: [] /* populated dynamically */ },
 ]
@@ -652,6 +656,8 @@ function CenterEditor(props: {
       {section === 'auth'        && <AuthCopyEditor  surface={surface} brandDraft={brandDraft} setBrandDraft={setBrandDraft}/>}
       {section === 'email'       && <EmailEditor     tplDraft={props.tplDraft} setTplDraft={props.setTplDraft} onSendTest={props.onTplSendTest} onReset={props.onTplReset}/>}
       {section === 'integrations'&& <IntegrationsEditor surface={surface} apps={props.apps} onAppUpdate={props.onAppUpdate}/>}
+      {section === 'design-tokens' && surface === 'tokens' && <DesignTokensEditor brandDraft={brandDraft} setBrandDraft={setBrandDraft}/>}
+      {section === 'design-tokens' && surface === 'paywall' && <PaywallPreviewEditor apps={props.apps}/>}
     </div>
   )
 }
@@ -1456,6 +1462,187 @@ function CompositePreview({ brandDraft }: { brandDraft: any }) {
           tok_1234567890abcdef · GET /api/v1/auth
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── H4: Design Tokens editor ────────────────────────────────────────────────
+
+const KNOWN_TOKEN_KEYS = [
+  'colors.primary', 'colors.secondary', 'colors.background', 'colors.text',
+  'typography.font_family', 'typography.scale.base', 'typography.scale.h1', 'typography.scale.h2',
+  'spacing.unit', 'motion.duration_ms',
+]
+
+function DesignTokensEditor({ brandDraft, setBrandDraft }: any) {
+  const toast = useToast()
+  const serverTokens = brandDraft?.design_tokens || {}
+  const [draft, setDraft] = React.useState(() => JSON.stringify(serverTokens, null, 2) || '{}')
+  const [parseErr, setParseErr] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+  const [copyDone, setCopyDone] = React.useState(false)
+
+  React.useEffect(() => {
+    setDraft(JSON.stringify(serverTokens, null, 2) || '{}')
+  }, [JSON.stringify(serverTokens)])
+
+  const parse = () => {
+    try {
+      const v = JSON.parse(draft)
+      setParseErr('')
+      return v
+    } catch (e: any) {
+      setParseErr(e.message)
+      return null
+    }
+  }
+
+  const onSave = async () => {
+    const parsed = parse()
+    if (!parsed) return
+    setSaving(true)
+    try {
+      const r = await API.patch('/admin/branding/design-tokens', { design_tokens: parsed })
+      setBrandDraft((d: any) => ({ ...d, design_tokens: r?.data?.design_tokens || parsed }))
+      toast.success('Design tokens saved')
+    } catch (e: any) {
+      toast.error(e?.message || 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onReset = async () => {
+    if (!window.confirm('Reset design tokens to empty? This removes all custom tokens.')) return
+    setSaving(true)
+    try {
+      await API.patch('/admin/branding/design-tokens', { design_tokens: {} })
+      setBrandDraft((d: any) => ({ ...d, design_tokens: {} }))
+      setDraft('{}')
+      toast.success('Design tokens cleared')
+    } catch (e: any) {
+      toast.error(e?.message || 'Reset failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onCopyCSSVars = () => {
+    const parsed = parse()
+    if (!parsed) return
+    const flatten = (obj: any, prefix = '--') => {
+      return Object.entries(obj).flatMap(([k, v]) => {
+        if (typeof v === 'object' && v !== null && !Array.isArray(v)) return flatten(v, prefix + k + '-')
+        return [`${prefix}${k}: ${v};`]
+      })
+    }
+    const css = ':root {\n' + flatten(parsed).map(l => '  ' + l).join('\n') + '\n}'
+    navigator.clipboard?.writeText(css)
+    setCopyDone(true)
+    setTimeout(() => setCopyDone(false), 1500)
+    toast.success('CSS variables copied to clipboard')
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--fg-dim)' }}>
+        Free-form JSON token tree. Saved as-is to the server; consumed by paywall + hosted-login CSS var injection.
+      </div>
+
+      <div style={{ fontSize: 11, color: 'var(--fg-faint)', marginBottom: 8 }}>
+        Suggested keys: {KNOWN_TOKEN_KEYS.slice(0, 4).join(', ')}, …
+      </div>
+
+      <textarea
+        value={draft}
+        onChange={e => { setDraft(e.target.value); setParseErr('') }}
+        style={{
+          width: '100%', boxSizing: 'border-box', minHeight: 320,
+          fontFamily: 'var(--font-mono)', fontSize: 12, padding: 10,
+          background: 'var(--surface-1)', border: '1px solid ' + (parseErr ? 'var(--danger)' : 'var(--hairline-strong)'),
+          borderRadius: 4, color: 'var(--fg)', resize: 'vertical', lineHeight: 1.6,
+        }}
+        spellCheck={false}
+      />
+      {parseErr && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>{parseErr}</div>}
+
+      <div className="row" style={{ gap: 8, marginTop: 12 }}>
+        <button className="btn primary sm" disabled={saving || !!parseErr} onClick={onSave}>{saving ? 'Saving…' : 'Save tokens'}</button>
+        <button className="btn ghost sm" onClick={onCopyCSSVars} disabled={!!parseErr}>
+          {copyDone ? <><Icon.Check width={11}/> Copied</> : 'Copy as CSS vars'}
+        </button>
+        <div style={{ flex: 1 }}/>
+        <button className="btn ghost sm" style={{ color: 'var(--fg-dim)' }} onClick={onReset}>Reset to empty</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── H5: Paywall preview pane ─────────────────────────────────────────────────
+
+function PaywallPreviewEditor({ apps }: any) {
+  const slugs = (apps || []).filter((a: any) => a.client_id || a.slug).map((a: any) => ({
+    slug: a.client_id || a.slug,
+    name: a.name || a.client_id,
+  }))
+  const [slug, setSlug] = React.useState(() => slugs[0]?.slug || '')
+  const [tier, setTier] = React.useState('pro')
+  const [width, setWidth] = React.useState<'mobile' | 'desktop'>('desktop')
+
+  const previewUrl = slug ? `/paywall/${slug}?tier=${tier}&return=/` : null
+
+  return (
+    <div>
+      <div className="row" style={{ gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        {slugs.length > 0 && (
+          <select value={slug} onChange={e => setSlug(e.target.value)}
+            style={{ height: 28, fontSize: 12, background: 'var(--surface-1)', border: '1px solid var(--hairline-strong)', color: 'var(--fg)', padding: '0 8px', borderRadius: 4 }}>
+            {slugs.map((s: any) => <option key={s.slug} value={s.slug}>{s.name}</option>)}
+          </select>
+        )}
+        {slugs.length === 0 && (
+          <input value={slug} onChange={e => setSlug(e.target.value)} placeholder="app-slug"
+            style={{ height: 28, fontSize: 12, padding: '0 8px', background: 'var(--surface-1)', border: '1px solid var(--hairline-strong)', borderRadius: 4, color: 'var(--fg)', width: 160 }}/>
+        )}
+        <div className="seg" style={{ display: 'flex' }}>
+          {['free', 'pro'].map(t => (
+            <button key={t} type="button"
+              style={{ padding: '4px 12px', fontSize: 11, background: tier === t ? 'var(--fg)' : 'transparent', color: tier === t ? 'var(--bg)' : 'var(--fg-muted)', border: '1px solid var(--hairline-strong)', borderRadius: 4, marginRight: -1, cursor: 'pointer' }}
+              onClick={() => setTier(t)}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="seg" style={{ display: 'flex' }}>
+          <button type="button"
+            style={{ padding: '4px 12px', fontSize: 11, background: width === 'desktop' ? 'var(--fg)' : 'transparent', color: width === 'desktop' ? 'var(--bg)' : 'var(--fg-muted)', border: '1px solid var(--hairline-strong)', borderRadius: 4, marginRight: -1, cursor: 'pointer' }}
+            onClick={() => setWidth('desktop')}>Desktop</button>
+          <button type="button"
+            style={{ padding: '4px 12px', fontSize: 11, background: width === 'mobile' ? 'var(--fg)' : 'transparent', color: width === 'mobile' ? 'var(--bg)' : 'var(--fg-muted)', border: '1px solid var(--hairline-strong)', borderRadius: 4, cursor: 'pointer' }}
+            onClick={() => setWidth('mobile')}>Mobile</button>
+        </div>
+        {previewUrl && (
+          <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="btn ghost sm">
+            <Icon.External width={11}/> Open in tab
+          </a>
+        )}
+      </div>
+
+      {previewUrl ? (
+        <div style={{ border: '1px solid var(--hairline-strong)', borderRadius: 6, overflow: 'hidden', background: '#fff' }}>
+          <iframe
+            key={previewUrl}
+            src={previewUrl}
+            title="Paywall preview"
+            sandbox="allow-scripts allow-same-origin"
+            style={{ width: width === 'mobile' ? 390 : '100%', minHeight: 520, display: 'block', border: 'none', margin: width === 'mobile' ? '0 auto' : undefined }}
+          />
+        </div>
+      ) : (
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 12 }}>
+          Enter an app slug above to preview its paywall.
+        </div>
+      )}
     </div>
   )
 }
