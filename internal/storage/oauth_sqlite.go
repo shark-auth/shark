@@ -177,6 +177,38 @@ func (s *SQLiteStore) RevokeOAuthToken(ctx context.Context, id string) error {
 	return err
 }
 
+// RevokeActiveOAuthTokenByRequestID atomically revokes the latest still-active
+// token matching requestID + tokenType. Returns (true, nil) when exactly one
+// row was revoked by this call; (false, nil) when another concurrent caller
+// already revoked the token (race resolved). Only (false, err) on driver errors.
+//
+// SQLite WAL serializes writes per table, so concurrent callers land in a
+// deterministic order. The outer `revoked_at IS NULL` predicate is the gate:
+// the first caller commits with revoked_at set, subsequent callers see
+// revoked_at != NULL on the re-check and affect zero rows. This closes the
+// concurrent-refresh race that existed when RotateRefreshToken did a
+// read-then-write over two statements.
+func (s *SQLiteStore) RevokeActiveOAuthTokenByRequestID(ctx context.Context, requestID, tokenType string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE oauth_tokens
+		SET revoked_at = ?
+		WHERE id = (
+			SELECT id FROM oauth_tokens
+			WHERE request_id = ? AND token_type = ? AND revoked_at IS NULL
+			ORDER BY created_at DESC LIMIT 1
+		)
+		AND revoked_at IS NULL`,
+		time.Now().UTC().Format(time.RFC3339), requestID, tokenType)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 func (s *SQLiteStore) RevokeOAuthTokensByClientID(ctx context.Context, clientID string) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `UPDATE oauth_tokens SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL`,
 		time.Now().UTC().Format(time.RFC3339), clientID)

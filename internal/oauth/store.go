@@ -252,16 +252,16 @@ func (s *FositeStore) DeleteRefreshTokenSession(ctx context.Context, signature s
 	return s.deleteTokenSession(ctx, signature)
 }
 
-// RotateRefreshToken invalidates the active refresh token associated with
-// fosite's requestID after a successful refresh exchange. fosite reuses the
-// same request ID across rotations, so we look up the latest still-active row.
+// RotateRefreshToken atomically invalidates the active refresh token associated
+// with fosite's requestID after a successful refresh exchange. Under concurrent
+// refresh attempts with the same requestID, the storage layer guarantees that
+// only one caller observes RowsAffected == 1; the others see no active row and
+// return nil so fosite's downstream logic handles the race consistently. Family
+// reuse detection (see revoke.go) still catches long-window replay of an
+// already-rotated token by a separate client.
 func (s *FositeStore) RotateRefreshToken(ctx context.Context, requestID string, refreshTokenSignature string) error {
-	token, err := s.store.GetActiveOAuthTokenByRequestIDAndType(ctx, requestID, "refresh")
-	if err != nil {
-		// Already rotated or never existed — nothing to do.
-		return nil
-	}
-	return s.store.RevokeOAuthToken(ctx, token.ID)
+	_, err := s.store.RevokeActiveOAuthTokenByRequestID(ctx, requestID, "refresh")
+	return err
 }
 
 // ---------------------------------------------------------------------------

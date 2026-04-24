@@ -74,7 +74,12 @@ gosec_results.json
 
 # Temp
 *.txt
+*.jsonl
 install_id
+
+# Session scratch (office-hours output)
+runes-*.md
+runes-*.jsonl
 
 # Build artifacts
 *.tsbuildinfo

@@ -270,6 +270,7 @@ type Store interface {
 	GetOAuthTokenByHash(ctx context.Context, tokenHash string) (*OAuthToken, error)
 	GetActiveOAuthTokenByRequestIDAndType(ctx context.Context, requestID, tokenType string) (*OAuthToken, error)
 	RevokeOAuthToken(ctx context.Context, id string) error
+	RevokeActiveOAuthTokenByRequestID(ctx context.Context, requestID, tokenType string) (bool, error)
 	RevokeOAuthTokensByClientID(ctx context.Context, clientID string) (int64, error)
 	RevokeOAuthTokenFamily(ctx context.Context, familyID string) (int64, error)
 	ListOAuthTokensByAgentID(ctx context.Context, agentID string, limit int) ([]*OAuthToken, error)
