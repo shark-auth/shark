@@ -9,18 +9,15 @@ package cli
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"net"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/sharkauth/sharkauth/cmd/shark/migrations"
 	"github.com/sharkauth/sharkauth/internal/server"
 )
-
-//go:embed testmigrations/*.sql
-var migrationsFS embed.FS
 
 // Harness runs a fully wired shark server against a temp dev.db on a random
 // local port. Start returns once /healthz answers 200.
@@ -51,8 +48,8 @@ func Start(t *testing.T) *Harness {
 	defer bootstrapCancel()
 
 	b, err := server.Build(bootstrapCtx, server.Options{
-		MigrationsFS:        migrationsFS,
-		MigrationsDir:       "testmigrations",
+		MigrationsFS:        migrations.FS,
+		MigrationsDir:       ".",
 		DevMode:             true,
 		SecretOverride:      "cli-harness-secret-" + fmt.Sprintf("%032d", port),
 		StoragePathOverride: dbPath,
