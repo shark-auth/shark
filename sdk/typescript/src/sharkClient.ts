@@ -1,8 +1,16 @@
 /**
- * High-level client for agents with automatic DPoP signing.
+ * High-level client for agents with automatic DPoP signing,
+ * and admin namespaces for proxy rules, lifecycle, branding, paywall,
+ * users, and agents (v1.5).
  */
 
 import { DPoPProver } from "./dpop.js";
+import { ProxyRulesClient } from "./proxyRules.js";
+import { ProxyLifecycleClient } from "./proxyLifecycle.js";
+import { BrandingClient } from "./branding.js";
+import { PaywallClient } from "./paywall.js";
+import { UsersClient } from "./users.js";
+import { AgentsClient } from "./agents.js";
 
 /** Options for {@link SharkClient}. */
 export interface SharkClientOptions {
@@ -15,21 +23,38 @@ export interface SharkClientOptions {
   dpopProver?: DPoPProver;
   /** Custom User-Agent header. */
   userAgent?: string;
+  /**
+   * Admin API key used by the admin namespaces
+   * (`proxyRules`, `proxyLifecycle`, `branding`, `users`, `agents`).
+   * Required if any admin namespace is used.
+   */
+  adminKey?: string;
+  /**
+   * Base URL of the SharkAuth server, e.g. `https://auth.example.com`.
+   * Required if any admin namespace or `paywall` is used.
+   */
+  baseUrl?: string;
 }
 
 /**
- * A DPoP-aware HTTP client for SharkAuth agents.
+ * A DPoP-aware HTTP client for SharkAuth agents, extended with v1.5 admin namespaces.
  *
  * Wraps the built-in `fetch` API to automatically inject
  * `Authorization: DPoP <token>` and `DPoP: <proof>` headers.
  *
+ * Admin namespaces (`proxyRules`, `proxyLifecycle`, `branding`, `users`, `agents`)
+ * use the `adminKey` option; `paywall` uses `baseUrl` with no auth.
+ *
  * @example
  * ```ts
- * const prover = await DPoPProver.generate();
- * const client = new SharkClient({ accessToken: "agent_abc", dpopProver: prover });
+ * const client = new SharkClient({
+ *   accessToken: "agent_abc",
+ *   adminKey: "sk_live_xyz",
+ *   baseUrl: "https://auth.example.com",
+ * });
  *
- * const res = await client.fetch("https://api.example/data");
- * console.log(await res.json());
+ * const rules = await client.proxyRules.listRules();
+ * const status = await client.proxyLifecycle.getProxyStatus();
  * ```
  */
 export class SharkClient {
@@ -37,10 +62,28 @@ export class SharkClient {
   private readonly _dpopProver?: DPoPProver;
   private readonly _userAgent: string;
 
+  // Admin namespaces (v1.5)
+  readonly proxyRules: ProxyRulesClient;
+  readonly proxyLifecycle: ProxyLifecycleClient;
+  readonly branding: BrandingClient;
+  readonly paywall: PaywallClient;
+  readonly users: UsersClient;
+  readonly agents: AgentsClient;
+
   constructor(opts: SharkClientOptions) {
     this._accessToken = opts.accessToken;
     this._dpopProver = opts.dpopProver;
     this._userAgent = opts.userAgent ?? "@sharkauth/node/0.1.0";
+
+    const baseUrl = opts.baseUrl ?? "";
+    const adminKey = opts.adminKey ?? opts.accessToken;
+
+    this.proxyRules = new ProxyRulesClient({ baseUrl, adminKey });
+    this.proxyLifecycle = new ProxyLifecycleClient({ baseUrl, adminKey });
+    this.branding = new BrandingClient({ baseUrl, adminKey });
+    this.paywall = new PaywallClient({ baseUrl });
+    this.users = new UsersClient({ baseUrl, adminKey });
+    this.agents = new AgentsClient({ baseUrl, adminKey });
   }
 
   /**
