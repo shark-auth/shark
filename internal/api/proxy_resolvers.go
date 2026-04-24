@@ -77,7 +77,7 @@ func (r *JWTResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 		if roles, err := r.Store.GetRolesByUserID(req.Context(), claims.Subject); err == nil {
 			for _, role := range roles {
 				if role != nil {
-					id.UserRoles = append(id.UserRoles, role.Name)
+					id.Roles = append(id.Roles, role.Name)
 				}
 			}
 		}
@@ -139,7 +139,7 @@ func (r *LiveResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 	return proxy.Identity{
 		UserID:     sess.UserID,
 		UserEmail:  email,
-		UserRoles:  roles,
+		Roles:      roles,
 		AuthMethod: "session-live",
 	}, nil
 }

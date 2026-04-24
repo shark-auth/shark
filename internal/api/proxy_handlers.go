@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sharkauth/sharkauth/internal/identity"
 	"github.com/sharkauth/sharkauth/internal/proxy"
 )
 
@@ -63,7 +64,7 @@ type proxySimulateRequest struct {
 type proxySimulatedIdentity struct {
 	UserID     string   `json:"user_id"`
 	UserEmail  string   `json:"user_email"`
-	UserRoles  []string `json:"roles"`
+	Roles      []string `json:"roles"`
 	AgentID    string   `json:"agent_id"`
 	AgentName  string   `json:"agent_name"`
 	AuthMethod string   `json:"auth_method"`
@@ -227,24 +228,24 @@ func (s *Server) handleProxySimulate(w http.ResponseWriter, r *http.Request) {
 		URL:    syntheticURL,
 	}
 
-	identity := proxy.Identity{
+	id := proxy.Identity{
 		UserID:     req.Identity.UserID,
 		UserEmail:  req.Identity.UserEmail,
-		UserRoles:  req.Identity.UserRoles,
+		Roles:      req.Identity.Roles,
 		AgentID:    req.Identity.AgentID,
 		AgentName:  req.Identity.AgentName,
-		AuthMethod: req.Identity.AuthMethod,
+		AuthMethod: identity.AuthMethod(req.Identity.AuthMethod),
 		Scopes:     req.Identity.Scopes,
 	}
 
 	start := time.Now()
-	decision := s.ProxyEngine.Evaluate(synReq, identity)
+	decision := s.ProxyEngine.Evaluate(synReq, id)
 	elapsed := time.Since(start)
 
 	resp := proxySimulateResponse{
 		Decision:        decisionLabel(decision.Allow),
 		Reason:          decision.Reason,
-		InjectedHeaders: computeInjectedHeaders(identity),
+		InjectedHeaders: computeInjectedHeaders(id),
 		EvalUs:          elapsed.Microseconds(),
 	}
 	if decision.MatchedRule != nil {

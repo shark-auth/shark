@@ -341,7 +341,7 @@ func (c *jwksCache) verifyBearer(ctx context.Context, authHeader string) (proxy.
 	if raw, ok := claims["roles"].([]any); ok {
 		for _, v := range raw {
 			if s, ok := v.(string); ok {
-				id.UserRoles = append(id.UserRoles, s)
+				id.Roles = append(id.Roles, s)
 			}
 		}
 	}
