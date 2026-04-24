@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sharkauth/sharkauth/internal/identity"
+	"github.com/sharkauth/sharkauth/internal/oauth"
 )
 
 // WithIdentity is a back-compat wrapper that forwards to
@@ -52,12 +53,13 @@ type AppResolver interface {
 // sensible defaults for upstream timeouts. Construct instances with New.
 type ReverseProxy struct {
 	cfg      Config
-	issuer   string   // base URL of SharkAuth for redirects
-	upstream *url.URL // static fallback or main upstream
-	resolver AppResolver
-	backend  *httputil.ReverseProxy
-	engine   *Engine // static fallback or main engine
-	logger   *slog.Logger
+	issuer     string   // base URL of SharkAuth for redirects
+	upstream   *url.URL // static fallback or main upstream
+	resolver   AppResolver
+	backend    *httputil.ReverseProxy
+	engine     *Engine // static fallback or main engine
+	logger     *slog.Logger
+	dpopCache  *oauth.DPoPJTICache // nil = DPoP enforcement disabled
 }
 
 // New builds a ReverseProxy from cfg. It validates the config, parses the
@@ -129,6 +131,19 @@ func (p *ReverseProxy) SetResolver(res AppResolver) {
 	p.resolver = res
 }
 
+// SetDPoPCache wires a DPoP JTI replay cache into the proxy. When set,
+// ServeHTTP validates the DPoP proof header against the bearer access
+// token for any request whose resolved Identity.AuthMethod is
+// AuthMethodDPoP — invalid/missing proofs produce 401 with the
+// X-Shark-Deny-Reason header describing the failure.
+//
+// Passing nil disables DPoP enforcement; the proxy will forward
+// DPoP-authenticated requests without validating the proof (useful in
+// tests and in deployments where an upstream edge handles DPoP).
+func (p *ReverseProxy) SetDPoPCache(cache *oauth.DPoPJTICache) {
+	p.dpopCache = cache
+}
+
 // ServeHTTP implements http.Handler. It:
 //  1. recovers from panics and replies 503 so a buggy handler or
 //     transport never takes down the server;
@@ -163,6 +178,24 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// whether this is permitted; annotating happens whether the
 		// engine allows or denies.
 		id = Identity{AuthMethod: identity.AuthMethodAnonymous}
+	}
+
+	// DPoP proof-of-possession check. Only runs when the identity was
+	// resolved via a DPoP-bound bearer (AuthMethodDPoP) and the operator
+	// wired a JTI cache into the proxy. If either is absent we trust
+	// whatever the upstream middleware decided.
+	if id.AuthMethod == identity.AuthMethodDPoP && p.dpopCache != nil {
+		if err := p.validateDPoPProof(r); err != nil {
+			p.logger.Info("proxy dpop rejected",
+				"path", r.URL.Path,
+				"method", r.Method,
+				"user_id", id.UserID,
+				"err", err,
+			)
+			w.Header().Set(HeaderDenyReason, err.Error())
+			http.Error(w, "unauthorized: "+err.Error(), http.StatusUnauthorized)
+			return
+		}
 	}
 
 	// Dynamic Resolution (W15 Transparent Mode)
@@ -377,6 +410,50 @@ func (p *ReverseProxy) onUpstreamError(w http.ResponseWriter, r *http.Request, e
 // "authenticated-but-unauthorized" (403).
 func isAnonymous(id Identity) bool {
 	return id.UserID == "" && id.AgentID == ""
+}
+
+// validateDPoPProof validates the DPoP proof header on r against the
+// bearer access token per RFC 9449 §4.3. Called only when
+// p.dpopCache is non-nil and the resolved identity used AuthMethodDPoP.
+//
+// htu is constructed from the request as scheme://host/path — query and
+// fragment are explicitly excluded because RFC 9449 §4.2 defines htu
+// that way. Scheme defaults to "https" when unset (the usual case
+// behind a TLS terminator that rewrites r.URL.Scheme to empty).
+//
+// Returns a concise error whose Error() is safe to surface on the
+// X-Shark-Deny-Reason header; callers set the header + 401.
+func (p *ReverseProxy) validateDPoPProof(r *http.Request) error {
+	proof := r.Header.Get("DPoP")
+	if proof == "" {
+		return fmt.Errorf("dpop proof missing")
+	}
+
+	authz := r.Header.Get("Authorization")
+	const bearerPrefix = "Bearer "
+	if !strings.HasPrefix(authz, bearerPrefix) {
+		return fmt.Errorf("dpop proof invalid: bearer token missing")
+	}
+	bearer := strings.TrimSpace(strings.TrimPrefix(authz, bearerPrefix))
+	if bearer == "" {
+		return fmt.Errorf("dpop proof invalid: bearer token empty")
+	}
+
+	scheme := r.URL.Scheme
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	htu := scheme + "://" + r.Host + r.URL.Path
+
+	ath := oauth.HashAccessTokenForDPoP(bearer)
+	if _, err := oauth.ValidateDPoPProof(proof, r.Method, htu, ath, p.dpopCache); err != nil {
+		return fmt.Errorf("dpop proof invalid")
+	}
+	return nil
 }
 
 // statusText is a small helper that returns a canonical English phrase
