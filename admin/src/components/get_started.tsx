@@ -1,154 +1,74 @@
 // @ts-nocheck
 import React from 'react'
-import { Icon } from './shared'
+import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
+import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
 
-// Get Started — dual-path operator console.
-//
-// Two integration paths sit side by side as checklists:
-//   Path A — Proxy mode + hosted components (zero-code in user's app)
-//   Path B — SDK (user builds UI, SharkAuth handles state + tokens)
-//
-// The admin focuses on one path at a time but can switch any time without
-// losing progress. Each task has a status (pending/done/skipped), a deep
-// link into the right page, and an optional right-side detail drawer with
-// real config snippets / commands.
-//
-// Aesthetic: square (3-6px radius), 13px base, hairline borders, dense.
-// Reference pages: users.tsx, agents_manage.tsx, sessions.tsx.
+// Get Started — onboarding checklist.
+// Sibling page to users.tsx: monochrome, square, hairline, 13px base, dense rows.
+// Two integration paths shown via a tab strip. Per-task status persists in
+// localStorage; auto-verify probes /admin/proxy/status and /admin/apps to flip
+// task state when admin completes config elsewhere.
 
-const STORAGE_KEY = 'shark_admin_onboarding_state_v2';
+const STORAGE_KEY = 'shark_get_started_state_v1';
 
-// ─── Persistence ──────────────────────────────────────────────────────────────
-
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw);
-    if (typeof v !== 'object' || v == null) return null;
-    return v;
-  } catch { return null; }
-}
-
-function saveState(s) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
-}
-
-function defaultState() {
-  return {
-    activePath: 'proxy', // 'proxy' | 'sdk'
-    proxy: {},           // { taskId: 'done' | 'skipped' }
-    sdk: {},
-    drawer: null,        // { path, taskId } | null
-  };
-}
-
-function markOnboarded() {
-  try { localStorage.setItem('shark_admin_onboarded', '1'); } catch {}
-}
-
-// ─── Task definitions ─────────────────────────────────────────────────────────
-// Each task: { id, title, summary, kind, ... }
-//   kind: 'cmd' (CLI snippet), 'code' (code block), 'link' (deep link),
-//         'check' (auto-detect via API)
-//   target: page id for "Open" deep link
-//   verify: optional async () => bool to auto-mark done
+// ─── Task definitions ────────────────────────────────────────────────────────
+// Tasks are derived from the live admin surface (proxy_handlers.go,
+// application_handlers.go, branding admin, shark-auth-react SDK).
+// IDs are stable — they key the localStorage status map.
 
 const PROXY_TASKS = [
   {
     id: 'proxy.upstream',
     title: 'Configure proxy upstream',
-    summary: 'Point SharkAuth at the app you want to protect.',
-    target: 'proxy',
-    body: ({ devMode }) => ({
-      lead: 'SharkAuth runs as a reverse proxy in front of your app. Define the upstream URL once — every request flows through SharkAuth before hitting your service.',
-      blocks: [
-        { kind: 'cmd', label: 'Quick start (CLI)', value: 'shark serve --proxy-upstream http://localhost:3000' },
-        { kind: 'note', value: 'Or use the Proxy page to define multiple upstreams with path matching, header rules, and tier gates.' },
-      ],
-      cta: { label: 'Open Proxy page', target: 'proxy' },
-    }),
+    summary: 'Point SharkAuth at the app it should sit in front of. The reverse proxy forwards every request and stamps identity headers.',
+    page: 'proxy',
+    pageLabel: 'Proxy → Lifecycle',
+    cli: 'shark serve --dev --proxy-upstream http://localhost:3000',
+    autoCheck: 'proxyEnabled',
   },
   {
     id: 'proxy.rule',
     title: 'Add a protect rule',
-    summary: 'Decide which paths require auth — anonymous, authenticated, role, or scope.',
-    target: 'proxy',
-    body: () => ({
-      lead: 'Rules use the `require:` grammar. Stack as many as you want — first match wins. Default-deny is a single rule away.',
-      blocks: [
-        {
-          kind: 'code', label: 'Example rule',
-          value: `name:    api-protected
-match:   /api/*
-require: authenticated
-allow:   ""`,
-        },
-        { kind: 'note', value: 'Valid require values: anonymous, authenticated, agent, role:<name>, scope:<value>, tier:<tier>.' },
-      ],
-      cta: { label: 'Manage rules', target: 'proxy' },
-    }),
+    summary: 'Pick which paths require auth. A rule matches a path pattern + method, requires an identity (user / role / scope), and is evaluated at the edge before the upstream sees the request.',
+    page: 'proxy',
+    pageLabel: 'Proxy → Rules',
+    cli: 'curl -sH "Authorization: Bearer $KEY" /api/v1/admin/proxy/rules',
+    autoCheck: 'proxyHasRules',
   },
   {
-    id: 'proxy.auth',
-    title: 'Pick a login method',
-    summary: 'Password, magic link, passkey, SSO — toggle what you want enabled.',
-    target: 'authentication',
-    body: () => ({
-      lead: 'Hosted components use whatever methods you enable here. You can mix all of them; users see only what is on.',
-      blocks: [
-        { kind: 'note', value: 'Recommended starter: password + magic link. Add SSO once you have a provider.' },
-      ],
-      cta: { label: 'Configure auth methods', target: 'authentication' },
-    }),
+    id: 'proxy.methods',
+    title: 'Pick login methods',
+    summary: 'Decide which sign-in surfaces the hosted login page exposes — passwords, magic links, social, SSO, passkeys. Disabled methods do not render.',
+    page: 'authentication',
+    pageLabel: 'Authentication',
+    cli: 'shark methods enable password,oauth_google',
   },
   {
     id: 'proxy.redirect',
-    title: 'Set the post-login redirect',
-    summary: 'Where users land after successful login (defaults to "/").',
-    target: 'branding',
-    body: () => ({
-      lead: 'The hosted login page sends users to this URL after their session is established. Use a path on your app, or a full URL for cross-origin redirects.',
-      blocks: [
-        { kind: 'code', label: 'Branding → Auth copy', value: 'post_login_redirect: /dashboard' },
-      ],
-      cta: { label: 'Open branding', target: 'branding' },
-    }),
+    title: 'Set post-login redirect',
+    summary: 'Where the hosted login page sends users once authentication completes. Must match an allowed redirect on the proxy app.',
+    page: 'proxy',
+    pageLabel: 'Proxy → Config',
+    cli: 'shark proxy set-redirect /home',
   },
   {
     id: 'proxy.brand',
     title: 'Brand the hosted login page',
-    summary: 'Logo, colors, copy — everything that ships with the proxy.',
-    target: 'branding',
-    body: () => ({
-      lead: 'Hosted pages render with your branding. Default is fine for prototypes; swap to your logo + accent before production.',
-      blocks: [
-        { kind: 'note', value: 'Logo, primary color, font, and per-surface copy live on one page. Use the live preview pane to iterate without reloading.' },
-      ],
-      cta: { label: 'Open BrandStudio', target: 'branding' },
-    }),
+    summary: 'Upload a logo and override design tokens. Branding lives in /admin/branding and is content-addressed for cache safety.',
+    page: 'branding',
+    pageLabel: 'Branding',
+    cli: 'curl -X PATCH /api/v1/admin/branding -d \'{"name":"Acme"}\'',
+    autoCheck: 'brandingSet',
   },
   {
     id: 'proxy.test',
     title: 'Test the proxy URL',
-    summary: 'Hit your proxied app and confirm the login redirect.',
-    target: 'proxy',
-    verify: async () => {
-      try {
-        const s = await API.get('/admin/proxy/status');
-        return s && (s.state === 'running' || s.running === true);
-      } catch { return false; }
-    },
-    body: ({ origin }) => ({
-      lead: 'Open your protected URL in a fresh tab. An unauthenticated request should redirect you to the SharkAuth hosted login page; logging in should drop you back at the original path.',
-      blocks: [
-        { kind: 'cmd', label: 'Smoke test', value: `curl -i ${origin}/` },
-        { kind: 'note', value: 'Look for `Location: /shark/login` on a 302 response. That is the proxy doing its job.' },
-      ],
-      cta: { label: 'Open status panel', target: 'proxy' },
-    }),
+    summary: 'Hit the proxy from a browser. You should land on the hosted login page, sign in, and bounce to the upstream with X-Shark-User-Id stamped on the request.',
+    page: 'proxy',
+    pageLabel: 'Proxy → Simulate',
+    cli: 'curl -i http://localhost:8080/',
   },
 ];
 
@@ -156,1014 +76,556 @@ const SDK_TASKS = [
   {
     id: 'sdk.app',
     title: 'Create an Application',
-    summary: 'You need a publishable key — it lives on the App.',
-    target: 'apps',
-    verify: async () => {
-      try {
-        const a = await API.get('/admin/apps');
-        const list = Array.isArray(a) ? a : (a?.apps || []);
-        return list.length > 0;
-      } catch { return false; }
-    },
-    body: () => ({
-      lead: 'Apps map a frontend to its OAuth client_id. The publishable key (pk_live_…) is safe to ship in your client bundle.',
-      blocks: [
-        { kind: 'note', value: 'You can have many apps — one per environment, or one per frontend codebase. Each gets its own redirect URIs and rate limits.' },
-      ],
-      cta: { label: 'Open Applications', target: 'apps' },
-    }),
+    summary: 'Register an OAuth/OIDC client. You get a publishable key (public) and an issuer URL the SDK points at.',
+    page: 'apps',
+    pageLabel: 'Applications',
+    cli: 'shark apps create --name "My App" --redirect http://localhost:5173/shark/callback',
+    autoCheck: 'hasApp',
   },
   {
     id: 'sdk.install',
     title: 'Install the SDK package',
-    summary: 'React, vanilla TS, or Python — pick the one that fits.',
-    target: null,
-    body: () => ({
-      lead: 'The React package wraps everything: provider, hooks, prebuilt components. Other stacks consume the TypeScript SDK directly.',
-      blocks: [
-        { kind: 'cmd', label: 'React (recommended)', value: 'npm install @shark-auth/react' },
-        { kind: 'cmd', label: 'Vanilla TS / Node', value: 'npm install @shark-auth/sdk' },
-        { kind: 'cmd', label: 'Python', value: 'pip install shark-auth' },
-      ],
-    }),
+    summary: 'Pick the SDK that matches your stack. The React package wraps the TypeScript core SDK with hooks and components.',
+    page: null,
+    pageLabel: null,
+    cli: 'npm install @shark-auth/react',
+    extraSnippets: [
+      { label: 'TypeScript core', code: 'npm install @shark-auth/sdk' },
+      { label: 'Python', code: 'pip install shark-auth' },
+    ],
   },
   {
     id: 'sdk.provider',
     title: 'Mount SharkProvider',
-    summary: 'Wrap your app once with the publishable key + auth URL.',
-    target: null,
-    body: ({ origin, firstAppKey }) => ({
-      lead: 'The provider holds the access token, refreshes it silently, and exposes hooks like `useAuth`, `useUser`, `useSession`.',
-      blocks: [
-        {
-          kind: 'code', label: 'app/layout.tsx',
-          value: `import { SharkProvider } from '@shark-auth/react'
+    summary: 'Wrap the app root with SharkProvider. It loads tokens from storage, refreshes on schedule, and exposes the session via context.',
+    page: null,
+    pageLabel: null,
+    code: `import { SharkProvider } from '@shark-auth/react';
 
-export default function Layout({ children }) {
+export default function App() {
   return (
     <SharkProvider
-      authUrl="${origin}"
-      publishableKey="${firstAppKey || 'pk_live_xxx'}"
+      authUrl="https://auth.example.com"
+      publishableKey="pk_live_…"
     >
-      {children}
+      <Routes/>
     </SharkProvider>
-  )
+  );
 }`,
-        },
-      ],
-    }),
   },
   {
     id: 'sdk.signin',
-    title: 'Wire a SignIn button',
-    summary: 'Drop in `<SignIn />` or call `startAuthFlow` yourself.',
-    target: null,
-    body: () => ({
-      lead: 'The prebuilt component handles the OAuth 2.1 + PKCE handshake. State and code_verifier are persisted to sessionStorage; SharkAuth redirects back to /shark/callback when the user is done.',
-      blocks: [
-        {
-          kind: 'code', label: 'Prebuilt button',
-          value: `import { SignIn } from '@shark-auth/react'
+    title: 'Wire a Sign-in button',
+    summary: 'Trigger the OAuth 2.1 + PKCE flow. startAuthFlow stores the verifier in sessionStorage and redirects to /oauth/authorize on the issuer.',
+    page: null,
+    pageLabel: null,
+    code: `import { useShark } from '@shark-auth/react';
 
-<SignIn>Log in</SignIn>`,
-        },
-        {
-          kind: 'code', label: 'Manual flow (advanced)',
-          value: `import { startAuthFlow } from '@shark-auth/react/core'
-
-const { url } = await startAuthFlow(
-  window.location.href,
-  authUrl,
-  publishableKey,
-)
-window.location.href = url`,
-        },
-      ],
-    }),
+export function SignInButton() {
+  const { signIn } = useShark();
+  return <button onClick={() => signIn()}>Sign in</button>;
+}`,
   },
   {
     id: 'sdk.callback',
     title: 'Mount the callback route',
-    summary: 'Required: a /shark/callback route that runs `<SharkCallback />`.',
-    target: null,
-    body: () => ({
-      lead: 'The callback URI is fixed at `${origin}/shark/callback`. SharkCallback parses `?code=`, exchanges it for an access token, then routes the user back to where they started.',
-      blocks: [
-        {
-          kind: 'code', label: 'app/shark/callback/page.tsx',
-          value: `import { SharkCallback } from '@shark-auth/react'
+    summary: 'The redirect_uri is /shark/callback by default. The route exchanges ?code= for tokens via /oauth/token, then bounces to the post-login redirect saved in sessionStorage.',
+    page: null,
+    pageLabel: null,
+    code: `import { SharkCallback } from '@shark-auth/react';
 
-export default function Page() {
-  return <SharkCallback />
-}`,
-        },
-      ],
-    }),
+// In your router:
+{ path: '/shark/callback', element: <SharkCallback/> }`,
   },
   {
     id: 'sdk.session',
     title: 'Read the session',
-    summary: 'Use `useUser()` / `useSession()` anywhere in your tree.',
-    target: null,
-    body: () => ({
-      lead: 'Once a user signs in, hooks resolve synchronously on every render. Tokens refresh in the background — you never have to think about expiry.',
-      blocks: [
-        {
-          kind: 'code', label: 'Component',
-          value: `import { useUser } from '@shark-auth/react'
-
-function Profile() {
-  const { user, isLoading } = useUser()
-  if (isLoading) return null
-  if (!user) return <SignIn>Log in</SignIn>
-  return <div>Hi, {user.email}</div>
-}`,
-        },
-      ],
-    }),
+    summary: 'Use the useShark hook anywhere under the provider. session.user is null until exchange completes; use isLoading to guard.',
+    page: null,
+    pageLabel: null,
+    code: `const { session, isLoading } = useShark();
+if (isLoading) return null;
+return session?.user
+  ? <p>Hi {session.user.email}</p>
+  : <p>Signed out</p>;`,
   },
 ];
 
-const PATHS = {
-  proxy: {
-    id: 'proxy',
-    title: 'Proxy mode',
-    subtitle: 'Hosted components, zero code in your app',
-    blurb: 'SharkAuth runs as a reverse proxy in front of your service. Login UI, callbacks, sessions — all handled by SharkAuth’s hosted pages.',
-    icon: <Icon.Proxy width={14} height={14}/>,
-    tasks: PROXY_TASKS,
-    cli: 'shark serve --proxy-upstream http://localhost:3000',
-  },
-  sdk: {
-    id: 'sdk',
-    title: 'SDK',
-    subtitle: 'You build the UI, we handle auth state',
-    blurb: 'Install the React or TypeScript SDK in your app. Use hooks and components to drive login, sessions, and token refresh from your own UI.',
-    icon: <Icon.Bolt width={14} height={14}/>,
-    tasks: SDK_TASKS,
-    cli: 'npm install @shark-auth/react',
-  },
-};
+// ─── State helpers ───────────────────────────────────────────────────────────
 
-// ─── Tiny atoms ───────────────────────────────────────────────────────────────
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { tab: 'proxy', tasks: {} };
+    const parsed = JSON.parse(raw);
+    return { tab: parsed.tab === 'sdk' ? 'sdk' : 'proxy', tasks: parsed.tasks || {} };
+  } catch { return { tab: 'proxy', tasks: {} }; }
+}
 
-const HAIRLINE = '1px solid var(--hairline)';
-const HAIRLINE_STRONG = '1px solid var(--hairline-strong)';
+function persist(state) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+}
 
+// ─── Status dot — only colored element on the page ───────────────────────────
+//    pending → neutral, done → success, skipped → warn, blocked → danger
 function StatusDot({ status }) {
-  const color =
-    status === 'done' ? 'var(--success)' :
-    status === 'skipped' ? 'var(--fg-faint)' :
-    'var(--fg-dim)';
-  const fill =
-    status === 'done' ? 'var(--success)' :
-    'transparent';
+  const color = status === 'done' ? 'var(--success)'
+    : status === 'skipped' ? 'var(--warn)'
+    : status === 'blocked' ? 'var(--danger)'
+    : 'var(--fg-faint)';
+  const fill = status === 'done' || status === 'blocked' || status === 'skipped';
   return (
-    <div style={{
-      width: 14, height: 14, flexShrink: 0,
-      borderRadius: 3,
-      border: `1px solid ${color}`,
-      background: fill,
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      {status === 'done' && <Icon.Check width={9} height={9} style={{ color: '#000' }}/>}
-      {status === 'skipped' && (
-        <div style={{ width: 6, height: 1, background: 'var(--fg-faint)' }}/>
-      )}
-    </div>
-  );
-}
-
-function Kbd({ children }) {
-  return (
-    <span style={{
-      fontFamily: 'var(--font-mono)',
-      fontSize: 10,
-      padding: '1px 5px',
-      border: HAIRLINE_STRONG,
-      borderRadius: 3,
-      color: 'var(--fg-muted)',
-      background: 'var(--surface-1)',
-    }}>{children}</span>
-  );
-}
-
-function CopyChip({ text, label = 'Copy' }) {
-  const [copied, setCopied] = React.useState(false);
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        try {
-          navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1100);
-        } catch {}
-      }}
-      className="btn ghost sm"
-      style={{ height: 22, padding: '0 7px', fontSize: 11 }}
-    >
-      {copied
-        ? <><Icon.Check width={10} height={10} style={{ color: 'var(--success)' }}/> Copied</>
-        : <><Icon.Copy width={10} height={10} style={{ opacity: 0.7 }}/> {label}</>}
-    </button>
-  );
-}
-
-// ─── Path tab strip ───────────────────────────────────────────────────────────
-
-function PathTabs({ active, onChange, progress }) {
-  return (
-    <div style={{
-      display: 'flex',
-      border: HAIRLINE,
-      borderRadius: 4,
-      overflow: 'hidden',
-      background: 'var(--surface-1)',
-    }}>
-      {Object.values(PATHS).map((p) => {
-        const on = active === p.id;
-        const prog = progress[p.id];
-        return (
-          <button
-            key={p.id}
-            onClick={() => onChange(p.id)}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '12px 14px',
-              background: on ? 'var(--surface-3)' : 'transparent',
-              border: 'none',
-              borderRight: p.id === 'proxy' ? HAIRLINE : 'none',
-              cursor: 'pointer',
-              textAlign: 'left',
-              color: on ? 'var(--fg)' : 'var(--fg-muted)',
-              transition: 'background 100ms',
-            }}
-            onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = 'var(--surface-2)'; }}
-            onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}
-          >
-            <div style={{
-              width: 22, height: 22, flexShrink: 0,
-              border: HAIRLINE_STRONG,
-              borderRadius: 4,
-              background: 'var(--surface-2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              {p.icon}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{
-                  fontFamily: 'var(--font-display)',
-                  fontWeight: 600,
-                  fontSize: 13,
-                  letterSpacing: '-0.005em',
-                }}>
-                  {p.title}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Path {p.id === 'proxy' ? 'A' : 'B'}
-                </span>
-              </div>
-              <div style={{
-                fontSize: 11.5,
-                color: 'var(--fg-dim)',
-                marginTop: 2,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}>
-                {p.subtitle}
-              </div>
-            </div>
-            <div style={{
-              fontSize: 10.5,
-              fontFamily: 'var(--font-mono)',
-              color: prog.done === prog.total ? 'var(--success)' : 'var(--fg-muted)',
-              padding: '2px 6px',
-              border: HAIRLINE_STRONG,
-              borderRadius: 3,
-              background: 'var(--surface-1)',
-              flexShrink: 0,
-            }}>
-              {prog.done}/{prog.total}
-            </div>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Task row ─────────────────────────────────────────────────────────────────
-
-function TaskRow({ task, status, index, onOpen, onToggleDone, onSkip }) {
-  const isDone = status === 'done';
-  const isSkipped = status === 'skipped';
-  return (
-    <div
-      onClick={onOpen}
+    <span
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '10px 14px',
-        borderBottom: HAIRLINE,
-        background: 'var(--surface-1)',
-        cursor: 'pointer',
-        transition: 'background 80ms',
+        width: 8, height: 8, borderRadius: '50%',
+        background: fill ? color : 'transparent',
+        border: '1px solid ' + color,
+        flexShrink: 0,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-1)'; }}
-    >
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggleDone(); }}
-        title={isDone ? 'Mark as pending' : 'Mark as done'}
-        style={{
-          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >
-        <StatusDot status={status} />
-      </button>
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10.5,
-        color: 'var(--fg-faint)',
-        width: 22,
-        flexShrink: 0,
-      }}>
-        {String(index + 1).padStart(2, '0')}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: 13,
-          fontWeight: 500,
-          color: isDone || isSkipped ? 'var(--fg-muted)' : 'var(--fg)',
-          textDecoration: isSkipped ? 'line-through' : 'none',
-          textDecorationColor: 'var(--fg-faint)',
-        }}>
-          {task.title}
-        </div>
-        <div style={{ fontSize: 11.5, color: 'var(--fg-dim)', marginTop: 2 }}>
-          {task.summary}
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-        {!isDone && !isSkipped && (
-          <button
-            className="btn ghost sm"
-            onClick={(e) => { e.stopPropagation(); onSkip(); }}
-            style={{ fontSize: 11, height: 24 }}
-          >
-            Skip
-          </button>
-        )}
-        <button
-          className="btn sm"
-          onClick={(e) => { e.stopPropagation(); onOpen(); }}
-          style={{ fontSize: 11, height: 24 }}
-        >
-          {isDone ? 'Review' : 'Open'} <Icon.ChevronRight width={10} height={10}/>
-        </button>
-      </div>
-    </div>
+      aria-label={status || 'pending'}
+    />
   );
 }
 
-// ─── Detail drawer ────────────────────────────────────────────────────────────
+// ─── Auto-verify hook ────────────────────────────────────────────────────────
+//   Probes /admin/proxy/status (404 when proxy disabled), /admin/proxy/rules,
+//   /admin/apps, /admin/branding. Returns booleans for autoCheck keys.
 
-function TaskDrawer({ pathId, task, status, onClose, onMarkDone, onSkip, onUnskip, onGoTo, ctx }) {
-  if (!task) return null;
-  const body = task.body ? task.body(ctx) : { lead: '', blocks: [] };
-  const cta = body.cta;
-
-  return (
-    <>
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.45)',
-          zIndex: 90,
-        }}
-      />
-      <aside
-        style={{
-          position: 'fixed',
-          right: 0, top: 0, bottom: 0,
-          width: 440,
-          background: 'var(--surface-0)',
-          borderLeft: HAIRLINE_STRONG,
-          zIndex: 100,
-          display: 'flex',
-          flexDirection: 'column',
-          animation: 'shark-drawer-in 140ms ease-out',
-        }}
-      >
-        {/* Header */}
-        <div style={{
-          padding: '14px 18px',
-          borderBottom: HAIRLINE,
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 10,
-          background: 'var(--surface-0)',
-        }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: 10,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: 'var(--fg-dim)',
-              marginBottom: 4,
-            }}>
-              Path {pathId === 'proxy' ? 'A · Proxy' : 'B · SDK'} · Task
-            </div>
-            <div style={{
-              fontFamily: 'var(--font-display)',
-              fontWeight: 600,
-              fontSize: 17,
-              letterSpacing: '-0.01em',
-              lineHeight: 1.2,
-            }}>
-              {task.title}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="btn ghost icon sm"
-            title="Close (Esc)"
-          >
-            <Icon.X width={11} height={11}/>
-          </button>
-        </div>
-
-        {/* Status row */}
-        <div style={{
-          padding: '10px 18px',
-          borderBottom: HAIRLINE,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          background: 'var(--surface-1)',
-        }}>
-          <StatusDot status={status}/>
-          <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>
-            {status === 'done' ? 'Completed' : status === 'skipped' ? 'Skipped' : 'Pending'}
-          </span>
-          <div style={{ flex: 1 }}/>
-          {status === 'skipped'
-            ? <button className="btn sm" onClick={onUnskip} style={{ fontSize: 11 }}>Restore</button>
-            : status === 'done'
-              ? <button className="btn ghost sm" onClick={onMarkDone} style={{ fontSize: 11 }}>Mark pending</button>
-              : <>
-                  <button className="btn ghost sm" onClick={onSkip} style={{ fontSize: 11 }}>Skip</button>
-                  <button className="btn primary sm" onClick={onMarkDone} style={{ fontSize: 11 }}>
-                    <Icon.Check width={10} height={10}/> Mark done
-                  </button>
-                </>
-          }
-        </div>
-
-        {/* Body */}
-        <div style={{
-          flex: 1, overflow: 'auto', padding: '16px 18px 24px',
-        }}>
-          {body.lead && (
-            <p style={{
-              fontSize: 13,
-              lineHeight: 1.55,
-              color: 'var(--fg-muted)',
-              margin: '0 0 16px',
-              maxWidth: '60ch',
-            }}>
-              {body.lead}
-            </p>
-          )}
-
-          {body.blocks?.map((b, i) => {
-            if (b.kind === 'note') {
-              return (
-                <div key={i} style={{
-                  padding: '8px 12px',
-                  border: HAIRLINE,
-                  background: 'var(--surface-1)',
-                  borderRadius: 4,
-                  marginBottom: 12,
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'flex-start',
-                }}>
-                  <Icon.Info width={12} height={12} style={{ marginTop: 2, color: 'var(--fg-dim)', flexShrink: 0 }}/>
-                  <div style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
-                    {b.value}
-                  </div>
-                </div>
-              );
-            }
-            return (
-              <div key={i} style={{ marginBottom: 14 }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: 6,
-                }}>
-                  <span style={{
-                    fontSize: 10,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    color: 'var(--fg-dim)',
-                  }}>
-                    {b.label}
-                  </span>
-                  <CopyChip text={b.value}/>
-                </div>
-                <pre style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 12,
-                  lineHeight: 1.55,
-                  color: 'var(--fg)',
-                  background: 'var(--surface-1)',
-                  border: HAIRLINE,
-                  borderRadius: 4,
-                  padding: '10px 12px',
-                  margin: 0,
-                  overflow: 'auto',
-                  whiteSpace: 'pre',
-                }}>
-                  {b.kind === 'cmd' ? '$ ' + b.value : b.value}
-                </pre>
-              </div>
-            );
-          })}
-
-          {cta && (
-            <div style={{
-              marginTop: 18,
-              paddingTop: 14,
-              borderTop: HAIRLINE,
-              display: 'flex',
-              gap: 8,
-            }}>
-              <button
-                className="btn primary"
-                onClick={() => { onGoTo(cta.target); }}
-                style={{ fontSize: 12 }}
-              >
-                {cta.label} <Icon.External width={11} height={11}/>
-              </button>
-            </div>
-          )}
-        </div>
-      </aside>
-    </>
-  );
-}
-
-// ─── Header ───────────────────────────────────────────────────────────────────
-
-function PageHeader({ overallProgress, onSkipAll }) {
-  const { done, total } = overallProgress;
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-  return (
-    <div style={{
-      padding: '20px 24px 18px',
-      borderBottom: HAIRLINE,
-      background: 'var(--surface-0)',
-      display: 'flex',
-      alignItems: 'flex-end',
-      gap: 24,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: 10,
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          color: 'var(--fg-dim)',
-          marginBottom: 6,
-        }}>
-          Onboarding · Two paths, your pick
-        </div>
-        <div style={{
-          fontFamily: 'var(--font-display)',
-          fontWeight: 700,
-          fontSize: 26,
-          letterSpacing: '-0.02em',
-          lineHeight: 1.05,
-        }}>
-          Get SharkAuth in front of your app.
-        </div>
-        <div style={{
-          fontSize: 13,
-          color: 'var(--fg-muted)',
-          marginTop: 6,
-          maxWidth: '64ch',
-          lineHeight: 1.5,
-        }}>
-          Two ways to ship: run SharkAuth as a proxy with hosted login pages, or
-          drop our SDK into your own UI. Pick one to focus on — switch any time
-          without losing progress on the other.
-        </div>
-      </div>
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        gap: 8,
-        flexShrink: 0,
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '6px 10px',
-          border: HAIRLINE_STRONG,
-          background: 'var(--surface-1)',
-          borderRadius: 4,
-        }}>
-          <div style={{
-            width: 80, height: 4,
-            background: 'var(--surface-3)',
-            borderRadius: 2,
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              width: `${pct}%`,
-              height: '100%',
-              background: pct === 100 ? 'var(--success)' : 'var(--fg)',
-              transition: 'width 200ms ease-out',
-            }}/>
-          </div>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            color: 'var(--fg-muted)',
-          }}>
-            {done}/{total}
-          </span>
-        </div>
-        <button
-          className="btn ghost sm"
-          onClick={onSkipAll}
-          style={{ fontSize: 11 }}
-        >
-          Skip onboarding <Kbd>esc</Kbd>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
-export function GetStarted({ setPage }) {
-  const toast = useToast();
-
-  const [state, setState] = React.useState(() => {
-    const loaded = loadState();
-    return loaded || defaultState();
+function useAutoChecks() {
+  const [checks, setChecks] = React.useState({
+    proxyEnabled: false,
+    proxyHasRules: false,
+    hasApp: false,
+    brandingSet: false,
   });
 
-  React.useEffect(() => { saveState(state); }, [state]);
-
-  const { data: appsData } = useAPI('/admin/apps');
-  const apps = React.useMemo(() => {
-    if (!appsData) return [];
-    return Array.isArray(appsData) ? appsData : (appsData.apps || []);
-  }, [appsData]);
-  const firstAppKey = apps?.[0]?.publishable_key || apps?.[0]?.client_id || '';
-
-  const ctx = React.useMemo(() => ({
-    origin: typeof window !== 'undefined' ? window.location.origin : 'https://auth.example.com',
-    devMode: false,
-    firstAppKey,
-  }), [firstAppKey]);
-
-  // Auto-verify tasks (best-effort, silent on error)
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const upd = { proxy: { ...state.proxy }, sdk: { ...state.sdk } };
-      let changed = false;
-      for (const path of ['proxy', 'sdk']) {
-        for (const t of PATHS[path].tasks) {
-          if (t.verify && !upd[path][t.id]) {
-            try {
-              const ok = await t.verify();
-              if (ok && !cancelled) { upd[path][t.id] = 'done'; changed = true; }
-            } catch {}
-          }
-        }
-      }
-      if (changed && !cancelled) {
-        setState((s) => ({ ...s, proxy: upd.proxy, sdk: upd.sdk }));
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const probe = React.useCallback(async () => {
+    const next = { proxyEnabled: false, proxyHasRules: false, hasApp: false, brandingSet: false };
+    // Proxy enabled: status returns 200 with data; 404 when disabled.
+    try {
+      const r = await API.get('/admin/proxy/status');
+      next.proxyEnabled = !!(r && (r.data || r.state || r.upstream));
+    } catch {}
+    try {
+      const r = await API.get('/admin/proxy/rules');
+      const rules = r?.data || r?.rules || (Array.isArray(r) ? r : []);
+      next.proxyHasRules = Array.isArray(rules) && rules.length > 0;
+    } catch {}
+    try {
+      const r = await API.get('/admin/apps');
+      const apps = r?.applications || r?.data || (Array.isArray(r) ? r : []);
+      next.hasApp = Array.isArray(apps) && apps.length > 0;
+    } catch {}
+    try {
+      const r = await API.get('/admin/branding');
+      const b = r?.data || r;
+      next.brandingSet = !!(b && (b.name || b.logo_url || b.logo));
+    } catch {}
+    setChecks(next);
   }, []);
 
-  // Esc closes drawer or skips onboarding
-  React.useEffect(() => {
-    const onKey = (e) => {
-      if (e.key !== 'Escape') return;
-      if (state.drawer) setState((s) => ({ ...s, drawer: null }));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [state.drawer]);
+  React.useEffect(() => { probe(); }, [probe]);
 
-  const switchPath = (id) => setState((s) => ({ ...s, activePath: id }));
-  const setTaskStatus = (pathId, taskId, status) => {
-    setState((s) => {
-      const next = { ...s };
-      next[pathId] = { ...s[pathId] };
-      if (status == null) delete next[pathId][taskId];
-      else next[pathId][taskId] = status;
+  return { checks, refresh: probe };
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export function GetStarted({ setPage }) {
+  const initial = React.useMemo(loadState, []);
+  const [tab, setTab] = React.useState(initial.tab);
+  const [tasks, setTasks] = React.useState(initial.tasks);
+  const [selectedId, setSelectedId] = React.useState(null);
+  const toast = useToast();
+  const { checks, refresh: refreshChecks } = useAutoChecks();
+
+  React.useEffect(() => { persist({ tab, tasks }); }, [tab, tasks]);
+
+  // Apply auto-checks: any pending task whose autoCheck flips true → done.
+  React.useEffect(() => {
+    setTasks(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const t of [...PROXY_TASKS, ...SDK_TASKS]) {
+        if (t.autoCheck && checks[t.autoCheck] && next[t.id] !== 'done' && next[t.id] !== 'skipped') {
+          next[t.id] = 'done';
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [checks]);
+
+  const list = tab === 'proxy' ? PROXY_TASKS : SDK_TASKS;
+  const selected = list.find(t => t.id === selectedId) || null;
+
+  const setStatus = (id, status) => {
+    setTasks(prev => {
+      const next = { ...prev };
+      if (status === null) delete next[id]; else next[id] = status;
       return next;
     });
   };
 
-  const openTask = (pathId, taskId) => setState((s) => ({ ...s, drawer: { pathId, taskId } }));
-  const closeDrawer = () => setState((s) => ({ ...s, drawer: null }));
+  const total = list.length;
+  const done = list.filter(t => tasks[t.id] === 'done').length;
+  const skipped = list.filter(t => tasks[t.id] === 'skipped').length;
+  const pending = total - done - skipped;
+  const pct = Math.round((done / Math.max(total, 1)) * 100);
 
-  const handleSkipAll = () => {
-    markOnboarded();
-    if (setPage) setPage('overview');
+  const dismissOnboarding = () => {
+    try { localStorage.setItem('shark_admin_onboarded', '1'); } catch {}
+    if (typeof setPage === 'function') setPage('overview');
   };
-
-  const goTo = (target) => {
-    if (!target) return;
-    if (setPage) setPage(target);
-  };
-
-  const progress = React.useMemo(() => {
-    const m = {};
-    for (const id of ['proxy', 'sdk']) {
-      const tasks = PATHS[id].tasks;
-      const done = tasks.filter((t) => state[id][t.id] === 'done').length;
-      m[id] = { done, total: tasks.length };
-    }
-    return m;
-  }, [state.proxy, state.sdk]);
-
-  const overall = React.useMemo(() => {
-    const t = progress.proxy.total + progress.sdk.total;
-    const d = progress.proxy.done + progress.sdk.done;
-    return { done: d, total: t };
-  }, [progress]);
-
-  const activePath = PATHS[state.activePath];
-  const inactivePath = PATHS[state.activePath === 'proxy' ? 'sdk' : 'proxy'];
-  const inactiveProg = progress[inactivePath.id];
-
-  const drawerTask = state.drawer
-    ? PATHS[state.drawer.pathId]?.tasks.find((t) => t.id === state.drawer.taskId)
-    : null;
-  const drawerStatus = state.drawer
-    ? (state[state.drawer.pathId]?.[state.drawer.taskId] || null)
-    : null;
-
-  // Auto-mark complete -> celebrate once
-  const allDone = overall.done === overall.total && overall.total > 0;
-  const celebratedRef = React.useRef(false);
-  React.useEffect(() => {
-    if (allDone && !celebratedRef.current) {
-      celebratedRef.current = true;
-      markOnboarded();
-      try { toast?.show?.('Onboarding complete'); } catch {}
-    }
-  }, [allDone, toast]);
 
   return (
-    <div style={{
-      height: '100%',
-      overflow: 'auto',
-      background: 'var(--bg)',
-      color: 'var(--fg)',
-    }}>
-      <style>{`
-        @keyframes shark-drawer-in {
-          from { transform: translateX(8px); opacity: 0; }
-          to   { transform: translateX(0);   opacity: 1; }
-        }
-      `}</style>
-
-      <PageHeader overallProgress={overall} onSkipAll={handleSkipAll}/>
-
-      <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
-        <PathTabs
-          active={state.activePath}
-          onChange={switchPath}
-          progress={progress}
-        />
-
-        {/* Active path block */}
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Toolbar — same rhythm as users.tsx */}
         <div style={{
-          marginTop: 20,
-          border: HAIRLINE,
-          borderRadius: 5,
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--hairline)',
+          display: 'flex', gap: 8, alignItems: 'center',
           background: 'var(--surface-0)',
-          overflow: 'hidden',
         }}>
+          <div style={{ display: 'flex', gap: 0 }}>
+            <TabBtn on={tab === 'proxy'} onClick={() => { setTab('proxy'); setSelectedId(null); }}>
+              Proxy + hosted UI
+            </TabBtn>
+            <TabBtn on={tab === 'sdk'} onClick={() => { setTab('sdk'); setSelectedId(null); }}>
+              SDK
+            </TabBtn>
+          </div>
+          <div style={{ flex: 1 }}/>
+          <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+            {done}/{total} done{skipped ? ` · ${skipped} skipped` : ''}
+          </span>
           <div style={{
-            padding: '14px 18px',
-            borderBottom: HAIRLINE,
-            background: 'var(--surface-0)',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 14,
+            width: 80, height: 4, background: 'var(--surface-2)',
+            borderRadius: 2, overflow: 'hidden',
           }}>
-            <div style={{
-              width: 28, height: 28,
-              border: HAIRLINE_STRONG,
-              borderRadius: 4,
-              background: 'var(--surface-2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              {activePath.icon}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4,
-              }}>
-                <span style={{
-                  fontFamily: 'var(--font-display)',
-                  fontWeight: 600,
-                  fontSize: 15,
-                  letterSpacing: '-0.01em',
-                }}>
-                  {activePath.title}
-                </span>
-                <span className="chip ghost" style={{ height: 18, fontSize: 10 }}>
-                  Active
-                </span>
-              </div>
-              <div style={{
-                fontSize: 12.5,
-                color: 'var(--fg-muted)',
-                lineHeight: 1.5,
-                maxWidth: '70ch',
-              }}>
-                {activePath.blurb}
-              </div>
-            </div>
-            <div style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10.5,
-              color: 'var(--fg-muted)',
-              padding: '4px 8px',
-              border: HAIRLINE,
-              borderRadius: 3,
-              background: 'var(--surface-1)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              flexShrink: 0,
-            }}>
-              <span>{activePath.cli}</span>
-              <CopyChip text={activePath.cli} label=""/>
-            </div>
+            <div style={{ width: pct + '%', height: '100%', background: 'var(--fg)' }}/>
           </div>
-
-          {/* Task list */}
-          <div>
-            {activePath.tasks.map((t, i) => {
-              const status = state[activePath.id][t.id] || null;
-              return (
-                <TaskRow
-                  key={t.id}
-                  task={t}
-                  status={status}
-                  index={i}
-                  onOpen={() => openTask(activePath.id, t.id)}
-                  onToggleDone={() => setTaskStatus(activePath.id, t.id, status === 'done' ? null : 'done')}
-                  onSkip={() => setTaskStatus(activePath.id, t.id, 'skipped')}
-                />
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Inactive path teaser — switch any time */}
-        <div style={{
-          marginTop: 16,
-          padding: '12px 16px',
-          border: HAIRLINE,
-          borderRadius: 4,
-          background: 'var(--surface-1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 14,
-        }}>
-          <div style={{
-            width: 22, height: 22,
-            border: HAIRLINE_STRONG,
-            borderRadius: 4,
-            background: 'var(--surface-2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            {inactivePath.icon}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: 12.5,
-              color: 'var(--fg-muted)',
-              lineHeight: 1.5,
-            }}>
-              <span style={{ color: 'var(--fg)', fontWeight: 500 }}>
-                Path {inactivePath.id === 'proxy' ? 'A' : 'B'} · {inactivePath.title}
-              </span>
-              {' '}— {inactivePath.subtitle}.
-              {inactiveProg.done > 0 && (
-                <> Progress saved: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)' }}>
-                  {inactiveProg.done}/{inactiveProg.total}
-                </span>.</>
-              )}
-            </div>
-          </div>
-          <button
-            className="btn sm"
-            onClick={() => switchPath(inactivePath.id)}
-            style={{ fontSize: 11 }}
-          >
-            Switch to {inactivePath.title} <Icon.ChevronRight width={10} height={10}/>
+          <button className="btn ghost sm" onClick={refreshChecks} title="Re-probe state">
+            <Icon.Refresh width={11} height={11}/>Recheck
+          </button>
+          <button className="btn sm" onClick={dismissOnboarding}>
+            Skip to dashboard
           </button>
         </div>
 
-        {/* Footer hints */}
+        {/* Sub-header — small framing line, no hero */}
         <div style={{
-          marginTop: 24,
-          padding: '14px 16px',
-          border: HAIRLINE,
-          borderRadius: 4,
+          padding: '7px 16px',
+          borderBottom: '1px solid var(--hairline)',
           background: 'var(--surface-0)',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: 14,
+          fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
         }}>
-          <FooterHint
-            icon={<Icon.Terminal width={12} height={12}/>}
-            title="Prefer the CLI?"
-            body={<>Run <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg)' }}>shark serve --dev</code> for an ephemeral instance with relaxed CORS and dev inbox.</>}
-          />
-          <FooterHint
-            icon={<Icon.Schema width={12} height={12}/>}
-            title="Need agent auth?"
-            body="Both paths support agent OAuth clients. Configure them under Agents once humans are flowing."
-          />
-          <FooterHint
-            icon={<Icon.Info width={12} height={12}/>}
-            title="Stuck on a step?"
-            body={<>Each task links to the page where it lives. Hit <Kbd>cmd</Kbd>+<Kbd>k</Kbd> to jump anywhere.</>}
-          />
+          {tab === 'proxy'
+            ? 'SharkAuth runs as a reverse proxy in front of your app. Auth happens at the edge — no SDK needed.'
+            : 'Embed SharkAuth in your own UI. Drop in the SDK, mount the provider, wire sign-in.'}
         </div>
+
+        {/* Task table */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <table className="tbl">
+            <thead style={{ background: 'var(--surface-0)' }}>
+              <tr>
+                <th style={{ width: 28, paddingLeft: 16, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}/>
+                <th style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Task</th>
+                <th style={{ width: 110, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Status</th>
+                <th style={{ width: 160, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Goes to</th>
+                <th style={{ width: 60, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}/>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((t, idx) => {
+                const status = tasks[t.id] || 'pending';
+                const auto = t.autoCheck && checks[t.autoCheck];
+                return (
+                  <tr key={t.id}
+                      className={selectedId === t.id ? 'active' : ''}
+                      onClick={() => setSelectedId(t.id)}
+                      style={{ cursor: 'pointer' }}>
+                    <td style={{ paddingLeft: 16 }}>
+                      <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, fontSize: 13 }}>{t.title}</div>
+                        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 560 }}>
+                          {t.summary}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="row" style={{ gap: 6 }}>
+                        <StatusDot status={status}/>
+                        <span style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.5, textTransform: 'capitalize' }}>{status}</span>
+                        {auto && status === 'done' && (
+                          <span className="faint mono" style={{ fontSize: 10, lineHeight: 1.5 }}>auto</span>
+                        )}
+                      </span>
+                    </td>
+                    <td>
+                      {t.pageLabel ? (
+                        <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{t.pageLabel}</span>
+                      ) : (
+                        <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>—</span>
+                      )}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <Icon.ChevronRight width={12} height={12} style={{ opacity: 0.5 }}/>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '8px 16px',
+          borderTop: '1px solid var(--hairline)',
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--surface-0)',
+          fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
+        }}>
+          <span>{pending} pending</span>
+          <span>·</span>
+          <span>{done} done</span>
+          {skipped > 0 && <><span>·</span><span>{skipped} skipped</span></>}
+          <div style={{ flex: 1 }}/>
+          <span className="faint">Status auto-syncs from /admin/proxy/status, /admin/apps, /admin/branding.</span>
+        </div>
+
+        <CLIFooter command="shark help"/>
       </div>
 
-      {state.drawer && drawerTask && (
+      {selected && (
         <TaskDrawer
-          pathId={state.drawer.pathId}
-          task={drawerTask}
-          status={drawerStatus}
-          ctx={ctx}
-          onClose={closeDrawer}
-          onMarkDone={() => setTaskStatus(state.drawer.pathId, state.drawer.taskId, drawerStatus === 'done' ? null : 'done')}
-          onSkip={() => setTaskStatus(state.drawer.pathId, state.drawer.taskId, 'skipped')}
-          onUnskip={() => setTaskStatus(state.drawer.pathId, state.drawer.taskId, null)}
-          onGoTo={(t) => { closeDrawer(); goTo(t); }}
+          task={selected}
+          status={tasks[selected.id] || 'pending'}
+          onClose={() => setSelectedId(null)}
+          onStatus={(s) => {
+            setStatus(selected.id, s);
+            if (s === 'done') toast.success('Marked done');
+            else if (s === 'skipped') toast.success('Skipped');
+            else if (s === null) toast.success('Reset');
+          }}
+          onGo={(p) => {
+            try { localStorage.setItem('shark_admin_onboarded', '1'); } catch {}
+            if (typeof setPage === 'function') setPage(p);
+          }}
         />
       )}
     </div>
   );
 }
 
-function FooterHint({ icon, title, body }) {
+// ─── Tab button — matches users.tsx slideover tab idiom ──────────────────────
+function TabBtn({ on, onClick, children }) {
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <div style={{
-        width: 22, height: 22,
-        border: HAIRLINE_STRONG,
-        borderRadius: 4,
-        background: 'var(--surface-2)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
-        color: 'var(--fg-muted)',
-      }}>
-        {icon}
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2 }}>{title}</div>
-        <div style={{ fontSize: 11.5, color: 'var(--fg-dim)', lineHeight: 1.5 }}>
-          {body}
+    <button
+      onClick={onClick}
+      style={{
+        padding: '6px 14px',
+        height: 28,
+        fontSize: 12, fontWeight: on ? 600 : 500,
+        background: on ? 'var(--surface-3)' : 'var(--surface-2)',
+        color: on ? 'var(--fg)' : 'var(--fg-muted)',
+        border: '1px solid var(--hairline-strong)',
+        borderRadius: 5,
+        marginRight: -1,
+        cursor: 'pointer',
+      }}
+    >{children}</button>
+  );
+}
+
+// ─── Drawer ──────────────────────────────────────────────────────────────────
+function TaskDrawer({ task, status, onClose, onStatus, onGo }) {
+  const toast = useToast();
+  // ESC closes
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const copy = async (text) => {
+    try { await navigator.clipboard.writeText(text); toast.success('Copied'); }
+    catch { toast.error('Copy failed'); }
+  };
+
+  return (
+    <div style={{
+      width: 420, borderLeft: '1px solid var(--hairline)',
+      background: 'var(--surface-0)',
+      display: 'flex', flexDirection: 'column',
+      flexShrink: 0,
+      animation: 'slideIn 140ms ease-out',
+    }}>
+      {/* Header */}
+      <div style={{ padding: 16, borderBottom: '1px solid var(--hairline)' }}>
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+          <button className="btn ghost sm" onClick={onClose}>
+            <Icon.X width={12} height={12}/>Close
+          </button>
+          <span className="faint mono" style={{ fontSize: 11 }}>{task.id}</span>
         </div>
+        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: 'var(--font-display)', lineHeight: 1.25 }}>
+          {task.title}
+        </div>
+        <div className="row" style={{ gap: 6, marginTop: 8 }}>
+          <StatusDot status={status}/>
+          <span style={{ fontSize: 12, color: 'var(--fg-muted)', textTransform: 'capitalize' }}>{status}</span>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        <Field label="What this does">
+          <div style={{ fontSize: 13, color: 'var(--fg-muted)', lineHeight: 1.55 }}>
+            {task.summary}
+          </div>
+        </Field>
+
+        {task.pageLabel && task.page && (
+          <div style={{ marginTop: 16 }}>
+            <Field label="Configure here">
+              <div style={{
+                padding: 10,
+                border: '1px solid var(--hairline-strong)',
+                borderRadius: 4,
+                background: 'var(--surface-1)',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13 }}>{task.pageLabel}</div>
+                  <div className="faint mono" style={{ fontSize: 11 }}>/admin/{task.page}</div>
+                </div>
+                <button className="btn sm" onClick={() => onGo(task.page)}>
+                  Open<Icon.External width={11} height={11}/>
+                </button>
+              </div>
+            </Field>
+          </div>
+        )}
+
+        {task.cli && (
+          <div style={{ marginTop: 16 }}>
+            <Field label="CLI">
+              <Snippet text={task.cli} onCopy={copy} mono/>
+            </Field>
+          </div>
+        )}
+
+        {task.code && (
+          <div style={{ marginTop: 16 }}>
+            <Field label="Code">
+              <Snippet text={task.code} onCopy={copy} mono multiline/>
+            </Field>
+          </div>
+        )}
+
+        {task.extraSnippets && task.extraSnippets.map(s => (
+          <div key={s.label} style={{ marginTop: 12 }}>
+            <Field label={s.label}>
+              <Snippet text={s.code} onCopy={copy} mono/>
+            </Field>
+          </div>
+        ))}
+
+        {task.autoCheck && (
+          <div style={{
+            marginTop: 16, padding: 8,
+            border: '1px solid var(--hairline)',
+            borderRadius: 4,
+            background: 'var(--surface-1)',
+            fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
+          }}>
+            <Icon.Info width={11} height={11} style={{ verticalAlign: 'middle', marginRight: 6, opacity: 0.7 }}/>
+            This task auto-completes once SharkAuth detects the corresponding state.
+          </div>
+        )}
+      </div>
+
+      {/* Footer actions */}
+      <div style={{
+        padding: 12, borderTop: '1px solid var(--hairline)',
+        display: 'flex', gap: 6, alignItems: 'center',
+        background: 'var(--surface-0)',
+      }}>
+        {status !== 'done' && (
+          <button className="btn primary sm" onClick={() => onStatus('done')}>
+            <Icon.Check width={11} height={11}/>Mark done
+          </button>
+        )}
+        {status !== 'skipped' && (
+          <button className="btn sm" onClick={() => onStatus('skipped')}>
+            Skip
+          </button>
+        )}
+        {status !== 'pending' && (
+          <button className="btn ghost sm" onClick={() => onStatus(null)}>
+            Reset
+          </button>
+        )}
+        <div style={{ flex: 1 }}/>
+        {task.page && (
+          <button className="btn sm" onClick={() => onGo(task.page)}>
+            Go<Icon.ChevronRight width={11} height={11}/>
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-export default GetStarted;
+function Field({ label, children }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 6, lineHeight: 1.5 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function Snippet({ text, onCopy, mono = true, multiline = false }) {
+  return (
+    <div style={{
+      position: 'relative',
+      border: '1px solid var(--hairline-strong)',
+      borderRadius: 4,
+      background: 'var(--surface-1)',
+      padding: multiline ? '10px 36px 10px 10px' : '6px 36px 6px 10px',
+      fontFamily: mono ? 'var(--font-mono)' : 'inherit',
+      fontSize: 12, lineHeight: 1.55,
+      color: 'var(--fg)',
+      whiteSpace: multiline ? 'pre' : 'nowrap',
+      overflowX: 'auto',
+    }}>
+      {text}
+      <button
+        onClick={() => onCopy(text)}
+        title="Copy"
+        style={{
+          position: 'absolute', top: 4, right: 4,
+          height: 22, width: 22,
+          background: 'transparent', border: '1px solid transparent',
+          color: 'var(--fg-muted)', cursor: 'pointer',
+          borderRadius: 3,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--hairline-strong)'; e.currentTarget.style.background = 'var(--surface-2)'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'transparent'; }}
+      >
+        <Icon.Copy width={11} height={11}/>
+      </button>
+    </div>
+  );
+}
