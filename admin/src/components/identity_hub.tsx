@@ -14,7 +14,9 @@ import { useToast } from './toast'
 const SECTIONS = [
   { id: 'methods',  label: 'Authentication methods' },
   { id: 'tokens',   label: 'Sessions & tokens' },
+  { id: 'sessions', label: 'Active sessions' },
   { id: 'mfa',      label: 'MFA' },
+  { id: 'sso',      label: 'SSO connections' },
   { id: 'oauth',    label: 'OAuth server' },
 ];
 
@@ -182,10 +184,26 @@ export function IdentityHub() {
   const { data: jwks } = useAPI(null); // load below via raw fetch — JWKS isn't behind /admin
   const [form, setForm] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
-  const [drawer, setDrawer] = React.useState(null); // { kind: 'provider'|'key', payload }
+  const [drawer, setDrawer] = React.useState(null); // { kind: 'provider'|'key'|'sso', payload }
   const [keys, setKeys] = React.useState([]);
   const [keysLoading, setKeysLoading] = React.useState(true);
   const [keysTick, setKeysTick] = React.useState(0);
+
+  // Active sessions — admin list
+  const [sessions, setSessions] = React.useState([]);
+  const [sessionsLoading, setSessionsLoading] = React.useState(true);
+  const [sessionsTick, setSessionsTick] = React.useState(0);
+
+  // SSO connections
+  const [ssoConns, setSsoConns] = React.useState([]);
+  const [ssoLoading, setSsoLoading] = React.useState(true);
+  const [ssoTick, setSsoTick] = React.useState(0);
+
+  // OAuth device codes
+  const [deviceCodes, setDeviceCodes] = React.useState([]);
+  const [deviceCodesLoading, setDeviceCodesLoading] = React.useState(true);
+  const [deviceCodesTick, setDeviceCodesTick] = React.useState(0);
+
   const toast = useToast();
 
   // Initialise form once /admin/config resolves. Deep-clone so edits stay
@@ -260,6 +278,30 @@ export function IdentityHub() {
       .catch(() => { setKeys([]); setKeysLoading(false); });
   }, [keysTick]);
 
+  // Admin session list — GET /api/v1/admin/sessions?limit=50
+  React.useEffect(() => {
+    setSessionsLoading(true);
+    API.get('/admin/sessions?limit=50')
+      .then(j => { setSessions(j?.data || []); setSessionsLoading(false); })
+      .catch(() => { setSessions([]); setSessionsLoading(false); });
+  }, [sessionsTick]);
+
+  // SSO connections — GET /sso/connections
+  React.useEffect(() => {
+    setSsoLoading(true);
+    API.get('/sso/connections')
+      .then(j => { setSsoConns(Array.isArray(j) ? j : (j?.data || [])); setSsoLoading(false); })
+      .catch(() => { setSsoConns([]); setSsoLoading(false); });
+  }, [ssoTick]);
+
+  // Device codes — GET /api/v1/admin/oauth/device-codes (pending only)
+  React.useEffect(() => {
+    setDeviceCodesLoading(true);
+    API.get('/admin/oauth/device-codes')
+      .then(j => { setDeviceCodes(j?.data || []); setDeviceCodesLoading(false); })
+      .catch(() => { setDeviceCodes([]); setDeviceCodesLoading(false); });
+  }, [deviceCodesTick]);
+
   if (loading || !form) {
     return <div className="faint" style={{ padding: 24, fontSize: 13 }}>Loading identity…</div>;
   }
@@ -299,6 +341,7 @@ export function IdentityHub() {
           ttl: form.password_reset.ttl,
         },
         jwt: {
+          lifetime: form.jwt.lifetime,
           issuer:   form.jwt.issuer,
           audience: form.jwt.audience,
         },
@@ -365,6 +408,57 @@ export function IdentityHub() {
   };
 
   const openProvider = (id, label) => setDrawer({ kind: 'provider', id, label });
+
+  // Session actions
+  const revokeSession = async (id) => {
+    if (!window.confirm('Revoke this session?')) return;
+    try {
+      await API.del('/admin/sessions/' + id);
+      toast.success('Session revoked');
+      setSessionsTick(t => t + 1);
+    } catch (e) { toast.error('Revoke failed: ' + (e?.message || 'unknown')); }
+  };
+  const revokeAllSessions = async () => {
+    if (!window.confirm('Revoke ALL active sessions? Users will be signed out immediately.')) return;
+    try {
+      const r = await API.del('/admin/sessions');
+      toast.success('Revoked ' + (r?.revoked ?? '?') + ' sessions');
+      setSessionsTick(t => t + 1);
+    } catch (e) { toast.error('Bulk revoke failed: ' + (e?.message || 'unknown')); }
+  };
+  const purgeExpiredSessions = async () => {
+    try {
+      const r = await API.post('/admin/sessions/purge-expired');
+      toast.success('Purged ' + (r?.deleted ?? '?') + ' expired sessions');
+      setSessionsTick(t => t + 1);
+    } catch (e) { toast.error('Purge failed: ' + (e?.message || 'unknown')); }
+  };
+
+  // SSO connection actions
+  const deleteSsoConn = async (id) => {
+    if (!window.confirm('Delete this SSO connection?')) return;
+    try {
+      await API.del('/sso/connections/' + id);
+      toast.success('SSO connection deleted');
+      setSsoTick(t => t + 1);
+    } catch (e) { toast.error('Delete failed: ' + (e?.message || 'unknown')); }
+  };
+
+  // Device code actions
+  const approveDeviceCode = async (userCode) => {
+    try {
+      await API.post('/admin/oauth/device-codes/' + userCode + '/approve');
+      toast.success('Device code approved');
+      setDeviceCodesTick(t => t + 1);
+    } catch (e) { toast.error('Approve failed: ' + (e?.message || 'unknown')); }
+  };
+  const denyDeviceCode = async (userCode) => {
+    try {
+      await API.post('/admin/oauth/device-codes/' + userCode + '/deny');
+      toast.success('Device code denied');
+      setDeviceCodesTick(t => t + 1);
+    } catch (e) { toast.error('Deny failed: ' + (e?.message || 'unknown')); }
+  };
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -669,6 +763,65 @@ export function IdentityHub() {
                 </ConfigRow>
               </SectionCard>
 
+              {/* ── Active sessions ───────────────────────────────────── */}
+              <SectionCard
+                id="sessions"
+                title="Active sessions"
+                sub="All sessions across all users. Revoke individually or flush all."
+                right={
+                  <div className="row" style={{ gap: 6 }}>
+                    <button className="btn ghost sm" onClick={() => setSessionsTick(t => t + 1)}>
+                      <Icon.Refresh width={11} height={11}/>Refresh
+                    </button>
+                    <button className="btn ghost sm" onClick={purgeExpiredSessions}>
+                      Purge expired
+                    </button>
+                    <button className="btn sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={revokeAllSessions}>
+                      Revoke all
+                    </button>
+                  </div>
+                }
+              >
+                {sessionsLoading && (
+                  <div className="faint" style={{ padding: '12px 14px', fontSize: 12 }}>Loading sessions…</div>
+                )}
+                {!sessionsLoading && sessions.length === 0 && (
+                  <div className="faint" style={{ padding: '12px 14px', fontSize: 12 }}>No active sessions</div>
+                )}
+                {!sessionsLoading && sessions.map((s, i) => (
+                  <div key={s.id || i} className="row" style={{
+                    padding: '8px 14px', gap: 10,
+                    borderBottom: i === sessions.length - 1 ? 'none' : '1px solid var(--hairline)',
+                    minHeight: 36,
+                  }}>
+                    <Dot tone="success"/>
+                    <span className="mono faint" style={{ fontSize: 10.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>
+                      {s.id ? s.id.slice(0, 24) : '—'}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--fg-muted)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {s.user_email || s.user_id || '—'}
+                    </span>
+                    {s.auth_method && (
+                      <span className="chip" style={{ height: 17, fontSize: 10 }}>{s.auth_method}</span>
+                    )}
+                    {s.mfa_passed && (
+                      <span className="chip" style={{ height: 17, fontSize: 10 }}>mfa</span>
+                    )}
+                    <span className="faint" style={{ fontSize: 10.5 }}>
+                      {s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}
+                    </span>
+                    <button className="btn ghost sm" onClick={() => revokeSession(s.id)}>
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+                {!sessionsLoading && sessions.length === 50 && (
+                  <div className="faint" style={{ padding: '8px 14px', fontSize: 11, borderTop: '1px solid var(--hairline)' }}>
+                    Showing first 50 sessions — use filters via API for full list
+                  </div>
+                )}
+              </SectionCard>
+
               {/* ── MFA ────────────────────────────────────────────────── */}
               <SectionCard
                 id="mfa"
@@ -702,6 +855,58 @@ export function IdentityHub() {
                     onChange={v => upd('mfa.recovery_codes', v)}
                   />
                 </ConfigRow>
+              </SectionCard>
+
+              {/* ── SSO connections ───────────────────────────────────── */}
+              <SectionCard
+                id="sso"
+                title="SSO connections"
+                sub="SAML and OIDC enterprise connections. Create via API; manage here."
+                right={
+                  <div className="row" style={{ gap: 6 }}>
+                    <button className="btn ghost sm" onClick={() => setSsoTick(t => t + 1)}>
+                      <Icon.Refresh width={11} height={11}/>Refresh
+                    </button>
+                  </div>
+                }
+              >
+                {ssoLoading && (
+                  <div className="faint" style={{ padding: '12px 14px', fontSize: 12 }}>Loading connections…</div>
+                )}
+                {!ssoLoading && ssoConns.length === 0 && (
+                  <div className="faint" style={{ padding: '12px 14px', fontSize: 12 }}>
+                    No SSO connections — create via <span className="mono">POST /sso/connections</span>
+                  </div>
+                )}
+                {!ssoLoading && ssoConns.map((c, i) => (
+                  <div key={c.id || i} className="row" style={{
+                    padding: '8px 14px', gap: 10,
+                    borderBottom: i === ssoConns.length - 1 ? 'none' : '1px solid var(--hairline)',
+                    minHeight: 36,
+                    cursor: 'pointer',
+                  }} onClick={() => setDrawer({ kind: 'sso', payload: c })}>
+                    <Dot tone={c.enabled ? 'success' : 'fg-dim'}/>
+                    <span style={{ fontSize: 13, fontWeight: 500, minWidth: 80 }}>{c.name || c.id}</span>
+                    <span className="chip" style={{ height: 17, fontSize: 10 }}>{c.protocol || '—'}</span>
+                    {c.domain && (
+                      <span className="mono faint" style={{ fontSize: 10.5, flex: 1 }}>{c.domain}</span>
+                    )}
+                    <span style={{ flex: 1 }}/>
+                    <button
+                      className="btn ghost sm"
+                      onClick={e => { e.stopPropagation(); setDrawer({ kind: 'sso', payload: c }); }}
+                    >
+                      Inspect
+                    </button>
+                    <button
+                      className="btn ghost sm"
+                      style={{ color: 'var(--danger)' }}
+                      onClick={e => { e.stopPropagation(); deleteSsoConn(c.id); }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
               </SectionCard>
 
               {/* ── OAuth server ──────────────────────────────────────── */}
@@ -743,12 +948,48 @@ export function IdentityHub() {
                     disabled={!form.oauth_server.enabled}
                   />
                 </ConfigRow>
-                <ConfigRow label="DPoP requirement" hint="Bind tokens to client key" last>
+                <ConfigRow label="DPoP requirement" hint="Bind tokens to client key">
                   <Toggle
                     on={!!form.oauth_server.require_dpop}
                     onChange={v => upd('oauth_server.require_dpop', v)}
                     disabled={!form.oauth_server.enabled}
                   />
+                </ConfigRow>
+                <ConfigRow label="Device code queue" hint="Pending authorization requests" last>
+                  <div className="row" style={{ gap: 6, marginBottom: 6 }}>
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+                      {deviceCodesLoading ? 'loading…' : `${deviceCodes.length} pending`}
+                    </span>
+                    <span style={{ flex: 1 }}/>
+                    <button className="btn ghost sm" onClick={() => setDeviceCodesTick(t => t + 1)}>
+                      <Icon.Refresh width={11} height={11}/>Refresh
+                    </button>
+                  </div>
+                  {!deviceCodesLoading && deviceCodes.length > 0 && (
+                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 4, overflow: 'hidden' }}>
+                      {deviceCodes.map((dc, i) => (
+                        <div key={dc.user_code || i} className="row" style={{
+                          padding: '7px 10px', gap: 10,
+                          borderBottom: i === deviceCodes.length - 1 ? 'none' : '1px solid var(--hairline)',
+                        }}>
+                          <span className="mono" style={{ fontSize: 11, color: 'var(--fg)', minWidth: 90 }}>{dc.user_code || '—'}</span>
+                          <span style={{ fontSize: 11, color: 'var(--fg-muted)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {dc.agent_name || dc.client_id || '—'}
+                          </span>
+                          <span className="chip" style={{ height: 17, fontSize: 10 }}>{dc.status || 'pending'}</span>
+                          <button className="btn ghost sm" style={{ color: 'var(--success)' }} onClick={() => approveDeviceCode(dc.user_code)}>
+                            Approve
+                          </button>
+                          <button className="btn ghost sm" style={{ color: 'var(--danger)' }} onClick={() => denyDeviceCode(dc.user_code)}>
+                            Deny
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!deviceCodesLoading && deviceCodes.length === 0 && (
+                    <div className="faint" style={{ fontSize: 11 }}>No pending device codes</div>
+                  )}
                 </ConfigRow>
               </SectionCard>
 
@@ -770,6 +1011,12 @@ export function IdentityHub() {
       {drawer?.kind === 'key' && (
         <KeyDrawer
           jwk={drawer.payload}
+          onClose={() => setDrawer(null)}
+        />
+      )}
+      {drawer?.kind === 'sso' && (
+        <SSODrawer
+          conn={drawer.payload}
           onClose={() => setDrawer(null)}
         />
       )}
@@ -941,6 +1188,87 @@ function ProviderDrawer({ providerId, label, form, onChange, onClose }) {
           background: 'var(--surface-0)',
         }}>
           <button className="btn sm" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// SSODrawer — inspect a SAML/OIDC connection. Read-only; config is done via
+// API since connection fields (certs, entity IDs) are complex and operator-set
+// at provisioning time. Drawer matches KeyDrawer field-table pattern.
+function SSODrawer({ conn, onClose }) {
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const fields = [
+    ['id',       conn?.id],
+    ['protocol', conn?.protocol],
+    ['name',     conn?.name],
+    ['domain',   conn?.domain],
+    ['enabled',  conn?.enabled != null ? String(conn.enabled) : undefined],
+    ['issuer',   conn?.issuer],
+    ['sso_url',  conn?.sso_url],
+    ['entity_id',conn?.entity_id],
+    ['client_id',conn?.client_id],
+    ['discovery_url', conn?.discovery_url],
+  ].filter(([, v]) => v != null && v !== '');
+
+  return (
+    <>
+      <div onClick={onClose}
+           style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.35)' }}/>
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0,
+        width: 480, maxWidth: '100vw',
+        zIndex: 41,
+        borderLeft: '1px solid var(--hairline)',
+        background: 'var(--surface-0)',
+        display: 'flex', flexDirection: 'column',
+        animation: 'slideIn 140ms ease-out',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: 16, borderBottom: '1px solid var(--hairline)' }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+            <button className="btn ghost sm" onClick={onClose}><Icon.X width={12} height={12}/>Close</button>
+            <span className="faint mono" style={{ fontSize: 11 }}>sso connection</span>
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', fontFamily: 'var(--font-display)', lineHeight: 1.2 }}>
+            {conn?.name || conn?.id || 'SSO Connection'}
+          </div>
+          <div className="row" style={{ gap: 6, marginTop: 6 }}>
+            {conn?.protocol && <span className="chip">{conn.protocol}</span>}
+            {conn?.enabled != null && <span className="chip"><Dot tone={conn.enabled ? 'success' : 'fg-dim'}/>&nbsp;{conn.enabled ? 'enabled' : 'disabled'}</span>}
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          <div style={{ border: '1px solid var(--hairline)', borderRadius: 4, background: 'var(--surface-1)' }}>
+            {fields.map(([k, v], i) => (
+              <div key={k} className="row" style={{
+                padding: '7px 10px', gap: 10,
+                borderBottom: i === fields.length - 1 ? 'none' : '1px solid var(--hairline)',
+              }}>
+                <span style={{
+                  fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
+                  color: 'var(--fg-muted)', minWidth: 80,
+                }}>{k}</span>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--fg)', flex: 1, minWidth: 0, wordBreak: 'break-all' }}>{String(v)}</span>
+                <CopyField value={String(v)} truncate={0}/>
+              </div>
+            ))}
+          </div>
+          <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 12 }}>
+            To update or delete this connection use the admin API: <span className="mono">PATCH /sso/connections/{conn?.id}</span>
+          </div>
+        </div>
+        <div style={{
+          padding: 12, borderTop: '1px solid var(--hairline)',
+          display: 'flex', justifyContent: 'flex-end', gap: 8,
+          background: 'var(--surface-0)',
+        }}>
+          <button className="btn sm" onClick={onClose}>Close</button>
         </div>
       </div>
     </>
