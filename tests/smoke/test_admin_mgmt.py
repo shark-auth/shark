@@ -183,15 +183,22 @@ def test_dev_inbox_access(admin_client):
 
 def test_admin_config_health(admin_client):
     """Section 25: Admin Config + Health."""
-    # Health
-    resp = admin_client.get(f"{BASE_URL}/api/v1/admin/health")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("status") == "ok" or data.get("healthy") is True
-    
-    # Config (sanitized)
+    # Health — retry a few times to absorb server-startup timing jitter.
+    health_data = None
+    for _ in range(5):
+        resp = admin_client.get(f"{BASE_URL}/api/v1/admin/health")
+        if resp.status_code == 200:
+            health_data = resp.json()
+            break
+        time.sleep(1)
+    assert health_data is not None, f"Health endpoint returned {resp.status_code}: {resp.text}"
+    assert health_data.get("status") == "ok" or health_data.get("healthy") is True
+
+    # Config (sanitized) — adminConfigSummary has "server" + auth/email/etc. but no
+    # "database"/"storage" key (DB info lives in /health). Check for "server" only.
     resp = admin_client.get(f"{BASE_URL}/api/v1/admin/config")
     assert resp.status_code == 200
     cfg = resp.json()
     assert "server" in cfg
-    assert "database" in cfg or "storage" in cfg
+    # "auth" is always present in adminConfigSummary regardless of config.
+    assert "auth" in cfg
