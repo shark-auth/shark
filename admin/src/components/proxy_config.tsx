@@ -9,7 +9,8 @@ import { ProxyWizard } from './proxy_wizard'
 // Proxy Gateway — sibling page to users.tsx.
 // Monochrome, square (radius cap 5px / inputs 4px), hairline borders,
 // 13px base, dense 7-10px row padding. Drawers are right-side fixed
-// hairline-bordered panels — never modals. YAML UI removed entirely.
+// hairline-bordered panels — never modals. Rules live in DB; YAML import
+// was a one-shot CLI migration (pre-W17) and is no longer surfaced here.
 
 // ─── Require grammar validator ────────────────────────────────────────────────
 
@@ -137,8 +138,8 @@ function useProxyStatus(enabled: boolean) {
 
 // ─── Compiled engine rules view (read-only) ──────────────────────────────────
 // /admin/proxy/rules returns the *compiled* rules — what the engine actually
-// loaded after parsing the DB rules + any boot-time YAML. Useful for verifying
-// a DB write made it through and for spotting compile-time drops.
+// loaded from the DB. Useful for verifying a DB write made it through and
+// for spotting compile-time drops.
 
 function useCompiledRules(enabled: boolean) {
   const [rules, setRules] = React.useState<any[] | null>(null);
@@ -389,6 +390,42 @@ function InlineToggle({ on, busy, onChange, title }) {
   );
 }
 
+// ─── Enable Proxy button ─────────────────────────────────────────────────────
+
+function EnableProxyButton({ onEnabled }: { onEnabled: () => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = React.useState(false);
+
+  async function handleEnable() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await API.patch('/admin/config', { proxy: { enabled: true } });
+      toast.success('Proxy Gateway enabled');
+      onEnabled();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to enable proxy');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      className="btn"
+      style={{
+        fontSize: 13, padding: '7px 16px', borderRadius: 4,
+        opacity: busy ? 0.5 : 1, cursor: busy ? 'not-allowed' : 'pointer',
+        marginBottom: 16,
+      }}
+      onClick={handleEnable}
+      disabled={busy}
+    >
+      {busy ? 'Enabling…' : 'Enable Proxy Gateway'}
+    </button>
+  );
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function Proxy() {
@@ -418,8 +455,9 @@ export function Proxy() {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
         <div className="faint" style={{ fontSize: 13, marginBottom: 16 }}>
-          Proxy Gateway disabled. Enable proxy in sharkauth.yaml.
+          Proxy Gateway is not enabled.
         </div>
+        <EnableProxyButton onEnabled={() => lifecycle.refresh()}/>
         <div style={{ maxWidth: 500, margin: '24px auto' }}>
           <ProxyWizard onComplete={() => lifecycle.refresh()}/>
         </div>

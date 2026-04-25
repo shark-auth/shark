@@ -251,7 +251,7 @@ function OrgDetail({ org, onRefresh }) {
         {tab === 'members' && <OrgMembersTab org={org} members={members} loading={membersLoading} onRefresh={membersRefresh}/>}
         {tab === 'invitations' && <OrgInvitationsTab org={org}/>}
         {tab === 'roles' && <OrgRolesTab org={org} roles={roles} loading={rolesLoading} onRefresh={rolesRefresh}/>}
-        {tab === 'sso' && <OrgSSOTab org={org}/>}
+        {tab === 'sso' && <OrgSSOTab org={org} onRefresh={onRefresh}/>}
         {tab === 'audit' && <OrgAuditTab org={org}/>}
         {tab === 'settings' && <OrgSettingsTab org={org} onRefresh={onRefresh}/>}
       </div>
@@ -694,17 +694,45 @@ function OrgInvitationsTab({ org }) {
   );
 }
 
-function OrgSSOTab({ org }) {
+function OrgSSOTab({ org, onRefresh }) {
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  async function toggleSSO() {
+    setSaving(true);
+    setErr(null);
+    try {
+      await API.patch('/admin/organizations/' + org.id, { sso_required: !org.sso_required });
+      onRefresh();
+    } catch (e: any) {
+      setErr(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div style={{ padding: 4 }}>
       <div style={{ marginBottom: 12 }}>
-        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 500 }}>Require SSO</span>
-          <span className="chip" style={{ height: 18, fontSize: 10 }}>{org.sso_required ? 'enforced' : 'optional'}</span>
+        <div className="row" style={{ gap: 8, marginBottom: 8, justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 3 }}>Require SSO</div>
+            <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+              When enforced, members must authenticate via SSO. Password/magic-link login disabled for this org.
+            </div>
+          </div>
+          <button
+            className="btn sm"
+            style={{ flexShrink: 0, fontSize: 11, opacity: saving ? 0.5 : 1 }}
+            onClick={toggleSSO}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : org.sso_required ? 'Disable SSO' : 'Enforce SSO'}
+          </button>
         </div>
-        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-          When enforced, members must authenticate via SSO. Password/magic-link login disabled for this org.
-          Edit via <span className="mono">sharkauth.yaml</span> or API.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="chip" style={{ height: 18, fontSize: 10 }}>{org.sso_required ? 'enforced' : 'optional'}</span>
+          {err && <span style={{ fontSize: 11, color: 'var(--danger)' }}>{err}</span>}
         </div>
       </div>
       {org.sso_domain && (
@@ -716,7 +744,7 @@ function OrgSSOTab({ org }) {
       )}
       {!org.sso_domain && (
         <div className="faint" style={{ fontSize: 11, padding: '8px 0', borderTop: '1px solid var(--hairline)' }}>
-          No SSO domain bound. Bind one to auto-route logins: <span className="mono">shark org update --sso-domain example.com</span>
+          No SSO domain bound. Bind one via the API: <span className="mono">PATCH /admin/organizations/{'{id}'}</span> with <span className="mono">sso_domain</span>.
         </div>
       )}
     </div>
