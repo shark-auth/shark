@@ -154,11 +154,14 @@ def test_w15_multi_listener_isolation(toy_upstreams, tmp_path):
 
     try:
         admin_base = f"http://127.0.0.1:{p_admin}"
-        if not wait_for_health(f"{admin_base}/healthz"):
+        # 30 s instead of 15 s — Windows SQLite bootstrap + listener bind can
+        # take several seconds, especially when multiple shark instances are
+        # running concurrently in CI or during a full pytest session.
+        if not wait_for_health(f"{admin_base}/healthz", timeout=30):
             with open(log_path) as f:
                 pytest.fail(f"admin port failed to come up: {f.read()}")
-        assert wait_for_port(p_proxy_a), "proxy A listener never bound"
-        assert wait_for_port(p_proxy_b), "proxy B listener never bound"
+        assert wait_for_port(p_proxy_a, timeout=20), "proxy A listener never bound"
+        assert wait_for_port(p_proxy_b, timeout=20), "proxy B listener never bound"
 
         # Scrape the admin key from the server log.
         admin_key = None
