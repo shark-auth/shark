@@ -114,11 +114,11 @@ export function ApiKeys() {
             </div>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{revealKey}</span>
           </div>
-          <button className="btn ghost sm" style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.25)', flexShrink: 0 }}
+          <button className="btn ghost sm" style={{ color: 'var(--fg)', borderColor: 'var(--hairline-strong)', flexShrink: 0 }}
             onClick={() => navigator.clipboard?.writeText(revealKey)}>
             <Icon.Copy width={10} height={10}/> Copy
           </button>
-          <button className="btn ghost sm" style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.25)', flexShrink: 0 }}
+          <button className="btn ghost sm" style={{ color: 'var(--fg)', borderColor: 'var(--hairline-strong)', flexShrink: 0 }}
             onClick={() => setRevealKey(null)}>
             I've saved it
           </button>
@@ -171,7 +171,7 @@ export function ApiKeys() {
             <div className="seg" style={segStyle}>
               {[['all','All'],['active','Active'],['expiring','Expiring'],['revoked','Revoked']].map(([v,l]) => (
                 <button key={v} onClick={() => setFilter(v)}
-                  style={{...segBtn, background: filter===v ? '#fafafa':'var(--surface-2)', color: filter===v ? '#000':'var(--fg-muted)'}}>
+                  style={{...segBtn, background: filter===v ? 'var(--surface-3)':'var(--surface-2)', color: filter===v ? 'var(--fg)':'var(--fg-muted)'}}>
                   {l}
                 </button>
               ))}
@@ -363,10 +363,10 @@ function KeyDetail({ k, onClose, onRotate, onRevoke, onUpdate }) {
       <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--hairline)' }}>
         <div className="row" style={{ gap: 10 }}>
           <div style={{
-            width: 28, height: 28, background: '#000', borderRadius: 4,
+            width: 28, height: 28, background: 'var(--surface-3)', borderRadius: 0,
             display:'flex', alignItems:'center', justifyContent:'center',
           }}>
-            <Icon.Key width={14} height={14} style={{color:'#fff'}}/>
+            <Icon.Key width={14} height={14} style={{color:'var(--fg)'}}/>
           </div>
           <div style={{flex:1, minWidth:0}}>
             <div style={{fontWeight: 500, fontSize: 14}}>{k.name}</div>
@@ -477,11 +477,11 @@ function CurlSnippet({ keyPrefix, scopes }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 6,
       padding: '6px 8px', borderRadius: 4,
-      background: '#000', fontFamily: 'var(--font-mono)',
+      background: 'var(--surface-3)', fontFamily: 'var(--font-mono)',
       fontSize: 10.5, color: 'var(--fg-muted)', lineHeight: 1.4,
     }}>
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd}</span>
-      <button className="btn ghost icon sm" style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.2)' }}
+      <button className="btn ghost icon sm" style={{ color: 'var(--fg)', borderColor: 'var(--hairline-strong)' }}
         onClick={() => { navigator.clipboard?.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 900); }}>
         {copied ? <Icon.Check width={10} height={10} style={{color:'var(--success)'}}/> : <Icon.Copy width={10} height={10}/>}
       </button>
@@ -591,7 +591,7 @@ function CreateKeyModal({ onClose, onCreate }) {
           <div className="seg" style={{...segStyle, width: '100%'}}>
             {[['30d','30d'],['90d','90d'],['1y','1y'],['never','never']].map(([v,l]) => (
               <button key={v} onClick={() => setExpires(v)}
-                style={{...segBtn, flex:1, padding: '6px 10px', background: expires===v ? '#fafafa':'var(--surface-2)', color: expires===v ? '#000':'var(--fg-muted)'}}>
+                style={{...segBtn, flex:1, padding: '6px 10px', background: expires===v ? 'var(--surface-3)':'var(--surface-2)', color: expires===v ? 'var(--fg)':'var(--fg-muted)'}}>
                 {l}
               </button>
             ))}
@@ -659,7 +659,7 @@ function RotateKeyModal({ k, onClose, onRotate }) {
           <div className="seg" style={{...segStyle, width: '100%'}}>
             {[['1h','1h'],['24h','24h'],['7d','7d'],['0','Immediate']].map(([v,l]) => (
               <button key={v} onClick={() => setGrace(v)}
-                style={{...segBtn, flex:1, padding: '6px 10px', background: grace===v ? '#fafafa':'var(--surface-2)', color: grace===v ? '#000':'var(--fg-muted)'}}>
+                style={{...segBtn, flex:1, padding: '6px 10px', background: grace===v ? 'var(--surface-3)':'var(--surface-2)', color: grace===v ? 'var(--fg)':'var(--fg-muted)'}}>
                 {l}
               </button>
             ))}

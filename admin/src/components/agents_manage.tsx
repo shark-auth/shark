@@ -801,9 +801,9 @@ function CreateAgentSlideOver({ onClose, onCreate }) {
               {created.client_secret && (
                 <div>
                   <div className="faint" style={{fontSize: 11, marginBottom: 6}}>Client Secret (shown once)</div>
-                  <div style={{background:'#000', color:'#fff', padding: 14, borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak:'break-all', position:'relative', paddingRight: 80}}>
+                  <div style={{background:'var(--surface-3)', color:'var(--fg)', padding: 14, borderRadius: 0, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak:'break-all', position:'relative', paddingRight: 80}}>
                     {created.client_secret}
-                    <button className="btn ghost sm" style={{position:'absolute', top: 6, right: 6, color:'#fff', borderColor:'rgba(255,255,255,0.2)'}}
+                    <button className="btn ghost sm" style={{position:'absolute', top: 6, right: 6, color:'var(--fg)', borderColor:'var(--hairline-strong)'}}
                       onClick={() => navigator.clipboard.writeText(created.client_secret)}>
                       <Icon.Copy width={10} height={10}/> Copy
                     </button>
@@ -925,9 +925,9 @@ function RotateSecretModal({ agent, onClose }) {
             <p className="faint" style={{fontSize: 12, marginTop: 6, lineHeight: 1.5}}>
               Copy it now — it won't be shown again.
             </p>
-            <div style={{background:'#000', color:'#fff', padding: 14, borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak:'break-all', position:'relative', paddingRight: 80, marginTop: 12}}>
+            <div style={{background:'var(--surface-3)', color:'var(--fg)', padding: 14, borderRadius: 0, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak:'break-all', position:'relative', paddingRight: 80, marginTop: 12}}>
               {newSecret}
-              <button className="btn ghost sm" style={{position:'absolute', top: 6, right: 6, color:'#fff', borderColor:'rgba(255,255,255,0.2)'}}
+              <button className="btn ghost sm" style={{position:'absolute', top: 6, right: 6, color:'var(--fg)', borderColor:'var(--hairline-strong)'}}
                 onClick={() => navigator.clipboard.writeText(newSecret)}>
                 <Icon.Copy width={10} height={10}/> Copy
               </button>
