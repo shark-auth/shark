@@ -15,9 +15,11 @@ import { usePageActions } from './useKeyboardShortcuts'
 const SECTIONS = [
   { id: 'server',       label: 'Server',         desc: 'Base URL, CORS, port' },
   { id: 'tokens',       label: 'Sessions & Tokens', desc: 'Cookie + JWT lifetimes, signing key' },
+  { id: 'auth_policy',  label: 'Auth Policy',    desc: 'Password rules, magic links, password reset' },
   { id: 'email',        label: 'Email Delivery', desc: 'Provider, sender, test send' },
   { id: 'oauth',        label: 'OAuth Providers', desc: 'Per-provider credentials' },
-  { id: 'audit',        label: 'Audit & Data',   desc: 'Retention, purge' },
+  { id: 'webhooks',     label: 'Webhooks',       desc: 'Outbound event subscriptions' },
+  { id: 'audit',        label: 'Audit & Data',   desc: 'Retention, purge, export' },
   { id: 'maintenance',  label: 'Maintenance',    desc: 'Sessions + audit cleanup' },
 ];
 
@@ -278,6 +280,10 @@ export function Settings() {
   const [drawer, setDrawer] = React.useState(null);
   const [rotating, setRotating] = React.useState(false);
 
+  const { data: webhooksData, refresh: refreshWebhooks } = useAPI('/admin/webhooks');
+  const webhooks = webhooksData?.webhooks ?? [];
+  const [webhookDrawer, setWebhookDrawer] = React.useState(null); // null | 'create' | <webhook object>
+
   // Initialize editable form from config payload. Sentinels:
   //  - email.api_key === '********' means "set, masked".
   React.useEffect(() => {
@@ -289,11 +295,21 @@ export function Settings() {
         cors_origins: config.server?.cors_origins ?? config.cors_origins ?? [],
       },
       auth: {
-        session_lifetime: config.auth?.session_lifetime || '30d',
+        session_lifetime:    config.auth?.session_lifetime || '30d',
+        password_min_length: config.auth?.password_min_length ?? 8,
       },
       jwt: {
         // NO mode toggle. Cookie + JWT both always on.
         lifetime: config.jwt?.lifetime || config.jwt?.access_token_ttl || '15m',
+      },
+      magic_link: {
+        ttl: config.magic_link?.ttl || '15m',
+      },
+      password_reset: {
+        ttl: config.password_reset?.ttl || '1h',
+      },
+      social: {
+        redirect_url: config.social?.redirect_url || '',
       },
       email: {
         provider:  config.email?.provider || 'shark',
@@ -330,8 +346,11 @@ export function Settings() {
         port: config.server?.port ?? '',
         cors_origins: config.server?.cors_origins ?? config.cors_origins ?? [],
       },
-      auth:   { session_lifetime: config.auth?.session_lifetime || '30d' },
-      jwt:    { lifetime: config.jwt?.lifetime || config.jwt?.access_token_ttl || '15m' },
+      auth:           { session_lifetime: config.auth?.session_lifetime || '30d', password_min_length: config.auth?.password_min_length ?? 8 },
+      jwt:            { lifetime: config.jwt?.lifetime || config.jwt?.access_token_ttl || '15m' },
+      magic_link:     { ttl: config.magic_link?.ttl || '15m' },
+      password_reset: { ttl: config.password_reset?.ttl || '1h' },
+      social:         { redirect_url: config.social?.redirect_url || '' },
       email:  {
         provider: config.email?.provider || 'shark',
         api_key: config.email?.api_key || '',
@@ -353,6 +372,8 @@ export function Settings() {
       const payload = deepClone(form);
       // Don't echo the masked sentinel back — backend interprets unchanged.
       if (payload.email?.api_key === '********') delete payload.email.api_key;
+      // Remove empty social.redirect_url to avoid overwriting with blank.
+      if (payload.social?.redirect_url === '') delete payload.social;
       await API.patch('/admin/config', payload);
       toast.success('Configuration saved');
       refresh();
@@ -519,6 +540,24 @@ export function Settings() {
             </div>
           </Section>
 
+          {/* Auth Policy */}
+          <Section id="auth_policy" title="Auth Policy" desc="Password requirements, magic-link expiry, password-reset window" onSection={setActive}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Field label="Min password length" hint="Characters required for new passwords (min 6)">
+                <Input value={form.auth.password_min_length} type="number" mono
+                  onChange={(v) => set('auth.password_min_length', v)} placeholder="8" width={100}/>
+              </Field>
+              <Field label="Magic-link TTL" hint="How long a magic-link sign-in link stays valid">
+                <Input value={form.magic_link.ttl} mono
+                  onChange={(v) => set('magic_link.ttl', v)} placeholder="15m" width={120}/>
+              </Field>
+              <Field label="Password-reset TTL" hint="How long a reset-password link stays valid">
+                <Input value={form.password_reset.ttl} mono
+                  onChange={(v) => set('password_reset.ttl', v)} placeholder="1h" width={120}/>
+              </Field>
+            </div>
+          </Section>
+
           {/* Email Delivery */}
           <Section id="email" title="Email Delivery" desc="Outbound mail for verifications, magic links, and password resets" onSection={setActive}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -557,39 +596,72 @@ export function Settings() {
             </div>
           </Section>
 
-          {/* OAuth Providers — quick-link to Identity Hub */}
+          {/* OAuth Providers — quick-link to Identity Hub + social redirect URL */}
           <Section id="oauth" title="OAuth Providers" desc="Per-provider client credentials live in the Identity Hub" onSection={setActive}>
-            <div style={{
-              padding: 14,
-              border: '1px solid var(--hairline)',
-              borderRadius: 5,
-              background: 'var(--surface-1)',
-              display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center',
-            }}>
-              <div>
-                <div style={{ fontSize: 13, color: 'var(--fg)', marginBottom: 4 }}>
-                  {(config.oauth_providers || []).length} provider{(config.oauth_providers || []).length === 1 ? '' : 's'} configured
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field label="OAuth redirect URL" hint="Where users land after completing OAuth — leave blank to use server default">
+                <Input value={form.social.redirect_url} mono
+                  onChange={(v) => set('social.redirect_url', v)} placeholder="/dashboard"/>
+              </Field>
+              <div style={{
+                padding: 14,
+                border: '1px solid var(--hairline)',
+                borderRadius: 5,
+                background: 'var(--surface-1)',
+                display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center',
+              }}>
+                <div>
+                  <div style={{ fontSize: 13, color: 'var(--fg)', marginBottom: 4 }}>
+                    {(config.oauth_providers || []).length} provider{(config.oauth_providers || []).length === 1 ? '' : 's'} configured
+                  </div>
+                  <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+                    Google, GitHub, Apple, Discord — client IDs, secrets, and per-provider scopes are managed in Identity Hub.
+                  </div>
+                  <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+                    {(config.oauth_providers || []).map((p) => (
+                      <span key={p} className="chip" style={{ height: 18 }}>{p}</span>
+                    ))}
+                    {(!config.oauth_providers || config.oauth_providers.length === 0) && (
+                      <span className="faint" style={{ fontSize: 11 }}>No providers active</span>
+                    )}
+                  </div>
                 </div>
-                <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-                  Google, GitHub, Apple, Discord — client IDs, secrets, redirect URLs, and per-provider scopes are managed in Identity Hub to keep this surface focused.
-                </div>
-                <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
-                  {(config.oauth_providers || []).map((p) => (
-                    <span key={p} className="chip" style={{ height: 18 }}>{p}</span>
-                  ))}
-                  {(!config.oauth_providers || config.oauth_providers.length === 0) && (
-                    <span className="faint" style={{ fontSize: 11 }}>No providers active</span>
-                  )}
-                </div>
+                <a href="/admin/identity-hub" className="btn sm" style={{ textDecoration: 'none' }}>
+                  Open Identity Hub →
+                </a>
               </div>
-              <a href="/admin/identity-hub" className="btn sm" style={{ textDecoration: 'none' }}>
-                Open Identity Hub →
-              </a>
+            </div>
+          </Section>
+
+          {/* Webhooks */}
+          <Section id="webhooks" title="Webhooks" desc="Outbound HMAC-signed event subscriptions. Secret returned once at creation." onSection={setActive}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 2 }}>
+                <button type="button" className="btn sm" onClick={() => setWebhookDrawer('create')}>
+                  <Icon.Plus width={10} height={10}/>New webhook
+                </button>
+              </div>
+              {webhooks.length === 0 && (
+                <div className="faint" style={{ fontSize: 12, padding: '10px 0' }}>No webhooks configured</div>
+              )}
+              {webhooks.map((wh) => (
+                <div key={wh.id} className="row" style={{
+                  padding: '8px 12px', gap: 10,
+                  border: '1px solid var(--hairline)',
+                  borderRadius: 4,
+                  background: 'var(--surface-1)',
+                  cursor: 'pointer',
+                }} onClick={() => setWebhookDrawer(wh)}>
+                  <span className={'dot' + (wh.enabled ? ' success' : '')} style={{ flexShrink: 0 }}/>
+                  <span className="mono" style={{ fontSize: 12, flex: 1, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wh.url}</span>
+                  <span className="faint" style={{ fontSize: 11, flexShrink: 0 }}>{(wh.events || []).length} event{(wh.events || []).length === 1 ? '' : 's'}</span>
+                </div>
+              ))}
             </div>
           </Section>
 
           {/* Audit & Data */}
-          <Section id="audit" title="Audit & Data" desc="How long audit logs are kept, and how often expired records are cleaned" onSection={setActive}>
+          <Section id="audit" title="Audit & Data" desc="How long audit logs are kept, how often expired records are cleaned, and CSV export" onSection={setActive}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <Field label="Retention" hint="Audit logs older than this are eligible for purge">
                 <Input value={form.audit.retention} mono
@@ -600,9 +672,14 @@ export function Settings() {
                   onChange={(v) => set('audit.cleanup_interval', v)} placeholder="1h" width={140}/>
               </Field>
               <Field span={2}>
-                <button type="button" className="btn sm danger" onClick={() => setDrawer('purge_audit')}>
-                  Purge audit logs older than retention
-                </button>
+                <div className="row" style={{ gap: 8 }}>
+                  <button type="button" className="btn sm danger" onClick={() => setDrawer('purge_audit')}>
+                    Purge audit logs older than retention
+                  </button>
+                  <button type="button" className="btn sm" onClick={() => setDrawer('export_audit')}>
+                    Export CSV
+                  </button>
+                </div>
               </Field>
             </div>
           </Section>
@@ -689,11 +766,289 @@ export function Settings() {
           onDone={refresh}
         />
       )}
+      {drawer === 'export_audit' && (
+        <ExportAuditDrawer onClose={() => setDrawer(null)}/>
+      )}
+      {webhookDrawer === 'create' && (
+        <WebhookCreateDrawer
+          onClose={() => setWebhookDrawer(null)}
+          onDone={() => { setWebhookDrawer(null); refreshWebhooks(); }}
+        />
+      )}
+      {webhookDrawer && webhookDrawer !== 'create' && (
+        <WebhookEditDrawer
+          webhook={webhookDrawer}
+          onClose={() => setWebhookDrawer(null)}
+          onDone={() => { setWebhookDrawer(null); refreshWebhooks(); }}
+        />
+      )}
     </div>
   );
 }
 
 // SystemSettings alias is exported from system_settings.tsx (compat shim).
+
+// ─── Audit CSV Export Drawer ─────────────────────────────────────────────────
+function ExportAuditDrawer({ onClose }) {
+  const toast = useToast();
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now - 30 * 86400000);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const [from, setFrom] = React.useState(fmt(thirtyDaysAgo));
+  const [to, setTo]     = React.useState(fmt(now));
+  const [busy, setBusy] = React.useState(false);
+
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      // Backend streams CSV; use raw fetch with auth header so we can get a Blob.
+      const key = localStorage.getItem('shark_admin_key');
+      const res = await fetch('/api/v1/admin/audit-logs/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`,
+        },
+        body: JSON.stringify({ from: new Date(from).toISOString(), to: new Date(to + 'T23:59:59Z').toISOString() }),
+      });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const dlUrl = URL.createObjectURL(blob);
+      const a     = document.createElement('a');
+      a.href      = dlUrl;
+      a.download  = `audit-logs-${from}-to-${to}.csv`;
+      a.click();
+      URL.revokeObjectURL(dlUrl);
+      toast.success('CSV downloaded');
+      onClose();
+    } catch (e) {
+      toast.error(e?.message || 'Export failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Drawer
+      title="Export audit logs"
+      subtitle="Downloads a CSV of all audit records in the selected date range"
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn primary sm" onClick={run} disabled={busy || !from || !to}>
+            {busy ? 'Exporting…' : 'Download CSV'}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Field label="From date">
+          <Input type="text" mono value={from} onChange={setFrom} placeholder="YYYY-MM-DD"/>
+        </Field>
+        <Field label="To date">
+          <Input type="text" mono value={to} onChange={setTo} placeholder="YYYY-MM-DD"/>
+        </Field>
+        <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>POST /admin/audit-logs/export</div>
+      </div>
+    </Drawer>
+  );
+}
+
+// ─── Webhook Create Drawer ───────────────────────────────────────────────────
+function WebhookCreateDrawer({ onClose, onDone }) {
+  const toast = useToast();
+  const { data: eventsData } = useAPI('/admin/webhooks/events');
+  const knownEvents = eventsData?.events ?? [];
+  const [url, setUrl]         = React.useState('');
+  const [desc, setDesc]       = React.useState('');
+  const [events, setEvents]   = React.useState([]);
+  const [busy, setBusy]       = React.useState(false);
+  const [secret, setSecret]   = React.useState(null); // shown once after create
+
+  const toggleEvent = (ev) => setEvents(prev =>
+    prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev]
+  );
+
+  const create = async () => {
+    if (busy || !url.trim() || events.length === 0) return;
+    setBusy(true);
+    try {
+      const res = await API.post('/admin/webhooks', { url: url.trim(), events, description: desc.trim() || undefined });
+      setSecret(res?.secret || null);
+      toast.success('Webhook created');
+    } catch (e) {
+      toast.error(e?.message || 'Create failed');
+      setBusy(false);
+    }
+  };
+
+  if (secret) {
+    return (
+      <Drawer title="Webhook created" subtitle="Copy the secret now — it will not be shown again" onClose={onDone} footer={(
+        <button className="btn primary sm" onClick={onDone}>Done</button>
+      )}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="faint" style={{ fontSize: 12, lineHeight: 1.5 }}>
+            Sign every delivery with this HMAC-SHA256 secret. Verify <span className="mono">X-Shark-Signature</span> header on your endpoint.
+          </div>
+          <div style={{
+            padding: 10, background: 'var(--surface-1)',
+            border: '1px solid var(--hairline-strong)',
+            borderRadius: 4,
+            fontFamily: 'var(--font-mono)', fontSize: 12,
+            color: 'var(--fg)', wordBreak: 'break-all', lineHeight: 1.6,
+          }}>{secret}</div>
+        </div>
+      </Drawer>
+    );
+  }
+
+  return (
+    <Drawer
+      title="New webhook"
+      subtitle="Subscriptions fire HMAC-signed POST requests to your URL on each event"
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn primary sm" onClick={create} disabled={busy || !url.trim() || events.length === 0}>
+            {busy ? 'Creating…' : 'Create webhook'}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field label="Endpoint URL" hint="Must be HTTPS in production">
+          <Input mono value={url} onChange={setUrl} placeholder="https://example.com/webhooks/shark"/>
+        </Field>
+        <Field label="Description (optional)">
+          <Input value={desc} onChange={setDesc} placeholder="My webhook listener"/>
+        </Field>
+        <Field label="Events" hint="Select one or more events to subscribe to">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+            {knownEvents.length === 0 && <span className="faint" style={{ fontSize: 12 }}>Loading events…</span>}
+            {knownEvents.map((ev) => (
+              <label key={ev} className="row" style={{ gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                <input type="checkbox" checked={events.includes(ev)} onChange={() => toggleEvent(ev)}
+                  style={{ accentColor: 'var(--fg)', width: 13, height: 13 }}/>
+                <span className="mono" style={{ fontSize: 12 }}>{ev}</span>
+              </label>
+            ))}
+          </div>
+        </Field>
+      </div>
+    </Drawer>
+  );
+}
+
+// ─── Webhook Edit/View Drawer ────────────────────────────────────────────────
+function WebhookEditDrawer({ webhook, onClose, onDone }) {
+  const toast = useToast();
+  const { data: eventsData } = useAPI('/admin/webhooks/events');
+  const knownEvents = eventsData?.events ?? [];
+  const [url, setUrl]     = React.useState(webhook.url ?? '');
+  const [desc, setDesc]   = React.useState(webhook.description ?? '');
+  const [events, setEvents] = React.useState(webhook.events ?? []);
+  const [enabled, setEnabled] = React.useState(webhook.enabled ?? true);
+  const [busy, setBusy]   = React.useState(false);
+  const [testing, setTesting] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const toggleEvent = (ev) => setEvents(prev =>
+    prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev]
+  );
+
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await API.patch(`/admin/webhooks/${webhook.id}`, { url, events, description: desc || undefined, enabled });
+      toast.success('Webhook updated');
+      onDone();
+    } catch (e) {
+      toast.error(e?.message || 'Update failed');
+      setBusy(false);
+    }
+  };
+
+  const testHook = async () => {
+    if (testing) return;
+    setTesting(true);
+    try {
+      await API.post(`/admin/webhooks/${webhook.id}/test`, {});
+      toast.success('Test event fired');
+    } catch (e) {
+      toast.error(e?.message || 'Test failed');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const del = async () => {
+    if (!confirm('Delete this webhook? Deliveries will stop immediately.')) return;
+    setDeleting(true);
+    try {
+      await API.del(`/admin/webhooks/${webhook.id}`);
+      toast.success('Webhook deleted');
+      onDone();
+    } catch (e) {
+      toast.error(e?.message || 'Delete failed');
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Drawer
+      title="Edit webhook"
+      subtitle={<span className="mono faint" style={{ fontSize: 11 }}>{webhook.id}</span>}
+      onClose={onClose}
+      footer={(
+        <div className="row" style={{ width: '100%', justifyContent: 'space-between' }}>
+          <button className="btn sm danger" onClick={del} disabled={deleting || busy}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn sm ghost" onClick={testHook} disabled={testing || busy}>
+              {testing ? 'Firing…' : 'Send test event'}
+            </button>
+            <button className="btn primary sm" onClick={save} disabled={busy || !url.trim() || events.length === 0}>
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field label="Enabled">
+          <label className="row" style={{ gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)}
+              style={{ accentColor: 'var(--fg)', width: 14, height: 14 }}/>
+            <span>{enabled ? 'Active' : 'Disabled'}</span>
+          </label>
+        </Field>
+        <Field label="Endpoint URL">
+          <Input mono value={url} onChange={setUrl} placeholder="https://example.com/webhooks/shark"/>
+        </Field>
+        <Field label="Description">
+          <Input value={desc} onChange={setDesc} placeholder="My webhook listener"/>
+        </Field>
+        <Field label="Events">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+            {knownEvents.map((ev) => (
+              <label key={ev} className="row" style={{ gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                <input type="checkbox" checked={events.includes(ev)} onChange={() => toggleEvent(ev)}
+                  style={{ accentColor: 'var(--fg)', width: 13, height: 13 }}/>
+                <span className="mono" style={{ fontSize: 12 }}>{ev}</span>
+              </label>
+            ))}
+          </div>
+        </Field>
+      </div>
+    </Drawer>
+  );
+}
 
 // ─── Drawers ────────────────────────────────────────────────────────────────
 
