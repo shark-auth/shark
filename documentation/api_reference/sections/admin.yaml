@@ -1,0 +1,1244 @@
+openapi: "3.1.0"
+info:
+  title: SharkAuth Admin API
+  version: "0.9.0"
+  description: |
+    Admin / operational surface: system health and config, session management,
+    OAuth applications (admin-managed clients), Token Vault (third-party
+    OAuth credential storage), reverse-proxy rules and lifecycle, branding,
+    email templates, paywall tier control, dev-mode email inbox.
+
+    All endpoints require an admin-scoped session or admin API key, except
+    `/admin/bootstrap/consume` which uses a one-time first-boot token.
+
+    This file is one of five sections that compose the full SharkAuth API
+    spec. See `../openapi.yaml` for the master index.
+  contact: { name: "SharkAuth", url: "https://sharkauth.com" }
+  license: { name: "MIT", url: "https://github.com/sharkauth/sharkauth/blob/main/LICENSE" }
+
+servers:
+  - url: "https://sharkauth.example.com"
+    description: "Your SharkAuth deployment"
+  - url: "http://localhost:8080"
+    description: "Local development (`shark serve --dev`)"
+
+tags:
+  - name: admin-system
+    description: "Health, config, stats, session admin, signing-key rotation."
+  - name: admin-apps
+    description: "OAuth client (Application) lifecycle managed via admin UI."
+  - name: admin-vault
+    description: "Token Vault: store + dispense third-party OAuth tokens (Google, GitHub, Slack, etc)."
+  - name: admin-bootstrap
+    description: "First-boot bootstrap token consumption."
+  - name: admin-oauth
+    description: "Admin tools for inspecting OAuth consents, device codes, JTI revocation."
+  - name: admin-users
+    description: "Operator-grade user creation and administration."
+  - name: admin-orgs
+    description: "Operator-grade organization administration."
+  - name: admin-branding
+    description: "Logos, colors, design-token customization."
+  - name: admin-email
+    description: "Email templates, preview, send-test."
+  - name: admin-devinbox
+    description: "Captured outbound emails when running in `--dev` mode."
+  - name: admin-proxy
+    description: "Reverse-proxy status, rules CRUD (DB + YAML), lifecycle control."
+  - name: admin-paywall
+    description: "Per-user tier overrides + design-token control for paywall pages."
+  - name: admin-flows
+    description: "Hosted flow templates (login/signup pages)."
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error, code, message]
+      properties:
+        error: { type: string }
+        code: { type: string }
+        message: { type: string }
+        docs_url: { type: string, format: uri }
+        details: { type: object, additionalProperties: true }
+
+    AdminHealthResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        uptime_seconds: { type: integer }
+        version: { type: string, example: "0.9.0" }
+        db:
+          type: object
+          properties:
+            size_bytes: { type: integer }
+            migration_version: { type: integer }
+            wal_mode: { type: boolean }
+        jwt_keys:
+          type: object
+          properties:
+            active_kid: { type: string }
+            retired_kids: { type: array, items: { type: string } }
+        smtp:
+          type: object
+          properties:
+            configured: { type: boolean }
+            host: { type: string }
+        oauth_providers:
+          type: array
+          items: { type: string, example: "google" }
+        proxy:
+          type: object
+          properties:
+            running: { type: boolean }
+            rule_count: { type: integer }
+
+    AdminConfig:
+      type: object
+      description: "Live read of the runtime configuration (secrets redacted)."
+      properties:
+        server: { type: object, additionalProperties: true }
+        oauth: { type: object, additionalProperties: true }
+        smtp: { type: object, additionalProperties: true }
+        proxy: { type: object, additionalProperties: true }
+
+    AdminConfigPatch:
+      type: object
+      description: "JSON-merge-patch of allowed config keys; secret keys rejected."
+      additionalProperties: true
+
+    AdminStats:
+      type: object
+      properties:
+        users_total: { type: integer }
+        users_active_30d: { type: integer }
+        sessions_active: { type: integer }
+        oauth_tokens_active: { type: integer }
+        agents_total: { type: integer }
+        webhooks_total: { type: integer }
+        webhook_deliveries_24h: { type: integer }
+        proxy_requests_24h: { type: integer }
+
+    AdminStatsTrends:
+      type: object
+      properties:
+        window: { type: string, example: "30d" }
+        series:
+          type: array
+          items:
+            type: object
+            properties:
+              ts: { type: string, format: date-time }
+              users: { type: integer }
+              logins: { type: integer }
+              tokens_issued: { type: integer }
+
+    AdminSession:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        user_email: { type: string }
+        ip: { type: string }
+        user_agent: { type: string }
+        mfa_passed: { type: boolean }
+        auth_method: { type: string, enum: [password, magic-link, passkey, sso, social] }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+
+    Application:
+      type: object
+      required: [id, name, client_id]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        client_id: { type: string }
+        redirect_uris: { type: array, items: { type: string, format: uri } }
+        scopes: { type: array, items: { type: string } }
+        grant_types: { type: array, items: { type: string } }
+        branding_override: { type: object, additionalProperties: true, nullable: true }
+        proxy_login_fallback: { type: string, nullable: true }
+        proxy_public_domain: { type: string, nullable: true }
+        tier: { type: string, enum: [free, pro, enterprise] }
+        created_at: { type: string, format: date-time }
+
+    AppSnippet:
+      type: object
+      description: "Copy-paste integration snippet for an Application."
+      properties:
+        language: { type: string, enum: [bash, typescript, python, react] }
+        code: { type: string }
+        next_steps: { type: array, items: { type: string } }
+
+    VaultProvider:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: "google" }
+        client_id: { type: string }
+        scopes: { type: array, items: { type: string } }
+        token_endpoint: { type: string, format: uri }
+        authorize_endpoint: { type: string, format: uri }
+        active: { type: boolean }
+
+    VaultConnection:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        provider: { type: string }
+        user_id: { type: string, format: uuid }
+        scopes_granted: { type: array, items: { type: string } }
+        connected_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
+
+    Branding:
+      type: object
+      properties:
+        logo_url: { type: string, format: uri, nullable: true }
+        primary_color: { type: string, example: "#0EA5E9" }
+        accent_color: { type: string, example: "#F59E0B" }
+        background_color: { type: string, example: "#0B1220" }
+        text_color: { type: string, example: "#F8FAFC" }
+        font_family: { type: string }
+        custom_css: { type: string, nullable: true }
+        design_tokens: { type: object, additionalProperties: true }
+
+    EmailTemplate:
+      type: object
+      properties:
+        id: { type: string, example: "magic_link" }
+        subject: { type: string }
+        html: { type: string }
+        text: { type: string }
+        locale: { type: string, example: "en-US" }
+        modified_at: { type: string, format: date-time }
+
+    DevEmail:
+      type: object
+      description: "Captured outbound email when running in --dev mode (no SMTP send)."
+      properties:
+        id: { type: string, format: uuid }
+        to: { type: string, format: email }
+        from: { type: string, format: email }
+        subject: { type: string }
+        body_html: { type: string }
+        body_text: { type: string }
+        captured_at: { type: string, format: date-time }
+
+    ProxyRule:
+      type: object
+      description: "Rule used by the reverse proxy to authorize and rewrite incoming requests."
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        priority: { type: integer }
+        match:
+          type: object
+          properties:
+            path: { type: string, example: "/api/billing/*" }
+            method: { type: string, example: "POST" }
+            headers: { type: object, additionalProperties: { type: string } }
+        require:
+          type: object
+          properties:
+            scope: { type: array, items: { type: string } }
+            tier: { type: string, enum: [free, pro, enterprise], nullable: true }
+            mfa: { type: boolean, default: false }
+            authenticated: { type: boolean, default: true }
+        upstream:
+          type: object
+          properties:
+            url: { type: string, format: uri }
+            timeout_ms: { type: integer }
+        action: { type: string, enum: [pass, paywall, block, redirect] }
+        active: { type: boolean }
+
+    ProxyLifecycleStatus:
+      type: object
+      properties:
+        state: { type: string, enum: [stopped, starting, running, stopping, errored] }
+        rules_loaded: { type: integer }
+        upstream_url: { type: string, format: uri, nullable: true }
+        listening_addr: { type: string, nullable: true }
+        last_error: { type: string, nullable: true }
+        started_at: { type: string, format: date-time, nullable: true }
+
+    ProxySimulateRequest:
+      type: object
+      properties:
+        method: { type: string }
+        path: { type: string }
+        headers: { type: object, additionalProperties: { type: string } }
+        token: { type: string, description: "Optional bearer to evaluate scope/tier predicates." }
+
+    ProxySimulateResponse:
+      type: object
+      properties:
+        matched_rule: { type: string, nullable: true }
+        action: { type: string, enum: [pass, paywall, block, redirect] }
+        reason: { type: string }
+        rewritten_headers: { type: object, additionalProperties: { type: string } }
+
+    BootstrapConsumeRequest:
+      type: object
+      required: [token, admin_email, admin_password]
+      properties:
+        token: { type: string, description: "One-time bootstrap token printed at first boot." }
+        admin_email: { type: string, format: email }
+        admin_password: { type: string, format: password, minLength: 12 }
+
+    BootstrapConsumeResponse:
+      type: object
+      properties:
+        admin_user_id: { type: string, format: uuid }
+        session_token: { type: string }
+
+    Flow:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [signup, login, paywall, mfa-setup] }
+        application_id: { type: string, format: uuid }
+        config: { type: object, additionalProperties: true }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    FlowRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        flow_id: { type: string, format: uuid }
+        ts: { type: string, format: date-time }
+        outcome: { type: string, enum: [completed, abandoned, errored] }
+        duration_ms: { type: integer }
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # Bootstrap (first-boot only — token-protected, not bearer)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/bootstrap/consume:
+    post:
+      tags: [admin-bootstrap]
+      operationId: bootstrapConsume
+      summary: Consume the one-time bootstrap token to create the first admin user
+      description: "Used during first boot only. Token is printed to stdout by `shark serve --no-prompt` or shown by the interactive `init` command."
+      x-source: "internal/api/router.go:576"
+      security: []  # bootstrap token, not bearer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BootstrapConsumeRequest" }
+      responses:
+        "201":
+          description: First admin created
+          content: { application/json: { schema: { $ref: "#/components/schemas/BootstrapConsumeResponse" } } }
+        "404": { description: "Token invalid or already consumed" }
+
+  # ---------------------------------------------------------------------------
+  # Admin Apps (OAuth client management)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/apps:
+    post:
+      tags: [admin-apps]
+      operationId: adminCreateApp
+      summary: Create an Application (OAuth client) via admin UI
+      x-source: "internal/api/router.go:524"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } }
+      responses:
+        "201":
+          description: Created (response includes one-time `client_secret`)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Application"
+                  - type: object
+                    properties: { client_secret: { type: string, description: "Plaintext, shown once." } }
+    get:
+      tags: [admin-apps]
+      operationId: adminListApps
+      summary: List Applications
+      x-source: "internal/api/router.go:525"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/apps/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [admin-apps]
+      operationId: adminGetApp
+      summary: Get Application
+      x-source: "internal/api/router.go:526"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } } }
+    patch:
+      tags: [admin-apps]
+      operationId: adminUpdateApp
+      summary: Update Application
+      x-source: "internal/api/router.go:527"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [admin-apps]
+      operationId: adminDeleteApp
+      summary: Delete Application
+      x-source: "internal/api/router.go:528"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/admin/apps/{id}/rotate-secret:
+    post:
+      tags: [admin-apps]
+      operationId: adminRotateAppSecret
+      summary: Rotate Application client_secret (plaintext returned once)
+      x-source: "internal/api/router.go:529"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: Rotated } }
+
+  /api/v1/admin/apps/{id}/snippet:
+    get:
+      tags: [admin-apps]
+      operationId: adminAppSnippet
+      summary: Get integration snippet (bash/ts/py/react) for an Application
+      x-source: "internal/api/router.go:530"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: language, in: query, schema: { type: string, enum: [bash, typescript, python, react] } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AppSnippet" } } } } }
+
+  /api/v1/admin/auth/revoke-jti:
+    post:
+      tags: [admin-oauth]
+      operationId: adminRevokeJTI
+      summary: Revoke a specific JWT by jti claim (emergency cancel)
+      x-source: "internal/api/router.go:536"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [jti], properties: { jti: { type: string }, reason: { type: string } } }
+      responses: { "204": { description: Revoked } }
+
+  # ---------------------------------------------------------------------------
+  # Vault (third-party OAuth credential storage)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/vault/providers:
+    post:
+      tags: [admin-vault]
+      operationId: createVaultProvider
+      summary: Configure a Vault OAuth provider (Google, GitHub, etc)
+      x-source: "internal/api/router.go:548"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultProvider" } } }
+      responses: { "201": { description: Created } }
+    get:
+      tags: [admin-vault]
+      operationId: listVaultProviders
+      summary: List configured Vault providers
+      x-source: "internal/api/router.go:549"
+      responses: { "200": { description: OK } }
+
+  /api/v1/vault/providers/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [admin-vault]
+      operationId: getVaultProvider
+      summary: Get Vault provider
+      x-source: "internal/api/router.go:550"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/VaultProvider" } } } } }
+    patch:
+      tags: [admin-vault]
+      operationId: updateVaultProvider
+      summary: Update Vault provider
+      x-source: "internal/api/router.go:551"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [admin-vault]
+      operationId: deleteVaultProvider
+      summary: Delete Vault provider
+      x-source: "internal/api/router.go:552"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/vault/templates:
+    get:
+      tags: [admin-vault]
+      operationId: listVaultTemplates
+      summary: List built-in provider templates (preconfigured Google/GitHub/Slack/etc)
+      x-source: "internal/api/router.go:553"
+      responses: { "200": { description: OK } }
+
+  /api/v1/vault/connect/{provider}:
+    get:
+      tags: [admin-vault]
+      operationId: vaultConnectStart
+      summary: Begin Vault OAuth dance for a provider on behalf of the current user
+      x-source: "internal/api/router.go:559"
+      parameters: [ { name: provider, in: path, required: true, schema: { type: string } } ]
+      responses: { "302": { description: "Redirect to provider authorize endpoint" } }
+
+  /api/v1/vault/callback/{provider}:
+    get:
+      tags: [admin-vault]
+      operationId: vaultCallback
+      summary: Vault OAuth callback — exchange code for tokens, store in Vault
+      x-source: "internal/api/router.go:560"
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses: { "302": { description: "Redirect to post-connect URL" } }
+
+  /api/v1/vault/connections:
+    get:
+      tags: [admin-vault]
+      operationId: listVaultConnections
+      summary: List Vault connections for the current user
+      x-source: "internal/api/router.go:561"
+      responses: { "200": { description: OK } }
+
+  /api/v1/vault/connections/{id}:
+    delete:
+      tags: [admin-vault]
+      operationId: deleteVaultConnection
+      summary: Disconnect a Vault connection (revoke + delete)
+      x-source: "internal/api/router.go:562"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/vault/{provider}/token:
+    get:
+      tags: [admin-vault]
+      operationId: vaultGetToken
+      summary: Fetch a fresh access token for a Vault-stored provider connection
+      description: "Used by agents/services that need to act on a user's behalf against Google/GitHub/etc using stored OAuth credentials."
+      x-source: "internal/api/router.go:569"
+      parameters: [ { name: provider, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  expires_in: { type: integer }
+                  scope: { type: string }
+        "404": { description: "No connection for this user + provider" }
+
+  # ---------------------------------------------------------------------------
+  # Admin System
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/health:
+    get:
+      tags: [admin-system]
+      operationId: adminHealth
+      summary: Detailed health snapshot (DB, JWT keys, SMTP, OAuth providers, proxy)
+      x-source: "internal/api/router.go:581"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminHealthResponse" } } } } }
+
+  /api/v1/admin/config:
+    get:
+      tags: [admin-system]
+      operationId: adminGetConfig
+      summary: Read live runtime config (secrets redacted)
+      x-source: "internal/api/router.go:582"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminConfig" } } } } }
+    patch:
+      tags: [admin-system]
+      operationId: adminUpdateConfig
+      summary: Patch a subset of allowed runtime config keys
+      x-source: "internal/api/router.go:583"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdminConfigPatch" } } }
+      responses: { "200": { description: Updated } }
+
+  /api/v1/admin/logs/stream:
+    get:
+      tags: [admin-system]
+      operationId: adminLogStream
+      summary: Server-Sent Events stream of structured server logs
+      x-source: "internal/api/router.go:584"
+      responses:
+        "200":
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema: { type: string, description: "data: {json log line}\\n\\n" }
+
+  /api/v1/admin/stats:
+    get:
+      tags: [admin-system]
+      operationId: adminStats
+      summary: Snapshot platform stats
+      x-source: "internal/api/router.go:585"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminStats" } } } } }
+
+  /api/v1/admin/stats/trends:
+    get:
+      tags: [admin-system]
+      operationId: adminStatsTrends
+      summary: Time-series stats for dashboard charts
+      x-source: "internal/api/router.go:586"
+      parameters:
+        - { name: window, in: query, schema: { type: string, enum: [24h, 7d, 30d, 90d], default: "30d" } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminStatsTrends" } } } } }
+
+  /api/v1/admin/sessions:
+    get:
+      tags: [admin-system]
+      operationId: adminListSessions
+      summary: List active sessions across all users
+      x-source: "internal/api/router.go:587"
+      parameters:
+        - { name: user_id, in: query, schema: { type: string, format: uuid } }
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [admin-system]
+      operationId: adminRevokeAllSessions
+      summary: Revoke ALL active sessions (emergency control)
+      x-source: "internal/api/router.go:588"
+      responses: { "200": { description: "Revoked count returned" } }
+
+  /api/v1/admin/sessions/{id}:
+    delete:
+      tags: [admin-system]
+      operationId: adminDeleteSession
+      summary: Revoke a single session
+      x-source: "internal/api/router.go:589"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: Revoked } }
+
+  /api/v1/admin/sessions/purge-expired:
+    post:
+      tags: [admin-system]
+      operationId: adminPurgeExpiredSessions
+      summary: Sweep expired sessions from the database
+      x-source: "internal/api/router.go:590"
+      responses: { "200": { description: "Purged count returned" } }
+
+  /api/v1/admin/audit-logs/purge:
+    post:
+      tags: [admin-system]
+      operationId: adminPurgeAuditLogs
+      summary: Purge audit logs older than retention threshold
+      x-source: "internal/api/router.go:591"
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { older_than: { type: string, format: date-time } } }
+      responses: { "200": { description: "Purged count returned" } }
+
+  /api/v1/admin/test-email:
+    post:
+      tags: [admin-email]
+      operationId: adminTestEmail
+      summary: Send a test email through the configured SMTP transport
+      x-source: "internal/api/router.go:592"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [to], properties: { to: { type: string, format: email } } }
+      responses: { "200": { description: "Sent (or queued)" } }
+
+  /api/v1/admin/email-preview/{template}:
+    get:
+      tags: [admin-email]
+      operationId: adminEmailPreview
+      summary: Render an email template with sample data
+      x-source: "internal/api/router.go:593"
+      parameters: [ { name: template, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200":
+          description: HTML preview
+          content: { text/html: {} }
+
+  /api/v1/admin/auth/rotate-signing-key:
+    post:
+      tags: [admin-system]
+      operationId: adminRotateSigningKey
+      summary: Generate a new ES256 signing key, retire old one (still usable for verification)
+      x-source: "internal/api/router.go:594"
+      responses:
+        "200":
+          description: Rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  new_kid: { type: string }
+                  retired_kid: { type: string }
+
+  /api/v1/admin/vault/connections:
+    get:
+      tags: [admin-vault]
+      operationId: adminListVaultConnections
+      summary: List Vault connections across all users (admin oversight)
+      x-source: "internal/api/router.go:599"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/vault/connections/{id}:
+    delete:
+      tags: [admin-vault]
+      operationId: adminDeleteVaultConnection
+      summary: Disconnect a user's Vault connection (admin override)
+      x-source: "internal/api/router.go:600"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/admin/permissions/batch-usage:
+    get:
+      tags: [admin-system]
+      operationId: adminPermissionsBatchUsage
+      summary: Batch-fetch usage counts (roles + users) for many permissions in one call
+      x-source: "internal/api/router.go:605"
+      parameters:
+        - { name: ids, in: query, required: true, schema: { type: array, items: { type: string, format: uuid } }, style: form, explode: false }
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/oauth/consents:
+    get:
+      tags: [admin-oauth]
+      operationId: adminListConsents
+      summary: List OAuth consents granted across all users
+      x-source: "internal/api/router.go:609"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/oauth/consents/{id}:
+    delete:
+      tags: [admin-oauth]
+      operationId: adminRevokeConsent
+      summary: Revoke an OAuth consent (forces re-prompt on next authorize)
+      x-source: "internal/api/router.go:610"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: Revoked } }
+
+  /api/v1/admin/oauth/device-codes:
+    get:
+      tags: [admin-oauth]
+      operationId: adminListDeviceCodes
+      summary: List in-flight device-flow codes
+      x-source: "internal/api/router.go:615"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/oauth/device-codes/{user_code}/approve:
+    post:
+      tags: [admin-oauth]
+      operationId: adminApproveDeviceCode
+      summary: Approve a device-flow user_code on behalf of a user (admin override)
+      x-source: "internal/api/router.go:616"
+      parameters: [ { name: user_code, in: path, required: true, schema: { type: string } } ]
+      responses: { "200": { description: Approved } }
+
+  /api/v1/admin/oauth/device-codes/{user_code}/deny:
+    post:
+      tags: [admin-oauth]
+      operationId: adminDenyDeviceCode
+      summary: Deny a device-flow user_code
+      x-source: "internal/api/router.go:617"
+      parameters: [ { name: user_code, in: path, required: true, schema: { type: string } } ]
+      responses: { "200": { description: Denied } }
+
+  # ---------------------------------------------------------------------------
+  # Admin Users (operator create)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/users:
+    post:
+      tags: [admin-users]
+      operationId: adminCreateUser
+      summary: Create a user as an operator (skips email verification, can pre-set password)
+      x-source: "internal/api/router.go:629"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+                email_verified: { type: boolean, default: true }
+                organization_ids: { type: array, items: { type: string, format: uuid } }
+                roles: { type: array, items: { type: string, format: uuid } }
+      responses: { "201": { description: Created } }
+
+  # ---------------------------------------------------------------------------
+  # Admin Organizations
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/organizations:
+    post:
+      tags: [admin-orgs]
+      operationId: adminCreateOrganization
+      summary: Create an organization as an operator
+      x-source: "internal/api/router.go:631"
+      responses: { "201": { description: Created } }
+    get:
+      tags: [admin-orgs]
+      operationId: adminListOrganizations
+      summary: List all organizations (operator scope)
+      x-source: "internal/api/router.go:632"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/organizations/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [admin-orgs]
+      operationId: adminGetOrganization
+      summary: Get any organization
+      x-source: "internal/api/router.go:633"
+      responses: { "200": { description: OK } }
+    patch:
+      tags: [admin-orgs]
+      operationId: adminUpdateOrganization
+      summary: Update any organization
+      x-source: "internal/api/router.go:634"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [admin-orgs]
+      operationId: adminDeleteOrganization
+      summary: Delete any organization
+      x-source: "internal/api/router.go:635"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/admin/organizations/{id}/members:
+    get:
+      tags: [admin-orgs]
+      operationId: adminListOrgMembers
+      summary: List members of any organization
+      x-source: "internal/api/router.go:636"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/organizations/{id}/members/{uid}:
+    delete:
+      tags: [admin-orgs]
+      operationId: adminRemoveOrgMember
+      summary: Remove a member from any organization
+      x-source: "internal/api/router.go:637"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: uid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Removed } }
+
+  /api/v1/admin/organizations/{id}/roles:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [admin-orgs]
+      operationId: adminListOrgRoles
+      summary: List org-scoped roles
+      x-source: "internal/api/router.go:638"
+      responses: { "200": { description: OK } }
+    post:
+      tags: [admin-orgs]
+      operationId: adminCreateOrgRole
+      summary: Create an org-scoped role
+      x-source: "internal/api/router.go:639"
+      responses: { "201": { description: Created } }
+
+  /api/v1/admin/organizations/{id}/invitations:
+    get:
+      tags: [admin-orgs]
+      operationId: adminListOrgInvitations
+      summary: List pending invitations for an org
+      x-source: "internal/api/router.go:640"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/organizations/{id}/invitations/{invitationId}:
+    delete:
+      tags: [admin-orgs]
+      operationId: adminDeleteOrgInvitation
+      summary: Cancel a pending invitation
+      x-source: "internal/api/router.go:641"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Cancelled } }
+
+  /api/v1/admin/organizations/{id}/invitations/{invitationId}/resend:
+    post:
+      tags: [admin-orgs]
+      operationId: adminResendOrgInvitation
+      summary: Resend an invitation email
+      x-source: "internal/api/router.go:642"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "202": { description: Resent } }
+
+  # ---------------------------------------------------------------------------
+  # Admin Branding
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/branding:
+    get:
+      tags: [admin-branding]
+      operationId: adminGetBranding
+      summary: Get current branding config
+      x-source: "internal/api/router.go:649"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Branding" } } } } }
+    patch:
+      tags: [admin-branding]
+      operationId: adminPatchBranding
+      summary: Patch branding fields
+      x-source: "internal/api/router.go:650"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Branding" } } }
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/branding/logo:
+    post:
+      tags: [admin-branding]
+      operationId: adminUploadLogo
+      summary: Upload logo image (multipart)
+      x-source: "internal/api/router.go:651"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                logo: { type: string, format: binary }
+      responses: { "200": { description: "Uploaded; URL returned" } }
+    delete:
+      tags: [admin-branding]
+      operationId: adminDeleteLogo
+      summary: Delete current logo
+      x-source: "internal/api/router.go:652"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/admin/branding/design-tokens:
+    patch:
+      tags: [admin-branding, admin-paywall]
+      operationId: adminSetDesignTokens
+      summary: Patch the design-token map (colors, spacing, typography) used by hosted pages + paywall
+      x-source: "internal/api/router.go:706"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses: { "200": { description: OK } }
+
+  # ---------------------------------------------------------------------------
+  # Admin Email Templates
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/email-templates:
+    get:
+      tags: [admin-email]
+      operationId: adminListEmailTemplates
+      summary: List email templates
+      x-source: "internal/api/router.go:658"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/email-templates/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+    get:
+      tags: [admin-email]
+      operationId: adminGetEmailTemplate
+      summary: Get email template
+      x-source: "internal/api/router.go:659"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EmailTemplate" } } } } }
+    patch:
+      tags: [admin-email]
+      operationId: adminPatchEmailTemplate
+      summary: Override email template content
+      x-source: "internal/api/router.go:660"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/email-templates/{id}/preview:
+    post:
+      tags: [admin-email]
+      operationId: adminPreviewEmailTemplate
+      summary: Preview the template with optional sample variables
+      x-source: "internal/api/router.go:661"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses: { "200": { description: HTML, content: { text/html: {} } } }
+
+  /api/v1/admin/email-templates/{id}/send-test:
+    post:
+      tags: [admin-email]
+      operationId: adminSendTestEmail
+      summary: Send the rendered template to a test address
+      x-source: "internal/api/router.go:662"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses: { "200": { description: "Sent (or queued)" } }
+
+  /api/v1/admin/email-templates/{id}/reset:
+    post:
+      tags: [admin-email]
+      operationId: adminResetEmailTemplate
+      summary: Reset template to built-in default
+      x-source: "internal/api/router.go:663"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses: { "200": { description: Reset } }
+
+  # ---------------------------------------------------------------------------
+  # Dev Inbox (only when `--dev`)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/dev/emails:
+    get:
+      tags: [admin-devinbox]
+      operationId: adminListDevEmails
+      summary: List captured outbound emails (dev mode only)
+      x-source: "internal/api/router.go:667"
+      x-dev-only: true
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [admin-devinbox]
+      operationId: adminDeleteAllDevEmails
+      summary: Clear dev inbox
+      x-source: "internal/api/router.go:669"
+      x-dev-only: true
+      responses: { "204": { description: Cleared } }
+
+  /api/v1/admin/dev/emails/{id}:
+    get:
+      tags: [admin-devinbox]
+      operationId: adminGetDevEmail
+      summary: Read a captured dev email
+      x-source: "internal/api/router.go:668"
+      x-dev-only: true
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DevEmail" } } } } }
+
+  # ---------------------------------------------------------------------------
+  # Admin Proxy
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/proxy/status:
+    get:
+      tags: [admin-proxy]
+      operationId: adminProxyStatus
+      summary: Snapshot proxy status (running, rule count, listener)
+      x-source: "internal/api/router.go:675"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProxyLifecycleStatus" } } } } }
+
+  /api/v1/admin/proxy/status/stream:
+    get:
+      tags: [admin-proxy]
+      operationId: adminProxyStatusStream
+      summary: SSE stream of proxy status changes + per-request samples
+      x-source: "internal/api/router.go:676"
+      responses:
+        "200":
+          description: text/event-stream
+          content: { text/event-stream: { schema: { type: string } } }
+
+  /api/v1/admin/proxy/rules:
+    get:
+      tags: [admin-proxy]
+      operationId: adminProxyRulesEffective
+      summary: Effective rule set currently loaded by the proxy (read-through, may include YAML-imported)
+      x-source: "internal/api/router.go:677"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/proxy/simulate:
+    post:
+      tags: [admin-proxy]
+      operationId: adminProxySimulate
+      summary: Dry-run a request through the rule engine — see which rule fires and the action
+      x-source: "internal/api/router.go:678"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ProxySimulateRequest" } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProxySimulateResponse" } } } } }
+
+  /api/v1/admin/proxy/rules/db:
+    get:
+      tags: [admin-proxy]
+      operationId: adminListProxyRulesDB
+      summary: List proxy rules stored in the DB (admin UI source of truth)
+      x-source: "internal/api/router.go:684"
+      responses: { "200": { description: OK } }
+    post:
+      tags: [admin-proxy]
+      operationId: adminCreateProxyRule
+      summary: Create proxy rule
+      description: "Accepts an optional client-supplied id for idempotent upsert."
+      x-source: "internal/api/router.go:685"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ProxyRule" } } }
+      responses:
+        "201": { description: Created }
+        "200": { description: "Updated (idempotent upsert)" }
+
+  /api/v1/admin/proxy/rules/db/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [admin-proxy]
+      operationId: adminGetProxyRule
+      summary: Get a single proxy rule
+      x-source: "internal/api/router.go:686"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProxyRule" } } } } }
+    patch:
+      tags: [admin-proxy]
+      operationId: adminUpdateProxyRule
+      summary: Update proxy rule
+      x-source: "internal/api/router.go:687"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [admin-proxy]
+      operationId: adminDeleteProxyRule
+      summary: Delete proxy rule
+      x-source: "internal/api/router.go:688"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/admin/proxy/rules/import:
+    post:
+      tags: [admin-proxy]
+      operationId: adminImportYAMLRules
+      summary: Bulk-import proxy rules from a YAML payload
+      x-source: "internal/api/router.go:689"
+      requestBody:
+        required: true
+        content:
+          application/x-yaml:
+            schema: { type: string }
+          application/json:
+            schema: { type: object, properties: { yaml: { type: string } } }
+      responses: { "200": { description: "Imported count returned" } }
+
+  /api/v1/admin/proxy/lifecycle:
+    get:
+      tags: [admin-proxy]
+      operationId: adminProxyLifecycleStatus
+      summary: Get proxy lifecycle state machine snapshot
+      x-source: "internal/api/router.go:694"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProxyLifecycleStatus" } } } } }
+
+  /api/v1/admin/proxy/start:
+    post:
+      tags: [admin-proxy]
+      operationId: adminProxyStart
+      summary: Start the reverse proxy
+      x-source: "internal/api/router.go:695"
+      responses: { "200": { description: Started } }
+
+  /api/v1/admin/proxy/stop:
+    post:
+      tags: [admin-proxy]
+      operationId: adminProxyStop
+      summary: Stop the reverse proxy
+      x-source: "internal/api/router.go:696"
+      responses: { "200": { description: Stopped } }
+
+  /api/v1/admin/proxy/reload:
+    post:
+      tags: [admin-proxy]
+      operationId: adminProxyReload
+      summary: Reload proxy rules without restart
+      x-source: "internal/api/router.go:697"
+      responses: { "200": { description: Reloaded } }
+
+  # ---------------------------------------------------------------------------
+  # Paywall (per-user tier override)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/users/{id}/tier:
+    patch:
+      tags: [admin-paywall]
+      operationId: adminSetUserTier
+      summary: Set tier (free/pro/enterprise) override for a user
+      x-source: "internal/api/router.go:701"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tier]
+              properties:
+                tier: { type: string, enum: [free, pro, enterprise] }
+      responses: { "200": { description: OK } }
+
+  # ---------------------------------------------------------------------------
+  # Flows (hosted page templates)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/admin/flows:
+    post:
+      tags: [admin-flows]
+      operationId: adminCreateFlow
+      summary: Create a hosted flow (login/signup/paywall/mfa-setup template binding)
+      x-source: "internal/api/router.go:711"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Flow" } } }
+      responses: { "201": { description: Created } }
+    get:
+      tags: [admin-flows]
+      operationId: adminListFlows
+      summary: List hosted flows
+      x-source: "internal/api/router.go:712"
+      responses: { "200": { description: OK } }
+
+  /api/v1/admin/flows/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [admin-flows]
+      operationId: adminGetFlow
+      summary: Get hosted flow
+      x-source: "internal/api/router.go:713"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Flow" } } } } }
+    patch:
+      tags: [admin-flows]
+      operationId: adminUpdateFlow
+      summary: Update hosted flow
+      x-source: "internal/api/router.go:714"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [admin-flows]
+      operationId: adminDeleteFlow
+      summary: Delete hosted flow
+      x-source: "internal/api/router.go:715"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/admin/flows/{id}/test:
+    post:
+      tags: [admin-flows]
+      operationId: adminTestFlow
+      summary: Render a hosted flow with sample state for QA
+      x-source: "internal/api/router.go:716"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: HTML, content: { text/html: {} } } }
+
+  /api/v1/admin/flows/{id}/runs:
+    get:
+      tags: [admin-flows]
+      operationId: adminListFlowRuns
+      summary: List recent runs of a hosted flow
+      x-source: "internal/api/router.go:717"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { runs: { type: array, items: { $ref: "#/components/schemas/FlowRun" } } } } } } } }

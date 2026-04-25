@@ -1,0 +1,398 @@
+openapi: "3.1.0"
+
+info:
+  title: SharkAuth API
+  version: "0.9.0"
+  summary: "Open-source OAuth 2.1 authorization server with native agent delegation."
+  description: |
+    SharkAuth is a single-binary, open-source authentication platform purpose-built
+    for the agent era. It ships every primitive a modern auth product needs —
+    SSO (SAML + OIDC), passkeys (WebAuthn), TOTP MFA, magic links, social login,
+    organizations + RBAC, audit log, webhooks, reverse-proxy mode — plus
+    native RFC 8693 token-exchange with full agent delegation chains.
+
+    ### Surfaces
+
+    The API is partitioned into five surfaces. Each lives in its own file under
+    `sections/` for readability and tooling. The full spec is the union of the
+    five sections plus this master file's components.
+
+    | Section | Path prefix | What |
+    |---|---|---|
+    | OAuth 2.1 Authorization Server | `/oauth/*`, `/.well-known/*` | Token issuance, introspection, revocation, DCR, device flow, token-exchange. |
+    | Authentication & Identity | `/api/v1/auth/*` | User-facing signup/login/MFA/passkey/magic-link/SSO. |
+    | Platform | `/api/v1/organizations`, `/roles`, `/permissions`, `/users`, `/sso`, `/api-keys`, `/audit-logs`, `/webhooks`, `/agents` | Multi-tenant org model, RBAC, SSO connections, agents, webhooks, audit. |
+    | Admin Operations | `/api/v1/admin/*`, `/api/v1/vault/*` | Operator tools: health, config, apps, vault, branding, email templates, proxy rules + lifecycle, paywall. |
+    | System | `/healthz`, `/assets/branding/*`, `/hosted/*`, `/paywall/*` | Liveness probe, hosted pages, branding assets. |
+
+    ### Authentication
+
+    Most endpoints require either a session cookie (`shark_session`) or a bearer
+    token (session JWT or admin API key). OAuth endpoints follow RFC 6749 +
+    RFC 7591 + RFC 9449 client authentication rules.
+
+    Public endpoints (signup, login, password reset send, magic link send +
+    verify, social login start, paywall, healthz, hosted pages, branding assets)
+    require no authentication.
+
+    ### Errors
+
+    Two error envelopes coexist by surface:
+
+    1. **OAuth surface** (`/oauth/*`) — RFC 6749 §5.2 shape:
+       `{error, error_description, error_uri}`.
+    2. **Auth + Platform + Admin surfaces** — extended shape:
+       `{error, code, message, docs_url, details}`.
+
+    See the per-section files and `docs/errors.md` in the repo for the full
+    error catalog.
+
+    ### Versioning
+
+    `info.version` tracks the SharkAuth release. v0.9.x is the launch line;
+    v1.0.0 is gated on two weeks of partner usage without breaking changes.
+    Breaking schema changes will bump the major version and ship a migration
+    note in `CHANGELOG.md`.
+
+    ### Source of truth
+
+    Every operation includes an `x-source` extension pointing to the file +
+    line in the codebase where the route is registered. Use it to verify
+    spec accuracy against the implementation.
+  contact:
+    name: "SharkAuth"
+    url: "https://sharkauth.com"
+    email: "support@sharkauth.com"
+  license:
+    name: "MIT"
+    url: "https://github.com/sharkauth/sharkauth/blob/main/LICENSE"
+
+servers:
+  - url: "https://sharkauth.example.com"
+    description: "Your SharkAuth deployment (replace with your hostname)"
+  - url: "http://localhost:8080"
+    description: "Local development (`shark serve --dev`)"
+
+externalDocs:
+  description: "SharkAuth documentation site"
+  url: "https://sharkauth.com/docs"
+
+# ---------------------------------------------------------------------------
+# Tag groups (organized by surface — Scalar / Redoc render this nicely)
+# Tags themselves are defined in the per-section files; this master file
+# documents the full set so consumers see them organized when sections are
+# rendered together.
+# ---------------------------------------------------------------------------
+x-tagGroups:
+  - name: "OAuth 2.1 Authorization Server"
+    tags:
+      - oauth-discovery
+      - oauth-flow
+      - oauth-tokens
+      - oauth-dcr
+      - oauth-device
+      - dpop
+  - name: "Authentication & Identity"
+    tags:
+      - auth-signup-login
+      - auth-sessions
+      - auth-passkey
+      - auth-mfa
+      - auth-magic-link
+      - auth-password
+      - auth-email
+      - auth-sso
+      - auth-social
+      - auth-consent
+  - name: "Platform"
+    tags:
+      - organizations
+      - roles
+      - permissions
+      - authz
+      - users-admin
+      - sso-connections
+      - saml
+      - oidc
+      - api-keys
+      - audit-logs
+      - webhooks
+      - agents
+      - migration
+  - name: "Admin Operations"
+    tags:
+      - admin-system
+      - admin-apps
+      - admin-vault
+      - admin-bootstrap
+      - admin-oauth
+      - admin-users
+      - admin-orgs
+      - admin-branding
+      - admin-email
+      - admin-devinbox
+      - admin-proxy
+      - admin-paywall
+      - admin-flows
+  - name: "System"
+    tags:
+      - system-health
+      - system-branding
+      - system-hosted
+
+tags:
+  - name: oauth-discovery
+    description: "RFC 8414 Authorization Server Metadata + JWKS."
+    externalDocs: { description: "OAuth section", url: "./sections/oauth.yaml" }
+  - name: oauth-flow
+    description: "Authorization endpoint + PKCE."
+    externalDocs: { description: "OAuth section", url: "./sections/oauth.yaml" }
+  - name: oauth-tokens
+    description: "Token endpoint, introspection, revocation, token-exchange."
+    externalDocs: { description: "OAuth section", url: "./sections/oauth.yaml" }
+  - name: oauth-dcr
+    description: "RFC 7591 Dynamic Client Registration + RFC 7592 management."
+    externalDocs: { description: "OAuth section", url: "./sections/oauth.yaml" }
+  - name: oauth-device
+    description: "RFC 8628 Device Authorization Grant."
+    externalDocs: { description: "OAuth section", url: "./sections/oauth.yaml" }
+  - name: dpop
+    description: "RFC 9449 DPoP proof header + cnf.jkt binding."
+    externalDocs: { description: "OAuth section", url: "./sections/oauth.yaml" }
+
+  - name: auth-signup-login
+    description: "Signup, login, logout, /me."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-sessions
+    description: "Session listing + revocation."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-passkey
+    description: "WebAuthn passkey registration + login."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-mfa
+    description: "TOTP MFA enroll, verify, recovery codes."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-magic-link
+    description: "Email-based magic-link login."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-password
+    description: "Password reset + change."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-email
+    description: "Email verification."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-sso
+    description: "Per-user SSO auto-routing entrypoint."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-social
+    description: "Google / GitHub social login."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+  - name: auth-consent
+    description: "User-facing OAuth consent management."
+    externalDocs: { description: "Auth section", url: "./sections/auth.yaml" }
+
+  - name: organizations
+    description: "Tenant model, members, invitations."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: roles
+    description: "RBAC roles + permission attachments."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: permissions
+    description: "RBAC permission registry."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: authz
+    description: "Authorization-decision endpoint."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: users-admin
+    description: "Admin-scoped user CRUD."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: sso-connections
+    description: "Enterprise SSO connection management (SAML + OIDC)."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: saml
+    description: "SAML SP endpoints (consume from upstream IdP)."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: oidc
+    description: "OIDC client endpoints (federate from upstream IdP)."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: api-keys
+    description: "Programmatic API key management."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: audit-logs
+    description: "Audit log read + export."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: webhooks
+    description: "Outbound event subscriptions, deliveries, replay."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: agents
+    description: "Agent identity management + token revocation tools."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+  - name: migration
+    description: "Auth0 import (planned, currently 501)."
+    externalDocs: { description: "Platform section", url: "./sections/platform.yaml" }
+
+  - name: admin-system
+    description: "Operator health/config/stats/sessions/signing-key tools."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-apps
+    description: "OAuth client (Application) admin lifecycle."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-vault
+    description: "Token Vault: stored third-party OAuth credentials (Google, GitHub, Slack, etc)."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-bootstrap
+    description: "First-boot one-time admin creation."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-oauth
+    description: "Admin tooling for consents, device codes, JTI revoke."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-users
+    description: "Operator-grade user creation."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-orgs
+    description: "Operator-grade organization administration."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-branding
+    description: "Logos, colors, design tokens."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-email
+    description: "Email template CRUD + preview + send-test."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-devinbox
+    description: "Captured outbound emails when running with `--dev`."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-proxy
+    description: "Reverse-proxy status, rules, lifecycle, simulate."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-paywall
+    description: "Per-user tier overrides + paywall design tokens."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+  - name: admin-flows
+    description: "Hosted page flow templates (login/signup/paywall/mfa-setup)."
+    externalDocs: { description: "Admin section", url: "./sections/admin.yaml" }
+
+  - name: system-health
+    description: "Liveness/readiness probes."
+    externalDocs: { description: "System section", url: "./sections/system.yaml" }
+  - name: system-branding
+    description: "Static branding asset serving."
+    externalDocs: { description: "System section", url: "./sections/system.yaml" }
+  - name: system-hosted
+    description: "Hosted login/signup/MFA/paywall pages."
+    externalDocs: { description: "System section", url: "./sections/system.yaml" }
+
+# ---------------------------------------------------------------------------
+# Shared components used across all sections.
+# ---------------------------------------------------------------------------
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Session JWT (set by login, refresh on `/oauth/token` refresh grant) or
+        admin API key. Send as `Authorization: Bearer <token>`.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: shark_session
+      description: "Set by browser flows (signup/login/social login). HttpOnly + Secure + SameSite=Lax."
+    dpopHeader:
+      type: apiKey
+      in: header
+      name: DPoP
+      description: |
+        RFC 9449 proof-of-possession JWT signed by the client's private key.
+        Required on protected resources when the access token has a `cnf.jkt`
+        thumbprint claim.
+    clientSecretBasic:
+      type: http
+      scheme: basic
+      description: "OAuth client credentials via HTTP Basic. Used at `/oauth/token` for confidential clients."
+    clientSecretPost:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "OAuth client credentials in form-encoded body (`client_id` + `client_secret` fields)."
+    privateKeyJwt:
+      type: oauth2
+      description: "RFC 7521 client_assertion via signed JWT — for high-assurance clients."
+      flows:
+        clientCredentials:
+          tokenUrl: "/oauth/token"
+          scopes: {}
+    oauth2AuthorizationCode:
+      type: oauth2
+      description: "Standard OAuth 2.1 authorization code flow with PKCE."
+      flows:
+        authorizationCode:
+          authorizationUrl: "/oauth/authorize"
+          tokenUrl: "/oauth/token"
+          refreshUrl: "/oauth/token"
+          scopes:
+            openid: "Issue an OIDC id_token"
+            profile: "Read basic profile"
+            email: "Read user email"
+    oauth2ClientCredentials:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: "/oauth/token"
+          scopes: {}
+    oauth2DeviceCode:
+      type: oauth2
+      flows:
+        # OpenAPI 3.1 supports deviceCode flow on some renderers
+        clientCredentials:
+          tokenUrl: "/oauth/token"
+          scopes: {}
+          x-deviceAuthorizationUrl: "/oauth/device"
+
+  schemas:
+    OAuthError:
+      type: object
+      description: "RFC 6749 §5.2 standard error envelope used by all `/oauth/*` endpoints."
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [invalid_request, invalid_client, invalid_grant, unauthorized_client, unsupported_grant_type, invalid_scope, access_denied, unsupported_response_type, server_error, temporarily_unavailable, invalid_token, insufficient_scope, expired_token, invalid_dpop_proof, use_dpop_nonce, slow_down, authorization_pending]
+        error_description: { type: string }
+        error_uri: { type: string, format: uri }
+
+    ErrorEnvelope:
+      type: object
+      description: "Extended error envelope used by `/api/v1/auth/*`, `/api/v1/*` (platform), and `/api/v1/admin/*`."
+      required: [error, code, message]
+      properties:
+        error: { type: string, description: "Stable category: `validation_error`, `not_found`, `forbidden`, `conflict`, `rate_limited`, `internal_error`." }
+        code: { type: string, description: "Stable per-error string code, e.g. `EMAIL_ALREADY_REGISTERED`." }
+        message: { type: string, description: "Human-readable message safe to surface to end users." }
+        docs_url: { type: string, format: uri, description: "Link to the docs entry for this code." }
+        details: { type: object, additionalProperties: true, description: "Optional structured context (validation errors, rate-limit retry-after, etc)." }
+
+    Pagination:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        offset: { type: integer, minimum: 0, default: 0 }
+        total: { type: integer, minimum: 0 }
+
+# ---------------------------------------------------------------------------
+# Master paths: empty here. Each section file owns its own paths. Spec
+# consumers should either:
+#   (a) bundle the 6 files (this master + 5 sections) using a tool like
+#       `redocly bundle openapi.yaml --output bundled.yaml` for a single
+#       file, or
+#   (b) render each section file independently (Scalar supports
+#       multi-file viewing via the externalDocs links above).
+#
+# This master is the catalog and shared-component source. Bundling is the
+# recommended path for sharkauth.com/docs.
+# ---------------------------------------------------------------------------
+paths: {}
+
+security:
+  - bearerAuth: []
+  - cookieAuth: []

@@ -1,0 +1,140 @@
+openapi: "3.1.0"
+info:
+  title: SharkAuth System API
+  version: "0.9.0"
+  description: |
+    System / public-surface endpoints: liveness probe, branding asset
+    serving, hosted login pages, paywall pages.
+
+    These endpoints are typically unauthenticated (or use first-party
+    cookies) and serve HTML or static assets in addition to JSON.
+
+    This file is one of five sections that compose the full SharkAuth API
+    spec. See `../openapi.yaml` for the master index.
+  contact: { name: "SharkAuth", url: "https://sharkauth.com" }
+  license: { name: "MIT", url: "https://github.com/sharkauth/sharkauth/blob/main/LICENSE" }
+
+servers:
+  - url: "https://sharkauth.example.com"
+    description: "Your SharkAuth deployment"
+  - url: "http://localhost:8080"
+    description: "Local development (`shark serve --dev`)"
+
+tags:
+  - name: system-health
+    description: "Liveness and readiness probes."
+  - name: system-branding
+    description: "Static branding asset serving (logos, favicons)."
+  - name: system-hosted
+    description: "Hosted login/signup/MFA/paywall pages keyed by Application slug."
+
+paths:
+
+  /healthz:
+    get:
+      tags: [system-health]
+      operationId: healthz
+      summary: Liveness probe — returns 200 if server can respond
+      description: "Cheap probe used by Docker healthcheck and orchestrators. Does not check downstream dependencies (DB, SMTP); use `/api/v1/admin/health` for that."
+      x-source: "internal/api/router.go:219"
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "ok" }
+                  uptime_seconds: { type: integer }
+
+  /assets/branding/{path}:
+    parameters:
+      - { name: path, in: path, required: true, schema: { type: string }, description: "Asset path (e.g. `logo.png`, `favicon.ico`)." }
+    get:
+      tags: [system-branding]
+      operationId: brandingAssetGet
+      summary: Serve a branding asset
+      description: "Returns the configured branding asset (logo, favicon, etc). Falls back to bundled defaults if not customized."
+      x-source: "internal/api/router.go:234"
+      security: []
+      responses:
+        "200":
+          description: Asset bytes
+          content:
+            image/png: {}
+            image/jpeg: {}
+            image/svg+xml: {}
+            image/x-icon: {}
+        "404": { description: "Asset not found" }
+    head:
+      tags: [system-branding]
+      operationId: brandingAssetHead
+      summary: HEAD a branding asset (for ETag / cache validation)
+      x-source: "internal/api/router.go:235"
+      security: []
+      responses:
+        "200": { description: "Headers only" }
+
+  /hosted/{app_slug}/{page}:
+    get:
+      tags: [system-hosted]
+      operationId: hostedPage
+      summary: Serve a hosted page (login, signup, mfa, paywall, etc) for an Application
+      description: |
+        Returns the hosted HTML page bound to an Application by its slug.
+        Pages are rendered server-side with the Application's branding,
+        design tokens, and configured flow templates.
+
+        Common page values: `login`, `signup`, `mfa-setup`, `mfa-verify`,
+        `forgot-password`, `reset-password`, `consent`.
+      x-source: "internal/api/router.go:756"
+      security: []
+      parameters:
+        - { name: app_slug, in: path, required: true, schema: { type: string }, description: "Application slug." }
+        - { name: page, in: path, required: true, schema: { type: string }, description: "Page identifier." }
+        - { name: redirect_uri, in: query, schema: { type: string, format: uri }, description: "Where to send the user after success." }
+      responses:
+        "200":
+          description: Hosted page HTML
+          content: { text/html: {} }
+        "404": { description: "Application slug or page not found" }
+
+  /admin/hosted/assets/{path}:
+    get:
+      tags: [system-hosted]
+      operationId: hostedAssetGet
+      summary: Serve hosted-page static assets (CSS, JS, fonts)
+      x-source: "internal/api/router.go:757"
+      security: []
+      parameters:
+        - { name: path, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Asset
+          content:
+            text/css: {}
+            application/javascript: {}
+            font/woff2: {}
+        "404": { description: "Not found" }
+
+  /paywall/{app_slug}:
+    get:
+      tags: [system-hosted]
+      operationId: paywallPage
+      summary: Render the paywall page for an Application
+      description: |
+        Shown when a proxy rule with `action: paywall` matches an
+        unauthorized request. The page reflects the Application's
+        branding + design tokens.
+      x-source: "internal/api/router.go:763"
+      security: []
+      parameters:
+        - { name: app_slug, in: path, required: true, schema: { type: string } }
+        - { name: tier, in: query, schema: { type: string, enum: [free, pro, enterprise] }, description: "Required tier that triggered the paywall." }
+        - { name: continue, in: query, schema: { type: string, format: uri }, description: "URL to continue to after upgrading." }
+      responses:
+        "200":
+          description: Paywall HTML
+          content: { text/html: {} }

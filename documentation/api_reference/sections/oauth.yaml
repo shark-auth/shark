@@ -1,0 +1,1555 @@
+openapi: "3.1.0"
+info:
+  title: SharkAuth OAuth 2.1 Authorization Server
+  version: "0.9.0"
+  description: |
+    OAuth 2.1 authorization-server surface for SharkAuth — an authentication
+    platform purpose-built for MCP servers and agent-to-agent delegation.
+
+    ### RFCs implemented
+
+    | RFC  | Title                                                         |
+    |------|---------------------------------------------------------------|
+    | 6749 | The OAuth 2.0 Authorization Framework                         |
+    | 7009 | OAuth 2.0 Token Revocation                                    |
+    | 7591 | OAuth 2.0 Dynamic Client Registration                         |
+    | 7592 | OAuth 2.0 DCR Management Protocol                             |
+    | 7636 | PKCE by OAuth Public Clients                                  |
+    | 7662 | OAuth 2.0 Token Introspection                                 |
+    | 8414 | OAuth 2.0 Authorization Server Metadata                       |
+    | 8628 | OAuth 2.0 Device Authorization Grant                          |
+    | 8693 | OAuth 2.0 Token Exchange                                      |
+    | 8707 | Resource Indicators for OAuth 2.0                             |
+    | 9449 | OAuth 2.0 Demonstrating Proof of Possession (DPoP)            |
+
+    ### Audience
+
+    This document is written for MCP server authors and OAuth-savvy
+    developers integrating against a SharkAuth deployment. Every operation
+    includes an `x-source` extension pointing to the handler file:line so
+    you can cross-reference behavior against the implementation.
+
+    ### Token shapes
+
+    SharkAuth issues **signed ES256 JWTs** as its canonical access token,
+    but tolerates opaque tokens issued by the device-code flow. JWTs include
+    `iss`, `sub`, `aud`, `client_id`, `scope`, `jti`, `iat`, `exp`, and —
+    when a valid DPoP proof was presented — a `cnf.jkt` confirmation claim.
+
+  contact:
+    name: SharkAuth
+    url: https://sharkauth.com/docs
+    email: support@sharkauth.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://sharkauth.example.com
+    description: Your SharkAuth instance
+
+tags:
+  - name: oauth-discovery
+    description: RFC 8414 metadata + RFC 7517 JWKS — the entrypoints MCP clients use for discovery.
+  - name: oauth-flow
+    description: Authorization + consent endpoints (RFC 6749 §3.1).
+  - name: oauth-tokens
+    description: Token issuance, introspection, revocation, and exchange (RFCs 6749, 7009, 7662, 8693).
+  - name: oauth-dcr
+    description: Dynamic Client Registration and management (RFC 7591 + RFC 7592).
+  - name: oauth-device
+    description: Device Authorization Grant for headless / input-constrained clients (RFC 8628).
+  - name: dpop
+    description: DPoP proof-of-possession headers and confirmation claims (RFC 9449).
+
+security:
+  - {}
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Signed ES256 JWT access token issued by `/oauth/token`. Verify via the
+        keys at `/.well-known/jwks.json`. Tokens include `client_id`, `scope`,
+        `jti`, and (if DPoP was used) `cnf.jkt`.
+    dpop:
+      type: apiKey
+      in: header
+      name: DPoP
+      description: |
+        DPoP proof JWT per RFC 9449. The proof is a short-lived `dpop+jwt`
+        signed by the client's private key. The public key travels in the
+        `jwk` header of the proof. SharkAuth computes the JWK thumbprint and
+        stamps it into the access token as the `cnf.jkt` claim.
+
+        Required claims in the proof JWT:
+
+        - `htm` — HTTP method (upper-case)
+        - `htu` — fully-qualified request URL (no query/fragment)
+        - `iat` — issued-at within a 60-second window
+        - `jti` — unique identifier (replay-checked in-memory)
+        - `ath` — base64url(sha256(access_token)) on resource requests
+
+        Permitted algorithms: ES256, ES384, ES512, RS256, RS384, RS512,
+        PS256, PS384, PS512, EdDSA. Symmetric algorithms are rejected.
+    client_secret_basic:
+      type: http
+      scheme: basic
+      description: |
+        RFC 6749 §2.3.1 HTTP Basic authentication using `client_id`
+        as the username and `client_secret` as the password.
+    client_secret_post:
+      type: apiKey
+      in: query
+      name: client_secret
+      description: |
+        RFC 6749 §2.3.1 — `client_id` and `client_secret` submitted as
+        `application/x-www-form-urlencoded` body parameters. Shown here as
+        `apiKey`/query for OpenAPI expressiveness; in practice they MUST be
+        sent in the request body.
+    private_key_jwt:
+      type: apiKey
+      in: query
+      name: client_assertion
+      description: |
+        RFC 7521 + RFC 7523 — client authentication via a signed JWT
+        assertion. Set `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`
+        and pass the assertion in the `client_assertion` form parameter.
+    registration_access_token:
+      type: http
+      scheme: bearer
+      description: |
+        RFC 7592 per-client bearer token returned at DCR time as
+        `registration_access_token`. Required for GET / PUT / DELETE on
+        `/oauth/register/{client_id}`.
+
+  schemas:
+    OAuthError:
+      type: object
+      description: |
+        RFC 6749 §5.2 error shape. Also used by RFCs 7009, 7591, 7662, 8628.
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code.
+          examples:
+            - invalid_request
+            - invalid_client
+            - invalid_grant
+            - unauthorized_client
+            - unsupported_grant_type
+            - invalid_scope
+            - invalid_token
+            - invalid_dpop_proof
+            - access_denied
+            - authorization_pending
+            - slow_down
+            - expired_token
+            - server_error
+        error_description:
+          type: string
+          description: Human-readable description. Safe to log; not safe to show to end-users verbatim.
+        error_uri:
+          type: string
+          format: uri
+          description: Optional URI to a page documenting the error.
+
+    AuthServerMetadata:
+      type: object
+      description: RFC 8414 Authorization Server Metadata document.
+      required:
+        - issuer
+        - authorization_endpoint
+        - token_endpoint
+        - jwks_uri
+        - response_types_supported
+        - grant_types_supported
+      properties:
+        issuer:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com"]
+        authorization_endpoint:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com/oauth/authorize"]
+        token_endpoint:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com/oauth/token"]
+        jwks_uri:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com/.well-known/jwks.json"]
+        registration_endpoint:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com/oauth/register"]
+        revocation_endpoint:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com/oauth/revoke"]
+        introspection_endpoint:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com/oauth/introspect"]
+        device_authorization_endpoint:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com/oauth/device"]
+        response_types_supported:
+          type: array
+          items: {type: string}
+          examples: [["code"]]
+        response_modes_supported:
+          type: array
+          items: {type: string}
+          examples: [["query"]]
+        grant_types_supported:
+          type: array
+          items: {type: string}
+          examples:
+            - - authorization_code
+              - client_credentials
+              - refresh_token
+              - urn:ietf:params:oauth:grant-type:device_code
+              - urn:ietf:params:oauth:grant-type:token-exchange
+        code_challenge_methods_supported:
+          type: array
+          items: {type: string}
+          examples: [["S256"]]
+        token_endpoint_auth_methods_supported:
+          type: array
+          items: {type: string}
+          examples:
+            - - client_secret_basic
+              - client_secret_post
+              - private_key_jwt
+              - none
+        token_endpoint_auth_signing_alg_values_supported:
+          type: array
+          items: {type: string}
+          examples: [["ES256", "RS256"]]
+        scopes_supported:
+          type: array
+          items: {type: string}
+          examples: [["openid", "profile", "email"]]
+        dpop_signing_alg_values_supported:
+          type: array
+          items: {type: string}
+          examples: [["ES256", "RS256"]]
+        service_documentation:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.com/docs"]
+
+    JWK:
+      type: object
+      description: JSON Web Key per RFC 7517.
+      required: [kty, kid, use]
+      properties:
+        kty:
+          type: string
+          examples: ["EC", "RSA"]
+        use:
+          type: string
+          examples: ["sig"]
+        alg:
+          type: string
+          examples: ["ES256", "RS256"]
+        kid:
+          type: string
+          examples: ["key_2026_04_24_es256"]
+        crv:
+          type: string
+          description: Curve name for EC keys.
+          examples: ["P-256"]
+        x:
+          type: string
+          description: EC x coordinate (base64url, RFC 7518 §6.2).
+        y:
+          type: string
+          description: EC y coordinate (base64url).
+        n:
+          type: string
+          description: RSA modulus (base64url).
+        e:
+          type: string
+          description: RSA public exponent (base64url).
+          examples: ["AQAB"]
+
+    JWKS:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: {$ref: "#/components/schemas/JWK"}
+
+    AuthorizationResponse:
+      type: object
+      description: |
+        The authorization endpoint responds with a 302 redirect to
+        `redirect_uri` carrying these parameters in the query string. This
+        schema documents the shape of that URL fragment/query.
+      required: [code, state]
+      properties:
+        code:
+          type: string
+          description: Authorization code (one-time, short-lived, single-use).
+          examples: ["eyJjb2RlIjoiYWJjIn0.fGpZhg-yq"]
+        state:
+          type: string
+          description: Echo of the client's `state` parameter. Verify to defeat CSRF.
+          examples: ["xyz-csrf-nonce-42"]
+        iss:
+          type: string
+          format: uri
+          description: RFC 9207 issuer identifier echo (when configured).
+
+    TokenRequest:
+      description: |
+        Token endpoint request shape. The `grant_type` field determines
+        which additional fields are required.
+      oneOf:
+        - $ref: "#/components/schemas/TokenRequestAuthorizationCode"
+        - $ref: "#/components/schemas/TokenRequestClientCredentials"
+        - $ref: "#/components/schemas/TokenRequestRefreshToken"
+        - $ref: "#/components/schemas/TokenRequestDeviceCode"
+        - $ref: "#/components/schemas/TokenExchangeRequest"
+      discriminator:
+        propertyName: grant_type
+        mapping:
+          authorization_code: "#/components/schemas/TokenRequestAuthorizationCode"
+          client_credentials: "#/components/schemas/TokenRequestClientCredentials"
+          refresh_token: "#/components/schemas/TokenRequestRefreshToken"
+          "urn:ietf:params:oauth:grant-type:device_code": "#/components/schemas/TokenRequestDeviceCode"
+          "urn:ietf:params:oauth:grant-type:token-exchange": "#/components/schemas/TokenExchangeRequest"
+
+    TokenRequestAuthorizationCode:
+      type: object
+      required: [grant_type, code, redirect_uri, client_id]
+      properties:
+        grant_type:
+          type: string
+          enum: [authorization_code]
+        code:
+          type: string
+          description: Authorization code received at the redirect URI.
+        redirect_uri:
+          type: string
+          format: uri
+          description: Must exactly match the `redirect_uri` used in the authorize step.
+        client_id:
+          type: string
+        client_secret:
+          type: string
+          description: Required for confidential clients; omit for public + PKCE.
+        code_verifier:
+          type: string
+          description: RFC 7636 PKCE verifier. Required for public clients.
+          examples: ["dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"]
+        resource:
+          type: string
+          format: uri
+          description: RFC 8707 resource indicator.
+
+    TokenRequestClientCredentials:
+      type: object
+      required: [grant_type]
+      properties:
+        grant_type:
+          type: string
+          enum: [client_credentials]
+        client_id:
+          type: string
+        client_secret:
+          type: string
+        scope:
+          type: string
+          description: Space-separated scope list.
+          examples: ["mcp:tools:read mcp:tools:invoke"]
+        resource:
+          type: string
+          format: uri
+          description: RFC 8707 resource indicator. Populates `aud` on the issued JWT.
+          examples: ["https://mcp.example.com"]
+        audience:
+          type: string
+          description: Alternate audience targeting (RFC 8693 style).
+
+    TokenRequestRefreshToken:
+      type: object
+      required: [grant_type, refresh_token]
+      properties:
+        grant_type:
+          type: string
+          enum: [refresh_token]
+        refresh_token:
+          type: string
+        client_id:
+          type: string
+        client_secret:
+          type: string
+        scope:
+          type: string
+          description: Optional scope narrowing. Must be a subset of the original grant.
+
+    TokenRequestDeviceCode:
+      type: object
+      required: [grant_type, device_code, client_id]
+      properties:
+        grant_type:
+          type: string
+          enum: ["urn:ietf:params:oauth:grant-type:device_code"]
+        device_code:
+          type: string
+          description: The `device_code` returned by `POST /oauth/device`.
+        client_id:
+          type: string
+
+    TokenExchangeRequest:
+      type: object
+      description: |
+        RFC 8693 token-exchange request. The acting agent authenticates with
+        its own client credentials, presents a `subject_token` (a JWT issued
+        by this server), and receives a new JWT containing an `act` claim
+        that records the full delegation chain. If the subject already has
+        an `act` claim, it is nested inside the new one so the whole
+        delegation history remains inspectable.
+      required: [grant_type, subject_token, subject_token_type]
+      properties:
+        grant_type:
+          type: string
+          enum: ["urn:ietf:params:oauth:grant-type:token-exchange"]
+        subject_token:
+          type: string
+          description: JWT whose subject the acting agent wants to act on behalf of.
+        subject_token_type:
+          type: string
+          enum: ["urn:ietf:params:oauth:token-type:access_token"]
+          description: Only access-token subjects are supported today.
+        actor_token:
+          type: string
+          description: |
+            Optional JWT identifying the acting party when the `Authorization`
+            header does not carry it. In SharkAuth the acting agent is
+            authenticated via HTTP Basic / form `client_id`+`client_secret`;
+            `actor_token` is accepted but not required.
+        actor_token_type:
+          type: string
+          enum: ["urn:ietf:params:oauth:token-type:access_token"]
+        requested_token_type:
+          type: string
+          enum: ["urn:ietf:params:oauth:token-type:access_token"]
+          description: Defaults to access_token if omitted.
+        scope:
+          type: string
+          description: |
+            Requested scopes; must be a subset of the subject token's scopes.
+            If omitted, the subject token's scopes carry over unchanged.
+        audience:
+          type: string
+          description: Target audience for the issued token (RFC 8693 §2.1).
+        resource:
+          type: string
+          format: uri
+          description: RFC 8707 resource indicator. Checked against `audience` fallback order.
+        client_id:
+          type: string
+        client_secret:
+          type: string
+
+    TokenResponse:
+      type: object
+      description: RFC 6749 §5.1 successful token response.
+      required: [access_token, token_type]
+      properties:
+        access_token:
+          type: string
+          description: Signed ES256 JWT. Verify via `/.well-known/jwks.json`.
+          examples:
+            - "eyJhbGciOiJFUzI1NiIsImtpZCI6ImtleV8yMDI2XzA0XzI0X2VzMjU2IiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL3NoYXJrYXV0aC5leGFtcGxlLmNvbSIsInN1YiI6InVzcl8xOGRhNjIiLCJhdWQiOiJodHRwczovL21jcC5leGFtcGxlLmNvbSIsImNsaWVudF9pZCI6InNoYXJrX2Rjcl9hYmMxMjMiLCJzY29wZSI6Im1jcDp0b29sczpyZWFkIiwianRpIjoianRpXzhkNzEwOWEiLCJpYXQiOjE3NjU5ODc2NTQsImV4cCI6MTc2NTk5MTI1NCwiY25mIjp7Imprd CI6ImFGa0xwbWlueFBfTHh1WnRwQnN0S2I5SnpVR0JXaW9lTS1uc1JKSXN2WXMifX0.MEQCIAbcdef..."
+        token_type:
+          type: string
+          enum: [Bearer, bearer, DPoP]
+          description: |
+            `Bearer` for standard tokens, `DPoP` if the request included a
+            valid DPoP proof (RFC 9449 §5).
+        expires_in:
+          type: integer
+          description: Lifetime of the access token in seconds.
+          examples: [3600]
+        refresh_token:
+          type: string
+          description: Issued when `offline_access` semantics apply (authorization_code / device_code flows).
+        scope:
+          type: string
+          description: Space-separated list of scopes actually granted (may be narrower than requested).
+          examples: ["mcp:tools:read mcp:tools:invoke"]
+        issued_token_type:
+          type: string
+          description: RFC 8693 — present only on token-exchange responses.
+          enum: ["urn:ietf:params:oauth:token-type:access_token"]
+
+    RevokeRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: The access_token or refresh_token to revoke.
+        token_type_hint:
+          type: string
+          enum: [access_token, refresh_token]
+          description: Optional hint to speed up server-side lookup.
+
+    IntrospectRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+        token_type_hint:
+          type: string
+          enum: [access_token, refresh_token]
+
+    IntrospectResponse:
+      type: object
+      description: |
+        RFC 7662 §2.2 introspection response. When `active` is false the
+        server returns only the `active` field (all other claims are
+        omitted — do NOT rely on their absence meaning anything else).
+      required: [active]
+      properties:
+        active:
+          type: boolean
+          description: Whether the token is currently valid, unexpired, and unrevoked.
+          examples: [true]
+        scope:
+          type: string
+          examples: ["mcp:tools:read mcp:tools:invoke"]
+        client_id:
+          type: string
+          examples: ["shark_dcr_abc123"]
+        sub:
+          type: string
+          examples: ["usr_18da62"]
+        exp:
+          type: integer
+          format: int64
+          examples: [1765991254]
+        iat:
+          type: integer
+          format: int64
+          examples: [1765987654]
+        nbf:
+          type: integer
+          format: int64
+        aud:
+          type: string
+          examples: ["https://mcp.example.com"]
+        iss:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com"]
+        jti:
+          type: string
+          examples: ["jti_8d7109a0"]
+        token_type:
+          type: string
+          examples: ["Bearer"]
+        agent_id:
+          type: string
+          description: SharkAuth-specific — internal agent identifier for the client.
+          examples: ["agent_yfWkz7Lp"]
+        username:
+          type: string
+          description: Resolved user email when `sub` maps to a real user.
+          examples: ["hello@example.com"]
+
+    DCRRequest:
+      type: object
+      description: RFC 7591 Dynamic Client Registration metadata.
+      required: [client_name]
+      properties:
+        client_name:
+          type: string
+          description: Human-readable client name.
+          examples: ["Claude Desktop"]
+        redirect_uris:
+          type: array
+          items: {type: string, format: uri}
+          description: Required when `authorization_code` is in `grant_types`.
+          examples:
+            - ["https://claude.example.com/oauth/callback", "http://localhost:33418/callback"]
+        grant_types:
+          type: array
+          items:
+            type: string
+            enum:
+              - authorization_code
+              - client_credentials
+              - refresh_token
+              - "urn:ietf:params:oauth:grant-type:device_code"
+          examples: [["authorization_code", "refresh_token"]]
+        response_types:
+          type: array
+          items: {type: string}
+          examples: [["code"]]
+        token_endpoint_auth_method:
+          type: string
+          enum: [client_secret_basic, client_secret_post, private_key_jwt, none]
+          default: client_secret_basic
+        scope:
+          type: string
+          description: Space-separated scope list.
+          examples: ["mcp:tools:read mcp:tools:invoke"]
+        client_uri:
+          type: string
+          format: uri
+        logo_uri:
+          type: string
+          format: uri
+        tos_uri:
+          type: string
+          format: uri
+        policy_uri:
+          type: string
+          format: uri
+        contacts:
+          type: array
+          items: {type: string, format: email}
+
+    DCRResponse:
+      allOf:
+        - $ref: "#/components/schemas/DCRRequest"
+        - type: object
+          required:
+            - client_id
+            - client_id_issued_at
+            - registration_access_token
+            - registration_client_uri
+          properties:
+            client_id:
+              type: string
+              examples: ["shark_dcr_yfWkz7LpQaXbNe9RsJc2m"]
+            client_secret:
+              type: string
+              description: |
+                Only returned on initial registration (POST) and on secret
+                rotation. Store it immediately — it is never re-issued.
+              examples: ["b4cf1a6ec7eb4a9d8f0c1e2a3b4c5d6e7f8a9b0c1d2e3f405162738495a6b7c8"]
+            client_id_issued_at:
+              type: integer
+              format: int64
+              examples: [1765987654]
+            client_secret_expires_at:
+              type: integer
+              format: int64
+              description: 0 means "never expires" (current default).
+              examples: [0]
+            registration_access_token:
+              type: string
+              description: |
+                Bearer token authorizing subsequent RFC 7592 management
+                calls on this client record. Only returned on initial
+                registration and on explicit rotation.
+              examples: ["1f2e3d4c5b6a798807665544332211ffeeddccbbaa0099887766554433221100"]
+            registration_client_uri:
+              type: string
+              format: uri
+              examples: ["https://sharkauth.example.com/oauth/register/shark_dcr_yfWkz7LpQaXbNe9RsJc2m"]
+
+    DCRError:
+      type: object
+      description: RFC 7591 §3.2.2 error response.
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_client_metadata
+            - invalid_redirect_uri
+            - invalid_token
+            - server_error
+        error_description:
+          type: string
+
+    DeviceAuthRequest:
+      type: object
+      required: [client_id]
+      properties:
+        client_id:
+          type: string
+        scope:
+          type: string
+          examples: ["mcp:tools:read"]
+        resource:
+          type: string
+          format: uri
+          description: RFC 8707 resource indicator.
+
+    DeviceAuthResponse:
+      type: object
+      description: RFC 8628 §3.2 device authorization response.
+      required:
+        - device_code
+        - user_code
+        - verification_uri
+        - expires_in
+        - interval
+      properties:
+        device_code:
+          type: string
+          description: Opaque base64url-encoded 32-byte random token. Hash-stored server-side.
+          examples: ["WUxJRCBkZXZpY2UgY29kZSB0b2tlbiBleGFtcGxlIHZhbHVlIHN0cmluZw"]
+        user_code:
+          type: string
+          description: 8-char XXXX-XXXX code from unambiguous charset (no I, O, 0, 1).
+          examples: ["BRGH-K3QN"]
+        verification_uri:
+          type: string
+          format: uri
+          examples: ["https://sharkauth.example.com/oauth/device/verify"]
+        verification_uri_complete:
+          type: string
+          format: uri
+          description: Pre-filled URL with user_code for QR-code-style flows.
+          examples: ["https://sharkauth.example.com/oauth/device/verify?user_code=BRGH-K3QN"]
+        expires_in:
+          type: integer
+          description: Device code lifetime in seconds (default 900).
+          examples: [900]
+        interval:
+          type: integer
+          description: Minimum polling interval in seconds.
+          examples: [5]
+
+  parameters:
+    ClientIDPath:
+      name: client_id
+      in: path
+      required: true
+      schema: {type: string}
+      description: The `client_id` returned at registration time.
+      examples:
+        default:
+          value: "shark_dcr_yfWkz7LpQaXbNe9RsJc2m"
+
+paths:
+  /.well-known/oauth-authorization-server:
+    get:
+      operationId: getAuthorizationServerMetadata
+      tags: [oauth-discovery]
+      summary: Fetch OAuth 2.0 Authorization Server Metadata.
+      description: |
+        Returns the RFC 8414 discovery document describing this server's
+        endpoints, supported grant types, code-challenge methods, token
+        endpoint auth methods, signing algorithms, scopes, and DPoP
+        capabilities. This is the MCP discovery entrypoint — MCP clients
+        start here, then use `registration_endpoint` (for DCR) and
+        `authorization_endpoint` / `token_endpoint` for flows.
+
+        Response is cacheable for 1 hour via `Cache-Control: public, max-age=3600`.
+      security: [{}]
+      x-source: "internal/oauth/metadata.go:36"
+      responses:
+        "200":
+          description: Discovery document.
+          headers:
+            Cache-Control:
+              schema: {type: string}
+              example: "public, max-age=3600"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AuthServerMetadata"}
+              example:
+                issuer: https://sharkauth.example.com
+                authorization_endpoint: https://sharkauth.example.com/oauth/authorize
+                token_endpoint: https://sharkauth.example.com/oauth/token
+                jwks_uri: https://sharkauth.example.com/.well-known/jwks.json
+                registration_endpoint: https://sharkauth.example.com/oauth/register
+                revocation_endpoint: https://sharkauth.example.com/oauth/revoke
+                introspection_endpoint: https://sharkauth.example.com/oauth/introspect
+                device_authorization_endpoint: https://sharkauth.example.com/oauth/device
+                response_types_supported: [code]
+                response_modes_supported: [query]
+                grant_types_supported:
+                  - authorization_code
+                  - client_credentials
+                  - refresh_token
+                  - urn:ietf:params:oauth:grant-type:device_code
+                  - urn:ietf:params:oauth:grant-type:token-exchange
+                code_challenge_methods_supported: [S256]
+                token_endpoint_auth_methods_supported:
+                  - client_secret_basic
+                  - client_secret_post
+                  - private_key_jwt
+                  - none
+                token_endpoint_auth_signing_alg_values_supported: [ES256, RS256]
+                scopes_supported: [openid, profile, email]
+                dpop_signing_alg_values_supported: [ES256, RS256]
+                service_documentation: https://sharkauth.com/docs
+
+  /.well-known/jwks.json:
+    get:
+      operationId: getJWKS
+      tags: [oauth-discovery]
+      summary: Fetch the JSON Web Key Set.
+      description: |
+        Returns RFC 7517 JWKS containing the active and recently-retired
+        signing keys. The retirement window is 2x the access-token TTL so
+        in-flight tokens signed with a just-rotated key remain verifiable
+        until they expire. Cached for 5 minutes.
+
+        Use these keys to validate the `access_token` JWT's ES256 signature.
+        Look up by `kid` from the JWT header.
+      security: [{}]
+      x-source: "internal/api/well_known_handlers.go:73"
+      responses:
+        "200":
+          description: JWKS document.
+          headers:
+            Cache-Control:
+              schema: {type: string}
+              example: "public, max-age=300"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/JWKS"}
+              example:
+                keys:
+                  - kty: EC
+                    use: sig
+                    alg: ES256
+                    crv: P-256
+                    kid: key_2026_04_24_es256
+                    x: MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4
+                    y: 4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM
+        "500":
+          description: Failed to list signing keys.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+
+  /oauth/authorize:
+    get:
+      operationId: authorizeGet
+      tags: [oauth-flow]
+      summary: Begin the authorization-code flow.
+      description: |
+        RFC 6749 §3.1 + RFC 7636 PKCE authorization endpoint. The client
+        navigates the end-user's browser here. Behavior:
+
+        1. If the user is not logged in, the server redirects to the
+           hosted login page for the application
+           (`/hosted/{app_slug}/login?...&return_to=<this-request>`).
+        2. If logged in with an existing consent that covers all requested
+           scopes, the server redirects straight back to `redirect_uri`
+           with `code` and `state`.
+        3. Otherwise the server renders the HTML consent page.
+
+        PKCE is mandatory for public clients — omitting `code_challenge`
+        with `token_endpoint_auth_method=none` will be rejected at the
+        token step. RFC 8707 `resource` is supported; SharkAuth stamps it
+        into the issued token's `aud` claim.
+      security: [{}]
+      x-source: "internal/oauth/handlers.go:181"
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema: {type: string, enum: [code]}
+        - name: client_id
+          in: query
+          required: true
+          schema: {type: string}
+        - name: redirect_uri
+          in: query
+          required: true
+          schema: {type: string, format: uri}
+        - name: scope
+          in: query
+          schema: {type: string}
+          description: Space-separated scope list.
+        - name: state
+          in: query
+          schema: {type: string}
+          description: Opaque CSRF nonce. Echoed in the redirect.
+        - name: code_challenge
+          in: query
+          schema: {type: string}
+          description: RFC 7636 PKCE challenge (base64url(sha256(verifier))).
+        - name: code_challenge_method
+          in: query
+          schema: {type: string, enum: [S256]}
+        - name: resource
+          in: query
+          schema: {type: string, format: uri}
+          description: RFC 8707 resource indicator.
+        - name: audience
+          in: query
+          schema: {type: string}
+      responses:
+        "200":
+          description: Consent HTML page rendered (new consent required).
+          content:
+            text/html: {}
+        "302":
+          description: |
+            Either a redirect to `redirect_uri` carrying `code` + `state`
+            (success) or a redirect to the hosted login page (user not
+            authenticated). Error responses are also 302 back to
+            `redirect_uri` with `error`, `error_description` per RFC 6749
+            §4.1.2.1.
+          headers:
+            Location:
+              schema: {type: string, format: uri}
+
+    post:
+      operationId: authorizeDecision
+      tags: [oauth-flow]
+      summary: Submit a consent decision.
+      description: |
+        Handles the HTML consent form POST. The server re-parses the
+        original authorization request from the `challenge` field (the
+        original query string carried through the consent page), records
+        the consent grant, and redirects back to `redirect_uri` with code.
+        Submitting `approved=false` returns an RFC 6749 `access_denied`
+        error via redirect.
+      security: [{}]
+      x-source: "internal/oauth/handlers.go:276"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [approved, challenge]
+              properties:
+                approved:
+                  type: string
+                  enum: ["true", "false"]
+                challenge:
+                  type: string
+                  description: Full original query string from the authorize GET.
+      responses:
+        "302":
+          description: Redirect back to redirect_uri with code or error.
+        "401":
+          description: End-user authentication required (session expired during consent).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+              example:
+                error: login_required
+                error_description: End-user authentication is required
+
+  /oauth/token:
+    post:
+      operationId: token
+      tags: [oauth-tokens]
+      summary: Exchange an authorization grant for tokens.
+      description: |
+        Unified token endpoint supporting five grant types (selected via
+        the `grant_type` field):
+
+        - `authorization_code` — standard code flow (RFC 6749 §4.1).
+        - `client_credentials` — machine-to-machine (RFC 6749 §4.4).
+        - `refresh_token` — token refresh (RFC 6749 §6). Rotating.
+        - `urn:ietf:params:oauth:grant-type:device_code` — device flow
+          polling (RFC 8628). Returns `authorization_pending`, `slow_down`,
+          `access_denied`, or `expired_token` until the user approves.
+        - `urn:ietf:params:oauth:grant-type:token-exchange` — RFC 8693
+          delegation. Acting agent presents a `subject_token`; receives a
+          new JWT with an `act` claim recording the full delegation chain.
+          Scope narrowing enforced: requested scopes MUST be a subset of
+          the subject token's scopes. Optional `may_act` claim on the
+          subject token gates which clients can act as delegates.
+
+        **DPoP**: if a valid `DPoP` header is present, the proof's JWK
+        thumbprint is stamped into the issued JWT as `cnf.jkt` and the
+        token type becomes `DPoP` (RFC 9449 §5).
+
+        Issued access tokens are signed ES256 JWTs with at minimum
+        `iss`, `sub`, `aud`, `client_id`, `scope`, `jti`, `iat`, `exp`.
+      x-source: "internal/oauth/handlers.go:47"
+      security:
+        - client_secret_basic: []
+        - client_secret_post: []
+        - private_key_jwt: []
+        - {}
+      parameters:
+        - name: DPoP
+          in: header
+          schema: {type: string}
+          description: |
+            Optional DPoP proof JWT (RFC 9449). Example value (line-broken for display):
+            `eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6IkVTMjU2IiwiandrIjp7Imt0eSI6IkVDIiwiY3J2IjoiUC0yNTYiLCJ4IjoibDhwcnQ4MDAiLCJ5IjoiWmhQN2VVTSJ9fQ.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9zaGFya2F1dGguZXhhbXBsZS5jb20vb2F1dGgvdG9rZW4iLCJpYXQiOjE3NjU5ODc2NTQsImp0aSI6IjE5YzYxOGE1In0.MEUCIQC...`
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: "#/components/schemas/TokenRequest"}
+            examples:
+              authorization_code:
+                summary: authorization_code grant
+                value:
+                  grant_type: authorization_code
+                  code: Ag8fX3Ab-cD12
+                  redirect_uri: https://claude.example.com/oauth/callback
+                  client_id: shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+                  code_verifier: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+              client_credentials:
+                summary: client_credentials grant with resource indicator
+                value:
+                  grant_type: client_credentials
+                  client_id: shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+                  client_secret: b4cf1a6ec7eb4a9d8f0c1e2a3b4c5d6e
+                  scope: mcp:tools:read mcp:tools:invoke
+                  resource: https://mcp.example.com
+              refresh_token:
+                summary: refresh_token rotation
+                value:
+                  grant_type: refresh_token
+                  refresh_token: f3d4e5c6b7a8998877665544332211ff
+                  client_id: shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+                  client_secret: b4cf1a6ec7eb4a9d8f0c1e2a3b4c5d6e
+              device_code:
+                summary: device_code grant (polling)
+                value:
+                  grant_type: urn:ietf:params:oauth:grant-type:device_code
+                  device_code: WUxJRCBkZXZpY2UgY29kZSB0b2tlbiBleGFtcGxlIHZhbHVlIHN0cmluZw
+                  client_id: shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+              token_exchange:
+                summary: RFC 8693 delegation with subject + actor chain
+                value:
+                  grant_type: urn:ietf:params:oauth:grant-type:token-exchange
+                  subject_token: eyJhbGciOiJFUzI1NiIsImtpZCI6ImtleV8yMDI2XzA0XzI0In0.eyJzdWIiOiJ1c3JfMTg...
+                  subject_token_type: urn:ietf:params:oauth:token-type:access_token
+                  actor_token: eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJzaGFya19kY3JfcGFyZW50MTIzIn0....
+                  actor_token_type: urn:ietf:params:oauth:token-type:access_token
+                  requested_token_type: urn:ietf:params:oauth:token-type:access_token
+                  scope: mcp:tools:read
+                  resource: https://mcp.example.com
+                  client_id: shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+                  client_secret: b4cf1a6ec7eb4a9d8f0c1e2a3b4c5d6e
+      responses:
+        "200":
+          description: Token issued.
+          headers:
+            Cache-Control:
+              schema: {type: string}
+              example: "no-store"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TokenResponse"}
+              examples:
+                jwt_with_cnf:
+                  summary: DPoP-bound JWT access token with cnf.jkt
+                  value:
+                    access_token: "eyJhbGciOiJFUzI1NiIsImtpZCI6ImtleV8yMDI2XzA0XzI0X2VzMjU2IiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL3NoYXJrYXV0aC5leGFtcGxlLmNvbSIsInN1YiI6InVzcl8xOGRhNjIiLCJhdWQiOiJodHRwczovL21jcC5leGFtcGxlLmNvbSIsImNsaWVudF9pZCI6InNoYXJrX2Rjcl9hYmMiLCJzY29wZSI6Im1jcDp0b29sczpyZWFkIiwianRpIjoianRpXzhkNzEwOWEwIiwiaWF0IjoxNzY1OTg3NjU0LCJleHAiOjE3NjU5OTEyNTQsImNuZiI6eyJqa3QiOiJhRmtMcG1pbnhQX0x4dVp0cEJzdEtiOUp6VUdCV2lvZU0tbnNSSklzdllzIn19.MEQCIG..."
+                    token_type: DPoP
+                    expires_in: 3600
+                    refresh_token: f3d4e5c6b7a8998877665544332211ff1a2b3c4d5e6f
+                    scope: mcp:tools:read
+                token_exchange:
+                  summary: token-exchange success with act chain (nested)
+                  value:
+                    access_token: "eyJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3NoYXJrYXV0aC5leGFtcGxlLmNvbSIsInN1YiI6InVzcl8xOGRhNjIiLCJjbGllbnRfaWQiOiJzaGFya19kY3JfY2hpbGQ0NTYiLCJzY29wZSI6Im1jcDp0b29sczpyZWFkIiwiYWN0Ijp7InN1YiI6InNoYXJrX2Rjcl9jaGlsZDQ1NiIsImFjdCI6eyJzdWIiOiJzaGFya19kY3JfcGFyZW50MTIzIn19LCJpYXQiOjE3NjU5ODc2NTQsImV4cCI6MTc2NTk5MTI1NCwianRpIjoianRpXzE5YzYxOGE1In0.MEUCIQ..."
+                    issued_token_type: urn:ietf:params:oauth:token-type:access_token
+                    token_type: Bearer
+                    expires_in: 3600
+                    scope: mcp:tools:read
+                device_code_pending:
+                  summary: (Error envelope shown on device_code polling — see 400.)
+                  value: {}
+        "400":
+          description: Invalid request, bad grant, DPoP proof failure, or (for device flow) polling state.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+              examples:
+                authorization_pending:
+                  value:
+                    error: authorization_pending
+                    error_description: the user has not yet approved the request
+                slow_down:
+                  value:
+                    error: slow_down
+                    error_description: polling too fast, wait at least 5 seconds
+                invalid_dpop_proof:
+                  value:
+                    error: invalid_dpop_proof
+                    error_description: "dpop: jti already seen (replay detected)"
+                invalid_scope_exchange:
+                  value:
+                    error: invalid_scope
+                    error_description: requested scope exceeds subject_token scope
+        "401":
+          description: Client authentication failed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+              example:
+                error: invalid_client
+                error_description: client authentication failed
+        "403":
+          description: may_act claim rejected the acting agent.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+              example:
+                error: access_denied
+                error_description: acting agent is not permitted by may_act
+
+  /oauth/revoke:
+    post:
+      operationId: revoke
+      tags: [oauth-tokens]
+      summary: Revoke an access or refresh token.
+      description: |
+        RFC 7009 token revocation. Authenticated callers revoke their own
+        tokens. Admin Bearer tokens (`sk_live_*`) may revoke any token.
+
+        **Refresh-token family cascade**: revoking a refresh token revokes
+        the entire token family (all rotated refresh tokens derived from
+        the original grant). Revoking an access token that belongs to a
+        family also cascades to sibling refresh tokens.
+
+        Per RFC 7009 §2.2, returns 200 OK even for unknown / invalid /
+        already-revoked tokens — the response is effectively idempotent
+        and carries no body.
+      x-source: "internal/oauth/revoke.go:16"
+      security:
+        - client_secret_basic: []
+        - client_secret_post: []
+        - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: "#/components/schemas/RevokeRequest"}
+            example:
+              token: f3d4e5c6b7a8998877665544332211ff1a2b3c4d
+              token_type_hint: refresh_token
+      responses:
+        "200":
+          description: Revocation accepted (idempotent, body is empty).
+        "400":
+          description: Malformed request body.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+        "401":
+          description: Client authentication required.
+          headers:
+            WWW-Authenticate:
+              schema: {type: string}
+              example: 'Basic realm="oauth"'
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+
+  /oauth/introspect:
+    post:
+      operationId: introspect
+      tags: [oauth-tokens]
+      summary: Introspect an access or refresh token.
+      description: |
+        RFC 7662 token introspection. Resource servers (including MCP
+        servers) call this to authoritatively validate a bearer token
+        against the database — cheaper and more correct than parsing the
+        JWT locally when you need to know whether the token has been
+        revoked mid-lifetime.
+
+        Authentication: client credentials (Basic or body) OR admin
+        Bearer `sk_live_*`. Missing/unknown/revoked/expired tokens return
+        `{"active": false}` with HTTP 200 (per RFC 7662 §2.2).
+
+        Internally, SharkAuth looks tokens up three ways in order:
+        1. JWT `jti` claim (if the token is a JWT).
+        2. SHA-256 of the token's signature segment (HMAC opaque format).
+        3. SHA-256 of the full raw token string (fallback).
+      x-source: "internal/oauth/introspect.go:45"
+      security:
+        - client_secret_basic: []
+        - client_secret_post: []
+        - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: "#/components/schemas/IntrospectRequest"}
+            example:
+              token: "eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJ1c3JfMTg..."
+              token_type_hint: access_token
+      responses:
+        "200":
+          description: Introspection result (active=true for valid, active=false otherwise).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IntrospectResponse"}
+              examples:
+                active:
+                  value:
+                    active: true
+                    scope: mcp:tools:read mcp:tools:invoke
+                    client_id: shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+                    sub: usr_18da62
+                    aud: https://mcp.example.com
+                    iss: https://sharkauth.example.com
+                    jti: jti_8d7109a0
+                    iat: 1765987654
+                    exp: 1765991254
+                    token_type: Bearer
+                    agent_id: agent_yfWkz7Lp
+                    username: hello@example.com
+                inactive:
+                  value:
+                    active: false
+        "401":
+          description: Client authentication required.
+          headers:
+            WWW-Authenticate:
+              schema: {type: string}
+              example: 'Basic realm="oauth"'
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+
+  /oauth/register:
+    post:
+      operationId: dcrRegister
+      tags: [oauth-dcr]
+      summary: Register a new OAuth client (RFC 7591).
+      description: |
+        Open (no auth) dynamic client registration endpoint. Returns a
+        `client_id`, `client_secret` (for confidential clients), and a
+        `registration_access_token` the client MUST store to manage its
+        own registration later (RFC 7592).
+
+        Defaults if omitted: `grant_types=["authorization_code"]`,
+        `response_types=["code"]`, `token_endpoint_auth_method=client_secret_basic`.
+        Redirect URIs MUST be absolute `https://` — `http://` is allowed
+        only for `localhost`, `127.0.0.1`, `::1`.
+      security: [{}]
+      x-source: "internal/oauth/dcr.go:284"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DCRRequest"}
+            example:
+              client_name: Claude Desktop
+              redirect_uris:
+                - https://claude.example.com/oauth/callback
+                - http://localhost:33418/callback
+              grant_types: [authorization_code, refresh_token]
+              response_types: [code]
+              token_endpoint_auth_method: client_secret_basic
+              scope: mcp:tools:read mcp:tools:invoke
+              client_uri: https://claude.ai
+              logo_uri: https://claude.ai/logo.png
+              contacts: [security@anthropic.com]
+      responses:
+        "201":
+          description: Client registered.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRResponse"}
+        "400":
+          description: Invalid client metadata or redirect URI.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+              examples:
+                invalid_client_metadata:
+                  value:
+                    error: invalid_client_metadata
+                    error_description: client_name is required
+                invalid_redirect_uri:
+                  value:
+                    error: invalid_redirect_uri
+                    error_description: "\"ftp://evil.example\": scheme \"ftp\" is not allowed (use https or http://localhost)"
+        "500":
+          description: Server error storing client.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+
+  /oauth/register/{client_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientIDPath"
+    get:
+      operationId: dcrGet
+      tags: [oauth-dcr]
+      summary: Retrieve a registered client's metadata (RFC 7592).
+      description: |
+        Read-back of the current client metadata. Requires the
+        `registration_access_token` issued at registration time as
+        `Authorization: Bearer <token>`.
+
+        The `client_secret` and `registration_access_token` are NOT
+        returned on read — those are only issued at registration time or
+        on explicit rotation.
+      x-source: "internal/oauth/dcr.go:421"
+      security:
+        - registration_access_token: []
+      responses:
+        "200":
+          description: Current client metadata.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRResponse"}
+        "401":
+          description: Missing or invalid registration access token.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+              example:
+                error: invalid_token
+                error_description: invalid registration access token
+        "404":
+          description: Client not found.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+    put:
+      operationId: dcrUpdate
+      tags: [oauth-dcr]
+      summary: Update a registered client's metadata (RFC 7592).
+      description: |
+        Replaces the client's metadata. All fields in the request body
+        overwrite the existing values — pass the full metadata, not a
+        partial patch. Grants and redirect URIs are re-validated.
+      x-source: "internal/oauth/dcr.go:442"
+      security:
+        - registration_access_token: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DCRRequest"}
+      responses:
+        "200":
+          description: Updated. Secret and registration token are NOT re-issued.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRResponse"}
+        "400":
+          description: Invalid client metadata.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+        "401":
+          description: Missing or invalid registration access token.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+    delete:
+      operationId: dcrDelete
+      tags: [oauth-dcr]
+      summary: Deregister a client (RFC 7592).
+      description: |
+        Deactivates the client record and revokes all outstanding tokens
+        issued to it. Non-reversible — a fresh registration creates a new
+        `client_id`.
+      x-source: "internal/oauth/dcr.go:539"
+      security:
+        - registration_access_token: []
+      responses:
+        "204":
+          description: Client deactivated and tokens revoked.
+        "401":
+          description: Missing or invalid registration access token.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+
+  /oauth/register/{client_id}/secret:
+    parameters:
+      - $ref: "#/components/parameters/ClientIDPath"
+    post:
+      operationId: dcrRotateSecret
+      tags: [oauth-dcr]
+      summary: Rotate the client secret.
+      description: |
+        Issues a new `client_secret` and keeps the OLD secret valid for a
+        1-hour grace window. Use this to rotate secrets without downtime:
+        roll out the new secret, confirm traffic is flowing, then let the
+        old one expire automatically.
+      x-source: "internal/oauth/dcr.go:583"
+      security:
+        - registration_access_token: []
+      responses:
+        "200":
+          description: New client_secret issued.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRResponse"}
+              example:
+                client_id: shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+                client_secret: "7c1b5a4e3d2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b"
+                client_id_issued_at: 1765000000
+                client_secret_expires_at: 0
+                registration_client_uri: https://sharkauth.example.com/oauth/register/shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+        "401":
+          description: Missing or invalid registration access token.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+
+  /oauth/register/{client_id}/registration-token:
+    parameters:
+      - $ref: "#/components/parameters/ClientIDPath"
+    delete:
+      operationId: dcrRotateRegistrationToken
+      tags: [oauth-dcr]
+      summary: Rotate the registration access token.
+      description: |
+        Invalidates the current `registration_access_token` immediately
+        and issues a new one. Unlike secret rotation there is no grace
+        window — use this when you suspect the registration token was
+        leaked.
+      x-source: "internal/oauth/dcr.go:634"
+      security:
+        - registration_access_token: []
+      responses:
+        "200":
+          description: New registration access token issued.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRResponse"}
+        "401":
+          description: Missing or invalid registration access token.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DCRError"}
+
+  /oauth/device:
+    post:
+      operationId: deviceAuthorization
+      tags: [oauth-device]
+      summary: Start a device authorization flow (RFC 8628).
+      description: |
+        Headless / input-constrained clients call this to start the
+        device flow. Returns a `device_code` (for polling `/oauth/token`),
+        a short `user_code` the user types into a browser, and the
+        `verification_uri` where they enter it.
+
+        Rate limit: 10 requests per minute per `client_id`. Default code
+        lifetime is 15 minutes; default polling interval is 5 seconds.
+      security: [{}]
+      x-source: "internal/oauth/device.go:105"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: "#/components/schemas/DeviceAuthRequest"}
+            example:
+              client_id: shark_dcr_yfWkz7LpQaXbNe9RsJc2m
+              scope: mcp:tools:read
+              resource: https://mcp.example.com
+      responses:
+        "200":
+          description: Device flow initiated.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DeviceAuthResponse"}
+              example:
+                device_code: WUxJRCBkZXZpY2UgY29kZSB0b2tlbiBleGFtcGxlIHZhbHVlIHN0cmluZw
+                user_code: BRGH-K3QN
+                verification_uri: https://sharkauth.example.com/oauth/device/verify
+                verification_uri_complete: https://sharkauth.example.com/oauth/device/verify?user_code=BRGH-K3QN
+                expires_in: 900
+                interval: 5
+        "400":
+          description: Missing `client_id` or malformed form.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+        "401":
+          description: Unknown or inactive client.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+              example:
+                error: invalid_client
+                error_description: unknown or inactive client
+        "429":
+          description: Per-client rate limit exceeded (10/min).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OAuthError"}
+              example:
+                error: slow_down
+                error_description: too many device authorization requests
+
+  /oauth/device/verify:
+    get:
+      operationId: deviceVerifyPage
+      tags: [oauth-device]
+      summary: Render the device code-entry page.
+      description: |
+        End-user-facing HTML page. If `user_code` is supplied and the user
+        is logged in, renders the approve/deny consent page. If
+        `user_code` is supplied but the user is not logged in, redirects
+        to the hosted login with `return_to` preserving the flow. Otherwise
+        renders a plain code-entry form.
+
+        Machine clients do NOT call this endpoint — they poll `/oauth/token`
+        with the `device_code` grant.
+      security: [{}]
+      x-source: "internal/oauth/device.go:203"
+      parameters:
+        - name: user_code
+          in: query
+          schema: {type: string}
+          description: The 8-char code shown to the user by the headless client.
+          examples:
+            default: {value: "BRGH-K3QN"}
+      responses:
+        "200":
+          description: HTML page rendered.
+          content:
+            text/html: {}
+        "302":
+          description: Redirect to hosted login (user not authenticated).
+
+    post:
+      operationId: deviceApprove
+      tags: [oauth-device]
+      summary: Submit the user's approve/deny decision for a device code.
+      description: |
+        Handles the consent form POST for the device flow. On `approved=true`,
+        marks the device code as approved so the polling client's next
+        `/oauth/token` call returns tokens. On `approved=false`, marks
+        the code as denied so the polling client receives `access_denied`.
+      security: [{}]
+      x-source: "internal/oauth/device.go:246"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [user_code]
+              properties:
+                user_code: {type: string, examples: ["BRGH-K3QN"]}
+                approved: {type: string, enum: ["true", "false"]}
+      responses:
+        "200":
+          description: Decision recorded. HTML success or denied page rendered.
+          content:
+            text/html: {}
+        "302":
+          description: Redirect to hosted login (user session expired).
+        "400":
+          description: Invalid, expired, or already-used user code.
+          content:
+            text/html: {}

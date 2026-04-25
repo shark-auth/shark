@@ -1,0 +1,1077 @@
+openapi: "3.1.0"
+info:
+  title: SharkAuth Platform API
+  version: "0.9.0"
+  description: |
+    Platform / tenant surface: organizations, RBAC (roles + permissions),
+    SSO connection management, API keys, audit logs, webhooks, agents,
+    and admin-scoped user CRUD.
+
+    This file is one of five sections that compose the full SharkAuth API
+    spec. See `../openapi.yaml` for the master index.
+  contact: { name: "SharkAuth", url: "https://sharkauth.com" }
+  license: { name: "MIT", url: "https://github.com/sharkauth/sharkauth/blob/main/LICENSE" }
+
+servers:
+  - url: "https://sharkauth.example.com"
+    description: "Your SharkAuth deployment"
+  - url: "http://localhost:8080"
+    description: "Local development (`shark serve --dev`)"
+
+tags:
+  - name: organizations
+    description: "Multi-tenant organization model — create, list, members, invitations."
+  - name: roles
+    description: "RBAC role definitions and permission attachments."
+  - name: permissions
+    description: "RBAC permission registry."
+  - name: authz
+    description: "Authorization checks (does user X have permission Y?)."
+  - name: users-admin
+    description: "Admin-scoped user CRUD + role assignment + session management."
+  - name: sso-connections
+    description: "SAML and OIDC enterprise SSO connection management."
+  - name: saml
+    description: "SAML SP endpoints for assertion consumption."
+  - name: oidc
+    description: "OIDC client endpoints for federated identity providers."
+  - name: api-keys
+    description: "Programmatic API key management."
+  - name: audit-logs
+    description: "Read + export immutable audit log."
+  - name: webhooks
+    description: "Outbound event subscriptions with HMAC signatures + retry."
+  - name: agents
+    description: "Agent identity (OAuth client) management with token-revocation tools."
+  - name: migration
+    description: "One-shot import from external auth providers (Auth0). Currently stubbed."
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Session JWT or admin-scoped API key."
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: shark_session
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error, code, message]
+      properties:
+        error: { type: string, example: "validation_error" }
+        code: { type: string, example: "ORG_NAME_REQUIRED" }
+        message: { type: string, example: "organization name is required" }
+        docs_url: { type: string, format: uri, example: "https://sharkauth.com/docs/errors#ORG_NAME_REQUIRED" }
+        details: { type: object, additionalProperties: true }
+
+    Pagination:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        offset: { type: integer, minimum: 0, default: 0 }
+        total: { type: integer, minimum: 0 }
+
+    Organization:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: "Acme Robotics" }
+        slug: { type: string, example: "acme-robotics" }
+        created_at: { type: string, format: date-time }
+        member_count: { type: integer, minimum: 0 }
+
+    OrganizationMember:
+      type: object
+      required: [user_id, organization_id, joined_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        roles: { type: array, items: { type: string } }
+        joined_at: { type: string, format: date-time }
+
+    Invitation:
+      type: object
+      required: [token, email, organization_id, expires_at]
+      properties:
+        token: { type: string }
+        email: { type: string, format: email }
+        organization_id: { type: string, format: uuid }
+        invited_by: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+
+    Role:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: "billing-admin" }
+        description: { type: string }
+        permissions:
+          type: array
+          items: { $ref: "#/components/schemas/Permission" }
+
+    Permission:
+      type: object
+      required: [id, resource, action]
+      properties:
+        id: { type: string, format: uuid }
+        resource: { type: string, example: "billing" }
+        action: { type: string, example: "read" }
+        description: { type: string }
+
+    UserAdmin:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        email_verified: { type: boolean }
+        mfa_enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        last_login_at: { type: string, format: date-time, nullable: true }
+        organizations:
+          type: array
+          items: { type: string, format: uuid }
+
+    SSOConnection:
+      type: object
+      required: [id, organization_id, kind, name]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        kind: { type: string, enum: [saml, oidc] }
+        name: { type: string }
+        # SAML-specific
+        saml_idp_metadata_url: { type: string, format: uri, nullable: true }
+        saml_sp_entity_id: { type: string, nullable: true }
+        # OIDC-specific
+        oidc_issuer: { type: string, format: uri, nullable: true }
+        oidc_client_id: { type: string, nullable: true }
+        attribute_mappings: { type: object, additionalProperties: { type: string } }
+        created_at: { type: string, format: date-time }
+
+    APIKey:
+      type: object
+      required: [id, name, prefix, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: "ci-deploy-key" }
+        prefix: { type: string, example: "sk_live_abc12" }
+        scopes: { type: array, items: { type: string } }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    APIKeyCreated:
+      allOf:
+        - $ref: "#/components/schemas/APIKey"
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: "Plaintext API key — shown once at creation, never returned again."
+              example: "sk_live_abc12_d7f...6e4"
+
+    AuditLog:
+      type: object
+      required: [id, ts, actor_id, action]
+      properties:
+        id: { type: string, format: uuid }
+        ts: { type: string, format: date-time }
+        actor_id: { type: string, format: uuid, nullable: true }
+        actor_type: { type: string, enum: [user, agent, system] }
+        organization_id: { type: string, format: uuid, nullable: true }
+        action: { type: string, example: "user.login" }
+        target_type: { type: string }
+        target_id: { type: string }
+        status: { type: string, enum: [success, failure] }
+        ip: { type: string }
+        user_agent: { type: string }
+        metadata: { type: object, additionalProperties: true }
+
+    Webhook:
+      type: object
+      required: [id, url, events, secret_prefix]
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items:
+            type: string
+            enum: [user.created, user.deleted, session.created, session.revoked, mfa.enabled, mfa.disabled, oauth.token.issued, oauth.client.registered, audit.log]
+        secret_prefix: { type: string, description: "First chars of HMAC secret. Full secret returned once at creation." }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        webhook_id: { type: string, format: uuid }
+        event_type: { type: string }
+        attempt: { type: integer }
+        status: { type: string, enum: [pending, success, failed, dead] }
+        response_status: { type: integer, nullable: true }
+        response_body_preview: { type: string }
+        next_retry_at: { type: string, format: date-time, nullable: true }
+        delivered_at: { type: string, format: date-time, nullable: true }
+
+    Agent:
+      type: object
+      required: [id, name, client_id, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: "ci-runner-agent" }
+        client_id: { type: string }
+        scopes: { type: array, items: { type: string } }
+        organization_id: { type: string, format: uuid, nullable: true }
+        created_at: { type: string, format: date-time }
+        last_token_at: { type: string, format: date-time, nullable: true }
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # Organizations (self-service tenant model)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/organizations:
+    post:
+      tags: [organizations]
+      operationId: createOrganization
+      summary: Create an organization
+      x-source: "internal/api/router.go:366"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Organization" } } }
+        "400": { description: "Validation error", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+    get:
+      tags: [organizations]
+      operationId: listMyOrganizations
+      summary: List organizations the caller belongs to
+      x-source: "internal/api/router.go:367"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organizations: { type: array, items: { $ref: "#/components/schemas/Organization" } }
+
+  /api/v1/organizations/invitations/{token}/accept:
+    post:
+      tags: [organizations]
+      operationId: acceptOrgInvitation
+      summary: Accept an organization invitation
+      x-source: "internal/api/router.go:368"
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Joined organization" }
+        "404": { description: "Invitation not found / expired" }
+
+  /api/v1/organizations/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [organizations]
+      operationId: getOrganization
+      summary: Get organization by id
+      x-source: "internal/api/router.go:373"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Organization" } } } }
+        "404": { description: "Not found" }
+
+  /api/v1/organizations/{id}/members:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [organizations]
+      operationId: listOrganizationMembers
+      summary: List members of an organization
+      x-source: "internal/api/router.go:376"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  members: { type: array, items: { $ref: "#/components/schemas/OrganizationMember" } }
+
+  # ---------------------------------------------------------------------------
+  # Roles
+  # ---------------------------------------------------------------------------
+
+  /api/v1/roles:
+    post:
+      tags: [roles]
+      operationId: createRole
+      summary: Create a role
+      x-source: "internal/api/router.go:396"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Role" } } } }
+    get:
+      tags: [roles]
+      operationId: listRoles
+      summary: List roles
+      x-source: "internal/api/router.go:397"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { roles: { type: array, items: { $ref: "#/components/schemas/Role" } } }
+
+  /api/v1/roles/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [roles]
+      operationId: getRole
+      summary: Get role by id
+      x-source: "internal/api/router.go:398"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Role" } } } } }
+    put:
+      tags: [roles]
+      operationId: updateRole
+      summary: Replace role
+      x-source: "internal/api/router.go:399"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Role" } } }
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [roles]
+      operationId: deleteRole
+      summary: Delete role
+      x-source: "internal/api/router.go:400"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/roles/{id}/permissions:
+    post:
+      tags: [roles]
+      operationId: attachPermissionToRole
+      summary: Attach a permission to a role
+      x-source: "internal/api/router.go:401"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permission_id]
+              properties: { permission_id: { type: string, format: uuid } }
+      responses: { "204": { description: Attached } }
+
+  /api/v1/roles/{id}/permissions/{pid}:
+    delete:
+      tags: [roles]
+      operationId: detachPermissionFromRole
+      summary: Detach a permission from a role
+      x-source: "internal/api/router.go:402"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: pid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Detached } }
+
+  # ---------------------------------------------------------------------------
+  # Permissions
+  # ---------------------------------------------------------------------------
+
+  /api/v1/permissions:
+    post:
+      tags: [permissions]
+      operationId: createPermission
+      summary: Register a permission
+      x-source: "internal/api/router.go:408"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, action]
+              properties:
+                resource: { type: string }
+                action: { type: string }
+                description: { type: string }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Permission" } } } } }
+    get:
+      tags: [permissions]
+      operationId: listPermissions
+      summary: List permissions
+      x-source: "internal/api/router.go:409"
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { permissions: { type: array, items: { $ref: "#/components/schemas/Permission" } } } } } } } }
+
+  /api/v1/permissions/{id}:
+    delete:
+      tags: [permissions]
+      operationId: deletePermission
+      summary: Delete a permission
+      x-source: "internal/api/router.go:410"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/permissions/{id}/roles:
+    get:
+      tags: [permissions]
+      operationId: listRolesByPermission
+      summary: List roles that include this permission
+      x-source: "internal/api/router.go:412"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/permissions/{id}/users:
+    get:
+      tags: [permissions]
+      operationId: listUsersByPermission
+      summary: List users effectively granted this permission
+      x-source: "internal/api/router.go:413"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/auth/check:
+    post:
+      tags: [authz]
+      operationId: authzCheck
+      summary: Check whether the caller (or named subject) has a given permission
+      x-source: "internal/api/router.go:419"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, action]
+              properties:
+                user_id: { type: string, format: uuid, nullable: true }
+                resource: { type: string }
+                action: { type: string }
+                organization_id: { type: string, format: uuid, nullable: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed: { type: boolean }
+                  via: { type: array, items: { type: string }, description: "Roles or grants that produced the decision." }
+
+  # ---------------------------------------------------------------------------
+  # Users (admin)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/users:
+    get:
+      tags: [users-admin]
+      operationId: adminListUsers
+      summary: List users (admin scope)
+      x-source: "internal/api/router.go:425"
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+        - { name: q, in: query, schema: { type: string }, description: "Search by email substring" }
+      responses: { "200": { description: OK } }
+
+  /api/v1/users/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [users-admin]
+      operationId: adminGetUser
+      summary: Get user (admin)
+      x-source: "internal/api/router.go:426"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserAdmin" } } } } }
+    delete:
+      tags: [users-admin]
+      operationId: adminDeleteUser
+      summary: Delete user
+      x-source: "internal/api/router.go:427"
+      responses: { "204": { description: Deleted } }
+    patch:
+      tags: [users-admin]
+      operationId: adminUpdateUser
+      summary: Update user
+      x-source: "internal/api/router.go:428"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UserAdmin" } } }
+      responses: { "200": { description: OK } }
+
+  /api/v1/users/{id}/roles:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    post:
+      tags: [users-admin]
+      operationId: assignRole
+      summary: Assign a role to a user
+      x-source: "internal/api/router.go:429"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [role_id], properties: { role_id: { type: string, format: uuid } } } } }
+      responses: { "204": { description: Assigned } }
+    get:
+      tags: [users-admin]
+      operationId: listUserRoles
+      summary: List roles for a user
+      x-source: "internal/api/router.go:431"
+      responses: { "200": { description: OK } }
+
+  /api/v1/users/{id}/roles/{rid}:
+    delete:
+      tags: [users-admin]
+      operationId: removeRole
+      summary: Remove a role from a user
+      x-source: "internal/api/router.go:430"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: rid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Removed } }
+
+  /api/v1/users/{id}/permissions:
+    get:
+      tags: [users-admin]
+      operationId: listUserPermissions
+      summary: List effective permissions for a user
+      x-source: "internal/api/router.go:432"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/users/{id}/audit-logs:
+    get:
+      tags: [users-admin]
+      operationId: userAuditLogs
+      summary: List audit log entries for a user
+      x-source: "internal/api/router.go:433"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/users/{id}/sessions:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [users-admin]
+      operationId: adminListUserSessions
+      summary: List active sessions for a user
+      x-source: "internal/api/router.go:434"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [users-admin]
+      operationId: adminRevokeUserSessions
+      summary: Revoke all sessions for a user
+      x-source: "internal/api/router.go:435"
+      responses: { "204": { description: Revoked } }
+
+  /api/v1/users/{id}/oauth-accounts:
+    get:
+      tags: [users-admin]
+      operationId: listUserOAuthAccounts
+      summary: List linked social-login accounts for a user
+      x-source: "internal/api/router.go:436"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/users/{id}/oauth-accounts/{oauthId}:
+    delete:
+      tags: [users-admin]
+      operationId: deleteUserOAuthAccount
+      summary: Unlink a social-login account
+      x-source: "internal/api/router.go:437"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: oauthId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Unlinked } }
+
+  /api/v1/users/{id}/passkeys:
+    get:
+      tags: [users-admin]
+      operationId: adminListUserPasskeys
+      summary: List passkey credentials for a user
+      x-source: "internal/api/router.go:438"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/users/{id}/mfa:
+    delete:
+      tags: [users-admin]
+      operationId: adminDisableUserMFA
+      summary: Disable MFA for a user (operator override)
+      x-source: "internal/api/router.go:442"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: MFA disabled } }
+
+  /api/v1/users/{id}/verify/send:
+    post:
+      tags: [users-admin]
+      operationId: adminEmailVerifySend
+      summary: Send email-verification email to a user (operator action)
+      x-source: "internal/api/router.go:443"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "202": { description: Email queued } }
+
+  # ---------------------------------------------------------------------------
+  # SSO Connections
+  # ---------------------------------------------------------------------------
+
+  /api/v1/sso/connections:
+    post:
+      tags: [sso-connections]
+      operationId: createSSOConnection
+      summary: Create a SAML or OIDC SSO connection
+      x-source: "internal/api/router.go:452"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } }
+      responses: { "201": { description: Created } }
+    get:
+      tags: [sso-connections]
+      operationId: listSSOConnections
+      summary: List SSO connections
+      x-source: "internal/api/router.go:453"
+      responses: { "200": { description: OK } }
+
+  /api/v1/sso/connections/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [sso-connections]
+      operationId: getSSOConnection
+      summary: Get SSO connection
+      x-source: "internal/api/router.go:454"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } } }
+    put:
+      tags: [sso-connections]
+      operationId: updateSSOConnection
+      summary: Update SSO connection
+      x-source: "internal/api/router.go:455"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } }
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [sso-connections]
+      operationId: deleteSSOConnection
+      summary: Delete SSO connection
+      x-source: "internal/api/router.go:456"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/sso/saml/{connection_id}/metadata:
+    get:
+      tags: [saml]
+      operationId: samlMetadata
+      summary: SP metadata XML for SAML connection
+      x-source: "internal/api/router.go:460"
+      parameters: [ { name: connection_id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        "200":
+          description: SAML metadata
+          content:
+            application/xml: {}
+
+  /api/v1/sso/saml/{connection_id}/acs:
+    post:
+      tags: [saml]
+      operationId: samlACS
+      summary: SAML Assertion Consumer Service — receive POST'd assertion from IdP
+      x-source: "internal/api/router.go:461"
+      parameters: [ { name: connection_id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                SAMLResponse: { type: string, description: "Base64-encoded SAML response" }
+                RelayState: { type: string }
+      responses: { "302": { description: "Redirect to post-login URL or session start" } }
+
+  /api/v1/sso/oidc/{connection_id}/auth:
+    get:
+      tags: [oidc]
+      operationId: oidcAuthStart
+      summary: Begin OIDC authorization flow against an upstream IdP
+      x-source: "internal/api/router.go:462"
+      parameters: [ { name: connection_id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "302": { description: "Redirect to IdP authorize endpoint" } }
+
+  /api/v1/sso/oidc/{connection_id}/callback:
+    get:
+      tags: [oidc]
+      operationId: oidcCallback
+      summary: OIDC callback from upstream IdP
+      x-source: "internal/api/router.go:463"
+      parameters:
+        - { name: connection_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses: { "302": { description: "Redirect to post-login URL" } }
+
+  # ---------------------------------------------------------------------------
+  # API Keys
+  # ---------------------------------------------------------------------------
+
+  /api/v1/api-keys:
+    post:
+      tags: [api-keys]
+      operationId: createAPIKey
+      summary: Create a new API key (plaintext returned once)
+      x-source: "internal/api/router.go:469"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                scopes: { type: array, items: { type: string } }
+                expires_at: { type: string, format: date-time, nullable: true }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeyCreated" } } } } }
+    get:
+      tags: [api-keys]
+      operationId: listAPIKeys
+      summary: List API keys
+      x-source: "internal/api/router.go:470"
+      responses: { "200": { description: OK } }
+
+  /api/v1/api-keys/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [api-keys]
+      operationId: getAPIKey
+      summary: Get API key metadata
+      x-source: "internal/api/router.go:471"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/APIKey" } } } } }
+    patch:
+      tags: [api-keys]
+      operationId: updateAPIKey
+      summary: Update API key (rename, change scopes)
+      x-source: "internal/api/router.go:472"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [api-keys]
+      operationId: revokeAPIKey
+      summary: Revoke API key
+      x-source: "internal/api/router.go:473"
+      responses: { "204": { description: Revoked } }
+
+  /api/v1/api-keys/{id}/rotate:
+    post:
+      tags: [api-keys]
+      operationId: rotateAPIKey
+      summary: Rotate API key — issues a new plaintext, marks old grace-revoked
+      x-source: "internal/api/router.go:474"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: Rotated, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeyCreated" } } } } }
+
+  # ---------------------------------------------------------------------------
+  # Audit Logs
+  # ---------------------------------------------------------------------------
+
+  /api/v1/audit-logs:
+    get:
+      tags: [audit-logs]
+      operationId: listAuditLogs
+      summary: List audit log entries (filterable)
+      x-source: "internal/api/router.go:480"
+      parameters:
+        - { name: actor_id, in: query, schema: { type: string, format: uuid } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: status, in: query, schema: { type: string, enum: [success, failure] } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs: { type: array, items: { $ref: "#/components/schemas/AuditLog" } }
+                  pagination: { $ref: "#/components/schemas/Pagination" }
+
+  /api/v1/audit-logs/{id}:
+    get:
+      tags: [audit-logs]
+      operationId: getAuditLog
+      summary: Get a single audit log entry
+      x-source: "internal/api/router.go:481"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AuditLog" } } } } }
+
+  /api/v1/audit-logs/export:
+    post:
+      tags: [audit-logs]
+      operationId: exportAuditLogs
+      summary: Export audit logs as CSV or JSON file
+      x-source: "internal/api/router.go:482"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                format: { type: string, enum: [csv, json], default: csv }
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Export file
+          content:
+            text/csv: {}
+            application/json: {}
+
+  # ---------------------------------------------------------------------------
+  # Migration (stubbed)
+  # ---------------------------------------------------------------------------
+
+  /api/v1/migrate/auth0:
+    post:
+      tags: [migration]
+      operationId: migrateFromAuth0
+      summary: Import users + clients from an Auth0 export (planned, not implemented)
+      x-source: "internal/api/router.go:488"
+      x-status: not-implemented
+      responses: { "501": { description: "Not implemented in v0.9 — planned for post-launch." } }
+
+  /api/v1/migrate/{id}:
+    get:
+      tags: [migration]
+      operationId: getMigrationStatus
+      summary: Status of a running or completed migration job (planned)
+      x-source: "internal/api/router.go:489"
+      x-status: not-implemented
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses: { "501": { description: "Not implemented in v0.9." } }
+
+  # ---------------------------------------------------------------------------
+  # Webhooks
+  # ---------------------------------------------------------------------------
+
+  /api/v1/webhooks:
+    post:
+      tags: [webhooks]
+      operationId: createWebhook
+      summary: Create a webhook subscription (HMAC secret returned once)
+      x-source: "internal/api/router.go:495"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url: { type: string, format: uri }
+                events: { type: array, items: { type: string } }
+                active: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Created (response includes one-time `secret`)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Webhook"
+                  - type: object
+                    properties: { secret: { type: string } }
+    get:
+      tags: [webhooks]
+      operationId: listWebhooks
+      summary: List webhooks
+      x-source: "internal/api/router.go:496"
+      responses: { "200": { description: OK } }
+
+  /api/v1/webhooks/events:
+    get:
+      tags: [webhooks]
+      operationId: listWebhookEventTypes
+      summary: List supported event types you can subscribe to
+      x-source: "internal/api/router.go:498"
+      responses: { "200": { description: OK } }
+
+  /api/v1/webhooks/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [webhooks]
+      operationId: getWebhook
+      summary: Get webhook
+      x-source: "internal/api/router.go:499"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } } }
+    patch:
+      tags: [webhooks]
+      operationId: updateWebhook
+      summary: Update webhook
+      x-source: "internal/api/router.go:500"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [webhooks]
+      operationId: deleteWebhook
+      summary: Delete webhook
+      x-source: "internal/api/router.go:501"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/webhooks/{id}/test:
+    post:
+      tags: [webhooks]
+      operationId: testWebhook
+      summary: Send a test event to the webhook URL
+      x-source: "internal/api/router.go:502"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: "Test attempted; result reported in body" } }
+
+  /api/v1/webhooks/{id}/deliveries:
+    get:
+      tags: [webhooks]
+      operationId: listWebhookDeliveries
+      summary: List recent delivery attempts
+      x-source: "internal/api/router.go:503"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/webhooks/{id}/deliveries/{deliveryId}/replay:
+    post:
+      tags: [webhooks]
+      operationId: replayWebhookDelivery
+      summary: Re-send a previous delivery attempt
+      x-source: "internal/api/router.go:504"
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "202": { description: Queued } }
+
+  # ---------------------------------------------------------------------------
+  # Agents
+  # ---------------------------------------------------------------------------
+
+  /api/v1/agents:
+    post:
+      tags: [agents]
+      operationId: createAgent
+      summary: Create an agent identity (issues OAuth client_id + plaintext secret once)
+      x-source: "internal/api/router.go:510"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                scopes: { type: array, items: { type: string } }
+                organization_id: { type: string, format: uuid, nullable: true }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Agent"
+                  - type: object
+                    properties: { client_secret: { type: string, description: "Shown once." } }
+    get:
+      tags: [agents]
+      operationId: listAgents
+      summary: List agents
+      x-source: "internal/api/router.go:511"
+      responses: { "200": { description: OK } }
+
+  /api/v1/agents/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+    get:
+      tags: [agents]
+      operationId: getAgent
+      summary: Get agent
+      x-source: "internal/api/router.go:512"
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Agent" } } } } }
+    patch:
+      tags: [agents]
+      operationId: updateAgent
+      summary: Update agent
+      x-source: "internal/api/router.go:513"
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [agents]
+      operationId: deleteAgent
+      summary: Delete agent
+      x-source: "internal/api/router.go:514"
+      responses: { "204": { description: Deleted } }
+
+  /api/v1/agents/{id}/tokens:
+    get:
+      tags: [agents]
+      operationId: listAgentTokens
+      summary: List active tokens issued to an agent
+      x-source: "internal/api/router.go:515"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }
+
+  /api/v1/agents/{id}/tokens/revoke-all:
+    post:
+      tags: [agents]
+      operationId: revokeAllAgentTokens
+      summary: Revoke every active token for an agent
+      x-source: "internal/api/router.go:516"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: "Revoked count returned" } }
+
+  /api/v1/agents/{id}/rotate-secret:
+    post:
+      tags: [agents]
+      operationId: rotateAgentSecret
+      summary: Rotate agent client_secret (plaintext returned once)
+      x-source: "internal/api/router.go:517"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: Rotated } }
+
+  /api/v1/agents/{id}/audit:
+    get:
+      tags: [agents]
+      operationId: agentAuditLogs
+      summary: List audit log entries scoped to an agent
+      x-source: "internal/api/router.go:518"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK } }

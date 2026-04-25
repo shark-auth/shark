@@ -1,0 +1,1584 @@
+openapi: "3.1.0"
+info:
+  title: SharkAuth Authentication API
+  version: "0.9.0"
+  description: |
+    End-user authentication and identity surface for SharkAuth.
+
+    Covers signup, login, logout, self-service (me), email verification,
+    social login (Google/GitHub/Apple/Discord), WebAuthn passkeys, TOTP MFA,
+    magic links, password reset + change, session management, OAuth consent
+    inspection, and the unified SSO auto-route.
+
+    Errors use the Auth/Admin envelope defined in `docs/errors.md`
+    (`{error, code, message, docs_url?, details?}`). The OAuth 2.1 RFC 6749 §5.2
+    envelope is reserved for `/oauth/*` endpoints and is documented separately.
+
+servers:
+  - url: https://auth.example.com
+    description: Your SharkAuth deployment
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: auth-signup-login
+    description: Account creation, password login, logout, current user.
+  - name: auth-sessions
+    description: Self-service session listing and revocation.
+  - name: auth-passkey
+    description: WebAuthn passkey registration, login, and credential management.
+  - name: auth-mfa
+    description: TOTP MFA enroll, challenge, recovery, disable.
+  - name: auth-magic-link
+    description: Passwordless email magic links.
+  - name: auth-password
+    description: Password reset (forgot flow) and authenticated change.
+  - name: auth-email
+    description: Email-address verification.
+  - name: auth-sso
+    description: Enterprise SSO auto-routing by email domain.
+  - name: auth-social
+    description: OAuth-based social login (Google, GitHub, Apple, Discord).
+  - name: auth-consent
+    description: OAuth consent grants the user has issued.
+
+security:
+  - sessionCookie: []
+  - bearerAuth: []
+
+paths:
+  /api/v1/auth/signup:
+    post:
+      tags: [auth-signup-login]
+      summary: Create a new user account
+      description: |
+        Creates a user, hashes the password with Argon2id, mints a session
+        cookie, and optionally returns a JWT (when JWT is enabled in server
+        config). Public — no authentication required.
+      operationId: signup
+      security: []
+      x-source: "internal/api/auth_handlers.go:78"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+            examples:
+              basic:
+                value:
+                  email: "ada@example.com"
+                  password: "correct-horse-battery-staple"
+                  name: "Ada Lovelace"
+      responses:
+        "201":
+          description: Account created. Session cookie set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+              examples:
+                created:
+                  value:
+                    id: "usr_V1StGXR8_Z5jdHi6B-myT"
+                    email: "ada@example.com"
+                    emailVerified: false
+                    name: "Ada Lovelace"
+                    mfaEnabled: false
+                    createdAt: "2026-04-24T18:04:12Z"
+                    updatedAt: "2026-04-24T18:04:12Z"
+                    token: "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+        "400":
+          description: Invalid email / weak password / bad body.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                weak_password:
+                  value:
+                    error: "weak_password"
+                    code: "password_too_short"
+                    message: "Password must be at least 12 characters"
+                    docs_url: "https://docs.shark-auth.com/errors/password_too_short"
+                    details: { min_length: 12 }
+        "409":
+          description: Email already registered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                taken:
+                  value:
+                    error: "email_taken"
+                    code: "email_taken"
+                    message: "An account with this email already exists"
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth-signup-login]
+      summary: Password login
+      description: |
+        Verifies email + password, handles account lockout, sets a session
+        cookie, and optionally returns a JWT. If the user has MFA enabled the
+        response is `{mfaRequired: true}` and the session cookie is partial
+        (`mfa_passed=false`) — the caller must complete `/auth/mfa/challenge`
+        or `/auth/mfa/recovery` before using the session.
+      operationId: login
+      security: []
+      x-source: "internal/api/auth_handlers.go:206"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              basic:
+                value:
+                  email: "ada@example.com"
+                  password: "correct-horse-battery-staple"
+      responses:
+        "200":
+          description: Login succeeded; or MFA is required.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LoginResponse"
+                  - $ref: "#/components/schemas/MFARequiredResponse"
+              examples:
+                normal:
+                  value:
+                    id: "usr_V1StGXR8_Z5jdHi6B-myT"
+                    email: "ada@example.com"
+                    emailVerified: true
+                    mfaEnabled: false
+                    createdAt: "2026-04-01T09:11:00Z"
+                    updatedAt: "2026-04-24T18:05:00Z"
+                    token: "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+                mfa_required:
+                  value:
+                    mfaRequired: true
+        "401":
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                bad:
+                  value:
+                    error: "invalid_credentials"
+                    code: "invalid_credentials"
+                    message: "Invalid email or password"
+        "429":
+          description: Account locked — too many failed attempts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                locked:
+                  value:
+                    error: "account_locked"
+                    code: "account_locked"
+                    message: "Too many failed attempts. Please try again later."
+                    details: { retry_after: 300 }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth-signup-login]
+      summary: Terminate the current session
+      description: |
+        Deletes the server-side session row and clears the session cookie.
+        If the caller used a JWT, the JTI is added to the revocation list
+        until its `exp`.
+      operationId: logout
+      x-source: "internal/api/auth_handlers.go:336"
+      responses:
+        "200":
+          description: Session terminated (idempotent — returns 200 even without a session).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+              examples:
+                ok: { value: {} }
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth-signup-login]
+      summary: Get the currently authenticated user
+      description: |
+        Returns the current user. Does NOT require a verified email so the
+        frontend can render a "verify your email" prompt using the response.
+      operationId: getMe
+      x-source: "internal/api/auth_handlers.go:356"
+      responses:
+        "200":
+          description: Current user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+              examples:
+                me:
+                  value:
+                    id: "usr_V1StGXR8_Z5jdHi6B-myT"
+                    email: "ada@example.com"
+                    emailVerified: true
+                    name: "Ada Lovelace"
+                    avatarUrl: "https://cdn.example.com/a/ada.png"
+                    mfaEnabled: true
+                    createdAt: "2026-04-01T09:11:00Z"
+                    updatedAt: "2026-04-24T18:05:00Z"
+        "401":
+          description: No valid session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+    delete:
+      tags: [auth-signup-login]
+      summary: Delete the current user's account
+      description: |
+        Hard-deletes the authenticated user and cascades deletions across
+        sessions, passkeys, MFA secrets, and consents. Requires a verified
+        email. Clears the session cookie on success.
+      operationId: deleteMe
+      x-source: "internal/api/user_handlers.go:278"
+      responses:
+        "200":
+          description: Account deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              examples:
+                ok:
+                  value: { message: "Account deleted" }
+        "401":
+          description: Unauthenticated or email not verified.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/email/verify/send:
+    post:
+      tags: [auth-email]
+      summary: Send an email-verification link
+      description: |
+        Sends the signed verification link to the currently authenticated
+        user's email address. Idempotent — returns 200 even if the email is
+        already verified or sending failed (to avoid leaking delivery state).
+      operationId: sendEmailVerification
+      x-source: "internal/api/email_verify_handlers.go:19"
+      responses:
+        "200":
+          description: Request accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              examples:
+                sent:
+                  value: { message: "Verification email sent" }
+        "401":
+          description: Unauthenticated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "503":
+          description: Email sending is not configured on this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/email/verify:
+    get:
+      tags: [auth-email]
+      summary: Verify an email address from a link
+      description: |
+        Public endpoint hit by the user clicking the verification link in their
+        inbox. Consumes the single-use token and marks `email_verified=true`.
+      operationId: verifyEmail
+      security: []
+      x-source: "internal/api/email_verify_handlers.go:65"
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema: { type: string }
+          example: "emv_3f9c1a2e4b6d7a8c..."
+      responses:
+        "200":
+          description: Email verified.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              examples:
+                ok:
+                  value: { message: "Email verified successfully" }
+        "400":
+          description: Invalid or expired token.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                bad:
+                  value:
+                    error: "invalid_token"
+                    code: "invalid_token"
+                    message: "Invalid or expired verification token"
+
+  /api/v1/auth/oauth/{provider}:
+    get:
+      tags: [auth-social]
+      summary: Start social-login OAuth flow
+      description: |
+        Generates a random state, sets a short-lived `shark_oauth_state`
+        cookie, and 302-redirects to the provider's authorization URL.
+        Public endpoint — the state cookie is the only session state between
+        start and callback.
+      operationId: oauthStart
+      security: []
+      x-source: "internal/api/oauth_handlers.go:27"
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [google, github, apple, discord]
+          example: "google"
+      responses:
+        "302":
+          description: Redirect to the provider's `authorize` URL.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+              example: "https://accounts.google.com/o/oauth2/v2/auth?client_id=..."
+            Set-Cookie:
+              schema: { type: string }
+              example: "shark_oauth_state=7b4f1...; Path=/; HttpOnly; SameSite=Lax; Max-Age=300"
+        "400":
+          description: Unsupported provider (not configured on this server).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/oauth/{provider}/callback:
+    get:
+      tags: [auth-social]
+      summary: OAuth provider callback
+      description: |
+        The provider redirects here with `code` and `state`. The handler
+        validates the state cookie, exchanges the code, finds-or-creates the
+        user, links the OAuth account, and creates a session. Returns a
+        302 redirect to the configured post-login URL, or a JSON body if no
+        redirect is configured.
+      operationId: oauthCallback
+      security: []
+      x-source: "internal/api/oauth_handlers.go:68"
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [google, github, apple, discord]
+        - in: query
+          name: code
+          required: false
+          schema: { type: string }
+          description: Authorization code from the provider.
+        - in: query
+          name: state
+          required: false
+          schema: { type: string }
+        - in: query
+          name: error
+          required: false
+          schema: { type: string }
+          description: Present when the provider signalled a failure.
+        - in: query
+          name: redirect_uri
+          required: false
+          schema: { type: string, format: uri }
+          description: Optional post-login redirect; must be on the default application's allowlist.
+      responses:
+        "200":
+          description: User authenticated (no redirect configured).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "302":
+          description: Redirect to configured post-login URL.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        "400":
+          description: Invalid state / missing code / provider error.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                bad_state:
+                  value:
+                    error: "invalid_state"
+                    code: "invalid_state"
+                    message: "OAuth state mismatch"
+
+  /api/v1/auth/passkey/register/begin:
+    post:
+      tags: [auth-passkey]
+      summary: Begin passkey registration (authenticated)
+      description: |
+        Returns a WebAuthn `PublicKeyCredentialCreationOptions` for the
+        authenticator. Also returns `challengeKey`, which the client MUST echo
+        back via the `X-Challenge-Key` header on `/register/finish`.
+      operationId: passkeyRegisterBegin
+      x-source: "internal/api/passkey_handlers.go:33"
+      responses:
+        "200":
+          description: Creation options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebAuthnRegistrationOptions" }
+        "401":
+          description: Unauthenticated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/passkey/register/finish:
+    post:
+      tags: [auth-passkey]
+      summary: Finish passkey registration
+      description: |
+        Verifies the attestation from the authenticator. The client must send
+        the `X-Challenge-Key` header returned by `/register/begin`; the body
+        is the raw WebAuthn registration response (credential id, clientDataJSON,
+        attestationObject).
+      operationId: passkeyRegisterFinish
+      x-source: "internal/api/passkey_handlers.go:67"
+      parameters:
+        - in: header
+          name: X-Challenge-Key
+          required: true
+          schema: { type: string }
+          example: "chk_7b4f1e0c3a9d2..."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WebAuthnRegistrationCompletion" }
+      responses:
+        "201":
+          description: Credential registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  credential_id: { type: string }
+                  name: { type: string, nullable: true }
+              examples:
+                ok:
+                  value:
+                    credential_id: "pkc_2k9fj3X..."
+                    name: "MacBook Touch ID"
+        "400":
+          description: Missing header or attestation verification failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/passkey/login/begin:
+    post:
+      tags: [auth-passkey]
+      summary: Begin passkey login (public)
+      description: |
+        Returns a WebAuthn `PublicKeyCredentialRequestOptions`. `email` is
+        optional — when omitted, the server returns a discoverable-credential
+        (usernameless) challenge.
+      operationId: passkeyLoginBegin
+      security: []
+      x-source: "internal/api/passkey_handlers.go:110"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+            examples:
+              targeted:
+                value: { email: "ada@example.com" }
+              discoverable:
+                value: {}
+      responses:
+        "200":
+          description: Authentication options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebAuthnAuthenticationOptions" }
+        "400":
+          description: User has no registered passkeys.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                none:
+                  value:
+                    error: "no_passkeys"
+                    code: "no_passkeys"
+                    message: "User has no registered passkeys"
+
+  /api/v1/auth/passkey/login/finish:
+    post:
+      tags: [auth-passkey]
+      summary: Finish passkey login (public)
+      description: |
+        Verifies the assertion, creates a session (mfa_passed=true — passkeys
+        are multi-factor), and returns the user. Requires `X-Challenge-Key`
+        from `/login/begin`.
+      operationId: passkeyLoginFinish
+      security: []
+      x-source: "internal/api/passkey_handlers.go:144"
+      parameters:
+        - in: header
+          name: X-Challenge-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WebAuthnAuthenticationCompletion" }
+      responses:
+        "200":
+          description: Session established.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401":
+          description: Verification failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/passkey/credentials:
+    get:
+      tags: [auth-passkey]
+      summary: List the authenticated user's passkeys
+      operationId: listPasskeys
+      x-source: "internal/api/passkey_handlers.go:168"
+      responses:
+        "200":
+          description: List of credentials.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  credentials:
+                    type: array
+                    items: { $ref: "#/components/schemas/PasskeyCredential" }
+              examples:
+                two:
+                  value:
+                    credentials:
+                      - id: "pkc_2k9fj3X..."
+                        name: "MacBook Touch ID"
+                        transports: "internal,hybrid"
+                        backed_up: true
+                        created_at: "2026-04-10T12:01:22Z"
+                        last_used_at: "2026-04-24T08:30:00Z"
+
+  /api/v1/auth/passkey/credentials/{id}:
+    delete:
+      tags: [auth-passkey]
+      summary: Delete a passkey credential
+      operationId: deletePasskey
+      x-source: "internal/api/passkey_handlers.go:204"
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Credential deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+        "404":
+          description: Credential not found or not owned by the caller.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+    patch:
+      tags: [auth-passkey]
+      summary: Rename a passkey credential
+      operationId: renamePasskey
+      x-source: "internal/api/passkey_handlers.go:260"
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  example: "Yubikey 5C"
+      responses:
+        "200":
+          description: Credential renamed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasskeyCredential" }
+        "400":
+          description: Missing or empty name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404":
+          description: Credential not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/magic-link/send:
+    post:
+      tags: [auth-magic-link]
+      summary: Send a magic-link login email
+      description: |
+        Rate-limited (default 1 send per email per 60s). Always returns 200 to
+        avoid leaking whether the email exists.
+      operationId: sendMagicLink
+      security: []
+      x-source: "internal/api/magiclink_handlers.go:80"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MagicLinkSendRequest" }
+            examples:
+              basic: { value: { email: "ada@example.com" } }
+      responses:
+        "200":
+          description: Request accepted (even if address was unknown or rate-limited).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              examples:
+                ok:
+                  value: { message: "The magic link has been sent" }
+        "400":
+          description: Invalid email.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/magic-link/verify:
+    get:
+      tags: [auth-magic-link]
+      summary: Verify a magic-link token
+      description: |
+        Consumes the single-use token, sets a session cookie, and either 302s
+        to the configured redirect URL or returns a JSON body with the user
+        (and optional JWT).
+      operationId: verifyMagicLink
+      security: []
+      x-source: "internal/api/magiclink_handlers.go:123"
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema: { type: string }
+        - in: query
+          name: redirect_uri
+          required: false
+          schema: { type: string, format: uri }
+          description: Must be on the default application's allowlist.
+      responses:
+        "200":
+          description: Session established (no redirect).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "302":
+          description: Redirect to configured post-login URL.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        "400":
+          description: Token invalid, used, or expired.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              examples:
+                used:
+                  value:
+                    error: "token_used"
+                    code: "token_used"
+                    message: "This magic link has already been used"
+                expired:
+                  value:
+                    error: "token_expired"
+                    code: "magic_link_expired"
+                    message: "This magic link has expired"
+
+  /api/v1/auth/password/send-reset-link:
+    post:
+      tags: [auth-password]
+      summary: Send a password-reset email (forgot password)
+      description: |
+        Always returns 200 to avoid leaking whether the email exists.
+      operationId: sendPasswordResetLink
+      security: []
+      x-source: "internal/api/auth_handlers.go:378"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+            examples:
+              basic: { value: { email: "ada@example.com" } }
+      responses:
+        "200":
+          description: Request accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              examples:
+                ok:
+                  value:
+                    message: "If an account with that email exists, a password reset link has been sent"
+        "400":
+          description: Invalid email.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/password/reset:
+    post:
+      tags: [auth-password]
+      summary: Reset password with a reset token
+      operationId: resetPassword
+      security: []
+      x-source: "internal/api/auth_handlers.go:421"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, format: password }
+            examples:
+              basic:
+                value:
+                  token: "prt_9a2c8b1e..."
+                  password: "new-correct-horse-battery"
+      responses:
+        "200":
+          description: Password reset.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              examples:
+                ok:
+                  value: { message: "Password has been reset successfully" }
+        "400":
+          description: Token invalid/expired, or weak password.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/password/change:
+    post:
+      tags: [auth-password]
+      summary: Change password (authenticated)
+      description: Requires the caller to prove knowledge of the current password. Requires a verified email and a full (MFA-passed) session.
+      operationId: changePassword
+      x-source: "internal/api/auth_handlers.go:502"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string, format: password }
+                new_password: { type: string, format: password }
+            examples:
+              basic:
+                value:
+                  current_password: "old-correct-horse"
+                  new_password: "new-correct-horse-battery-staple"
+      responses:
+        "200":
+          description: Password changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        "400":
+          description: Weak password.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401":
+          description: Current password mismatch or no session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/mfa/challenge:
+    post:
+      tags: [auth-mfa]
+      summary: Satisfy MFA on a partial session (TOTP)
+      description: |
+        Called after `/auth/login` returned `{mfaRequired: true}`. Upgrades the
+        current session to `mfa_passed=true`.
+      operationId: mfaChallenge
+      x-source: "internal/api/mfa_handlers.go:205"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: "123456" }
+      responses:
+        "200":
+          description: MFA passed; session upgraded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400":
+          description: Bad code format, MFA already passed, or MFA not enabled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401":
+          description: Invalid TOTP code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/mfa/recovery:
+    post:
+      tags: [auth-mfa]
+      summary: Satisfy MFA on a partial session (recovery code)
+      operationId: mfaRecovery
+      x-source: "internal/api/mfa_handlers.go:285"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: "a1b2-c3d4-e5f6" }
+      responses:
+        "200":
+          description: MFA passed via recovery code; session upgraded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401":
+          description: Invalid recovery code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/mfa/enroll:
+    post:
+      tags: [auth-mfa]
+      summary: Start TOTP enrollment
+      description: |
+        Generates a TOTP secret, stores it (encrypted) as pending, and returns
+        the secret + an `otpauth://` URI the client can render as a QR code.
+        Completing enrollment requires a call to `/auth/mfa/verify` with a
+        valid code.
+      operationId: mfaEnroll
+      x-source: "internal/api/mfa_handlers.go:41"
+      responses:
+        "200":
+          description: Pending secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MFAEnrollResponse" }
+              examples:
+                ok:
+                  value:
+                    secret: "JBSWY3DPEHPK3PXP"
+                    qr_uri: "otpauth://totp/SharkAuth:ada@example.com?secret=JBSWY3DPEHPK3PXP&issuer=SharkAuth"
+        "409":
+          description: MFA already enabled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/mfa/verify:
+    post:
+      tags: [auth-mfa]
+      summary: Confirm TOTP enrollment
+      description: |
+        Validates the first TOTP code against the pending secret. Enables MFA,
+        marks the factor verified, and returns freshly-generated recovery codes.
+      operationId: mfaVerify
+      x-source: "internal/api/mfa_handlers.go:109"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: "123456" }
+      responses:
+        "200":
+          description: MFA enabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mfa_enabled: { type: boolean }
+                  recovery_codes:
+                    type: array
+                    items: { type: string }
+              examples:
+                ok:
+                  value:
+                    mfa_enabled: true
+                    recovery_codes:
+                      - "a1b2-c3d4-e5f6"
+                      - "g7h8-i9j0-k1l2"
+                      - "m3n4-o5p6-q7r8"
+        "400":
+          description: Not enrolled or bad code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: Already verified.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/mfa:
+    delete:
+      tags: [auth-mfa]
+      summary: Disable MFA
+      description: Requires a current valid TOTP code in the body to prevent lockout via stolen sessions.
+      operationId: mfaDisable
+      x-source: "internal/api/mfa_handlers.go:355"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: MFA disabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mfa_enabled: { type: boolean }
+              examples:
+                ok: { value: { mfa_enabled: false } }
+        "400":
+          description: MFA not enabled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401":
+          description: Invalid TOTP code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/mfa/recovery-codes:
+    get:
+      tags: [auth-mfa]
+      summary: Regenerate recovery codes
+      description: |
+        Invalidates previously-issued recovery codes and returns a fresh set.
+        Despite using `GET`, this mutates — that is by design so the codes can
+        be fetched via a browser redirect.
+      operationId: mfaRegenerateRecoveryCodes
+      x-source: "internal/api/mfa_handlers.go:435"
+      responses:
+        "200":
+          description: New recovery codes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recovery_codes:
+                    type: array
+                    items: { type: string }
+              examples:
+                ok:
+                  value:
+                    recovery_codes:
+                      - "a1b2-c3d4-e5f6"
+                      - "g7h8-i9j0-k1l2"
+        "400":
+          description: MFA not enabled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/flow/mfa/verify:
+    post:
+      tags: [auth-mfa]
+      summary: Verify MFA during a paused auth flow
+      description: |
+        Called when an auth flow step returned `{outcome: "awaiting_mfa",
+        challenge_id: "mfac_..."}`. The endpoint is public — the challenge
+        ID is the proof of prior auth. Single-use; the challenge is consumed
+        atomically. After a 200 response the SDK re-POSTs the original
+        action (signup/login/etc.).
+      operationId: flowMfaVerify
+      security: []
+      x-source: "internal/api/flow_mfa_handlers.go:43"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id, code, user_id]
+              properties:
+                flow_run_id: { type: string, description: "Informational; reserved for future stateful resumption." }
+                challenge_id: { type: string, example: "mfac_7b4f..." }
+                code: { type: string, example: "123456" }
+                user_id: { type: string, example: "usr_V1StGXR8_Z5jdHi6B-myT" }
+      responses:
+        "200":
+          description: Challenge satisfied.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified: { type: boolean }
+                  user_id: { type: string }
+              examples:
+                ok:
+                  value:
+                    verified: true
+                    user_id: "usr_V1StGXR8_Z5jdHi6B-myT"
+        "401":
+          description: Challenge invalid/expired or TOTP wrong.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/sso:
+    get:
+      tags: [auth-sso]
+      summary: Route a user to the right SSO connection by email domain
+      description: |
+        Single entrypoint a login page can redirect to. Looks up the SSO
+        connection registered for the email's domain and returns the URL
+        to continue the flow (OIDC authorize endpoint or SAML IdP SSO URL).
+      operationId: ssoAutoRoute
+      security: []
+      x-source: "internal/api/sso_handlers.go:304"
+      parameters:
+        - in: query
+          name: email
+          required: true
+          schema: { type: string, format: email }
+          example: "ada@corp.example.com"
+      responses:
+        "200":
+          description: Connection found; follow `redirect_url`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connection_id: { type: string }
+                  connection_type: { type: string, enum: [oidc, saml] }
+                  connection_name: { type: string }
+                  redirect_url: { type: string, format: uri }
+              examples:
+                oidc:
+                  value:
+                    connection_id: "ssoc_okta_corp"
+                    connection_type: "oidc"
+                    connection_name: "Okta (corp.example.com)"
+                    redirect_url: "/api/v1/sso/oidc/ssoc_okta_corp/auth"
+        "400":
+          description: Missing email parameter.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404":
+          description: No SSO connection configured for that email domain.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/sessions:
+    get:
+      tags: [auth-sessions]
+      summary: List my sessions
+      description: |
+        Returns every live session for the authenticated user. The current
+        session is marked `current: true`.
+      operationId: listMySessions
+      x-source: "internal/api/session_handlers.go:50"
+      responses:
+        "200":
+          description: Sessions list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+              examples:
+                two:
+                  value:
+                    data:
+                      - id: "ses_cur_01HW..."
+                        user_id: "usr_V1StGXR8_Z5jdHi6B-myT"
+                        ip: "203.0.113.42"
+                        user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) ..."
+                        mfa_passed: true
+                        auth_method: "password"
+                        expires_at: "2026-05-24T18:00:00Z"
+                        created_at: "2026-04-24T18:00:00Z"
+                        last_activity_at: "2026-04-24T18:00:00Z"
+                        current: true
+
+  /api/v1/auth/sessions/{id}:
+    delete:
+      tags: [auth-sessions]
+      summary: Revoke one of my sessions
+      description: |
+        Users can only revoke their own sessions; revoking another user's ID
+        returns 404 (to avoid leaking existence).
+      operationId: revokeMySession
+      x-source: "internal/api/session_handlers.go:82"
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Session revoked.
+        "404":
+          description: Session not found or not owned by the caller.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/consents:
+    get:
+      tags: [auth-consent]
+      summary: List my active OAuth consents
+      description: |
+        Returns the authenticated user's active (non-revoked) OAuth consent
+        grants, enriched with the registered agent/application display name
+        where available.
+      operationId: listMyConsents
+      x-source: "internal/api/consent_handlers.go:26"
+      responses:
+        "200":
+          description: Consent grants.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Consent" }
+              examples:
+                one:
+                  value:
+                    data:
+                      - id: "cns_01HW..."
+                        client_id: "cli_research_bot"
+                        agent_name: "Research Bot"
+                        scope: "openid profile email read:docs"
+                        granted_at: "2026-04-01T10:00:00Z"
+                        expires_at: "2027-04-01T10:00:00Z"
+
+  /api/v1/auth/consents/{id}:
+    delete:
+      tags: [auth-consent]
+      summary: Revoke an OAuth consent
+      description: |
+        Revokes the consent grant and cascades: every OAuth access + refresh
+        token issued to the client under this grant is revoked as well.
+      operationId: revokeMyConsent
+      x-source: "internal/api/consent_handlers.go:59"
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Consent revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              examples:
+                ok:
+                  value: { message: "Consent revoked" }
+        "404":
+          description: Consent not found or not owned by the caller.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /api/v1/auth/revoke:
+    post:
+      tags: [auth-signup-login]
+      summary: Revoke a JWT (self-service)
+      description: |
+        Revokes the JTI of the current JWT, or — if `token` is supplied in the
+        body — validates that token and revokes its JTI (only if it belongs to
+        the authenticated user). Cookie sessions are unaffected unless the
+        caller also holds a JWT.
+      operationId: userRevokeJwt
+      x-source: "internal/api/jwt_revoke_handlers.go:30"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: Optional JWT to revoke. Must belong to the authenticated user.
+            examples:
+              explicit:
+                value: { token: "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..." }
+      responses:
+        "200":
+          description: Token revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              examples:
+                ok: { value: { message: "Token revoked" } }
+        "400":
+          description: Supplied token is invalid.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: Token does not belong to the authenticated user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "501":
+          description: JWT is not configured on this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: shark_session
+      description: |
+        Session cookie set by `/auth/signup`, `/auth/login`, the OAuth callback,
+        magic-link verify, and passkey login. HttpOnly, Secure (when served
+        over HTTPS), SameSite=Lax.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued alongside the session cookie when JWT is enabled. Supply as
+        `Authorization: Bearer <jwt>`. Revokable via `/auth/revoke`.
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      description: |
+        Auth + Admin error envelope. See `docs/errors.md`. `error` and `code`
+        are both machine-readable slugs, usually identical; switch on `code`
+        when they diverge.
+      required: [error, code, message]
+      properties:
+        error:
+          type: string
+          example: "invalid_credentials"
+        code:
+          type: string
+          example: "invalid_credentials"
+        message:
+          type: string
+          example: "Invalid email or password"
+        docs_url:
+          type: string
+          format: uri
+          example: "https://docs.shark-auth.com/errors/invalid_credentials"
+        details:
+          type: object
+          additionalProperties: true
+          example: { retry_after: 300 }
+
+    User:
+      type: object
+      required: [id, email, emailVerified, mfaEnabled, createdAt, updatedAt]
+      properties:
+        id: { type: string, example: "usr_V1StGXR8_Z5jdHi6B-myT" }
+        email: { type: string, format: email, example: "ada@example.com" }
+        emailVerified: { type: boolean, example: true }
+        name: { type: string, nullable: true, example: "Ada Lovelace" }
+        avatarUrl: { type: string, format: uri, nullable: true, example: "https://cdn.example.com/a/ada.png" }
+        mfaEnabled: { type: boolean, example: false }
+        createdAt: { type: string, format: date-time, example: "2026-04-01T09:11:00Z" }
+        updatedAt: { type: string, format: date-time, example: "2026-04-24T18:05:00Z" }
+
+    SignupRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, example: "ada@example.com" }
+        password: { type: string, format: password, minLength: 8, example: "correct-horse-battery-staple" }
+        name: { type: string, example: "Ada Lovelace" }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+
+    LoginResponse:
+      description: |
+        User fields plus optional JWT material. In `access_refresh` JWT mode the
+        response carries `access_token` + `refresh_token`; in the simpler
+        single-token mode it carries `token`. Session cookie is always set.
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            token:
+              type: string
+              description: Session JWT (single-token mode).
+            access_token:
+              type: string
+              description: Short-lived access JWT (access_refresh mode).
+            refresh_token:
+              type: string
+              description: Long-lived refresh JWT (access_refresh mode).
+
+    MFARequiredResponse:
+      description: Returned by `/auth/login` when the user has MFA enabled. The partial session cookie is set; satisfy via `/auth/mfa/challenge` or `/auth/mfa/recovery`.
+      type: object
+      required: [mfaRequired]
+      properties:
+        mfaRequired:
+          type: boolean
+          const: true
+
+    PasskeyCredential:
+      type: object
+      required: [id, transports, backed_up, created_at]
+      properties:
+        id: { type: string, example: "pkc_2k9fj3X..." }
+        name: { type: string, nullable: true, example: "MacBook Touch ID" }
+        transports:
+          type: string
+          description: Comma-separated WebAuthn transport list.
+          example: "internal,hybrid"
+        backed_up:
+          type: boolean
+          description: True if the authenticator reports the credential as backed up (syncable).
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time, nullable: true }
+
+    WebAuthnRegistrationOptions:
+      description: |
+        Response from `/auth/passkey/register/begin`. `publicKey` is the raw
+        `PublicKeyCredentialCreationOptions` from the WebAuthn library; pass
+        it directly to `navigator.credentials.create({publicKey})`.
+      type: object
+      required: [publicKey, challengeKey]
+      properties:
+        publicKey:
+          type: object
+          description: Opaque WebAuthn creation options (challenge, rp, user, pubKeyCredParams, excludeCredentials, etc.).
+          additionalProperties: true
+        challengeKey:
+          type: string
+          description: Server-side challenge lookup key. Echo back via the `X-Challenge-Key` header on `/register/finish`.
+          example: "chk_7b4f1e0c3a9d2..."
+
+    WebAuthnRegistrationCompletion:
+      description: |
+        Raw `PublicKeyCredential` from `navigator.credentials.create()` —
+        shape defined by the WebAuthn Level 2 spec. Forwarded as-is to the
+        server-side attestation verifier.
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        rawId: { type: string, description: "Base64url credential ID" }
+        type: { type: string, enum: ["public-key"] }
+        response:
+          type: object
+          properties:
+            clientDataJSON: { type: string }
+            attestationObject: { type: string }
+
+    WebAuthnAuthenticationOptions:
+      description: Response from `/auth/passkey/login/begin`. Pass `publicKey` to `navigator.credentials.get({publicKey})`.
+      type: object
+      required: [publicKey, challengeKey]
+      properties:
+        publicKey:
+          type: object
+          additionalProperties: true
+        challengeKey:
+          type: string
+
+    WebAuthnAuthenticationCompletion:
+      description: Raw `PublicKeyCredential` assertion from `navigator.credentials.get()`.
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        rawId: { type: string }
+        type: { type: string, enum: ["public-key"] }
+        response:
+          type: object
+          properties:
+            clientDataJSON: { type: string }
+            authenticatorData: { type: string }
+            signature: { type: string }
+            userHandle: { type: string, nullable: true }
+
+    MagicLinkSendRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    MFAEnrollResponse:
+      type: object
+      required: [secret, qr_uri]
+      properties:
+        secret:
+          type: string
+          description: Base32-encoded TOTP shared secret. Treat as sensitive.
+          example: "JBSWY3DPEHPK3PXP"
+        qr_uri:
+          type: string
+          description: "`otpauth://totp/...` URI suitable for rendering as a QR code."
+          example: "otpauth://totp/SharkAuth:ada@example.com?secret=JBSWY3DPEHPK3PXP&issuer=SharkAuth"
+
+    Session:
+      type: object
+      required: [id, user_id, mfa_passed, auth_method, expires_at, created_at]
+      properties:
+        id: { type: string, example: "ses_01HW..." }
+        user_id: { type: string, example: "usr_V1StGXR8_Z5jdHi6B-myT" }
+        ip: { type: string, example: "203.0.113.42" }
+        user_agent: { type: string }
+        mfa_passed: { type: boolean }
+        auth_method:
+          type: string
+          enum: [password, passkey, magic_link, oauth, sso]
+          example: "password"
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        last_activity_at: { type: string, format: date-time }
+        current:
+          type: boolean
+          description: True on the caller's own session row in `GET /auth/sessions`.
+
+    Consent:
+      type: object
+      required: [id, client_id, scope, granted_at]
+      properties:
+        id: { type: string, example: "cns_01HW..." }
+        client_id: { type: string, example: "cli_research_bot" }
+        agent_name:
+          type: string
+          description: Display name of the client/agent, when registered.
+        scope:
+          type: string
+          description: Space-delimited scope list granted to the client.
+          example: "openid profile email read:docs"
+        authorization_details:
+          type: string
+          description: RFC 9396 rich authorization details (JSON, stringified).
+        granted_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
