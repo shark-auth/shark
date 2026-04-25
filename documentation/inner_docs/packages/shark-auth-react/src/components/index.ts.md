@@ -25,7 +25,7 @@ export * from './SharkCallback'
 - All 10 sibling component modules.
 
 ## Used by (consumer-facing)
-- Root `src/index.ts` re-exports this barrel — consumers import everything from `@shark-auth/react`.
+- Root `src/index.ts` re-exports this barrel — consumers import everything from `@sharkauth/react`.
 
 ## Notes
 - No standalone subpath in `package.json` for components (only `core` and `hooks` have subpaths) — components must be imported from the root.

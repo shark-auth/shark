@@ -1,10 +1,10 @@
-# Branding + Hosted Pages + `@shark-auth/react` Implementation Plan
+# Branding + Hosted Pages + `@sharkauth/react` Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a unified branding, mail-builder, hosted auth pages, and `@shark-auth/react` NPM package, sharing one design system across three consumers (admin dashboard, hosted SPA, NPM widgets).
+**Goal:** Build a unified branding, mail-builder, hosted auth pages, and `@sharkauth/react` NPM package, sharing one design system across three consumers (admin dashboard, hosted SPA, NPM widgets).
 
-**Architecture:** Three sequential phases. Phase A ships backend + dashboard Branding tab + editable email templates. Phase B extracts shared design system and ships hosted React SPA mounted at `/hosted/<app-slug>/*`. Phase C ships `@shark-auth/react` NPM package reusing Phase B components. A→B→C is strict — B depends on Phase A migrations; C depends on Phase B hosted pages as OAuth redirect target.
+**Architecture:** Three sequential phases. Phase A ships backend + dashboard Branding tab + editable email templates. Phase B extracts shared design system and ships hosted React SPA mounted at `/hosted/<app-slug>/*`. Phase C ships `@sharkauth/react` NPM package reusing Phase B components. A→B→C is strict — B depends on Phase A migrations; C depends on Phase B hosted pages as OAuth redirect target.
 
 **Tech Stack:** Go (chi router, goose migrations, html/template, go:embed), SQLite, React 18, Vite, TypeScript, jose (JWKS verification), react-colorful (color picker), wouter (client-side routing in hosted SPA), tsup (NPM package dual CJS/ESM build), pnpm workspaces (monorepo).
 
@@ -81,11 +81,11 @@ Spec covers three coupled phases sharing one design system. Not decomposed into 
 - Existing admin components — refactor to import from `admin/src/design/` instead of inline styles
 - `smoke_test.sh` — add section 75
 
-### Phase C — `@shark-auth/react` NPM package
+### Phase C — `@sharkauth/react` NPM package
 
 **Create:**
 - `package.json` at repo root — add `workspaces: ["packages/*", "admin", "examples/*"]` (or `pnpm-workspace.yaml` if using pnpm)
-- `packages/shark-auth-react/package.json` — name `@shark-auth/react`, version `0.1.0`
+- `packages/shark-auth-react/package.json` — name `@sharkauth/react`, version `0.1.0`
 - `packages/shark-auth-react/tsconfig.json`
 - `packages/shark-auth-react/vite.config.ts` — lib mode
 - `packages/shark-auth-react/tsup.config.ts` — dual CJS/ESM + .d.ts generation
@@ -1418,14 +1418,14 @@ func (s *Server) handleAppSnippet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"framework": "react",
 		"snippets": []map[string]string{
-			{"label": "Install", "lang": "bash", "code": "npm install @shark-auth/react"},
+			{"label": "Install", "lang": "bash", "code": "npm install @sharkauth/react"},
 			{"label": "Provider setup", "lang": "tsx", "code": fmt.Sprintf(
-				"import { SharkProvider } from '@shark-auth/react'\n\n"+
+				"import { SharkProvider } from '@sharkauth/react'\n\n"+
 					"<SharkProvider publishableKey=%q authUrl=%q>\n"+
 					"  <App/>\n"+
 					"</SharkProvider>", app.ClientID, authURL)},
 			{"label": "Page usage", "lang": "tsx", "code":
-				"import { SignIn, UserButton, SignedIn, SignedOut } from '@shark-auth/react'\n\n" +
+				"import { SignIn, UserButton, SignedIn, SignedOut } from '@sharkauth/react'\n\n" +
 					"<SignedOut><SignIn/></SignedOut>\n" +
 					"<SignedIn><UserButton/></SignedIn>"},
 		},
@@ -2759,7 +2759,7 @@ git tag phase-b-hosted-done
 
 ---
 
-# PHASE C — `@shark-auth/react` NPM package (~5 working days, ~12 tasks)
+# PHASE C — `@sharkauth/react` NPM package (~5 working days, ~12 tasks)
 
 ### Task C1: Monorepo setup
 
@@ -2789,7 +2789,7 @@ packages:
 
 ```json
 {
-  "name": "@shark-auth/react",
+  "name": "@sharkauth/react",
   "version": "0.1.0",
   "description": "React components + hooks for SharkAuth",
   "type": "module",
@@ -2864,7 +2864,7 @@ export default defineConfig({
 
 ```bash
 pnpm install
-pnpm --filter @shark-auth/react build
+pnpm --filter @sharkauth/react build
 ```
 
 Expected: `packages/shark-auth-react/dist/` populated with index.js, index.cjs, index.d.ts.
@@ -2873,7 +2873,7 @@ Expected: `packages/shark-auth-react/dist/` populated with index.js, index.cjs, 
 
 ```bash
 git add pnpm-workspace.yaml packages/shark-auth-react/package.json packages/shark-auth-react/tsup.config.ts packages/shark-auth-react/tsconfig.json package.json
-git commit -m "feat(sdk): @shark-auth/react monorepo scaffold (pnpm workspaces + tsup)"
+git commit -m "feat(sdk): @sharkauth/react monorepo scaffold (pnpm workspaces + tsup)"
 ```
 
 ---
@@ -2907,7 +2907,7 @@ export * from './types'
 - [ ] **Step 3: Build**
 
 ```bash
-pnpm --filter @shark-auth/react build
+pnpm --filter @sharkauth/react build
 ```
 
 - [ ] **Step 4: Unit tests for JWT**
@@ -2928,7 +2928,7 @@ describe('decodeClaims', () => {
 })
 ```
 
-Run: `pnpm --filter @shark-auth/react test`.
+Run: `pnpm --filter @sharkauth/react test`.
 
 - [ ] **Step 5: Commit**
 
@@ -2979,7 +2979,7 @@ Analogous for `useUser`, `useSession`, `useOrganization`.
 - [ ] **Step 3: Build + commit**
 
 ```bash
-pnpm --filter @shark-auth/react build
+pnpm --filter @sharkauth/react build
 git add packages/shark-auth-react/src/hooks/
 git commit -m "feat(sdk): hooks useAuth/useUser/useSession/useOrganization"
 ```
@@ -3066,7 +3066,7 @@ export function SharkCallback() {
 - [ ] **Step 5: Build + commit**
 
 ```bash
-pnpm --filter @shark-auth/react build
+pnpm --filter @sharkauth/react build
 git add packages/shark-auth-react/src/components/
 git commit -m "feat(sdk): SharkProvider + SignIn/SignedIn/SignedOut + UserButton + SharkCallback"
 ```
@@ -3084,7 +3084,7 @@ git commit -m "feat(sdk): SharkProvider + SignIn/SignedIn/SignedOut + UserButton
 mkdir -p examples/react-next
 cd examples/react-next
 pnpm init
-pnpm add next react react-dom @shark-auth/react@workspace:*
+pnpm add next react react-dom @sharkauth/react@workspace:*
 ```
 
 - [ ] **Step 2: Minimal App Router setup**
@@ -3092,7 +3092,7 @@ pnpm add next react react-dom @shark-auth/react@workspace:*
 `app/layout.tsx`:
 
 ```tsx
-import { SharkProvider } from '@shark-auth/react'
+import { SharkProvider } from '@sharkauth/react'
 
 export default function Root({ children }) {
   return (
@@ -3108,7 +3108,7 @@ export default function Root({ children }) {
 `app/page.tsx`:
 
 ```tsx
-import { SignIn, UserButton, SignedIn, SignedOut } from '@shark-auth/react'
+import { SignIn, UserButton, SignedIn, SignedOut } from '@sharkauth/react'
 export default function Home() {
   return (
     <main>
@@ -3123,7 +3123,7 @@ export default function Home() {
 
 ```tsx
 'use client'
-import { SharkCallback } from '@shark-auth/react'
+import { SharkCallback } from '@sharkauth/react'
 export default function Callback() { return <SharkCallback/> }
 ```
 
@@ -3140,7 +3140,7 @@ Click "Sign in" → redirect to shark hosted → login → redirect back → Use
 
 ```bash
 git add examples/react-next/
-git commit -m "feat(sdk): examples/react-next — Next.js app using @shark-auth/react SDK"
+git commit -m "feat(sdk): examples/react-next — Next.js app using @sharkauth/react SDK"
 ```
 
 ---
@@ -3207,9 +3207,9 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install
-      - run: pnpm --filter @shark-auth/react build
-      - run: pnpm --filter @shark-auth/react test
-      - run: pnpm --filter @shark-auth/react publish --no-git-checks
+      - run: pnpm --filter @sharkauth/react build
+      - run: pnpm --filter @sharkauth/react test
+      - run: pnpm --filter @sharkauth/react publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 ```
@@ -3232,7 +3232,7 @@ git commit -m "feat(sdk): GitHub Actions publish on sdk-v* tag"
 - [ ] **Step 1: README + guide content**
 
 Include:
-- Install: `npm install @shark-auth/react`
+- Install: `npm install @sharkauth/react`
 - Register app in shark admin dashboard with `integration_mode=components`
 - Set env vars: `NEXT_PUBLIC_SHARK_KEY`, `NEXT_PUBLIC_SHARK_URL`
 - SharkProvider wrapping
@@ -3256,8 +3256,8 @@ git commit -m "docs(sdk): React integration guide + package README"
 
 ```bash
 pnpm install
-pnpm --filter @shark-auth/react build
-pnpm --filter @shark-auth/react test
+pnpm --filter @sharkauth/react build
+pnpm --filter @sharkauth/react test
 (cd examples/react-next && pnpm build && pnpm start &) && sleep 3
 # Manual: visit http://localhost:3000, click Sign in, complete flow, see UserButton with email
 ```
@@ -3320,7 +3320,7 @@ for _, e := range entries {
 - `BrandingConfig` defined in A2, consumed in A4 email rendering + A5 handlers + B7 hosted shell — consistent field names
 - `EmailTemplate` defined in A3, consumed in A7 handlers — consistent
 - `integration_mode` string enum: `hosted|components|proxy|custom` used consistently in A8 PATCH + B7 handler + A13 UI
-- `@shark-auth/react` naming consistent across C1-C8
+- `@sharkauth/react` naming consistent across C1-C8
 
 No inconsistencies found.
 

@@ -1,5 +1,5 @@
 'use client'
-import { SharkProvider } from '@shark-auth/react'
+import { SharkProvider } from '@sharkauth/react'
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SharkProvider

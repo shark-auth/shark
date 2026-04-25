@@ -83,8 +83,6 @@ export function SharkProvider({ publishableKey, authUrl, dpop, children }: Shark
     return token
   }, [authUrl, publishableKey, prover])
 
-  )
-
   React.useEffect(() => {
     let cancelled = false
 

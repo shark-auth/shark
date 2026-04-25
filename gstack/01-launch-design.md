@@ -137,7 +137,7 @@ The cost: either real dollars (SaaS), real engineering hours (hand-rolled), or r
 |---|---|---|
 | TypeScript SDK (DPoP, device flow, vault, admin) | SHIPPED | `sdk/typescript/`, tsup build |
 | Python SDK (core flows, 10 test files) | SHIPPED | `sdk/python/pyproject.toml v0.1.0` |
-| React SDK (hooks: useAuth/useUser/useSession/useOrganization) | SHIPPED | `@shark-auth/react v0.1.0` |
+| React SDK (hooks: useAuth/useUser/useSession/useOrganization) | SHIPPED | `@sharkauth/react v0.1.0` |
 | npm SDK publishing pipeline | SHIPPED | `.github/workflows/publish-sdk.yml` on `sdk-v*` tags |
 | Quick-start (hello-agent, 271 lines) | SHIPPED | `docs/hello-agent.md` + runnable script |
 | Error catalog + RFC 6749 §5.2 compliant | SHIPPED | `docs/errors.md` |
@@ -272,7 +272,7 @@ Reasoning:
 - Docker Hub mirror optional; GHCR is adequate for launch audience.
 
 **SDK distribution (already partial):**
-- npm: `@shark-auth/core`, `@shark-auth/react` — workflow exists, confirm publish on tag.
+- npm: `@shark-auth/core`, `@sharkauth/react` — workflow exists, confirm publish on tag.
 - PyPI: `sharkauth` — needs `publish-python-sdk.yml` workflow (currently missing).
 
 **Deferred until post-YC (explicit in app):**

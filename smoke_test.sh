@@ -3246,20 +3246,20 @@ if command -v pnpm >/dev/null 2>&1; then
   ( pnpm install --prefer-offline >/dev/null 2>&1 ) || note "76 pnpm install warned"
 fi
 
-# ── 76-1: @shark-auth/react package builds cleanly ---------------------------
+# ── 76-1: @sharkauth/react package builds cleanly ---------------------------
 if command -v pnpm >/dev/null 2>&1; then
-  ( pnpm --filter @shark-auth/react build >/dev/null 2>&1 )
-  [ $? -eq 0 ] && pass "76 pnpm --filter @shark-auth/react build succeeds" \
-    || fail "76 pnpm --filter @shark-auth/react build failed"
+  ( pnpm --filter @sharkauth/react build >/dev/null 2>&1 )
+  [ $? -eq 0 ] && pass "76 pnpm --filter @sharkauth/react build succeeds" \
+    || fail "76 pnpm --filter @sharkauth/react build failed"
 else
   note "76 pnpm not found — skipping SDK build assertions"
 fi
 
-# ── 76-2: @shark-auth/react tests pass ---------------------------------------
+# ── 76-2: @sharkauth/react tests pass ---------------------------------------
 if command -v pnpm >/dev/null 2>&1; then
-  ( pnpm --filter @shark-auth/react test --run >/dev/null 2>&1 )
-  [ $? -eq 0 ] && pass "76 pnpm --filter @shark-auth/react test succeeds" \
-    || fail "76 pnpm --filter @shark-auth/react test failed"
+  ( pnpm --filter @sharkauth/react test --run >/dev/null 2>&1 )
+  [ $? -eq 0 ] && pass "76 pnpm --filter @sharkauth/react test succeeds" \
+    || fail "76 pnpm --filter @sharkauth/react test failed"
 fi
 
 # ── 76-3: react-next-example Next.js app builds cleanly ----------------------

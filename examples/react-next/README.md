@@ -1,6 +1,6 @@
 # react-next-example
 
-Next.js 14 App Router example consuming `@shark-auth/react`.
+Next.js 14 App Router example consuming `@sharkauth/react`.
 
 ## Setup
 

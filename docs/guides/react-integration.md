@@ -1,13 +1,13 @@
-# React Integration Guide — `@shark-auth/react`
+# React Integration Guide — `@sharkauth/react`
 
 Drop-in React components + hooks for SharkAuth. Works with Next.js App Router, Vite, CRA.
 
 ## Install
 
 ```bash
-npm install @shark-auth/react
+npm install @sharkauth/react
 # or
-pnpm add @shark-auth/react
+pnpm add @sharkauth/react
 ```
 
 Peer deps: React 18+, React DOM 18+.
@@ -36,7 +36,7 @@ For non-Next frameworks, use whatever env convention your bundler supports. The 
 
 ```tsx
 'use client'
-import { SharkProvider } from '@shark-auth/react'
+import { SharkProvider } from '@sharkauth/react'
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -59,12 +59,12 @@ export default function Root({ children }: { children: React.ReactNode }) {
 }
 ```
 
-Also add `transpilePackages: ['@shark-auth/react']` to `next.config.mjs`.
+Also add `transpilePackages: ['@sharkauth/react']` to `next.config.mjs`.
 
 ### Vite / CRA
 
 ```tsx
-import { SharkProvider } from '@shark-auth/react'
+import { SharkProvider } from '@sharkauth/react'
 
 createRoot(document.getElementById('root')!).render(
   <SharkProvider publishableKey={import.meta.env.VITE_SHARK_KEY} authUrl={import.meta.env.VITE_SHARK_URL}>
@@ -76,7 +76,7 @@ createRoot(document.getElementById('root')!).render(
 ## Drop in components
 
 ```tsx
-import { SignIn, SignedIn, SignedOut, UserButton } from '@shark-auth/react'
+import { SignIn, SignedIn, SignedOut, UserButton } from '@sharkauth/react'
 
 <SignedOut>
   <SignIn redirectUrl="/dashboard" />
@@ -95,7 +95,7 @@ Create a route at `/shark/callback` that renders `<SharkCallback />`:
 ```tsx
 // app/shark/callback/page.tsx
 'use client'
-import { SharkCallback } from '@shark-auth/react'
+import { SharkCallback } from '@sharkauth/react'
 export default function Callback() { return <SharkCallback /> }
 ```
 
@@ -110,7 +110,7 @@ export default function Callback() { return <SharkCallback /> }
 ## Hooks
 
 ```tsx
-import { useAuth, useUser, useSession, useOrganization } from '@shark-auth/react'
+import { useAuth, useUser, useSession, useOrganization } from '@sharkauth/react'
 
 function Profile() {
   const { isLoaded, isAuthenticated, signOut } = useAuth()
@@ -132,7 +132,7 @@ All hooks throw if called outside `<SharkProvider>`.
 ## MFA / Passkeys
 
 ```tsx
-import { MFAChallenge, PasskeyButton } from '@shark-auth/react'
+import { MFAChallenge, PasskeyButton } from '@sharkauth/react'
 
 <MFAChallenge onSuccess={() => router.push('/dashboard')} />
 <PasskeyButton mode="signin" onSuccess={() => router.refresh()} />
@@ -141,7 +141,7 @@ import { MFAChallenge, PasskeyButton } from '@shark-auth/react'
 ## Organizations
 
 ```tsx
-import { OrganizationSwitcher, useOrganization } from '@shark-auth/react'
+import { OrganizationSwitcher, useOrganization } from '@sharkauth/react'
 
 <OrganizationSwitcher />
 const { organization } = useOrganization()

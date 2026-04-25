@@ -5,8 +5,8 @@
 **LOC:** 51
 
 ## Identity
-- **name:** `@shark-auth/react`
-- **version:** `0.1.0`
+- **name:** `@sharkauth/react`
+- **version:** `0.1.1`
 - **description:** React components + hooks for SharkAuth
 - **type:** `module` (ESM-first)
 

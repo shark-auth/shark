@@ -1,11 +1,11 @@
-# @shark-auth/react
+# @sharkauth/react
 
 React components + hooks for SharkAuth — drop-in auth for Next.js, Vite, CRA.
 
 ## Install
 
 ```bash
-npm install @shark-auth/react
+npm install @sharkauth/react
 ```
 
 Peer: React 18+.
@@ -13,7 +13,7 @@ Peer: React 18+.
 ## Quick start
 
 ```tsx
-import { SharkProvider, SignIn, SignedIn, SignedOut, UserButton } from '@shark-auth/react'
+import { SharkProvider, SignIn, SignedIn, SignedOut, UserButton } from '@sharkauth/react'
 
 <SharkProvider publishableKey={process.env.NEXT_PUBLIC_SHARK_KEY!} authUrl={process.env.NEXT_PUBLIC_SHARK_URL!}>
   <SignedOut><SignIn redirectUrl="/dashboard" /></SignedOut>
