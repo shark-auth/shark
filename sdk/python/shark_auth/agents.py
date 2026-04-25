@@ -96,6 +96,31 @@ class AgentsClient:
         _raise(resp)
 
     # ------------------------------------------------------------------
+    # Get single agent
+    # ------------------------------------------------------------------
+
+    def get_agent(self, agent_id: str) -> Dict[str, Any]:
+        """Return a single agent by *agent_id* (or client_id).
+
+        Parameters
+        ----------
+        agent_id:
+            The ``id`` (``agent_*``) or ``client_id`` (``shark_agent_*``) of
+            the agent to fetch.
+
+        Example
+        -------
+        >>> client = AgentsClient(base_url="https://auth.example.com", token="sk_live_...")
+        >>> agent = client.get_agent("agent_abc123")
+        >>> print(agent["name"])
+        """
+        url = f"{self._base}{self._PREFIX}/{agent_id}"
+        resp = _http.request(self._session, "GET", url, headers=self._auth())
+        if resp.status_code == 200:
+            return resp.json()
+        _raise(resp)
+
+    # ------------------------------------------------------------------
     # Revoke (deactivate)
     # ------------------------------------------------------------------
 

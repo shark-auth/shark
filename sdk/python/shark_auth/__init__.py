@@ -6,6 +6,8 @@ Public API
 - :class:`DPoPProver`      — RFC 9449 DPoP proof JWT emission
 - :class:`DeviceFlow`      — RFC 8628 device authorization grant
 - :class:`VaultClient`     — Shark Token Vault client
+- :class:`OAuthClient`     — RFC 7009 revoke + RFC 7662 introspect
+- :class:`MagicLinkClient` — send magic-link sign-in emails
 - :func:`decode_agent_token` — verify Shark-issued agent access tokens
 """
 
@@ -21,6 +23,8 @@ from .errors import (
     TokenError,
     VaultError,
 )
+from .magic_link import MagicLinkClient
+from .oauth import OAuthClient
 from .paywall import PaywallClient
 from .proxy_lifecycle import ProxyLifecycleClient, ProxyStatus
 from .proxy_rules import (
@@ -47,6 +51,8 @@ __all__ = [
     "PaywallClient",
     "UsersClient",
     "AgentsClient",
+    "OAuthClient",
+    "MagicLinkClient",
     # v1.5 types
     "ProxyRule",
     "CreateProxyRuleInput",

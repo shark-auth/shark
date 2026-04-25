@@ -39,6 +39,27 @@ export interface SetUserTierResult {
   tier: string;
 }
 
+/** Input for `createUser` (POST /api/v1/admin/users). */
+export interface CreateUserInput {
+  /** User email address. Required. */
+  email: string;
+  /** Optional plaintext password — hashed server-side. */
+  password?: string;
+  /** Display name. */
+  name?: string;
+  /** Pre-verify the email. Default: false. */
+  email_verified?: boolean;
+}
+
+/** Input for `updateUser` (PATCH /api/v1/users/{id}). All fields are optional. */
+export interface UpdateUserInput {
+  email?: string;
+  name?: string;
+  email_verified?: boolean;
+  /** Raw JSON metadata string. */
+  metadata?: string;
+}
+
 /** Options for `listUsers`. */
 export interface ListUsersOptions {
   /** Filter by email (exact or partial match — server behaviour). */
@@ -131,6 +152,71 @@ export class UsersClient {
       return (raw as { data: User }).data;
     }
     return raw as User;
+  }
+
+  /**
+   * Create a new user (admin only).
+   *
+   * Password is optional — omit to create a passwordless account
+   * that can be invited via magic link.
+   *
+   * @example
+   * ```ts
+   * const user = await client.createUser({ email: "new@example.com", name: "Alice" });
+   * ```
+   */
+  async createUser(input: CreateUserInput): Promise<User> {
+    const url = `${this._base}/api/v1/admin/users`;
+    const resp = await httpRequest(url, {
+      method: "POST",
+      headers: { ...this._auth(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (resp.status !== 201 && resp.status !== 200)
+      await this._throw(resp.status, resp.text);
+    const raw = resp.json<User | { data: User }>();
+    if (raw && typeof raw === "object" && "data" in raw) return (raw as { data: User }).data;
+    return raw as User;
+  }
+
+  /**
+   * Update a user by ID.
+   *
+   * Only supplied fields are changed (partial update).
+   *
+   * @example
+   * ```ts
+   * const user = await client.updateUser("usr_abc", { name: "Bob" });
+   * ```
+   */
+  async updateUser(userId: string, input: UpdateUserInput): Promise<User> {
+    const url = `${this._base}/api/v1/users/${encodeURIComponent(userId)}`;
+    const resp = await httpRequest(url, {
+      method: "PATCH",
+      headers: { ...this._auth(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (resp.status !== 200) await this._throw(resp.status, resp.text);
+    const raw = resp.json<User | { data: User }>();
+    if (raw && typeof raw === "object" && "data" in raw) return (raw as { data: User }).data;
+    return raw as User;
+  }
+
+  /**
+   * Delete a user by ID. Returns void on 204.
+   *
+   * @example
+   * ```ts
+   * await client.deleteUser("usr_abc");
+   * ```
+   */
+  async deleteUser(userId: string): Promise<void> {
+    const url = `${this._base}/api/v1/users/${encodeURIComponent(userId)}`;
+    const resp = await httpRequest(url, {
+      method: "DELETE",
+      headers: this._auth(),
+    });
+    if (resp.status !== 204) await this._throw(resp.status, resp.text);
   }
 
   /** List users, optionally filtered by email. */

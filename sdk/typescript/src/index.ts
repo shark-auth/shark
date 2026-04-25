@@ -12,8 +12,10 @@
  * - {@link ProxyLifecycleClient}— proxy start / stop / reload / status
  * - {@link BrandingClient}      — branding design tokens
  * - {@link PaywallClient}       — paywall URL builder + HTML renderer
- * - {@link UsersClient}         — user tier + read/list
- * - {@link AgentsClient}        — agent register / list / revoke
+ * - {@link UsersClient}         — user CRUD + tier
+ * - {@link AgentsClient}        — agent register / list / get / revoke
+ * - {@link OAuthClient}         — RFC 7009 revoke + RFC 7662 introspect
+ * - {@link MagicLinkClient}     — send magic-link sign-in emails
  * - {@link SharkAPIError}       — typed error for admin API failures
  */
 
@@ -90,6 +92,8 @@ export { UsersClient } from "./users.js";
 export type {
   UserTier,
   User,
+  CreateUserInput,
+  UpdateUserInput,
   SetUserTierResult,
   ListUsersOptions,
   UserListResult,
@@ -105,5 +109,18 @@ export type {
   AgentListResult,
   AgentsClientOptions,
 } from "./agents.js";
+
+export { OAuthClient } from "./oauth.js";
+export type {
+  TokenTypeHint,
+  IntrospectResult,
+  OAuthClientOptions,
+} from "./oauth.js";
+
+export { MagicLinkClient } from "./magicLink.js";
+export type {
+  SendMagicLinkResult,
+  MagicLinkClientOptions,
+} from "./magicLink.js";
 
 export const VERSION = "0.1.0";

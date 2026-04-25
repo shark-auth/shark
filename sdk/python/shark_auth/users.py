@@ -71,6 +71,113 @@ class UsersClient:
         _raise(resp)
 
     # ------------------------------------------------------------------
+    # Create user (admin)
+    # ------------------------------------------------------------------
+
+    def create_user(
+        self,
+        email: str,
+        *,
+        password: Optional[str] = None,
+        name: Optional[str] = None,
+        email_verified: bool = False,
+    ) -> Dict[str, Any]:
+        """Create a new user via the admin endpoint.
+
+        Parameters
+        ----------
+        email:
+            User email address.
+        password:
+            Optional plaintext password hashed server-side.
+        name:
+            Display name.
+        email_verified:
+            Pre-verify the email. Default: ``False``.
+
+        Example
+        -------
+        >>> client = UsersClient(base_url="https://auth.example.com", token="sk_live_...")
+        >>> user = client.create_user("new@example.com", name="Alice")
+        """
+        body: Dict[str, Any] = {"email": email, "email_verified": email_verified}
+        if password is not None:
+            body["password"] = password
+        if name is not None:
+            body["name"] = name
+        url = f"{self._base}/api/v1/admin/users"
+        resp = _http.request(self._session, "POST", url, headers=self._auth(), json=body)
+        if resp.status_code in (200, 201):
+            body_resp = resp.json()
+            return body_resp.get("data", body_resp) if isinstance(body_resp, dict) else body_resp
+        _raise(resp)
+
+    # ------------------------------------------------------------------
+    # Update user
+    # ------------------------------------------------------------------
+
+    def update_user(
+        self,
+        user_id: str,
+        *,
+        email: Optional[str] = None,
+        name: Optional[str] = None,
+        email_verified: Optional[bool] = None,
+        metadata: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update a user by *user_id* (partial update — only supplied fields changed).
+
+        Parameters
+        ----------
+        user_id:
+            The ``usr_*`` identifier of the user.
+        email:
+            New email address.
+        name:
+            New display name.
+        email_verified:
+            Override email-verified flag.
+        metadata:
+            Raw JSON metadata string.
+
+        Example
+        -------
+        >>> client.update_user("usr_abc", name="Bob")
+        """
+        body: Dict[str, Any] = {}
+        if email is not None:
+            body["email"] = email
+        if name is not None:
+            body["name"] = name
+        if email_verified is not None:
+            body["email_verified"] = email_verified
+        if metadata is not None:
+            body["metadata"] = metadata
+        url = f"{self._base}/api/v1/users/{user_id}"
+        resp = _http.request(self._session, "PATCH", url, headers=self._auth(), json=body)
+        if resp.status_code == 200:
+            body_resp = resp.json()
+            return body_resp.get("data", body_resp) if isinstance(body_resp, dict) else body_resp
+        _raise(resp)
+
+    # ------------------------------------------------------------------
+    # Delete user
+    # ------------------------------------------------------------------
+
+    def delete_user(self, user_id: str) -> None:
+        """Delete a user by *user_id*. Returns ``None`` on success (204).
+
+        Example
+        -------
+        >>> client.delete_user("usr_abc")
+        """
+        url = f"{self._base}/api/v1/users/{user_id}"
+        resp = _http.request(self._session, "DELETE", url, headers=self._auth())
+        if resp.status_code == 204:
+            return
+        _raise(resp)
+
+    # ------------------------------------------------------------------
     # Set tier (v1.5)
     # ------------------------------------------------------------------
 
