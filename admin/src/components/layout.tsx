@@ -32,7 +32,7 @@ export const NAV = [
   { group: 'OPERATIONS', items: [
     { id: 'audit', label: 'Audit Log', icon: 'Audit' },
     { id: 'webhooks', label: 'Webhooks', icon: 'Webhook' },
-    { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', badge: 'dev', devOnly: true },
+    // dev-email entry injected conditionally via emailProvider prop — see Sidebar below
     { id: 'signing', label: 'Signing Keys', icon: 'Signing' },
     { id: 'settings', label: 'System', icon: 'Settings' },
   ]},
@@ -52,7 +52,7 @@ export const NAV = [
   ]},
 ];
 
-export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode, showPreview }) {
+export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode, emailProvider, showPreview }) {
   const { data: health } = useAPI('/admin/health');
   const version = health?.version;
   const healthStatus = health?.db?.status === 'healthy' || health?.db?.status === 'ok' ? 'healthy' : (health?.db?.status || '—');
@@ -114,7 +114,16 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode, showP
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
         {NAV.map((section, i) => {
-          const visibleItems = section.items
+          // Inject dev-email entry conditionally into OPERATIONS group
+          const baseItems = section.group === 'OPERATIONS' && emailProvider === 'dev'
+            ? [
+                section.items[0], // audit
+                section.items[1], // webhooks
+                { id: 'dev-email', label: 'Dev Email', icon: 'Mail', badge: 'dev' },
+                ...section.items.slice(2), // signing, settings
+              ]
+            : section.items;
+          const visibleItems = baseItems
             .filter(item => !item.devOnly || devMode)
             .filter(item => !item.ph || item.ph <= CURRENT_PHASE || showPreview);
           if (visibleItems.length === 0) return null;
@@ -222,7 +231,7 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
     apps: 'Applications',
     keys: 'API Keys',
     rbac: 'Roles & Permissions',
-    'dev-inbox': 'Dev Inbox',
+    'dev-email': 'Dev Email',
     sso: 'SSO Connections',
     auth: 'Identity',
     signing: 'Signing Keys',

@@ -14,7 +14,7 @@ import { Applications } from './applications'
 import { ApiKeys } from './api_keys'
 import { Webhooks } from './webhooks'
 import { RBAC } from './rbac'
-import { DevInbox } from './dev_inbox'
+import { DevEmail } from './dev_email'
 import { SSO } from './sso'
 import { SigningKeys } from './signing_keys'
 import { Settings } from './settings'
@@ -136,6 +136,7 @@ export function App() {
       .catch(() => {});
   }, [apiKey]);
   const devMode = adminConfig?.dev_mode ?? false;
+  const emailProvider: string = adminConfig?.email?.provider ?? '';
 
   const redirectedRef = React.useRef(false);
   React.useEffect(() => {
@@ -156,10 +157,10 @@ export function App() {
   }, [apiKey, page]);
 
   React.useEffect(() => {
-    if (adminConfig !== null && !devMode && page === 'dev-inbox') {
+    if (adminConfig !== null && emailProvider !== '' && emailProvider !== 'dev' && page === 'dev-email') {
       setPage('overview');
     }
-  }, [adminConfig, devMode, page]);
+  }, [adminConfig, emailProvider, page]);
 
   if (!apiKey) {
     return <Login onLogin={(k) => setApiKey(k)} />;
@@ -177,7 +178,7 @@ export function App() {
     keys: ApiKeys,
     webhooks: Webhooks,
     rbac: RBAC,
-    'dev-inbox': DevInbox,
+    'dev-email': DevEmail,
     sso: SSO,
     signing: SigningKeys,
     settings: Settings,
@@ -202,6 +203,7 @@ export function App() {
         collapsed={tweaks.sidebarCollapsed}
         setCollapsed={(v) => setTweak('sidebarCollapsed', v)}
         devMode={devMode}
+        emailProvider={emailProvider}
         showPreview={tweaks.showPreview}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}
            data-screen-label={'01 ' + page}>
