@@ -16,16 +16,13 @@ import { Webhooks } from './webhooks'
 import { RBAC } from './rbac'
 import { DevInbox } from './dev_inbox'
 import { SSO } from './sso'
-import { IdentityHub } from './identity_hub'
 import { SigningKeys } from './signing_keys'
 import { Settings } from './settings'
 import { Consents } from './consents_manage'
 import { Vault } from './vault_manage'
-import { Tokens, APIExplorer, EventSchemas, OIDCProvider, Impersonation, Migrations } from './empty_shell'
+import { Tokens, APIExplorer, EventSchemas, SessionDebugger, OIDCProvider, Impersonation, Migrations } from './empty_shell'
 import { Branding } from './branding'
-import { SessionDebugger } from './session_debugger'
 import { CompliancePage } from './compliance'
-import { FlowBuilder } from './flow_builder'
 import { Proxy } from './proxy_config'
 import { GetStarted } from './get_started'
 import { Walkthrough } from './Walkthrough'
@@ -182,7 +179,6 @@ export function App() {
     rbac: RBAC,
     'dev-inbox': DevInbox,
     sso: SSO,
-    auth: IdentityHub,
     signing: SigningKeys,
     settings: Settings,
     consents: Consents,
@@ -197,7 +193,6 @@ export function App() {
     compliance: CompliancePage,
     migrations: Migrations,
     branding: Branding,
-    flow: FlowBuilder,
     'get-started': GetStarted,
   }[page] || Overview;
 

@@ -24,7 +24,6 @@ export const NAV = [
   ]},
   { group: 'ACCESS', items: [
     { id: 'apps', label: 'Applications', icon: 'App' },
-    { id: 'auth', label: 'Identity', icon: 'Lock' },
     { id: 'proxy', label: 'Proxy', icon: 'Proxy' },
     { id: 'sso', label: 'SSO', icon: 'SSO' },
     { id: 'rbac', label: 'Roles & Permissions', icon: 'Shield' },
@@ -50,7 +49,6 @@ export const NAV = [
     { id: 'compliance', label: 'Compliance', icon: 'Compliance' },
     { id: 'migrations', label: 'Migrations', icon: 'Migration', ph: 9 },
     { id: 'branding', label: 'Branding', icon: 'Brand' },
-    { id: 'flow', label: 'Flow Builder', icon: 'Flow' },
   ]},
 ];
 
