@@ -94,26 +94,30 @@ def test_refresh_token_rotation_and_reuse(admin_client, smoke_user):
     code = qs_dict["code"]
 
     # 4. Exchange code for tokens.
-    token_resp = requests.post(f"{BASE_URL}/oauth/token", data={
-        "grant_type": "authorization_code",
-        "code": code,
-        "client_id": cid,
-        "client_secret": secret,
-        "redirect_uri": "http://localhost:9999/callback",
-        "code_verifier": verifier,
-    })
+    # Server registers confidential clients with token_endpoint_auth_method=
+    # client_secret_basic — send credentials via HTTP Basic, not form body.
+    token_resp = requests.post(f"{BASE_URL}/oauth/token",
+        auth=(cid, secret),
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "http://localhost:9999/callback",
+            "code_verifier": verifier,
+        },
+    )
     assert token_resp.status_code == 200, f"Token exchange failed: {token_resp.text}"
     tokens = token_resp.json()
     assert "refresh_token" in tokens, f"No refresh_token in response: {tokens}"
     rt1 = tokens["refresh_token"]
 
     # 5. First Refresh — fosite MUST issue a new RT (rotation).
-    resp = requests.post(f"{BASE_URL}/oauth/token", data={
-        "grant_type": "refresh_token",
-        "refresh_token": rt1,
-        "client_id": cid,
-        "client_secret": secret,
-    })
+    resp = requests.post(f"{BASE_URL}/oauth/token",
+        auth=(cid, secret),
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": rt1,
+        },
+    )
     assert resp.status_code == 200, f"First refresh failed: {resp.text}"
     body = resp.json()
     assert "refresh_token" in body, f"No refresh_token after rotation: {body}"
@@ -121,12 +125,13 @@ def test_refresh_token_rotation_and_reuse(admin_client, smoke_user):
     assert rt1 != rt2, "Refresh token was NOT rotated (rt1 == rt2)"
 
     # 6. Reuse rt1 — MUST be rejected (family breach detection).
-    resp = requests.post(f"{BASE_URL}/oauth/token", data={
-        "grant_type": "refresh_token",
-        "refresh_token": rt1,
-        "client_id": cid,
-        "client_secret": secret,
-    })
+    resp = requests.post(f"{BASE_URL}/oauth/token",
+        auth=(cid, secret),
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": rt1,
+        },
+    )
     assert resp.status_code in [400, 401], (
         f"Old refresh token still accepted after rotation (expected 400/401, got {resp.status_code})"
     )
