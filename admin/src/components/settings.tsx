@@ -18,7 +18,6 @@ const SECTIONS = [
   { id: 'auth_policy',  label: 'Auth Policy',    desc: 'Password rules, magic links, password reset' },
   { id: 'email',        label: 'Email Delivery', desc: 'Provider, sender, test send' },
   { id: 'oauth',        label: 'OAuth Providers', desc: 'Per-provider credentials' },
-  { id: 'webhooks',     label: 'Webhooks',       desc: 'Outbound event subscriptions' },
   { id: 'audit',        label: 'Audit & Data',   desc: 'Retention, purge, export' },
   { id: 'maintenance',  label: 'Maintenance',    desc: 'Sessions + audit cleanup' },
 ];
@@ -279,10 +278,6 @@ export function Settings() {
   const [active, setActive] = React.useState('server');
   const [drawer, setDrawer] = React.useState(null);
   const [rotating, setRotating] = React.useState(false);
-
-  const { data: webhooksData, refresh: refreshWebhooks } = useAPI('/admin/webhooks');
-  const webhooks = webhooksData?.webhooks ?? [];
-  const [webhookDrawer, setWebhookDrawer] = React.useState(null); // null | 'create' | <webhook object>
 
   // Initialize editable form from config payload. Sentinels:
   //  - email.api_key === '********' means "set, masked".
@@ -633,33 +628,6 @@ export function Settings() {
             </div>
           </Section>
 
-          {/* Webhooks */}
-          <Section id="webhooks" title="Webhooks" desc="Outbound HMAC-signed event subscriptions. Secret returned once at creation." onSection={setActive}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 2 }}>
-                <button type="button" className="btn sm" onClick={() => setWebhookDrawer('create')}>
-                  <Icon.Plus width={10} height={10}/>New webhook
-                </button>
-              </div>
-              {webhooks.length === 0 && (
-                <div className="faint" style={{ fontSize: 12, padding: '10px 0' }}>No webhooks configured</div>
-              )}
-              {webhooks.map((wh) => (
-                <div key={wh.id} className="row" style={{
-                  padding: '8px 12px', gap: 10,
-                  border: '1px solid var(--hairline)',
-                  borderRadius: 4,
-                  background: 'var(--surface-1)',
-                  cursor: 'pointer',
-                }} onClick={() => setWebhookDrawer(wh)}>
-                  <span className={'dot' + (wh.enabled ? ' success' : '')} style={{ flexShrink: 0 }}/>
-                  <span className="mono" style={{ fontSize: 12, flex: 1, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wh.url}</span>
-                  <span className="faint" style={{ fontSize: 11, flexShrink: 0 }}>{(wh.events || []).length} event{(wh.events || []).length === 1 ? '' : 's'}</span>
-                </div>
-              ))}
-            </div>
-          </Section>
-
           {/* Audit & Data */}
           <Section id="audit" title="Audit & Data" desc="How long audit logs are kept, how often expired records are cleaned, and CSV export" onSection={setActive}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -769,19 +737,6 @@ export function Settings() {
       {drawer === 'export_audit' && (
         <ExportAuditDrawer onClose={() => setDrawer(null)}/>
       )}
-      {webhookDrawer === 'create' && (
-        <WebhookCreateDrawer
-          onClose={() => setWebhookDrawer(null)}
-          onDone={() => { setWebhookDrawer(null); refreshWebhooks(); }}
-        />
-      )}
-      {webhookDrawer && webhookDrawer !== 'create' && (
-        <WebhookEditDrawer
-          webhook={webhookDrawer}
-          onClose={() => setWebhookDrawer(null)}
-          onDone={() => { setWebhookDrawer(null); refreshWebhooks(); }}
-        />
-      )}
     </div>
   );
 }
@@ -855,203 +810,6 @@ function ExportAuditDrawer({ onClose }) {
     </Drawer>
   );
 }
-
-// ─── Webhook Create Drawer ───────────────────────────────────────────────────
-function WebhookCreateDrawer({ onClose, onDone }) {
-  const toast = useToast();
-  const { data: eventsData } = useAPI('/admin/webhooks/events');
-  const knownEvents = eventsData?.events ?? [];
-  const [url, setUrl]         = React.useState('');
-  const [desc, setDesc]       = React.useState('');
-  const [events, setEvents]   = React.useState([]);
-  const [busy, setBusy]       = React.useState(false);
-  const [secret, setSecret]   = React.useState(null); // shown once after create
-
-  const toggleEvent = (ev) => setEvents(prev =>
-    prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev]
-  );
-
-  const create = async () => {
-    if (busy || !url.trim() || events.length === 0) return;
-    setBusy(true);
-    try {
-      const res = await API.post('/admin/webhooks', { url: url.trim(), events, description: desc.trim() || undefined });
-      setSecret(res?.secret || null);
-      toast.success('Webhook created');
-    } catch (e) {
-      toast.error(e?.message || 'Create failed');
-      setBusy(false);
-    }
-  };
-
-  if (secret) {
-    return (
-      <Drawer title="Webhook created" subtitle="Copy the secret now — it will not be shown again" onClose={onDone} footer={(
-        <button className="btn primary sm" onClick={onDone}>Done</button>
-      )}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="faint" style={{ fontSize: 12, lineHeight: 1.5 }}>
-            Sign every delivery with this HMAC-SHA256 secret. Verify <span className="mono">X-Shark-Signature</span> header on your endpoint.
-          </div>
-          <div style={{
-            padding: 10, background: 'var(--surface-1)',
-            border: '1px solid var(--hairline-strong)',
-            borderRadius: 4,
-            fontFamily: 'var(--font-mono)', fontSize: 12,
-            color: 'var(--fg)', wordBreak: 'break-all', lineHeight: 1.6,
-          }}>{secret}</div>
-        </div>
-      </Drawer>
-    );
-  }
-
-  return (
-    <Drawer
-      title="New webhook"
-      subtitle="Subscriptions fire HMAC-signed POST requests to your URL on each event"
-      onClose={onClose}
-      footer={(
-        <>
-          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="btn primary sm" onClick={create} disabled={busy || !url.trim() || events.length === 0}>
-            {busy ? 'Creating…' : 'Create webhook'}
-          </button>
-        </>
-      )}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Field label="Endpoint URL" hint="Must be HTTPS in production">
-          <Input mono value={url} onChange={setUrl} placeholder="https://example.com/webhooks/shark"/>
-        </Field>
-        <Field label="Description (optional)">
-          <Input value={desc} onChange={setDesc} placeholder="My webhook listener"/>
-        </Field>
-        <Field label="Events" hint="Select one or more events to subscribe to">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-            {knownEvents.length === 0 && <span className="faint" style={{ fontSize: 12 }}>Loading events…</span>}
-            {knownEvents.map((ev) => (
-              <label key={ev} className="row" style={{ gap: 8, cursor: 'pointer', fontSize: 12 }}>
-                <input type="checkbox" checked={events.includes(ev)} onChange={() => toggleEvent(ev)}
-                  style={{ accentColor: 'var(--fg)', width: 13, height: 13 }}/>
-                <span className="mono" style={{ fontSize: 12 }}>{ev}</span>
-              </label>
-            ))}
-          </div>
-        </Field>
-      </div>
-    </Drawer>
-  );
-}
-
-// ─── Webhook Edit/View Drawer ────────────────────────────────────────────────
-function WebhookEditDrawer({ webhook, onClose, onDone }) {
-  const toast = useToast();
-  const { data: eventsData } = useAPI('/admin/webhooks/events');
-  const knownEvents = eventsData?.events ?? [];
-  const [url, setUrl]     = React.useState(webhook.url ?? '');
-  const [desc, setDesc]   = React.useState(webhook.description ?? '');
-  const [events, setEvents] = React.useState(webhook.events ?? []);
-  const [enabled, setEnabled] = React.useState(webhook.enabled ?? true);
-  const [busy, setBusy]   = React.useState(false);
-  const [testing, setTesting] = React.useState(false);
-  const [deleting, setDeleting] = React.useState(false);
-
-  const toggleEvent = (ev) => setEvents(prev =>
-    prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev]
-  );
-
-  const save = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await API.patch(`/admin/webhooks/${webhook.id}`, { url, events, description: desc || undefined, enabled });
-      toast.success('Webhook updated');
-      onDone();
-    } catch (e) {
-      toast.error(e?.message || 'Update failed');
-      setBusy(false);
-    }
-  };
-
-  const testHook = async () => {
-    if (testing) return;
-    setTesting(true);
-    try {
-      await API.post(`/admin/webhooks/${webhook.id}/test`, {});
-      toast.success('Test event fired');
-    } catch (e) {
-      toast.error(e?.message || 'Test failed');
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const del = async () => {
-    if (!confirm('Delete this webhook? Deliveries will stop immediately.')) return;
-    setDeleting(true);
-    try {
-      await API.del(`/admin/webhooks/${webhook.id}`);
-      toast.success('Webhook deleted');
-      onDone();
-    } catch (e) {
-      toast.error(e?.message || 'Delete failed');
-      setDeleting(false);
-    }
-  };
-
-  return (
-    <Drawer
-      title="Edit webhook"
-      subtitle={<span className="mono faint" style={{ fontSize: 11 }}>{webhook.id}</span>}
-      onClose={onClose}
-      footer={(
-        <div className="row" style={{ width: '100%', justifyContent: 'space-between' }}>
-          <button className="btn sm danger" onClick={del} disabled={deleting || busy}>
-            {deleting ? 'Deleting…' : 'Delete'}
-          </button>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn sm ghost" onClick={testHook} disabled={testing || busy}>
-              {testing ? 'Firing…' : 'Send test event'}
-            </button>
-            <button className="btn primary sm" onClick={save} disabled={busy || !url.trim() || events.length === 0}>
-              {busy ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </div>
-      )}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Field label="Enabled">
-          <label className="row" style={{ gap: 8, cursor: 'pointer', fontSize: 13 }}>
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)}
-              style={{ accentColor: 'var(--fg)', width: 14, height: 14 }}/>
-            <span>{enabled ? 'Active' : 'Disabled'}</span>
-          </label>
-        </Field>
-        <Field label="Endpoint URL">
-          <Input mono value={url} onChange={setUrl} placeholder="https://example.com/webhooks/shark"/>
-        </Field>
-        <Field label="Description">
-          <Input value={desc} onChange={setDesc} placeholder="My webhook listener"/>
-        </Field>
-        <Field label="Events">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-            {knownEvents.map((ev) => (
-              <label key={ev} className="row" style={{ gap: 8, cursor: 'pointer', fontSize: 12 }}>
-                <input type="checkbox" checked={events.includes(ev)} onChange={() => toggleEvent(ev)}
-                  style={{ accentColor: 'var(--fg)', width: 13, height: 13 }}/>
-                <span className="mono" style={{ fontSize: 12 }}>{ev}</span>
-              </label>
-            ))}
-          </div>
-        </Field>
-      </div>
-    </Drawer>
-  );
-}
-
-// ─── Drawers ────────────────────────────────────────────────────────────────
-
 function TestEmailDrawer({ fromAddress, onClose }) {
   const toast = useToast();
   const [to, setTo] = React.useState('');
