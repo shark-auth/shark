@@ -11,13 +11,18 @@ Admin operations on user records: get the per-user billing tier, set it, list/fi
 - `class UsersClient`
   - `constructor(opts: UsersClientOptions)`
   - `setUserTier(userId, tier): Promise<SetUserTierResult>` — PATCH `/api/v1/admin/users/{id}/tier`
-  - `getUser(userId): Promise<User>` — GET `/api/v1/users/{id}` (handles wrapped or unwrapped server response)
+  - `getUser(userId): Promise<User>` — GET `/api/v1/users/{id}` (handles wrapped or unwrapped response)
+  - `createUser(input: CreateUserInput): Promise<User>` — POST `/api/v1/admin/users`; admin-only; password optional
+  - `updateUser(userId, input: UpdateUserInput): Promise<User>` — PATCH `/api/v1/users/{id}`; partial update
+  - `deleteUser(userId): Promise<void>` — DELETE `/api/v1/users/{id}`; 204 on success
   - `listUsers(opts?: ListUsersOptions): Promise<UserListResult>` — GET `/api/v1/users[?email&limit&offset]`
 
 ## Types
 - `UserTier = "free" | "pro"` — server-enforced enum
 - `User`: `id, email, name?, metadata?, created_at, updated_at` + open index signature
-- `SetUserTierResult = { user, tier }`
+- `SetUserTierResult = { user: User, tier: string }`
+- `CreateUserInput = { email, password?, name?, email_verified? }`
+- `UpdateUserInput = { email?, name?, email_verified?, metadata? }` — all optional
 - `ListUsersOptions = { email?, limit?, offset? }`
 - `UserListResult = { data: User[], total: number }`
 

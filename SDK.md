@@ -1,8 +1,37 @@
 # SharkAuth SDK & Config Strategy
 
-**Date:** 2026-04-13
-**Status:** Planning
+**Date:** 2026-04-13  
+**Updated:** 2026-04-25  
+**Status:** v0.9.0 — core SDK surfaces shipped; framework adapters in progress  
 **Goal:** Ship the most ergonomic auth SDK in the market
+
+---
+
+## Shipped SDK surfaces (v0.9.0)
+
+### TypeScript (`sdk/typescript/src/`)
+
+| Module | Class | What it covers |
+|--------|-------|----------------|
+| `users.ts` | `UsersClient` | CRUD: list, get, create, update, delete users; set tier |
+| `oauth.ts` | `OAuthClient` | Token introspection (`POST /oauth/introspect`), revocation (`POST /oauth/revoke`) |
+| `magicLink.ts` | `MagicLinkClient` | Send (`POST /auth/magic-link/send`), verify (`GET /auth/magic-link/verify`) |
+| `agents.ts` | `AgentsClient` | Agent CRUD, secret rotation, token revocation |
+
+All clients accept `{ baseUrl, token }` and are exported from `index.ts`.
+
+### Python (`sdk/python/shark_auth/`)
+
+| Module | Class | What it covers |
+|--------|-------|----------------|
+| `users.py` | `UsersClient` | list_users, get_user, create_user, update_user, delete_user, set_user_tier |
+| `oauth.py` | `OAuthClient` | introspect, revoke |
+| `magic_link.py` | `MagicLinkClient` | send, verify |
+| `agents.py` | `AgentsClient` | get_agent (+ existing CRUD) |
+
+All clients accept `base_url` + `token` kwargs.
+
+---
 
 ---
 

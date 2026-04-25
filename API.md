@@ -16,6 +16,16 @@ All responses return JSON. Errors use `{error, message}` format.
 
 ---
 
+## Interactive API Docs
+
+| Path | Description |
+|------|-------------|
+| `GET /api/docs` | Scalar UI — interactive explorer for all ~200 endpoints |
+
+The bundled OpenAPI spec at `documentation/api_reference/openapi.yaml` (v0.9.0) is served at `/api/docs` via the Scalar UI. Run `npx @scalar/cli serve documentation/api_reference/openapi.yaml` to explore locally.
+
+---
+
 ## Health
 
 | Method | Path | Auth | Response |
@@ -454,9 +464,12 @@ Check if a user has a specific permission.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/users` | List users (501 - not implemented) |
-| GET | `/users/{id}` | Get user (501 - not implemented) |
-| DELETE | `/users/{id}` | Delete user (501 - not implemented) |
+| GET | `/users` | List users (query: `email`, `limit`, `offset`) |
+| GET | `/users/{id}` | Get user |
+| PATCH | `/users/{id}` | Update user (`email`, `name`, `email_verified`, `metadata`) |
+| DELETE | `/users/{id}` | Delete user (cascades sessions, roles) |
+| POST | `/admin/users` | Create user with optional pre-verified email |
+| PATCH | `/admin/users/{id}/tier` | Set billing tier (`free` \| `pro`) |
 | POST | `/users/{id}/roles` | Assign role (`role_id`) |
 | DELETE | `/users/{id}/roles/{rid}` | Remove role |
 | GET | `/users/{id}/roles` | List user's roles |

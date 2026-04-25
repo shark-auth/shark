@@ -10,9 +10,12 @@ Admin client wrapping the v1 `/api/v1/users` endpoints plus the v1.5 tier-manage
 ## Public API
 - `class UsersClient`
   - `__init__(base_url, token, *, session=None)`
-  - `.list_users(email: str | None = None) -> list[dict]` — `GET /api/v1/users[?email=…]`; tolerates either `{data: […]}` or bare list response
-  - `.get_user(user_id: str) -> dict` — `GET /api/v1/users/{id}`
-  - `.set_user_tier(user_id: str, tier: Literal["free", "pro"]) -> dict` — `PATCH /api/v1/admin/users/{id}/tier`; returns `{user, tier}`
+  - `.list_users(email=None) -> list[dict]` — `GET /api/v1/users[?email=…]`; tolerates `{data:[…]}` or bare list
+  - `.get_user(user_id) -> dict` — `GET /api/v1/users/{id}`
+  - `.create_user(email, *, password=None, name=None, email_verified=False) -> dict` — `POST /api/v1/admin/users`; admin-only create with optional pre-verified email
+  - `.update_user(user_id, *, email=None, name=None, email_verified=None, metadata=None) -> dict` — `PATCH /api/v1/users/{id}`; partial update, only supplied fields changed
+  - `.delete_user(user_id) -> None` — `DELETE /api/v1/users/{id}`; 204 on success
+  - `.set_user_tier(user_id, tier: Literal["free", "pro"]) -> dict` — `PATCH /api/v1/admin/users/{id}/tier`; returns `{user, tier}`
 
 ## Constructor params
 - `base_url: str` — required

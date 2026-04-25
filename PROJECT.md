@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A single Go binary that handles authentication end-to-end: signup, login, sessions, OAuth, MFA, passkeys, magic links, RBAC, SSO, M2M API keys, audit logs — with Auth0 migration, an embedded Svelte admin dashboard, and a TypeScript SDK. Self-hosted for $0, cloud for ops convenience. `shark serve` and visit `:8080/admin`.
+A single Go binary that handles authentication end-to-end: signup, login, sessions, OAuth 2.1, MFA, passkeys, magic links, RBAC, SSO, M2M API keys, audit logs, agent delegation, token vault, reverse proxy — with an embedded React admin dashboard, TypeScript + Python SDKs, and a full CLI. Self-hosted for $0, cloud for ops convenience. `shark serve` and visit `:8080/admin`.
 
 ## Core Value
 
@@ -10,50 +10,54 @@ One binary replaces Auth0/Clerk at 98% less cost, with full feature parity on se
 
 ## Requirements
 
-### Validated
+### Validated (v0.9.0 — target ship 2026-04-29)
 
-(None yet — ship to validate)
+- [x] Email/password signup + login (Argon2id hashing)
+- [x] Passkey/WebAuthn login (FIDO2-compliant, discoverable + non-discoverable)
+- [x] Magic link login (email-based passwordless)
+- [x] Server-side sessions (encrypted cookies, auth_method tracking)
+- [x] Social OAuth — Google, GitHub, Apple, Discord
+- [x] MFA — TOTP with recovery codes (Google Authenticator compatible)
+- [x] RBAC (roles, permissions, middleware enforcement, /auth/check)
+- [x] SSO — OIDC provider (SharkAuth as IdP) + SAML SP (Okta/Azure AD)
+- [x] M2M API keys (scoped, rotatable, rate-limited)
+- [x] Audit logs (filterable, exportable, retention-configurable)
+- [x] Auth0 bcrypt→Argon2id transparent rehash on login
+- [x] REST API for all features (~200 endpoints, OpenAPI spec at `/api/docs`)
+- [x] TypeScript SDK (`@sharkauth/js`) + Python SDK (`sharkauth-py`)
+- [x] Admin dashboard (React, embedded in binary)
+- [x] OAuth 2.1 AS — auth code+PKCE, client credentials, DPoP, DCR, device flow, token exchange, introspection, revocation
+- [x] Agent delegation (RFC 8693 token exchange, first-class agent identities)
+- [x] Token vault (AES-256-GCM, Google/Slack/GitHub/Microsoft/Notion/Linear/Jira)
+- [x] Reverse proxy with identity header injection and route rules engine
+- [x] Auth flow engine (post-auth pipelines, 12 step types)
+- [x] Full CLI (`shark user/sso/api-key/agent/session/audit/debug/admin/consents/org/vault/auth`)
+- [x] YAML config with env var overrides
+- [x] SQLite storage (embedded, zero-config)
+- [x] Goreleaser + PyPI + npm distribution plan
 
-### Active
+### Active (v1.0 target)
 
-- [ ] Email/password signup + login (Argon2id hashing)
-- [ ] Passkey/WebAuthn login (FIDO2-compliant, discoverable + non-discoverable)
-- [ ] Magic link login (email-based passwordless)
-- [ ] Server-side sessions (encrypted cookies, auth_method tracking)
-- [ ] Social OAuth — Google, GitHub, Apple, Discord (generic handler pattern)
-- [ ] MFA — TOTP with recovery codes (Google Authenticator compatible)
-- [ ] RBAC (roles, permissions, middleware enforcement, /auth/check)
-- [ ] SSO — OIDC provider (SharkAuth as IdP)
-- [ ] SSO — SAML SP (beta — Okta/Azure AD)
-- [ ] M2M API keys (scoped, rotatable, rate-limited)
-- [ ] Audit logs (every auth event, filterable, exportable, retention-configurable)
-- [ ] Auth0 user import (JSON export, bcrypt→argon2id transparent rehash)
-- [ ] REST API for all features
-- [ ] TypeScript SDK (`@sharkauth/js` — fetch-based, zero-dep, isomorphic)
-- [ ] Admin dashboard (Svelte, embedded in binary)
-- [ ] Automated test suite (Go unit + integration, SDK vitest, CI with gosec)
-- [ ] YAML config with env var overrides
-- [ ] SQLite storage (embedded, zero-config)
-- [ ] Docker image (<30MB, one container)
-- [ ] Landing page updates (sharkauth.com — pricing, features, comparison)
+- [ ] Flow builder dashboard UI (backend wired; UI cut at v0.9.0)
+- [ ] Postgres mode
+- [ ] SCIM provisioning
+- [ ] React/Next.js component library (SDK hooks shipped; pre-built UI deferred)
+- [ ] Hosted SharkAuth Cloud (blocked on Postgres, Q3 2026)
 
-### Out of Scope
+### Out of Scope (v0.9.0)
 
-- Organizations/multi-tenancy — post-launch, highest priority after v1
-- OIDC client federation — post-launch
-- Agent identity / MCP auth — emerging standard, not table stakes yet
-- Clerk/Firebase/Cognito migration — later
-- Postgres mode — later
-- React/Next.js component library — SDK first, pre-built UI follows
+- Auth0 migration importer UI (bcrypt rehash works; bulk JSON import endpoint cut)
+- Dashboard flow builder UI (API fully wired; UI deferred to v1.0)
+- Tier/paywall UI (`BILLING_UI=false` flag; backend wired, UI hidden)
 
 ## Context
 
-- **Existing code:** Partial Go scaffold exists (router, auth handlers, password hashing, sessions, config, DB layer, OAuth stubs, middleware). Spec v2 expands significantly beyond what's built.
-- **Tech stack:** Go backend, SQLite (mattn/go-sqlite3), React 18 + Vite + TypeScript admin dashboard at `admin/src/` (embedded via go:embed at `internal/admin/dist/`), TypeScript SDK (tsup build). (Original spec called for Svelte; React was chosen during Phase 4 build.)
-- **Key libraries:** go-webauthn/webauthn (passkeys), pquerna/otp (TOTP), gorilla/securecookie (sessions).
-- **Target audience:** Developers who currently use Auth0/Clerk and are frustrated by per-MAU pricing or vendor lock-in. Also self-hosters who want full control.
-- **Pricing philosophy:** Self-hosted = $0 unlimited. Cloud tiers: $19/$49/$149/mo. "You're paying for ops, not features" — the day that stops being true, we lose positioning.
-- **Sprint:** 17 days (evenings 3h + three weekends 8-11h). Ship date: April 27, 2026.
+- **Current state:** ~38/54 capabilities shipped. 375+ smoke tests passing. v0.9.0 target 2026-04-29. Distribution via Goreleaser (binaries), PyPI (`sharkauth-py`), npm (`@sharkauth/js`).
+- **Tech stack:** Go backend, SQLite (modernc/sqlite pure-Go), React 18 + Vite + TypeScript admin dashboard at `admin/src/` (embedded via go:embed at `internal/admin/dist/`), TypeScript SDK + Python SDK.
+- **Key libraries:** go-webauthn/webauthn (passkeys), pquerna/otp (TOTP), gorilla/securecookie (sessions), ory/fosite (OAuth 2.1 AS).
+- **Target audience:** Developers frustrated by Auth0/Clerk per-MAU pricing or vendor lock-in. Self-hosters who want full control. Agent/MCP developers needing delegation.
+- **Pricing philosophy:** Self-hosted = $0 unlimited. Cloud tiers TBD (finalized Q3 2026 with partners). "You're paying for ops, not features."
+- **Ship date:** v0.9.0 on 2026-04-29. v1.0 gated on two weeks of partner usage without breaking changes.
 
 ## Constraints
 
@@ -95,4 +99,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-05 after initialization*
+*Last updated: 2026-04-25 — v0.9.0 pre-launch doc sweep*

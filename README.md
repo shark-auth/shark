@@ -2,7 +2,7 @@
 
 ### a lightweight modern self-hosted authentication platform with no bullshit.  
 
-[![version](https://img.shields.io/badge/version-v0.1.0-red?style=for-the-badge&logoColor=white)](https://github.com/sharkauth/sharkauth/releases/latest)
+[![version](https://img.shields.io/badge/version-v0.9.0-red?style=for-the-badge&logoColor=white)](https://github.com/sharkauth/sharkauth/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Linux_|_macOS_|_Windows-orange?style=for-the-badge)](/)
 [![status](https://img.shields.io/badge/status-pre--launch-yellow?style=for-the-badge)](/)
@@ -132,7 +132,7 @@ sharkauth ships everything you need to replace a managed auth provider:
 - **OAuth 2.1 authorization server** — full fosite-based AS with auth code + PKCE, client credentials, refresh rotation, DPoP, DCR, device flow, token exchange, introspection, revocation. Agents as first-class identities. See `AGENT_AUTH.md`.
 - **token vault** — managed third-party OAuth for agents (Google, Slack, GitHub, Microsoft, Notion, Linear, Jira). auto-refresh, AES-256-GCM at rest, agent delegation. See `AGENT_AUTH.md` Token Vault section.
 - **reverse proxy** — `shark serve --proxy-upstream URL` injects identity headers (`X-User-ID`, `X-Agent-ID`, `X-User-Roles`) into upstream requests. route rules engine with default deny. circuit breaker keeps agents online during auth-server outages. See `PROXY.md`.
-- **visual auth flow builder** — Auth0 Actions-style post-auth pipelines (signup → verify → MFA → redirect). dashboard editor with palette, canvas, dry-run preview. 12 step types including webhooks and conditionals. See `FLOWS.md`.
+- **auth flow engine** — Auth0 Actions-style post-auth pipelines (signup → verify → MFA → redirect). 12 step types including webhooks and conditionals. Backend API fully wired; dashboard UI editor cut at v0.9.0. See `FLOWS.md`.
 
 ---
 
@@ -412,6 +412,51 @@ shark app delete <id>               # delete application
 # JWT key management (Phase 3)
 shark keys generate-jwt             # generate initial RS256 keypair
 shark keys generate-jwt --rotate    # retire active key(s) and generate a new one
+
+# User management
+shark user create --email EMAIL [--name NAME] [--password PW]
+shark user list [--email FILTER]
+shark user show <id>
+shark user update <id> [--name NAME] [--email EMAIL]
+shark user delete <id>
+
+# SSO connections
+shark sso create --type oidc|saml --name NAME --domain DOMAIN [flags]
+shark sso list
+shark sso show <id>
+shark sso update <id> [flags]
+shark sso delete <id>
+
+# API key management
+shark api-key create --name NAME [--scopes SCOPES]
+shark api-key list
+shark api-key revoke <id>
+shark api-key rotate <id>
+
+# Agent management
+shark agent show <id>
+shark agent update <id> [flags]
+shark agent delete <id>
+shark agent rotate-secret <id>
+shark agent revoke-tokens <id>
+
+# Session management
+shark session list [--user-id UID]
+shark session show <id>
+shark session revoke <id>
+
+# Audit
+shark audit export [--from DATE] [--to DATE] [--action ACTION]
+
+# Debug
+shark debug decode-jwt <token>
+
+# Admin / config
+shark admin config dump
+shark consents list [--user-id UID]
+shark org show <id>
+shark vault provider show
+shark auth config show
 ```
 
 `shark init` asks one question (base URL — defaults to `http://localhost:8080`) and writes a ready-to-run `sharkauth.yaml`. The 32-byte `secret` is auto-generated and email defaults to the **shark.email testing tier** so the server boots end-to-end with zero extra setup. Requires an interactive terminal. On first `shark serve`, the admin API key is generated and printed to stdout — save it, it is not shown again.
@@ -680,6 +725,12 @@ see [SECRETS.md](SECRETS.md) for the full rotation procedure for `server.secret`
 
 ## installation
 
+### one-line install (Linux/macOS)
+
+```bash
+curl -fsSL https://sharkauth.com/install.sh | sh
+```
+
 ### build from source
 
 ```bash
@@ -817,7 +868,7 @@ Client                    SharkAuth              Provider
 | `mfa_required` | MFA verification needed |
 | `rate_limited` | too many requests (429) |
 | `internal_error` | server error |
-| `not_implemented` | endpoint not yet built |
+| `feature_disabled` | feature not configured (503) — returned by magic link, JWT revoke, passkey nil-config paths |
 
 ---
 

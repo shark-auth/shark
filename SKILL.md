@@ -74,10 +74,15 @@ const { data, loading, error, refresh } = useAPI('/admin/proxy/rules/db')
 | Proxy rules CRUD | `admin/src/components/proxy_config.tsx` | `Proxy` component; `RuleModal`, `ImportModal`, `DeleteConfirm` |
 | Proxy lifecycle toggle | `proxy_config.tsx` → `LifecycleBar` | Polls `GET /api/v1/admin/proxy/lifecycle` every 5s |
 | Proxy wizard (first-time setup) | `admin/src/components/proxy_wizard.tsx` | Shown when lifecycle returns 404 |
-| Per-user billing tier | `admin/src/components/users.tsx` → `TierSection` | In `ProfileTab` of `UserSlideover` |
+| Per-user billing tier | `admin/src/components/users.tsx` → `TierSection` | In `ProfileTab` of `UserSlideover`; flag-gated by `BILLING_UI` |
 | Design tokens editor | `admin/src/components/branding.tsx` → `DesignTokensEditor` | BrandStudio → "Design Tokens" → "Token editor" |
 | Paywall preview | `branding.tsx` → `PaywallPreviewEditor` | BrandStudio → "Design Tokens" → "Paywall preview" |
 | Brand visuals, palette, typography | `branding.tsx` (entire file) | Full BrandStudio 3-column editor |
+| SSO admin | `admin/src/components/sso.tsx` | SAML + OIDC connection CRUD; the `/auth` sidebar entry |
+| Dev email viewer | `admin/src/components/dev_email.tsx` | Visible only when `email.provider=dev`; replaces deleted `dev_inbox.tsx` |
+| Error boundary | `admin/src/components/ErrorBoundary.tsx` | React class component wrapping App; catches render errors, shows fallback |
+| Feature flags | `admin/src/featureFlags.ts` | `BILLING_UI=false` gates tier/paywall UI; read-only at runtime |
+| Coming-soon shell | `admin/src/components/empty_shell.tsx` | Placeholder `ComingSoon` component; `debug` route now points here |
 
 ---
 

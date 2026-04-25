@@ -1,8 +1,8 @@
 # Auth Flow Builder
 
-> Auth0 Actions-style visual editor for post-auth pipelines. Wire custom steps onto signup, login, OAuth callback, password reset, and magic link verify — no code.
+> Auth0 Actions-style post-auth pipeline engine. Wire custom steps onto signup, login, OAuth callback, password reset, and magic link verify — via API or YAML.
 
-**Status:** Shipped in Phase 6 (`claude/admin-vendor-assets-fix`, commits `a2d8bba..9663dfd`).
+**Status:** Backend engine shipped in Phase 6. Dashboard UI editor (`flow_builder.tsx`) cut at v0.9.0 — manage flows via the admin API. UI editor deferred to v1.0.
 
 ---
 
@@ -255,29 +255,7 @@ Flow run JSON emits: id, flow_id, user_id, trigger, outcome, blocked_at_step, re
 
 ## Dashboard
 
-Navigate to `/admin/flows` (keyboard: check sidebar for key).
-
-### Flows list
-
-Table view with filter (all/signup/login/etc.) and search. Click row → editor. `+ New flow` seeds a starter flow and jumps into editing.
-
-### Flow editor
-
-Three-pane layout:
-
-- **Palette** (200px left): step types grouped by family. Click to insert after current selection.
-- **Canvas** (fluid center): vertical flow, trigger pseudo-node at top, steps stacked, done pseudo-node at bottom. Click node → select. Hover → `⋮` menu (move/duplicate/delete). Conditional steps display linearly with indented then/else branches (forked visualization deferred to F4.1).
-- **Config** (320px right): typed fields per step type — URL inputs, method dropdowns, headers key/value editor, condition textarea, etc. Generic JSON fallback for unknown shapes.
-
-Tabs above panes: **Steps · Trigger conditions · Preview · History**.
-
-Header: inline-editable name, trigger picker, enabled toggle (confirm on enable), Save/Revert buttons (shown only when dirty).
-
-### Deferred (F4.1)
-
-- Drag-drop step reordering (click-to-insert only today)
-- Forked-canvas conditional visualization (linear-indented today)
-- Canvas keyboard shortcuts (Delete, ↑↓, Enter)
+> **v0.9.0:** The flow builder UI (`flow_builder.tsx`) has been removed from the dashboard. Manage flows via the admin API (see §Admin API above). Dashboard UI editor is deferred to v1.0.
 
 ---
 
@@ -370,5 +348,5 @@ go test ./internal/api/... -run Flow -count=1 -v
 ## Reference
 
 - Plan: `docs/superpowers/plans/2026-04-18-visual-flow-builder.md`
-- Code: `internal/storage/auth_flows*`, `internal/authflow/` (engine, steps, conditions), `internal/api/flow_handlers.go`, `admin/src/components/flow_builder.tsx`
+- Code: `internal/storage/auth_flows*`, `internal/authflow/` (engine, steps, conditions), `internal/api/flow_handlers.go`
 - Tests: `internal/authflow/engine_test.go`, `internal/storage/auth_flows_sqlite_test.go`, `internal/api/flow_handlers_test.go`
