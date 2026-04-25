@@ -1,48 +1,40 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"strings"
+	"net/http"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 var appListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List OAuth applications",
+	Long:  "List OAuth applications registered in the running shark instance.\n\nRequires a running shark server (--url / SHARK_URL) and admin token (--token / SHARK_ADMIN_TOKEN).",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		configPath, _ := cmd.Flags().GetString("config")
-		if configPath == "" {
-			configPath = "sharkauth.yaml"
-		}
-		cfg, err := config.Load(configPath)
+		body, code, err := adminDo(cmd, "GET", "/api/v1/admin/apps", nil)
 		if err != nil {
-			return maybeJSONErr(cmd, "config_load_failed", fmt.Errorf("load config: %w", err))
+			return maybeJSONErr(cmd, "request_failed", err)
+		}
+		if code != http.StatusOK {
+			return maybeJSONErr(cmd, "list_failed", fmt.Errorf("list applications: %s", apiError(body, code)))
 		}
 
-		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
-		if err != nil {
-			return maybeJSONErr(cmd, "database_open_failed", fmt.Errorf("open database: %w", err))
-		}
-		defer store.Close()
-
-		ctx := context.Background()
-		apps, err := store.ListApplications(ctx, 100, 0)
-		if err != nil {
-			return maybeJSONErr(cmd, "list_failed", fmt.Errorf("list applications: %w", err))
+		// The API returns { "apps": [...] } or an array directly.
+		var apps []any
+		if arr, ok := body["apps"]; ok {
+			if a, ok := arr.([]any); ok {
+				apps = a
+			}
+		} else if arr, ok := body["data"]; ok {
+			if a, ok := arr.([]any); ok {
+				apps = a
+			}
 		}
 
 		if jsonFlag(cmd) {
-			out := make([]map[string]any, 0, len(apps))
-			for _, a := range apps {
-				out = append(out, appToJSON(a))
-			}
-			return writeJSON(cmd.OutOrStdout(), out)
+			return writeJSON(cmd.OutOrStdout(), body)
 		}
 
 		if len(apps) == 0 {
@@ -51,45 +43,38 @@ var appListCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tNAME\tCLIENT ID\tCALLBACKS\tCREATED")
-		for _, a := range apps {
-			callbackSummary := summarizeURLs(a.AllowedCallbackURLs)
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-				a.ID, a.Name, a.ClientID, callbackSummary,
-				a.CreatedAt.UTC().Format("2006-01-02"),
-			)
+		fmt.Fprintln(w, "ID\tNAME\tCLIENT ID\tCREATED")
+		for _, raw := range apps {
+			a, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			id, _ := a["id"].(string)
+			name, _ := a["name"].(string)
+			clientID, _ := a["client_id"].(string)
+			createdAt, _ := a["created_at"].(string)
+			if len(createdAt) > 10 {
+				createdAt = createdAt[:10]
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", id, name, clientID, createdAt)
 		}
 		return w.Flush()
 	},
 }
 
+// summarizeURLs returns a compact representation of a URL list.
 func summarizeURLs(urls []string) string {
 	if len(urls) == 0 {
 		return "(none)"
 	}
-	if len(urls) == 1 {
-		return urls[0]
-	}
 	if len(urls) <= 2 {
-		return strings.Join(urls, ", ")
+		result := urls[0]
+		if len(urls) == 2 {
+			result += ", " + urls[1]
+		}
+		return result
 	}
 	return fmt.Sprintf("%d urls", len(urls))
-}
-
-// appToJSON returns the canonical JSON shape for an Application used by the CLI.
-func appToJSON(a *storage.Application) map[string]any {
-	return map[string]any{
-		"id":                    a.ID,
-		"name":                  a.Name,
-		"client_id":             a.ClientID,
-		"client_secret_prefix":  a.ClientSecretPrefix,
-		"is_default":            a.IsDefault,
-		"allowed_callback_urls": a.AllowedCallbackURLs,
-		"allowed_logout_urls":   a.AllowedLogoutURLs,
-		"allowed_origins":       a.AllowedOrigins,
-		"created_at":            a.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		"updated_at":            a.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-	}
 }
 
 // maybeJSONErr emits a JSON error to stderr if --json is set, and returns err unchanged.
@@ -101,7 +86,6 @@ func maybeJSONErr(cmd *cobra.Command, code string, err error) error {
 }
 
 func init() {
-	appListCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
 	addJSONFlag(appListCmd)
 	appCmd.AddCommand(appListCmd)
 }

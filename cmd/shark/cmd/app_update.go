@@ -1,29 +1,29 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
-
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 var (
-	appUpdateName          string
-	appUpdateAddCallbacks  []string
-	appUpdateRmCallbacks   []string
-	appUpdateAddLogouts    []string
-	appUpdateRmLogouts     []string
-	appUpdateAddOrigins    []string
-	appUpdateRmOrigins     []string
+	appUpdateName         string
+	appUpdateAddCallbacks []string
+	appUpdateRmCallbacks  []string
+	appUpdateAddLogouts   []string
+	appUpdateRmLogouts    []string
+	appUpdateAddOrigins   []string
+	appUpdateRmOrigins    []string
 )
 
 var appUpdateCmd = &cobra.Command{
 	Use:   "update <id-or-client-id>",
 	Short: "Update an OAuth application",
-	Args:  cobra.ExactArgs(1),
+	Long: `Update an OAuth application's name and/or allowed URLs.
+
+Requires a running shark server (--url / SHARK_URL) and admin token (--token / SHARK_ADMIN_TOKEN).`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		idOrClientID := args[0]
 
@@ -38,51 +38,64 @@ var appUpdateCmd = &cobra.Command{
 			return fmt.Errorf("invalid origin URL: %w", err)
 		}
 
-		configPath, _ := cmd.Flags().GetString("config")
-		if configPath == "" {
-			configPath = "sharkauth.yaml"
-		}
-		cfg, err := config.Load(configPath)
+		// Fetch the current app state to compute mutations client-side.
+		appBody, appCode, err := adminDo(cmd, "GET", "/api/v1/admin/apps/"+idOrClientID, nil)
 		if err != nil {
-			return fmt.Errorf("load config: %w", err)
+			return fmt.Errorf("get application: %w", err)
+		}
+		if appCode != http.StatusOK {
+			return fmt.Errorf("get application: %s", apiError(appBody, appCode))
 		}
 
-		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
-		if err != nil {
-			return fmt.Errorf("open database: %w", err)
-		}
-		defer store.Close()
+		appID, _ := appBody["id"].(string)
 
-		ctx := context.Background()
-		app, err := lookupApp(ctx, store, idOrClientID)
-		if err != nil {
-			return err
-		}
+		currentCallbacks := anySliceToStrings(appBody["allowed_callback_urls"])
+		currentLogouts := anySliceToStrings(appBody["allowed_logout_urls"])
+		currentOrigins := anySliceToStrings(appBody["allowed_origins"])
 
+		newCallbacks := applyURLMutations(currentCallbacks, appUpdateAddCallbacks, appUpdateRmCallbacks)
+		newLogouts := applyURLMutations(currentLogouts, appUpdateAddLogouts, appUpdateRmLogouts)
+		newOrigins := applyURLMutations(currentOrigins, appUpdateAddOrigins, appUpdateRmOrigins)
+
+		patch := map[string]any{
+			"allowed_callback_urls": newCallbacks,
+			"allowed_logout_urls":   newLogouts,
+			"allowed_origins":       newOrigins,
+		}
 		if appUpdateName != "" {
-			app.Name = appUpdateName
+			patch["name"] = appUpdateName
 		}
 
-		app.AllowedCallbackURLs = applyURLMutations(app.AllowedCallbackURLs, appUpdateAddCallbacks, appUpdateRmCallbacks)
-		app.AllowedLogoutURLs = applyURLMutations(app.AllowedLogoutURLs, appUpdateAddLogouts, appUpdateRmLogouts)
-		app.AllowedOrigins = applyURLMutations(app.AllowedOrigins, appUpdateAddOrigins, appUpdateRmOrigins)
-
-		if err := store.UpdateApplication(ctx, app); err != nil {
+		body, code, err := adminDo(cmd, "PATCH", "/api/v1/admin/apps/"+appID, patch)
+		if err != nil {
 			return fmt.Errorf("update application: %w", err)
 		}
-
-		// Re-fetch to show updated state.
-		updated, err := store.GetApplicationByID(ctx, app.ID)
-		if err != nil {
-			return fmt.Errorf("re-fetch application: %w", err)
+		if code != http.StatusOK {
+			return fmt.Errorf("update application: %s", apiError(body, code))
 		}
 
-		fmt.Printf("Updated application %s (%s)\n", updated.Name, updated.ID)
-		fmt.Printf("  callbacks: %v\n", updated.AllowedCallbackURLs)
-		fmt.Printf("  logouts:   %v\n", updated.AllowedLogoutURLs)
-		fmt.Printf("  origins:   %v\n", updated.AllowedOrigins)
+		updatedName, _ := body["name"].(string)
+		fmt.Printf("Updated application %s (%s)\n", updatedName, appID)
+		fmt.Printf("  callbacks: %v\n", anySliceToStrings(body["allowed_callback_urls"]))
+		fmt.Printf("  logouts:   %v\n", anySliceToStrings(body["allowed_logout_urls"]))
+		fmt.Printf("  origins:   %v\n", anySliceToStrings(body["allowed_origins"]))
 		return nil
 	},
+}
+
+// anySliceToStrings converts []any (from JSON decode) to []string.
+func anySliceToStrings(v any) []string {
+	arr, ok := v.([]any)
+	if !ok {
+		return []string{}
+	}
+	result := make([]string, 0, len(arr))
+	for _, item := range arr {
+		if s, ok := item.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // applyURLMutations adds then removes URLs from a slice, preserving order and deduplicating.
@@ -127,6 +140,5 @@ func init() {
 	appUpdateCmd.Flags().StringArrayVar(&appUpdateRmLogouts, "remove-logout", nil, "remove a logout URL")
 	appUpdateCmd.Flags().StringArrayVar(&appUpdateAddOrigins, "add-origin", nil, "add an origin")
 	appUpdateCmd.Flags().StringArrayVar(&appUpdateRmOrigins, "remove-origin", nil, "remove an origin")
-	appUpdateCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
 	appCmd.AddCommand(appUpdateCmd)
 }

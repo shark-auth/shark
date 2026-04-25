@@ -1,14 +1,10 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
-
-	jwtmgr "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 var keysRotate bool
@@ -20,81 +16,43 @@ var keysCmd = &cobra.Command{
 
 var keysGenerateJWTCmd = &cobra.Command{
 	Use:   "generate-jwt",
-	Short: "Generate an RS256 JWT signing keypair and store it",
-	Long: `Generates a 2048-bit RSA keypair for JWT signing (RS256).
+	Short: "Generate or rotate the RS256 JWT signing keypair",
+	Long: `Calls the admin API to rotate the active RS256 JWT signing keypair.
 
-Without --rotate: inserts a new active key. Fails if an active key already exists.
-With --rotate: retires all current active keys and inserts a new active key.
-Both old and new keys remain in the JWKS endpoint until the retired key's
-rotated_at + 2*access_token_ttl has elapsed.`,
+Without --rotate: calls the rotate endpoint (the server always generates and stores
+a new key, retiring the current one). Both old and new keys remain in the JWKS
+endpoint until the retired key's rotated_at + 2*access_token_ttl has elapsed.
+
+With --rotate: same behaviour — the flag is accepted for compatibility.
+
+Requires a running shark server (--url / SHARK_URL) and admin token (--token / SHARK_ADMIN_TOKEN).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		configPath, _ := cmd.Flags().GetString("config")
-		if configPath == "" {
-			configPath = "sharkauth.yaml"
-		}
-
-		cfg, err := config.Load(configPath)
+		body, code, err := adminDo(cmd, "POST", "/api/v1/admin/auth/rotate-signing-key", nil)
 		if err != nil {
-			return maybeJSONErr(cmd, "config_load_failed", fmt.Errorf("load config: %w", err))
+			return maybeJSONErr(cmd, "request_failed", err)
 		}
-		if cfg.Server.Secret == "" {
-			return maybeJSONErr(cmd, "invalid_config", fmt.Errorf("server.secret is not set in config"))
-		}
-
-		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
-		if err != nil {
-			return maybeJSONErr(cmd, "database_open_failed", fmt.Errorf("open database: %w", err))
-		}
-		defer store.Close()
-
-		if err := storage.RunMigrations(store.DB(), migrationsFS, "migrations"); err != nil {
-			return maybeJSONErr(cmd, "migration_failed", fmt.Errorf("run migrations: %w", err))
-		}
-
-		ctx := context.Background()
-		mgr := jwtmgr.NewManager(&cfg.Auth.JWT, store, cfg.Server.BaseURL, cfg.Server.Secret)
-
-		if keysRotate {
-			if err := mgr.GenerateAndStore(ctx, true); err != nil {
-				return maybeJSONErr(cmd, "key_rotate_failed", fmt.Errorf("rotate signing key: %w", err))
-			}
-		} else {
-			if err := mgr.GenerateAndStore(ctx, false); err != nil {
-				return maybeJSONErr(cmd, "key_generate_failed", fmt.Errorf("generate signing key: %w", err))
-			}
-		}
-
-		key, err := store.GetActiveSigningKey(ctx)
-		if err != nil {
-			return maybeJSONErr(cmd, "key_lookup_failed", fmt.Errorf("get active key after generation: %w", err))
+		if code != http.StatusOK {
+			return maybeJSONErr(cmd, "key_rotate_failed", fmt.Errorf("rotate signing key: %s", apiError(body, code)))
 		}
 
 		if jsonFlag(cmd) {
-			return writeJSON(cmd.OutOrStdout(), map[string]any{
-				"kid":       key.KID,
-				"algorithm": key.Algorithm,
-				"alg":       key.Algorithm,
-				"status":    key.Status,
-				"rotated":   keysRotate,
-			})
+			return writeJSON(cmd.OutOrStdout(), body)
 		}
 
-		fmt.Printf("kid:       %s\n", key.KID)
-		fmt.Printf("algorithm: %s\n", key.Algorithm)
-		fmt.Printf("status:    %s\n", key.Status)
-		if keysRotate {
-			fmt.Println("Rotation complete. Old key(s) marked as retired.")
-		} else {
-			fmt.Println("New active signing key generated and stored.")
-		}
+		kid, _ := body["kid"].(string)
+		algorithm, _ := body["algorithm"].(string)
+		status, _ := body["status"].(string)
+
+		fmt.Printf("kid:       %s\n", kid)
+		fmt.Printf("algorithm: %s\n", algorithm)
+		fmt.Printf("status:    %s\n", status)
+		fmt.Println("Rotation complete. Old key(s) marked as retired.")
 		return nil
 	},
 }
 
 func init() {
-	keysGenerateJWTCmd.Flags().BoolVar(&keysRotate, "rotate", false, "retire active key(s) and generate a new one")
-	// Inherit --config flag from parent context via PersistentFlags or use the global serve config
-	keysGenerateJWTCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
+	keysGenerateJWTCmd.Flags().BoolVar(&keysRotate, "rotate", false, "retire active key(s) and generate a new one (default behaviour; flag kept for compatibility)")
 	addJSONFlag(keysGenerateJWTCmd)
 	keysCmd.AddCommand(keysGenerateJWTCmd)
 }
