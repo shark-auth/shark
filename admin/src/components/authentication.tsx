@@ -327,11 +327,18 @@ export function Authentication() {
               )}
               <div style={{
                 marginTop: 10, padding: '8px 10px', borderRadius: 4,
-                background: 'var(--warn-bg)', border: '1px solid color-mix(in oklch, var(--warn) 25%, var(--hairline))',
-                fontSize: 11, color: 'var(--warn)', lineHeight: 1.5,
+                background: 'var(--surface-2)', border: '1px solid var(--hairline)',
+                fontSize: 11, color: 'var(--fg-dim)', lineHeight: 1.5,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
               }}>
-                <Icon.Warn width={11} height={11} style={{ verticalAlign: -2, marginRight: 6 }}/>
-                Switching mode invalidates all existing sessions. Edit <span className="mono">auth.jwt.mode</span> in sharkauth.yaml and restart.
+                <span>JWT signing mode is managed in Identity Hub.</span>
+                <button
+                  className="btn sm"
+                  style={{ flexShrink: 0, fontSize: 11 }}
+                  onClick={() => { window.location.href = '/admin/auth'; }}
+                >
+                  Edit on Identity Hub
+                </button>
               </div>
             </div>
           </div>
