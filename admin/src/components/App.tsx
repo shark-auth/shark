@@ -136,7 +136,7 @@ export function App() {
     fetch('/api/v1/admin/config', { headers: { Authorization: `Bearer ${apiKey}` } })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setAdminConfig(d); })
-      .catch(() => {});
+      .catch(err => { console.error('[admin] config fetch failed:', err); });
   }, [apiKey]);
   const devMode = adminConfig?.dev_mode ?? false;
 
@@ -155,7 +155,7 @@ export function App() {
           setPage('get-started');
         }
       })
-      .catch(() => {});
+      .catch(err => { console.error('[admin] stats fetch failed:', err); });
   }, [apiKey, page]);
 
   React.useEffect(() => {
