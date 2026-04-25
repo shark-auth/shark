@@ -25,6 +25,7 @@ import { Branding } from './branding'
 import { CompliancePage } from './compliance'
 import { Proxy } from './proxy_config'
 import { GetStarted } from './get_started'
+import { Setup } from './setup'
 import { Walkthrough } from './Walkthrough'
 import { useKeyboardShortcuts, KeyboardCheatsheet } from './useKeyboardShortcuts'
 import { CommandPalette } from './CommandPalette'
@@ -161,6 +162,12 @@ export function App() {
       setPage('overview');
     }
   }, [adminConfig, emailProvider, page]);
+
+  // Setup page: reachable without a login session (first-boot flow).
+  // Check pathname (no query-string) so /admin/setup?token=... also matches.
+  if (window.location.pathname.replace(/\/$/, '') === '/admin/setup') {
+    return <Setup />;
+  }
 
   if (!apiKey) {
     return <Login onLogin={(k) => setApiKey(k)} />;
