@@ -65,6 +65,99 @@ function useLifecycle() {
   return { status, loading, missing, refresh: fetch_, act };
 }
 
+// ─── Live proxy status (SSE w/ poll fallback) ────────────────────────────────
+// Backs the Breaker / Failures / Cache tiles + per-listener upstream health.
+// /admin/proxy/status returns { state, cache_size, neg_cache_size, failures,
+// last_check, last_latency_ms, last_status, health_url, upstream, breaker_state }.
+// 404 when proxy disabled — caller already handles via useLifecycle.
+
+function useProxyStatus(enabled: boolean) {
+  const [data, setData] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    if (!enabled) { setData(null); return; }
+    let cancelled = false;
+    let es: EventSource | null = null;
+    let pollTimer: any = null;
+    let backoffTimer: any = null;
+    let retry = 0;
+
+    const pollOnce = async () => {
+      try {
+        const r = await API.get('/admin/proxy/status');
+        if (!cancelled) setData(r?.data || null);
+      } catch { /* 404 = disabled, ignore */ }
+    };
+
+    const startPoll = () => {
+      pollOnce();
+      pollTimer = setInterval(pollOnce, 5000);
+    };
+
+    const startStream = () => {
+      const key = localStorage.getItem('shark_admin_key');
+      if (!key) { startPoll(); return; }
+      try {
+        es = new EventSource(`/api/v1/admin/proxy/status/stream?token=${key}`);
+        es.onopen = () => { retry = 0; };
+        es.onmessage = (ev) => {
+          try {
+            const parsed = JSON.parse(ev.data);
+            if (!cancelled) setData(parsed?.data || parsed);
+          } catch { /* keep last */ }
+        };
+        es.onerror = () => {
+          es?.close();
+          es = null;
+          // Exponential backoff, max 30s. Mirrors overview activity stream.
+          backoffTimer = setTimeout(() => {
+            retry += 1;
+            startStream();
+          }, Math.min(1000 * Math.pow(2, retry), 30000));
+        };
+      } catch {
+        startPoll();
+      }
+    };
+
+    startStream();
+    // Always seed with one poll so tiles populate before first SSE message.
+    pollOnce();
+
+    return () => {
+      cancelled = true;
+      es?.close();
+      if (pollTimer) clearInterval(pollTimer);
+      if (backoffTimer) clearTimeout(backoffTimer);
+    };
+  }, [enabled]);
+
+  return data;
+}
+
+// ─── Compiled engine rules view (read-only) ──────────────────────────────────
+// /admin/proxy/rules returns the *compiled* rules — what the engine actually
+// loaded after parsing the DB rules + any boot-time YAML. Useful for verifying
+// a DB write made it through and for spotting compile-time drops.
+
+function useCompiledRules(enabled: boolean) {
+  const [rules, setRules] = React.useState<any[] | null>(null);
+
+  const refresh = React.useCallback(async () => {
+    if (!enabled) { setRules(null); return; }
+    try {
+      const r = await API.get('/admin/proxy/rules');
+      setRules(r?.data || []);
+    } catch {
+      setRules([]);
+    }
+  }, [enabled]);
+
+  React.useEffect(() => { refresh(); }, [refresh]);
+
+  return { rules, refresh };
+}
+
 // ─── Format helpers ───────────────────────────────────────────────────────────
 
 function fmtUptime(startedAt) {
@@ -171,11 +264,11 @@ function StatTile({ label, value, mono = false, dotState = null, last = false })
   );
 }
 
-function StatusStrip({ status, rulesCount, lastSimMicros }) {
-  const state = status?.state_str || 'unknown';
-  const breaker = status?.breaker_state || status?.breaker || '—';
-  const failures = status?.failure_count ?? status?.failures ?? 0;
-  const cacheSize = status?.cache_size ?? status?.cache_entries ?? '—';
+function StatusStrip({ lifecycle, status, rulesCount, lastSimMicros }) {
+  const state = lifecycle?.state_str || 'unknown';
+  const breaker = status?.breaker_state || status?.breaker || lifecycle?.breaker_state || '—';
+  const failures = status?.failures ?? status?.failure_count ?? lifecycle?.failure_count ?? 0;
+  const cacheSize = status?.cache_size ?? status?.cache_entries ?? lifecycle?.cache_size ?? '—';
   return (
     <div style={{
       display: 'flex',
@@ -185,9 +278,9 @@ function StatusStrip({ status, rulesCount, lastSimMicros }) {
       overflow: 'hidden',
     }}>
       <StatTile label="State" value={state} dotState={state}/>
-      <StatTile label="Listeners" value={status?.listeners ?? 0} mono/>
+      <StatTile label="Listeners" value={lifecycle?.listeners ?? 0} mono/>
       <StatTile label="Rules" value={rulesCount} mono/>
-      <StatTile label="Uptime" value={fmtUptime(status?.started_at)} mono/>
+      <StatTile label="Uptime" value={fmtUptime(lifecycle?.started_at)} mono/>
       <StatTile label="Breaker" value={breaker} mono/>
       <StatTile label="Failures" value={failures} mono/>
       <StatTile label="Cache" value={cacheSize} mono/>
@@ -198,7 +291,19 @@ function StatusStrip({ status, rulesCount, lastSimMicros }) {
 
 // ─── Topology row ─────────────────────────────────────────────────────────────
 
-function TopologyRow({ app, onReload, busy }) {
+function TopologyRow({ app, health, onReload, busy }) {
+  // Health surfaces only when this row's protected_url matches the live
+  // upstream — backend's /admin/proxy/status reports a single upstream today.
+  const showHealth = health && health.upstream && app.proxy_protected_url
+    && (health.upstream === app.proxy_protected_url
+        || app.proxy_protected_url.startsWith(health.upstream)
+        || health.upstream.startsWith(app.proxy_protected_url));
+  const statusCode = health?.last_status;
+  const latency = health?.last_latency_ms;
+  const healthy = statusCode != null && statusCode >= 200 && statusCode < 400;
+  const healthDot = statusCode == null
+    ? 'var(--fg-dim)'
+    : healthy ? 'var(--success)' : 'var(--danger)';
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -215,6 +320,20 @@ function TopologyRow({ app, onReload, busy }) {
         flex: 1, minWidth: 0, fontSize: 11,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{app.proxy_protected_url}</div>
+      {showHealth && (
+        <span title={`Last upstream check: ${statusCode} in ${latency}ms`} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          fontSize: 11, color: 'var(--fg-muted)',
+          fontFamily: 'var(--font-mono)',
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: healthDot,
+            display: 'inline-block',
+          }}/>
+          {statusCode ?? '—'}{latency != null && ` · ${latency}ms`}
+        </span>
+      )}
       <button
         onClick={onReload}
         disabled={busy}
@@ -281,10 +400,16 @@ export function Proxy() {
   const allRules = rulesRaw?.data || [];
 
   const [appFilter, setAppFilter] = React.useState('all');
+  const [rulesView, setRulesView] = React.useState<'db' | 'compiled'>('db');
   const [editing, setEditing] = React.useState<any>(null); // null | rule | { __new: true }
   const [simulateOpen, setSimulateOpen] = React.useState(false);
   const [reloadBusy, setReloadBusy] = React.useState(false);
   const [lastSimMicros, setLastSimMicros] = React.useState<number | null>(null);
+
+  // Live status (breaker, cache, upstream health) — only meaningful when proxy
+  // is actually wired. Disable the hook (and SSE) when lifecycle is missing.
+  const proxyStatus = useProxyStatus(!lifecycle.missing);
+  const compiled = useCompiledRules(!lifecycle.missing && rulesView === 'compiled');
 
   const rules = appFilter === 'all' ? allRules : allRules.filter(r => r.app_id === appFilter);
   const meshApps = apps.filter(a => a.proxy_public_domain);
@@ -307,6 +432,9 @@ export function Proxy() {
     setReloadBusy(true);
     try {
       await lifecycle.act('reload');
+      // Reload is the only path that refreshes engine rules from DB — pull
+      // the new compiled view so operator can verify the swap landed.
+      compiled.refresh();
       toast.success('Reloaded');
     } catch (e: any) {
       toast.error(e.message || 'Reload failed');
@@ -370,7 +498,8 @@ export function Proxy() {
 
             {/* Status strip */}
             <StatusStrip
-              status={lifecycle.status}
+              lifecycle={lifecycle.status}
+              status={proxyStatus}
               rulesCount={allRules.length}
               lastSimMicros={lastSimMicros}
             />
@@ -392,7 +521,7 @@ export function Proxy() {
                     <div key={app.id} style={{
                       borderBottom: i === meshApps.length - 1 ? 'none' : undefined,
                     }}>
-                      <TopologyRow app={app} onReload={doReload} busy={reloadBusy}/>
+                      <TopologyRow app={app} health={proxyStatus} onReload={doReload} busy={reloadBusy}/>
                     </div>
                   ))}
                 </div>
@@ -408,23 +537,53 @@ export function Proxy() {
                   fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
                   color: 'var(--fg-muted)', fontWeight: 500,
                 }}>Rules</div>
-                <select
-                  value={appFilter}
-                  onChange={e => setAppFilter(e.target.value)}
-                  style={{
-                    appearance: 'none', WebkitAppearance: 'none',
-                    height: 24, padding: '0 22px 0 8px',
-                    background: 'var(--surface-1)',
+                <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                  {/* DB / Compiled view toggle — Compiled = what engine actually loaded */}
+                  <div style={{
+                    display: 'inline-flex',
                     border: '1px solid var(--hairline-strong)',
                     borderRadius: 4,
-                    color: 'var(--fg)',
-                    fontSize: 12, cursor: 'pointer',
-                    colorScheme: 'dark',
-                  }}
-                >
-                  <option value="all">All applications</option>
-                  {apps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+                    overflow: 'hidden',
+                    height: 24,
+                  }}>
+                    {(['db', 'compiled'] as const).map(v => (
+                      <button
+                        key={v}
+                        onClick={() => setRulesView(v)}
+                        title={v === 'db' ? 'Editable DB rules' : 'Compiled engine view (read-only)'}
+                        style={{
+                          padding: '0 10px', height: 22,
+                          background: rulesView === v ? 'var(--surface-2)' : 'transparent',
+                          color: rulesView === v ? 'var(--fg)' : 'var(--fg-muted)',
+                          border: 0,
+                          borderRight: v === 'db' ? '1px solid var(--hairline-strong)' : 0,
+                          fontSize: 11, fontWeight: rulesView === v ? 500 : 400,
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                      >{v === 'db' ? 'DB' : 'Compiled'}</button>
+                    ))}
+                  </div>
+                  <select
+                    value={appFilter}
+                    onChange={e => setAppFilter(e.target.value)}
+                    disabled={rulesView === 'compiled'}
+                    style={{
+                      appearance: 'none', WebkitAppearance: 'none',
+                      height: 24, padding: '0 22px 0 8px',
+                      background: 'var(--surface-1)',
+                      border: '1px solid var(--hairline-strong)',
+                      borderRadius: 4,
+                      color: rulesView === 'compiled' ? 'var(--fg-dim)' : 'var(--fg)',
+                      fontSize: 12, cursor: rulesView === 'compiled' ? 'not-allowed' : 'pointer',
+                      opacity: rulesView === 'compiled' ? 0.5 : 1,
+                      colorScheme: 'dark',
+                    }}
+                  >
+                    <option value="all">All applications</option>
+                    {apps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
               </div>
 
               <div style={{
@@ -446,23 +605,41 @@ export function Proxy() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rules.length === 0 && (
-                      <tr>
-                        <td colSpan={7} style={{ padding: 28, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>
-                          No rules yet — click <strong>New rule</strong> to create one.
-                        </td>
-                      </tr>
+                    {rulesView === 'db' ? (
+                      <>
+                        {rules.length === 0 && (
+                          <tr>
+                            <td colSpan={7} style={{ padding: 28, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>
+                              No rules yet — click <strong>New rule</strong> to create one.
+                            </td>
+                          </tr>
+                        )}
+                        {rules.map(r => (
+                          <RuleRow
+                            key={r.id}
+                            rule={r}
+                            apps={apps}
+                            active={editing && editing.id === r.id}
+                            onClick={() => setEditing(r)}
+                            onToggled={refreshRules}
+                          />
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        {compiled.rules == null && (
+                          <tr><td colSpan={7} style={{ padding: 20, color: 'var(--fg-muted)', fontSize: 12 }}>Loading compiled rules…</td></tr>
+                        )}
+                        {compiled.rules?.length === 0 && (
+                          <tr><td colSpan={7} style={{ padding: 28, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>
+                            Engine has zero rules loaded. Press <strong>Reload</strong> on a topology row, or check the proxy log.
+                          </td></tr>
+                        )}
+                        {compiled.rules?.map((r: any, i: number) => (
+                          <CompiledRuleRow key={i} rule={r}/>
+                        ))}
+                      </>
                     )}
-                    {rules.map(r => (
-                      <RuleRow
-                        key={r.id}
-                        rule={r}
-                        apps={apps}
-                        active={editing && editing.id === r.id}
-                        onClick={() => setEditing(r)}
-                        onToggled={refreshRules}
-                      />
-                    ))}
                   </tbody>
                 </table>
               </div>
@@ -479,8 +656,8 @@ export function Proxy() {
           rule={editing.__new ? null : editing}
           apps={apps}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); refreshRules(); }}
-          onDeleted={() => { setEditing(null); refreshRules(); }}
+          onSaved={() => { setEditing(null); refreshRules(); compiled.refresh(); }}
+          onDeleted={() => { setEditing(null); refreshRules(); compiled.refresh(); }}
         />
       )}
 
@@ -574,6 +751,41 @@ function RuleRow({ rule, apps, active, onClick, onToggled }) {
       <td style={{ padding: '7px 12px' }} onClick={e => e.stopPropagation()}>
         <InlineToggle on={!!rule.enabled} busy={busy} onChange={toggle} title={rule.enabled ? 'Disable' : 'Enable'}/>
       </td>
+    </tr>
+  );
+}
+
+// ─── Compiled engine rule row (read-only) ─────────────────────────────────────
+// Mirrors RuleRow shape so view-toggle doesn't reflow the table. Compiled rules
+// expose only what the engine retained: path, methods, require, scopes. No id,
+// no app_id, no enable toggle — by definition, anything in this list is live.
+
+function CompiledRuleRow({ rule }) {
+  return (
+    <tr style={{ borderTop: '1px solid var(--hairline)', cursor: 'default' }}>
+      <td className="mono" style={{ padding: '7px 12px', color: 'var(--fg-dim)', fontSize: 12 }}>—</td>
+      <td className="faint" style={{ padding: '7px 12px', fontStyle: 'italic', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        compiled
+      </td>
+      <td style={{ padding: '7px 12px' }}>
+        <div className="mono" style={{ fontSize: 12 }}>{rule.path || rule.pattern}</div>
+        {rule.methods?.length > 0 && (
+          <div className="faint mono" style={{ fontSize: 10, lineHeight: 1.4 }}>
+            {rule.methods.join(' ')}
+          </div>
+        )}
+      </td>
+      <td style={{ padding: '7px 12px' }}>
+        <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+          {rule.require && <span className="chip" style={{ height: 17, fontSize: 10 }}>{rule.require}</span>}
+          {(rule.scopes || []).map((s: string) => (
+            <span key={s} className="chip" style={{ height: 17, fontSize: 10 }}>scope:{s}</span>
+          ))}
+        </div>
+      </td>
+      <td className="faint" style={{ padding: '7px 12px', fontSize: 11, opacity: 0.5 }}>—</td>
+      <td style={{ padding: '7px 12px' }}/>
+      <td style={{ padding: '7px 12px', color: 'var(--success)', fontSize: 11 }}>live</td>
     </tr>
   );
 }
