@@ -5,6 +5,7 @@ import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
 import { ProxyWizard } from './proxy_wizard'
+import { BILLING_UI } from '../featureFlags'
 
 // Proxy Gateway — sibling page to users.tsx.
 // Monochrome, square (radius cap 5px / inputs 4px), hairline borders,
@@ -739,7 +740,7 @@ function RuleRow({ rule, apps, active, onClick, onToggled }) {
               {rule.require || rule.allow}
             </span>
           )}
-          {rule.tier_match && <span className="chip" style={{ height: 17, fontSize: 10 }}>tier:{rule.tier_match}</span>}
+          {BILLING_UI && rule.tier_match && <span className="chip" style={{ height: 17, fontSize: 10 }}>tier:{rule.tier_match}</span>}
         </div>
       </td>
       <td className="faint" style={{ padding: '7px 12px', fontSize: 11 }}>
@@ -996,11 +997,13 @@ function RuleDrawer({ rule, apps, onClose, onSaved, onDeleted }) {
               </div>
             </FieldGroup>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <FieldGroup label="Tier match">
-                <Input value={f.tier_match} placeholder="free · pro"
-                  onChange={(v) => set('tier_match', v)}/>
-              </FieldGroup>
+            <div style={{ display: 'grid', gridTemplateColumns: BILLING_UI ? '1fr 1fr' : '1fr', gap: 10 }}>
+              {BILLING_UI && (
+                <FieldGroup label="Tier match">
+                  <Input value={f.tier_match} placeholder="free · pro"
+                    onChange={(v) => set('tier_match', v)}/>
+                </FieldGroup>
+              )}
               <FieldGroup label="Scopes" hint="comma-sep">
                 <Input value={f.scopes} placeholder="read:data"
                   onChange={(v) => set('scopes', v)}/>

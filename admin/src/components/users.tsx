@@ -7,6 +7,7 @@ import { CLIFooter } from './CLIFooter'
 import { useURLParam } from './useURLParams'
 import { useToast } from './toast'
 import { usePageActions } from './useKeyboardShortcuts'
+import { BILLING_UI } from '../featureFlags'
 
 // Users page — table + detail slide-over
 
@@ -927,10 +928,13 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
         <Field label="User ID"><CopyField value={user.id} truncate={0}/></Field>
       </div>
 
-      {/* Tier — billing tier management */}
-      <div style={{ marginTop: 20 }}>
-        <TierSection user={user} onUpdated={onRefreshList}/>
-      </div>
+      {/* Tier — billing tier management. Hidden pre-launch (BILLING_UI flag).
+          Backend tier endpoints remain wired; UI returns post-Stripe. */}
+      {BILLING_UI && (
+        <div style={{ marginTop: 20 }}>
+          <TierSection user={user} onUpdated={onRefreshList}/>
+        </div>
+      )}
 
       {/* Metadata — separated section */}
       <div style={{ marginTop: 24 }}>

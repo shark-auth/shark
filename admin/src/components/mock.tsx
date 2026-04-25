@@ -31,9 +31,9 @@ export const MOCK = {
   ],
   attention: [
     { id: 1, kind: 'device', severity: 'warn', title: '4 pending device approvals', sub: 'Oldest requested 2m ago \u00b7 claude-cli, cursor-agent', action: 'Review', href: 'device-flow' },
-    { id: 2, kind: 'webhook', severity: 'danger', title: '12 webhook deliveries failing', sub: 'endpoint billing-prod \u2192 503 (5 consecutive)', action: 'Investigate', href: 'overview' },
+    { id: 2, kind: 'webhook', severity: 'danger', title: '12 webhook deliveries failing', sub: 'endpoint events-prod \u2192 503 (5 consecutive)', action: 'Investigate', href: 'overview' },
     { id: 3, kind: 'key', severity: 'warn', title: '3 API keys expiring in 7 days', sub: 'sk_live_\u2026aK9f, sk_live_\u2026m2Bc, ci-bot', action: 'Rotate', href: 'overview' },
-    { id: 4, kind: 'config', severity: 'info', title: 'shark.email testing tier in use', sub: 'Switch provider before production \u2014 280/500 daily quota', action: 'Set up', href: 'overview' },
+    { id: 4, kind: 'config', severity: 'info', title: 'shark.email sandbox mode in use', sub: 'Switch provider before production \u2014 280/500 daily quota', action: 'Set up', href: 'overview' },
     { id: 5, kind: 'anomaly', severity: 'danger', title: 'Brute force pattern detected', sub: '47 failed logins from 185.220.101.\u00b7 in 4m \u00b7 blocked', action: 'Triage', href: 'overview' },
   ],
   activity: [
@@ -53,7 +53,7 @@ export const MOCK = {
   agents: [
     { id: 'agent_cursor', name: 'Cursor', type: 'confidential', clientId: 'cli_01HNGZK8RXT4A2VPQW', status: 'active', grants: ['authorization_code', 'refresh_token'], scopes: ['openid','profile','email','repos:read'], tokensActive: 482, lastUsed: mins(0.2), createdBy: 'amelia@nimbus.sh', dpop: true, description: 'AI code editor \u2014 user-delegated access' },
     { id: 'agent_claude_cli', name: 'Claude CLI', type: 'public', clientId: 'cli_01HNGZKA4BNFEJQP7M', status: 'active', grants: ['device_code', 'refresh_token'], scopes: ['openid','profile','email','workspace:read','workspace:write'], tokensActive: 213, lastUsed: mins(3), createdBy: 'amelia@nimbus.sh', dpop: true, description: 'Terminal AI assistant \u2014 device flow' },
-    { id: 'agent_lindy', name: 'Lindy Ops', type: 'confidential', clientId: 'cli_01HNGZKC9FWXTMA8LZ', status: 'active', grants: ['client_credentials', 'token_exchange'], scopes: ['agents:act','billing:read','tickets:rw'], tokensActive: 318, lastUsed: mins(8), createdBy: 'sasha@apex.dev', dpop: true, description: 'Autonomous ops agent \u2014 service account' },
+    { id: 'agent_lindy', name: 'Lindy Ops', type: 'confidential', clientId: 'cli_01HNGZKC9FWXTMA8LZ', status: 'active', grants: ['client_credentials', 'token_exchange'], scopes: ['agents:act','tickets:rw','reports:read'], tokensActive: 318, lastUsed: mins(8), createdBy: 'sasha@apex.dev', dpop: true, description: 'Autonomous ops agent \u2014 service account' },
     { id: 'agent_gpt5', name: 'GPT-5 Code', type: 'confidential', clientId: 'cli_01HNGZKDPM2QR5VTYN', status: 'active', grants: ['authorization_code'], scopes: ['openid','profile','email','files:read'], tokensActive: 167, lastUsed: mins(17), createdBy: 'priya.nair@stride.io', dpop: false, description: 'OpenAI dev agent' },
     { id: 'agent_zapier_mcp', name: 'Zapier MCP', type: 'confidential', clientId: 'cli_01HNGZKEV7XY3HJ2KN', status: 'active', grants: ['authorization_code','token_exchange'], scopes: ['workspace:read','webhooks:rw'], tokensActive: 74, lastUsed: hrs(1), createdBy: 'amelia@nimbus.sh', dpop: true, description: 'Workflow automation bridge' },
     { id: 'agent_slack_ai', name: 'Slack AI Bridge', type: 'confidential', clientId: 'cli_01HNGZKG8TJAM5EBRW', status: 'active', grants: ['authorization_code','refresh_token'], scopes: ['openid','profile','messages:read'], tokensActive: 21, lastUsed: hrs(2), createdBy: 'tomas@orbit.so', dpop: false, description: 'Workspace notifications' },

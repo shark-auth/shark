@@ -25,6 +25,7 @@ import { API, useAPI } from './api'
 import { useToast } from './toast'
 import { usePageActions } from './useKeyboardShortcuts'
 import { Icon } from './shared'
+import { BILLING_UI } from '../featureFlags'
 import {
   SignInForm,
   SignUpForm,
@@ -71,7 +72,8 @@ const SECTIONS: { id: string; label: string; icon: string; surfaces: { id: strin
   ]},
   { id: 'design-tokens', label: 'Design Tokens', icon: 'Bolt', surfaces: [
     { id: 'tokens',  label: 'Token editor' },
-    { id: 'paywall', label: 'Paywall preview' },
+    // Paywall preview hidden pre-launch (BILLING_UI flag).
+    ...(BILLING_UI ? [{ id: 'paywall', label: 'Paywall preview' }] : []),
   ]},
   { id: 'email', label: 'Email templates', icon: 'Mail', surfaces: [] /* populated dynamically */ },
   { id: 'integrations', label: 'Integrations', icon: 'Webhook', surfaces: [] /* populated dynamically */ },
@@ -657,7 +659,7 @@ function CenterEditor(props: {
       {section === 'email'       && <EmailEditor     tplDraft={props.tplDraft} setTplDraft={props.setTplDraft} onSendTest={props.onTplSendTest} onReset={props.onTplReset}/>}
       {section === 'integrations'&& <IntegrationsEditor surface={surface} apps={props.apps} onAppUpdate={props.onAppUpdate}/>}
       {section === 'design-tokens' && surface === 'tokens' && <DesignTokensEditor brandDraft={brandDraft} setBrandDraft={setBrandDraft}/>}
-      {section === 'design-tokens' && surface === 'paywall' && <PaywallPreviewEditor apps={props.apps}/>}
+      {section === 'design-tokens' && surface === 'paywall' && BILLING_UI && <PaywallPreviewEditor apps={props.apps}/>}
     </div>
   )
 }
