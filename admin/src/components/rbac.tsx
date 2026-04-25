@@ -111,14 +111,18 @@ export function RBAC() {
         {creating && (
           <form onSubmit={handleCreate} style={{ padding: 10, borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)' }}>
             <div className="col" style={{ gap: 6 }}>
+              <label htmlFor="rbac-role-name" style={{ display: 'none' }}>Role name</label>
               <input
+                id="rbac-role-name"
                 autoFocus
                 placeholder="Role name"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 style={{ fontSize: 12, padding: '5px 8px', border: '1px solid var(--hairline-strong)', borderRadius: 4, background: 'var(--surface-0)' }}
               />
+              <label htmlFor="rbac-role-desc" style={{ display: 'none' }}>Description</label>
               <input
+                id="rbac-role-desc"
                 placeholder="Description (optional)"
                 value={newDesc}
                 onChange={e => setNewDesc(e.target.value)}
@@ -327,6 +331,8 @@ function RoleDetailHeader({ role, onRefresh, onDelete }) {
           {editName ? (
             <div className="row" style={{ gap: 6, marginBottom: 4 }}>
               <input
+                id="rbac-edit-role-name"
+                aria-label="Role name"
                 autoFocus
                 value={name}
                 onChange={e => setName(e.target.value)}
@@ -350,6 +356,8 @@ function RoleDetailHeader({ role, onRefresh, onDelete }) {
           {/* Inline editable description */}
           {editDesc ? (
             <input
+              id="rbac-edit-role-desc"
+              aria-label="Role description"
               autoFocus
               value={desc}
               onChange={e => setDesc(e.target.value)}
@@ -565,6 +573,8 @@ function PermissionsTab({ role, onRefresh }) {
                 <div className="col" style={{ gap: 8 }}>
                   <div className="row" style={{ gap: 8 }}>
                     <input
+                      id="rbac-perm-action"
+                      aria-label="Action (e.g. read)"
                       autoFocus
                       placeholder="Action (e.g. read)"
                       value={caAction}
@@ -572,6 +582,8 @@ function PermissionsTab({ role, onRefresh }) {
                       style={{ flex: 1, fontSize: 12, padding: '5px 8px', border: '1px solid var(--hairline-strong)', borderRadius: 4, background: 'var(--surface-0)' }}
                     />
                     <input
+                      id="rbac-perm-resource"
+                      aria-label="Resource (e.g. documents)"
                       placeholder="Resource (e.g. documents)"
                       value={caResource}
                       onChange={e => setCaResource(e.target.value)}
@@ -636,8 +648,9 @@ function PermissionChecker() {
         <form onSubmit={handleCheck}>
           <div className="col" style={{ gap: 10 }}>
             <div className="col" style={{ gap: 4 }}>
-              <label style={{ fontSize: 10.5, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>User ID</label>
+              <label htmlFor="rbac-check-user-id" style={{ fontSize: 10.5, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>User ID</label>
               <input
+                id="rbac-check-user-id"
                 value={userId}
                 onChange={e => setUserId(e.target.value)}
                 placeholder="usr_…"
@@ -646,8 +659,9 @@ function PermissionChecker() {
             </div>
             <div className="row" style={{ gap: 8 }}>
               <div className="col" style={{ gap: 4, flex: 1 }}>
-                <label style={{ fontSize: 10.5, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Action</label>
+                <label htmlFor="rbac-check-action" style={{ fontSize: 10.5, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Action</label>
                 <input
+                  id="rbac-check-action"
                   value={action}
                   onChange={e => setAction(e.target.value)}
                   placeholder="read"
@@ -655,8 +669,9 @@ function PermissionChecker() {
                 />
               </div>
               <div className="col" style={{ gap: 4, flex: 1 }}>
-                <label style={{ fontSize: 10.5, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Resource</label>
+                <label htmlFor="rbac-check-resource" style={{ fontSize: 10.5, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Resource</label>
                 <input
+                  id="rbac-check-resource"
                   value={resource}
                   onChange={e => setResource(e.target.value)}
                   placeholder="documents"
