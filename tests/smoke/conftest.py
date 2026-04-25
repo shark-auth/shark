@@ -121,9 +121,15 @@ def smoke_user(api_session, server):
     return {"email": email, "password": password, "token": data.get("token"), "id": data.get("id")}
 
 @pytest.fixture
-def auth_session(api_session, smoke_user):
-    api_session.post(f"{BASE_URL}/api/v1/auth/login", json={"email": smoke_user["email"], "password": smoke_user["password"]})
-    return api_session
+def auth_session(smoke_user):
+    """Fresh session with its own cookie jar, already logged in."""
+    s = requests.Session()
+    resp = s.post(
+        f"{BASE_URL}/api/v1/auth/login",
+        json={"email": smoke_user["email"], "password": smoke_user["password"]},
+    )
+    assert resp.status_code == 200, f"auth_session login failed: {resp.text}"
+    return s
 
 @pytest.fixture(scope="session")
 def admin_client(admin_key):
