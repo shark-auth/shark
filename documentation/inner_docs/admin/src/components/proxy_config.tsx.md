@@ -2,47 +2,46 @@
 
 **Path:** `admin/src/components/proxy_config.tsx`
 **Type:** React component (page)
-**LOC:** ~500
+**Last rebuild:** 2026-04-25 (strict monochrome/square/editable spec)
 
 ## Purpose
-Proxy configuration—reverse proxy setup for protecting upstream services without app changes.
+Proxy management: lifecycle toggle, status metrics, topology, rules CRUD, simulate. Replaces both prior `proxy_config.tsx` AND `proxy_wizard.tsx` chrome. Wizard component still loaded only when lifecycle is `missing`.
 
 ## Exports
-- `Proxy()` (default) — function component
+- `Proxy()` — function component
 
-## Tabs
-- **Routes** — protected routes, path patterns, backend URLs
-- **Settings** — CORS, redirect behavior, rate limiting, auth mode
-- **Status** — active proxies, request stats, health checks
-- **Wizard** — step-by-step setup for new proxies
+## Sections
+- **Header** — title, rule count chip, last-error inline, Simulate button, New rule button, **Power toggle**
+- **Power toggle** — small square button (28px tall, 4px radius, hairline-strong border, surface-1 fill). Label flips Start/Stop. Leading 7px dot — `--success` running, `--warn` reloading, `--fg-dim` stopped. NO pulse, NO color fill.
+- **Status strip** — single hairline-bordered row of 8 monochrome tiles: state, listeners, rules, uptime, breaker, failures, cache, last sim. Color only on state-tile leading dot.
+- **Topology** — per-app `public_domain → protected_url` rows w/ small Reload button
+- **Rules table** — sticky uppercase header, 7px row padding, click → drawer, inline square slide-toggle for `enabled`, disabled rows fade 0.55
+- **Rule editor drawer** — 420px right-side fixed, square, hairline left border. Editable: app, public_domain, protected_url, pattern, methods, priority, require, allow_override, tier, scopes, enabled, m2m. Save/Delete/Cancel. Esc + backdrop close.
+- **Simulate drawer** — 440px. Method + path + identity JSON; result panel: decision dot, reason, matched rule, injected headers table, eval microseconds (bubbles into Last sim tile).
 
-## Features
-- **Route creation** — `/api/*` → `https://backend/api/*`, with auth required
-- **CORS config** — allowed origins, headers, methods
-- **Rate limiting** — requests/second per IP or user
-- **Auth modes** — require login, specific roles, RBAC rules
-- **SSL/TLS** — upstream certificate validation
-- **Logging** — request/response logging for debugging
+## Removed (vs prior)
+- YAML import drawer entirely (no Import button, no `ImportModal`, no `/admin/proxy/rules/import` UI)
+- All centered modals (rule editor, delete confirm, import) — replaced by drawers + native confirm for delete
+- Colored pulsing power toggle
+- Loud `LifecycleBar` chip strip
+- Bulky colored status chip line
 
-## Hooks used
-- `useAPI('/admin/proxy/config')` — fetch config
-- `useToast()` — feedback
-
-## State
-- `tab` — current tab
-- `routes` — defined routes
-- `settings` — global proxy settings
-
-## API calls
-- `GET /api/v1/admin/proxy/status` — health check (404 if disabled)
-- `GET /api/v1/admin/proxy/config` — fetch configuration
-- `POST /api/v1/admin/proxy/routes` — create route
-- `PATCH /api/v1/admin/proxy/settings` — update settings
+## API calls (preserved contract)
+- `GET/POST /admin/proxy/lifecycle`
+- `GET /admin/proxy/status`
+- `GET/POST/PATCH/DELETE /admin/proxy/rules/db`
+- `POST /admin/proxy/simulate`
 
 ## Composed by
-- App.tsx
+- `App.tsx` — proxy route
+- `ProxyWizard` still rendered when `lifecycle.missing` (initial setup)
+
+## Visual contract (per .impeccable.md v3)
+- Monochrome — status dots only carry color
+- Radii: 5px outer, 4px inputs/buttons
+- 13px base, hairline borders, 7-10px row padding
+- All editor surfaces are right-side drawers, square, hairline left border
 
 ## Notes
-- Zero-code auth integration for any service
-- Can be combined with branding for seamless UX
-- Transparent to upstream service (no code changes needed)
+- Polls lifecycle + status every 5s
+- ProxyWizard.tsx still imported (used by get_started + applications) but not by main proxy page chrome
