@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
@@ -703,11 +704,18 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 		cfg.PasswordReset.TokenLifetime = *req.PasswordReset.TTL
 	}
 
+	// W17 Phase A: persist to DB (primary). YAML Save is kept as a secondary
+	// write so operators with a yaml file on disk stay in sync until Phase H
+	// removes the yaml path entirely.
+	if err := config.SaveRuntime(r.Context(), s.Store, cfg); err != nil {
+		slog.Error("config: failed to save to db", "error", err)
+		writeJSON(w, http.StatusInternalServerError, errPayload("save_failed", "Failed to persist"))
+		return
+	}
 	if s.ConfigPath != "" {
 		if err := cfg.Save(s.ConfigPath); err != nil {
-			slog.Error("config: failed to save", "path", s.ConfigPath, "error", err)
-			writeJSON(w, http.StatusInternalServerError, errPayload("save_failed", "Failed to persist"))
-			return
+			// Non-fatal: DB write succeeded; yaml is best-effort until Phase H.
+			slog.Warn("config: failed to sync yaml (non-fatal)", "path", s.ConfigPath, "error", err)
 		}
 	}
 
