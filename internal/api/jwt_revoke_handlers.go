@@ -29,9 +29,11 @@ type adminRevokeJTIRequest struct {
 // If body provides a token, validate it first then revoke its JTI.
 func (s *Server) handleUserRevoke(w http.ResponseWriter, r *http.Request) {
 	if s.JWTManager == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error":   "not_configured",
-			"message": "JWT is not configured",
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error":   "feature_disabled",
+			"feature": "jwt_revoke",
+			"message": "JWT is not configured. Set jwt.signing_key_path in config and restart.",
+			"config":  "jwt.signing_key_path",
 		})
 		return
 	}
@@ -93,9 +95,11 @@ func (s *Server) handleUserRevoke(w http.ResponseWriter, r *http.Request) {
 // Admin-key-gated. Revokes an arbitrary JTI for any user.
 func (s *Server) handleAdminRevokeJTI(w http.ResponseWriter, r *http.Request) {
 	if s.JWTManager == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error":   "not_configured",
-			"message": "JWT is not configured",
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error":   "feature_disabled",
+			"feature": "jwt_revoke",
+			"message": "JWT is not configured. Set jwt.signing_key_path in config and restart.",
+			"config":  "jwt.signing_key_path",
 		})
 		return
 	}

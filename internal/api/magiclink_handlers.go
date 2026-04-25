@@ -131,9 +131,11 @@ func (s *Server) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.MagicLinkManager == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error":   "not_configured",
-			"message": "Magic links are not configured",
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error":   "feature_disabled",
+			"feature": "magic_link",
+			"message": "Magic links are not configured. Set email.smtp or email.resend in config and restart.",
+			"config":  "email.smtp.host or email.resend.api_key",
 		})
 		return
 	}

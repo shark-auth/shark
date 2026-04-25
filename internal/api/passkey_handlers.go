@@ -20,6 +20,23 @@ type passkeyRenameRequest struct {
 	Name string `json:"name"`
 }
 
+// passkeyDisabled writes a 503 when the passkey manager is not configured
+// (NewPasskeyManager failed at startup, e.g. missing webauthn.rp_id). Caller
+// must return when this returns true. Avoids the prior silent nil-deref 500
+// panics on the begin/finish endpoints.
+func (s *Server) passkeyDisabled(w http.ResponseWriter) bool {
+	if s.PasskeyManager == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error":   "feature_disabled",
+			"feature": "passkey",
+			"message": "Passkeys are not configured. Set webauthn.rp_id and webauthn.rp_origin in config and restart.",
+			"config":  "webauthn.rp_id, webauthn.rp_origin",
+		})
+		return true
+	}
+	return false
+}
+
 // passkeyCredentialResponse is the JSON response for a passkey credential.
 type passkeyCredentialResponse struct {
 	ID         string  `json:"id"`
@@ -31,6 +48,9 @@ type passkeyCredentialResponse struct {
 }
 
 func (s *Server) handlePasskeyRegisterBegin(w http.ResponseWriter, r *http.Request) {
+	if s.passkeyDisabled(w) {
+		return
+	}
 	userID := mw.GetUserID(r.Context())
 	if userID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
@@ -65,6 +85,9 @@ func (s *Server) handlePasskeyRegisterBegin(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handlePasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) {
+	if s.passkeyDisabled(w) {
+		return
+	}
 	userID := mw.GetUserID(r.Context())
 	if userID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
@@ -108,6 +131,9 @@ func (s *Server) handlePasskeyRegisterFinish(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
+	if s.passkeyDisabled(w) {
+		return
+	}
 	var req passkeyLoginBeginRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -142,6 +168,9 @@ func (s *Server) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handlePasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
+	if s.passkeyDisabled(w) {
+		return
+	}
 	challengeKey := r.Header.Get("X-Challenge-Key")
 	if challengeKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
