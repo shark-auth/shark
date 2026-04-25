@@ -31,21 +31,38 @@ def test_pkce_enforcement(admin_client, auth_session):
     else:
         assert resp.status_code in [400, 401]
 
-def test_refresh_token_rotation_and_reuse(admin_client, auth_session):
-    """Section 33: Refresh token rotation and reuse protection."""
-    # 1. Create agent
-    agent = admin_client.post(f"{BASE_URL}/api/v1/agents", json={
+def test_refresh_token_rotation_and_reuse(admin_client, smoke_user):
+    """Section 33: Refresh token rotation and reuse protection.
+
+    Uses a dedicated session with its own cookie jar so the authorize
+    redirect carries the correct login cookie independent of any other
+    test that might share auth_session's cookie jar.
+    """
+    import urllib.parse
+
+    # 1. Create agent with offline_access scope allowed.
+    agent_resp = admin_client.post(f"{BASE_URL}/api/v1/agents", json={
         "name": "rt-rotation",
         "grant_types": ["authorization_code", "refresh_token"],
         "scopes": ["openid", "offline_access"],
         "redirect_uris": ["http://localhost:9999/callback"]
-    }).json()
-    print(f"DEBUG: Agent response: {agent}")
+    })
+    assert agent_resp.status_code in [200, 201], f"Agent create failed: {agent_resp.text}"
+    agent = agent_resp.json()
+    assert "client_id" in agent, f"No client_id in agent response: {agent}"
     cid, secret = agent["client_id"], agent["client_secret"]
 
-    # 2. Complete Code Flow to get RT
+    # 2. Fresh session — login to get a valid session cookie.
+    sess = requests.Session()
+    login = sess.post(f"{BASE_URL}/api/v1/auth/login",
+                      json={"email": smoke_user["email"], "password": smoke_user["password"]})
+    assert login.status_code == 200, f"Login failed: {login.text}"
+
+    # 3. Complete Code Flow with PKCE to get a refresh token.
     verifier = "v" * 64
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).decode().rstrip('=')
     qs_params = {
         "response_type": "code",
         "client_id": cid,
@@ -53,47 +70,66 @@ def test_refresh_token_rotation_and_reuse(admin_client, auth_session):
         "state": "state12345",
         "code_challenge": challenge,
         "code_challenge_method": "S256",
-        "scope": "openid offline_access"
+        "scope": "openid offline_access",
     }
-    
-    resp = auth_session.get(f"{BASE_URL}/oauth/authorize", params=qs_params, allow_redirects=False)
-    if resp.status_code == 200: 
-        # Include original params in POST URL to satisfy synthetic request reconstruction
-        import urllib.parse
+
+    resp = sess.get(f"{BASE_URL}/oauth/authorize", params=qs_params, allow_redirects=False)
+    if resp.status_code == 200:
+        # Consent form — POST approval.
         qs = urllib.parse.urlencode(qs_params)
-        resp = auth_session.post(f"{BASE_URL}/oauth/authorize?{qs}", data={
-            "client_id": cid, "state": "state12345", "approved": "true", "scope": "openid offline_access"
-        }, allow_redirects=False)
-    
-    assert "Location" in resp.headers, f"Expected redirect, got {resp.status_code}: {resp.text}"
-    print(f"DEBUG: Location header: {resp.headers['Location']}")
-    code = requests.utils.urlparse(resp.headers["Location"]).query.split("code=")[1].split("&")[0]
-    
-    # 3. Exchange for RT
-    resp = requests.post(f"{BASE_URL}/oauth/token", data={
-        "grant_type": "authorization_code", "code": code,
-        "client_id": cid, "client_secret": secret,
-        "redirect_uri": "http://localhost:9999/callback", "code_verifier": verifier
+        resp = sess.post(
+            f"{BASE_URL}/oauth/authorize?{qs}",
+            data={"client_id": cid, "state": "state12345",
+                  "approved": "true", "scope": "openid offline_access"},
+            allow_redirects=False,
+        )
+
+    assert "Location" in resp.headers, (
+        f"Expected redirect from authorize, got {resp.status_code}: {resp.text}"
+    )
+    loc = resp.headers["Location"]
+    parsed = requests.utils.urlparse(loc)
+    qs_dict = dict(urllib.parse.parse_qsl(parsed.query))
+    assert "code" in qs_dict, f"No code in redirect: {loc}"
+    code = qs_dict["code"]
+
+    # 4. Exchange code for tokens.
+    token_resp = requests.post(f"{BASE_URL}/oauth/token", data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": cid,
+        "client_secret": secret,
+        "redirect_uri": "http://localhost:9999/callback",
+        "code_verifier": verifier,
     })
-    tokens = resp.json()
-    assert "refresh_token" in tokens
+    assert token_resp.status_code == 200, f"Token exchange failed: {token_resp.text}"
+    tokens = token_resp.json()
+    assert "refresh_token" in tokens, f"No refresh_token in response: {tokens}"
     rt1 = tokens["refresh_token"]
-    
-    # 4. First Refresh (Rotation)
+
+    # 5. First Refresh — fosite MUST issue a new RT (rotation).
     resp = requests.post(f"{BASE_URL}/oauth/token", data={
-        "grant_type": "refresh_token", "refresh_token": rt1,
-        "client_id": cid, "client_secret": secret
+        "grant_type": "refresh_token",
+        "refresh_token": rt1,
+        "client_id": cid,
+        "client_secret": secret,
     })
-    assert resp.status_code == 200
-    rt2 = resp.json()["refresh_token"]
-    assert rt1 != rt2
-    
-    # 5. Reuse RT1 (Breach Detection)
+    assert resp.status_code == 200, f"First refresh failed: {resp.text}"
+    body = resp.json()
+    assert "refresh_token" in body, f"No refresh_token after rotation: {body}"
+    rt2 = body["refresh_token"]
+    assert rt1 != rt2, "Refresh token was NOT rotated (rt1 == rt2)"
+
+    # 6. Reuse rt1 — MUST be rejected (family breach detection).
     resp = requests.post(f"{BASE_URL}/oauth/token", data={
-        "grant_type": "refresh_token", "refresh_token": rt1,
-        "client_id": cid, "client_secret": secret
+        "grant_type": "refresh_token",
+        "refresh_token": rt1,
+        "client_id": cid,
+        "client_secret": secret,
     })
-    assert resp.status_code in [400, 401]
+    assert resp.status_code in [400, 401], (
+        f"Old refresh token still accepted after rotation (expected 400/401, got {resp.status_code})"
+    )
 
 def test_device_flow(admin_client, smoke_user, db_conn):
     """Section 34: Device flow (RFC 8628)."""
