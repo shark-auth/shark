@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -80,7 +79,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 	if limit <= 0 {
 		limit = 50
 	}
-	query := fmt.Sprintf("SELECT * FROM agents WHERE %s ORDER BY created_at DESC LIMIT ? OFFSET ?", where)
+	query := "SELECT * FROM agents WHERE " + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, opts.Offset)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
