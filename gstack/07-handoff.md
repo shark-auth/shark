@@ -70,7 +70,7 @@ These are flagged-but-not-done items. None are launch-blockers but most are laun
 ### Code fixes (must ship before v0.9.0)
 
 1. **`SharkProvider.tsx:86` stray closing paren** (caught by React-SDK doc agent). Likely tsc compile error. Run `cd packages/shark-auth-react && pnpm tsc --noEmit` to confirm. Estimated fix: 2 min.
-2. **SDK naming unification.** Three different scopes today: `@sharkauth/node` (TS SDK), `@shark-auth/react` (React SDK), `shark_auth` (Python). Pick one (`@sharkauth/*` recommended), rename, republish. Estimated: 1 hour including republish workflow updates.
+2. **SDK naming unification.** Three different scopes today: `@sharkauth/node` (TS SDK), `@sharkauth/react` (React SDK), `shark_auth` (Python). Pick one (`@sharkauth/*` recommended), rename, republish. Estimated: 1 hour including republish workflow updates.
 3. **PyPI publish automation missing.** `pyproject.toml` exists at `sdk/python/pyproject.toml` but no `publish-python-sdk.yml` workflow. Lands as part of Day 1 release-pipeline work above.
 4. **OpenAPI spec — depth on platform/admin sections.** OAuth + auth sections were built by full subagents with rich schemas. Platform + admin sections were built in main thread under time pressure — coverage is complete (operationIds + summaries + x-source citations) but examples are sparse. Worth one parallel-agent pass post-launch to deepen the schemas + add realistic examples.
 5. **`shark doctor` CLI command.** Diagnostic for first-boot failures (config, DB writability, JWKS keys, port bind, base_url reachability, admin key presence). Day 2 of original calendar; estimated 3-4 hours.
@@ -110,7 +110,7 @@ documentation/
     cmd/                            25 MDs
     internal/                       150 MDs across 19 packages
     admin/src/                      82 MDs (React SPA)
-    packages/                       28 MDs (@shark-auth/react)
+    packages/                       28 MDs (@sharkauth/react)
     sdk/typescript/                 18 MDs (@sharkauth/node)
     sdk/python/                     16 MDs (shark-auth)
 

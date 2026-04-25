@@ -5,7 +5,7 @@
 **LOC:** 5
 
 ## Purpose
-Aggregates the hooks + context exports so they're reachable both from the package root and from `@shark-auth/react/hooks`.
+Aggregates the hooks + context exports so they're reachable both from the package root and from `@sharkauth/react/hooks`.
 
 ## Public API
 ```ts

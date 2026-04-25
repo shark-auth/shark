@@ -54,13 +54,13 @@ func (s *Server) handleAppSnippet(w http.ResponseWriter, r *http.Request) {
 			{
 				"label": "Install",
 				"lang":  "bash",
-				"code":  "npm install @shark-auth/react",
+				"code":  "npm install @sharkauth/react",
 			},
 			{
 				"label": "Provider setup",
 				"lang":  "tsx",
 				"code": fmt.Sprintf(
-					"import { SharkProvider } from '@shark-auth/react'\n\n"+
+					"import { SharkProvider } from '@sharkauth/react'\n\n"+
 						"<SharkProvider publishableKey=%q authUrl=%q>\n"+
 						"  <App/>\n"+
 						"</SharkProvider>",
@@ -70,7 +70,7 @@ func (s *Server) handleAppSnippet(w http.ResponseWriter, r *http.Request) {
 			{
 				"label": "Page usage",
 				"lang":  "tsx",
-				"code": "import { SignIn, UserButton, SignedIn, SignedOut } from '@shark-auth/react'\n\n" +
+				"code": "import { SignIn, UserButton, SignedIn, SignedOut } from '@sharkauth/react'\n\n" +
 					"<SignedOut><SignIn/></SignedOut>\n" +
 					"<SignedIn><UserButton/></SignedIn>",
 			},

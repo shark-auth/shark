@@ -48,7 +48,7 @@ shark/
 │   ├── hosted/                — hosted login/signup/MFA/paywall pages (separately bundled)
 │   └── lib/                   — API client, hooks, utilities
 ├── packages/                  — npm-published frontend SDKs
-│   └── shark-auth-react/      — React SDK (@shark-auth/react)
+│   └── shark-auth-react/      — React SDK (@sharkauth/react)
 ├── sdk/                       — non-npm SDKs
 │   ├── typescript/            — Node SDK
 │   └── python/                — Python SDK

@@ -1,5 +1,5 @@
 'use client'
-import { SignedIn, SignedOut, useUser } from '@shark-auth/react'
+import { SignedIn, SignedOut, useUser } from '@sharkauth/react'
 export default function DashboardClient() {
   const { user } = useUser()
   return (

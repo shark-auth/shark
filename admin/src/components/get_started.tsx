@@ -88,7 +88,7 @@ const SDK_TASKS = [
     summary: 'Pick the SDK that matches your stack. The React package wraps the TypeScript core SDK with hooks and components.',
     page: null,
     pageLabel: null,
-    cli: 'npm install @shark-auth/react',
+    cli: 'npm install @sharkauth/react',
     extraSnippets: [
       { label: 'TypeScript core', code: 'npm install @shark-auth/sdk' },
       { label: 'Python', code: 'pip install shark-auth' },
@@ -100,7 +100,7 @@ const SDK_TASKS = [
     summary: 'Wrap the app root with SharkProvider. It loads tokens from storage, refreshes on schedule, and exposes the session via context.',
     page: null,
     pageLabel: null,
-    code: `import { SharkProvider } from '@shark-auth/react';
+    code: `import { SharkProvider } from '@sharkauth/react';
 
 export default function App() {
   return (
@@ -119,7 +119,7 @@ export default function App() {
     summary: 'Trigger the OAuth 2.1 + PKCE flow. startAuthFlow stores the verifier in sessionStorage and redirects to /oauth/authorize on the issuer.',
     page: null,
     pageLabel: null,
-    code: `import { useShark } from '@shark-auth/react';
+    code: `import { useShark } from '@sharkauth/react';
 
 export function SignInButton() {
   const { signIn } = useShark();
@@ -132,7 +132,7 @@ export function SignInButton() {
     summary: 'The redirect_uri is /shark/callback by default. The route exchanges ?code= for tokens via /oauth/token, then bounces to the post-login redirect saved in sessionStorage.',
     page: null,
     pageLabel: null,
-    code: `import { SharkCallback } from '@shark-auth/react';
+    code: `import { SharkCallback } from '@sharkauth/react';
 
 // In your router:
 { path: '/shark/callback', element: <SharkCallback/> }`,

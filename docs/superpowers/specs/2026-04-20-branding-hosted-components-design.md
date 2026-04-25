@@ -25,7 +25,7 @@ If this context is lost, everything below is derived from these 11 user-confirme
 | 8 | V1 email templates | 4 existing (`magic_link`, `password_reset`, `verify_email`, `organization_invitation`) + NEW `welcome` = 5 total | Verified against `internal/email/templates/` actual contents |
 | 9 | Hosted pages architecture | **B** React SPA at `/hosted/<app-slug>/*`, separate Vite entry embedded via go:embed, shares design system with admin + npm package C | One codebase, three surfaces (hosted, admin preview, npm components); 3x reuse value |
 | 10 | Multi-tenant routing | **C (phased)** — path-based V1 (`/hosted/<app-slug>/login`), subdomain later via W15 multi-listener | Subdomain needs wildcard DNS + TLS; path works everywhere day-1 |
-| 11 | NPM package structure | **C** Monorepo single-publish — `@shark-auth/react` packages `core/hooks/components` internally, single npm install, tree-shakeable. Future split into `@shark-auth/core` + framework packages without breaking consumers. | User chose `shark-auth` NPM scope |
+| 11 | NPM package structure | **C** Monorepo single-publish — `@sharkauth/react` packages `core/hooks/components` internally, single npm install, tree-shakeable. Future split into `@shark-auth/core` + framework packages without breaking consumers. | User chose `shark-auth` NPM scope |
 | 12 | Per-app integration model | Single `integration_mode` enum (`hosted|components|proxy|custom`) as PRIMARY login surface. Session widgets (`<UserButton/>`, `<SignedIn/>`, `<OrganizationSwitcher/>`) always available regardless. Proxy fallback via `proxy_login_fallback` sub-config. | Cleaner mental model: one picker for "what's my login UI?" + widgets just work |
 
 ### Open-question answers (from end of brainstorm, before spec write):
@@ -37,7 +37,7 @@ If this context is lost, everything below is derived from these 11 user-confirme
 | OQ3 | Color picker UX | **Full picker component** (HSL slider + palette), not just hex input |
 | OQ4 | Test-send email recipient validation | **Any address** — no admin-verified restriction |
 | OQ5 | JWT storage in components | **sessionStorage** (per-tab, cleared on tab close) |
-| OQ6 | NPM scope | **`@shark-auth/react`** |
+| OQ6 | NPM scope | **`@sharkauth/react`** |
 | OQ7 | i18n | **English only V1**, no translation scaffold yet |
 
 ---
@@ -50,13 +50,13 @@ Three coupled features, single unified design:
 
 **B. Hosted auth pages** — new React SPA served at `/hosted/<app-slug>/{login|signup|magic|passkey|mfa|verify|error}`. Apps with `integration_mode='hosted'` configure a "Sign in" button that redirects here; shark renders the full auth flow; on success redirects back to the app's configured URI with OAuth code + state. Path-based routing V1, subdomain via W15 multi-listener later.
 
-**C. `@shark-auth/react` NPM package** — single published package with internal monorepo structure. Exports `<SignIn/>`, `<SignUp/>`, `<UserButton/>`, `<SignedIn/>`, `<SignedOut/>`, `<MFAChallenge/>`, `<PasskeyButton/>`, `useAuth()`, `useUser()`, `<SharkProvider/>`. Apps with `integration_mode='components'` install this, drop widgets in their JSX, SDK handles OAuth+PKCE flow + JWT refresh against shark. Framework dropdown in dashboard generates copy-paste snippets (React v1; Vue/Svelte/Solid/Angular placeholder "coming soon").
+**C. `@sharkauth/react` NPM package** — single published package with internal monorepo structure. Exports `<SignIn/>`, `<SignUp/>`, `<UserButton/>`, `<SignedIn/>`, `<SignedOut/>`, `<MFAChallenge/>`, `<PasskeyButton/>`, `useAuth()`, `useUser()`, `<SharkProvider/>`. Apps with `integration_mode='components'` install this, drop widgets in their JSX, SDK handles OAuth+PKCE flow + JWT refresh against shark. Framework dropdown in dashboard generates copy-paste snippets (React v1; Vue/Svelte/Solid/Angular placeholder "coming soon").
 
 **Shared foundation:** One design system in `admin/src/design/`. Tokens (colors, spacing, type scale), primitives (Button, Input, Card, FormField), composed (SignInForm, SignUpForm, MFAForm). Consumed by: dashboard Branding preview, hosted pages SPA, npm package.
 
 **Integration modes (per-application):**
 - `hosted` — shark renders login at `/hosted/<slug>/*`, app redirects to it
-- `components` — app installs `@shark-auth/react`, embeds widgets inline
+- `components` — app installs `@sharkauth/react`, embeds widgets inline
 - `proxy` — shark reverse-proxy enforces auth before requests reach app; `proxy_login_fallback` routes unauthed hits to `hosted` OR `custom_url`
 - `custom` — API-only, user hand-rolls everything
 
@@ -211,7 +211,7 @@ All admin endpoints auth'd via admin API key bearer.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/v1/auth/config?app_id=X` | Public config: `{integration_mode, branding, auth_methods, redirect_uri_whitelist}` — consumed by `@shark-auth/react` SharkProvider on mount |
+| GET | `/api/v1/auth/config?app_id=X` | Public config: `{integration_mode, branding, auth_methods, redirect_uri_whitelist}` — consumed by `@sharkauth/react` SharkProvider on mount |
 | GET | `/api/v1/me` | Current user from session or bearer (existing) |
 | existing OAuth | `/oauth/authorize`, `/oauth/token`, `/.well-known/*` | Unchanged — hosted pages and npm components use standard OAuth 2.1 + PKCE |
 
@@ -348,13 +348,13 @@ Consumers:
 
 ---
 
-## Section 4 — `@shark-auth/react` NPM package
+## Section 4 — `@sharkauth/react` NPM package
 
 ### Package structure
 
 ```
 packages/shark-auth-react/
-  package.json           # name: @shark-auth/react, version: 0.1.0
+  package.json           # name: @sharkauth/react, version: 0.1.0
   README.md
   tsconfig.json
   vite.config.ts         # lib mode, dual CJS+ESM via tsup
@@ -388,7 +388,7 @@ packages/shark-auth-react/
 
 ```json
 {
-  "name": "@shark-auth/react",
+  "name": "@sharkauth/react",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -413,7 +413,7 @@ packages/shark-auth-react/
 
 ```tsx
 // _app.tsx / layout.tsx
-import { SharkProvider } from '@shark-auth/react'
+import { SharkProvider } from '@sharkauth/react'
 
 <SharkProvider
   publishableKey="pub_abc123"   // app's client_id, prefixed
@@ -423,7 +423,7 @@ import { SharkProvider } from '@shark-auth/react'
 </SharkProvider>
 
 // Any component
-import { SignIn, UserButton, SignedIn, SignedOut, useAuth } from '@shark-auth/react'
+import { SignIn, UserButton, SignedIn, SignedOut, useAuth } from '@sharkauth/react'
 
 function Header() {
   return (
@@ -466,7 +466,7 @@ V1 ships with Option 1 + clear docs.
 ### Publish pipeline
 
 - Monorepo uses `pnpm workspaces` (preferred) OR npm workspaces
-- GitHub Actions workflow: on tag `v*` → build + publish `@shark-auth/react`
+- GitHub Actions workflow: on tag `v*` → build + publish `@sharkauth/react`
 - Dry-run `npm publish --dry-run` in CI to catch pack issues
 - Example app `examples/react-next/` — real Next.js app using SDK, used for e2e tests
 
@@ -479,9 +479,9 @@ Response:
 {
   "framework": "react",
   "snippets": [
-    { "label": "Install", "lang": "bash", "code": "npm install @shark-auth/react" },
-    { "label": "Provider setup", "lang": "tsx", "code": "import { SharkProvider } from '@shark-auth/react'\n\n<SharkProvider publishableKey=\"pub_abc123\" authUrl=\"https://auth.example.com\">\n  <App/>\n</SharkProvider>" },
-    { "label": "Page usage", "lang": "tsx", "code": "import { SignIn, UserButton, SignedIn, SignedOut } from '@shark-auth/react'\n\n<SignedOut><SignIn/></SignedOut>\n<SignedIn><UserButton/></SignedIn>" }
+    { "label": "Install", "lang": "bash", "code": "npm install @sharkauth/react" },
+    { "label": "Provider setup", "lang": "tsx", "code": "import { SharkProvider } from '@sharkauth/react'\n\n<SharkProvider publishableKey=\"pub_abc123\" authUrl=\"https://auth.example.com\">\n  <App/>\n</SharkProvider>" },
+    { "label": "Page usage", "lang": "tsx", "code": "import { SignIn, UserButton, SignedIn, SignedOut } from '@sharkauth/react'\n\n<SignedOut><SignIn/></SignedOut>\n<SignedIn><UserButton/></SignedIn>" }
   ]
 }
 ```
@@ -517,7 +517,7 @@ Response:
 7. Dashboard Applications tab: integration_mode dropdown with conditional proxy config
 8. Smoke: section 75 — unauthed hit `/hosted/my-app/login` returns HTML shell with correct branding, OAuth code flow round-trip completes, redirect back to app works, error page renders on invalid app_slug
 
-### Phase C — `@shark-auth/react` NPM package (~5 working days)
+### Phase C — `@sharkauth/react` NPM package (~5 working days)
 
 1. `packages/shark-auth-react/` monorepo structure
 2. Core: OAuth + PKCE client, JWT verify via JWKS (jose library), sessionStorage helpers (OQ5)
@@ -555,7 +555,7 @@ Response:
 | Logo upload RCE via SVG embedded script | M | H | Reject SVG MIME unless content parses as clean SVG (no `<script>`, no `<foreignObject>`); OR disallow SVG initially, PNG/JPG only. |
 | Integration mode conflict (proxy + hosted both enabled for same app) | L | M | Single enum (not flag set) — mutually exclusive at schema level. Session widgets always available separately. |
 | Cross-origin token flow breaks in embedded iframes | M | M | Require `authUrl` be served with `Content-Security-Policy: frame-ancestors *;` for known consumer origins only; document limitation. |
-| npm package name squatted | L | M | Reserve `@shark-auth/react` ASAP on npm (step 0 before implementing). User owns npm org. |
+| npm package name squatted | L | M | Reserve `@sharkauth/react` ASAP on npm (step 0 before implementing). User owns npm org. |
 
 ---
 
@@ -563,7 +563,7 @@ Response:
 
 **For `/impeccable` skill invocation immediately after this spec is approved:**
 
-> Build frontend components for SharkAuth's unified auth UX layer. Three consumers share ONE design system: admin dashboard Branding tab preview panels, hosted auth SPA at `/hosted/<app-slug>/*`, and `@shark-auth/react` NPM package. Source of truth is `admin/src/design/` with tokens, primitives, and composed components.
+> Build frontend components for SharkAuth's unified auth UX layer. Three consumers share ONE design system: admin dashboard Branding tab preview panels, hosted auth SPA at `/hosted/<app-slug>/*`, and `@sharkauth/react` NPM package. Source of truth is `admin/src/design/` with tokens, primitives, and composed components.
 >
 > **Aesthetic:** dark-first (match existing `internal/oauth/consent.html`), oklch color space, configurable primary accent from branding config (default `#7c3aed`), Manrope display font (configurable to Inter or IBM Plex), Azeret Mono for code/mono, generous spacing (8-12-16-24-32 scale), subtle motion (160ms ease-out for fades, 240ms for slides), Linear-density information architecture. Absolutely avoid AI-slop (gradient backgrounds, overlapping blobs, generic glass-morphism). Aim at Clerk / Linear / Vercel polish.
 >

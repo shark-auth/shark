@@ -1,5 +1,5 @@
 'use client'
-import { SignIn, UserButton, SignedIn, SignedOut } from '@shark-auth/react'
+import { SignIn, UserButton, SignedIn, SignedOut } from '@sharkauth/react'
 export default function HomeClient() {
   return (
     <main style={{ padding: 48 }}>

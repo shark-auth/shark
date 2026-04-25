@@ -16,8 +16,8 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @shark-auth/react build
-      - run: pnpm --filter @shark-auth/react test --run
-      - run: pnpm --filter @shark-auth/react publish --no-git-checks --access public
+      - run: pnpm --filter @sharkauth/react build
+      - run: pnpm --filter @sharkauth/react test --run
+      - run: pnpm --filter @sharkauth/react publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

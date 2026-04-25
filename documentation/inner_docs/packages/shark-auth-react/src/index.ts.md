@@ -5,7 +5,7 @@
 **LOC:** 3
 
 ## Purpose
-Single root entry that re-exports everything from `core`, `hooks`, and `components` so consumers can `import { SharkProvider, useAuth } from '@shark-auth/react'`.
+Single root entry that re-exports everything from `core`, `hooks`, and `components` so consumers can `import { SharkProvider, useAuth } from '@sharkauth/react'`.
 
 ## Public API
 ```ts
@@ -28,4 +28,4 @@ Surfaces (transitively):
 - Every consumer of the package — the default import path.
 
 ## Notes
-- Subpath exports (`@shark-auth/react/core`, `@shark-auth/react/hooks`) exist in `package.json` for tree-shaking-conscious consumers who only need primitives.
+- Subpath exports (`@sharkauth/react/core`, `@sharkauth/react/hooks`) exist in `package.json` for tree-shaking-conscious consumers who only need primitives.

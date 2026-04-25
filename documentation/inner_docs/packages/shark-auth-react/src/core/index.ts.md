@@ -5,7 +5,7 @@
 **LOC:** 5
 
 ## Purpose
-Aggregates everything in `core/` so consumers can `import { createClient, exchangeToken, decodeClaims, generateDPoPProver } from '@shark-auth/react/core'` for non-React (e.g. Node, server, custom UI) usage.
+Aggregates everything in `core/` so consumers can `import { createClient, exchangeToken, decodeClaims, generateDPoPProver } from '@sharkauth/react/core'` for non-React (e.g. Node, server, custom UI) usage.
 
 ## Public API
 ```ts
@@ -24,5 +24,5 @@ export * from './types'     // User, Session, Organization, AuthConfig, TokenPai
 - The `./core` subpath export in `package.json` points here directly so consumers can avoid pulling in React-only code if they only need wire primitives.
 
 ## Notes
-- Importing `@shark-auth/react/core` does **not** transitively import any React component — useful for SSR/middleware token verification or for non-React frameworks reusing these primitives.
+- Importing `@sharkauth/react/core` does **not** transitively import any React component — useful for SSR/middleware token verification or for non-React frameworks reusing these primitives.
 - DPoP is intentionally **not** in this barrel (`core/dpop.ts` exists but isn't re-exported here); it's surfaced from the root `src/index.ts` via component re-exports — see notes in the root barrel doc.
