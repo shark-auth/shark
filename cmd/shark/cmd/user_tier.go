@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sharkauth/sharkauth/internal/cli"
 )
 
 var userCmd = &cobra.Command{
@@ -56,7 +58,7 @@ GET /api/v1/users?search=<email>.`,
 		if jsonFlag(cmd) {
 			return writeJSON(cmd.OutOrStdout(), body)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "set tier %s for user %s\n", tier, userID)
+		cli.PrintSuccess(cmd.OutOrStdout(), fmt.Sprintf("set tier %s for user %s", tier, userID))
 		return nil
 	},
 }

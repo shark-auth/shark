@@ -28,6 +28,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sharkauth/sharkauth/internal/cli"
 )
 
 // init replaces the old deprecation-stub proxyCmd with a real command tree
@@ -133,10 +135,11 @@ func proxyLifecycleAction(name, method, path string) func(*cobra.Command, []stri
 		lastErr, _ := data["last_error"].(string)
 		listeners, _ := data["listeners"].(float64)
 		rulesLoaded, _ := data["rules_loaded"].(float64)
-		fmt.Fprintf(cmd.OutOrStdout(), "state: %s  listeners: %d  rules_loaded: %d\n",
-			stateStr, int(listeners), int(rulesLoaded))
+		out := cmd.OutOrStdout()
+		cli.PrintSuccess(out, fmt.Sprintf("state: %s  listeners: %d  rules_loaded: %d",
+			stateStr, int(listeners), int(rulesLoaded)))
 		if lastErr != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "last_error: %s\n", lastErr)
+			cli.PrintWarning(out, "last_error: "+lastErr)
 		}
 		return nil
 	}
@@ -168,7 +171,7 @@ var proxyRulesListCmd = &cobra.Command{
 		}
 		rules := extractDataArray(body)
 		if len(rules) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "No proxy rules found.")
+			cli.PrintWarning(cmd.OutOrStdout(), "No proxy rules found.")
 			return nil
 		}
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
@@ -256,7 +259,7 @@ var proxyRulesAddCmd = &cobra.Command{
 		}
 		// 409 with same id = conflict with different payload (idempotency spec).
 		if code == http.StatusConflict {
-			fmt.Fprintln(os.Stderr, "conflict: rule with this id already exists with a different payload")
+			cli.PrintError(os.Stderr, "conflict: rule with this id already exists with a different payload")
 			os.Exit(2)
 		}
 		if code >= 300 {
@@ -268,7 +271,7 @@ var proxyRulesAddCmd = &cobra.Command{
 		}
 		data := extractData(body)
 		ruleID, _ := data["id"].(string)
-		fmt.Fprintf(cmd.OutOrStdout(), "created rule %s\n", ruleID)
+		cli.PrintSuccess(cmd.OutOrStdout(), fmt.Sprintf("created rule %s", ruleID))
 		return nil
 	},
 }
@@ -311,7 +314,7 @@ var proxyRulesDeleteCmd = &cobra.Command{
 			return maybeJSONErr(cmd, "delete_failed",
 				fmt.Errorf("delete rule: %s", apiError(body, code)))
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "deleted rule %s\n", args[0])
+		cli.PrintSuccess(cmd.OutOrStdout(), fmt.Sprintf("deleted rule %s", args[0]))
 		return nil
 	},
 }
@@ -340,19 +343,19 @@ var proxyRulesImportCmd = &cobra.Command{
 		}
 		imported, _ := body["imported"].(float64)
 		errList, _ := body["errors"].([]any)
-		fmt.Fprintf(cmd.OutOrStdout(), "imported %d rule(s)", int(imported))
+		out := cmd.OutOrStdout()
 		if len(errList) > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), ", %d error(s):\n", len(errList))
+			cli.PrintWarning(out, fmt.Sprintf("imported %d rule(s), %d error(s):", int(imported), len(errList)))
 			for _, e := range errList {
 				if em, ok := e.(map[string]any); ok {
 					idx, _ := em["index"].(string)
 					n, _ := em["name"].(string)
 					msg, _ := em["error"].(string)
-					fmt.Fprintf(cmd.OutOrStdout(), "  [%s] %s: %s\n", idx, n, msg)
+					fmt.Fprintf(out, "  [%s] %s: %s\n", idx, n, msg)
 				}
 			}
 		} else {
-			fmt.Fprintln(cmd.OutOrStdout())
+			cli.PrintSuccess(out, fmt.Sprintf("imported %d rule(s)", int(imported)))
 		}
 		return nil
 	},

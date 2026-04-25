@@ -10,6 +10,8 @@ import (
 	"net/http"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sharkauth/sharkauth/internal/cli"
 )
 
 var agentCmd = &cobra.Command{
@@ -65,12 +67,16 @@ Returns the agent ID and client secret — the secret is shown only once.`,
 		clientID, _ := data["client_id"].(string)
 		secret, _ := data["client_secret"].(string)
 
-		fmt.Fprintf(cmd.OutOrStdout(), "agent registered\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  id:            %s\n", agentID)
-		fmt.Fprintf(cmd.OutOrStdout(), "  client_id:     %s\n", clientID)
-		if secret != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "  client_secret: %s  (shown once — save it now)\n", secret)
+		out := cmd.OutOrStdout()
+		cli.PrintSuccess(out, "agent registered")
+		lines := []string{
+			fmt.Sprintf("id:        %s", agentID),
+			fmt.Sprintf("client_id: %s", clientID),
 		}
+		if secret != "" {
+			lines = append(lines, fmt.Sprintf("secret:    %s  (shown once — save it now)", secret))
+		}
+		cli.PrintBox(out, "Agent Credentials", lines)
 		return nil
 	},
 }
