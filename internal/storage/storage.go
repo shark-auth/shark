@@ -361,6 +361,17 @@ type Store interface {
 	// fields (e.g. custom app data) are preserved.
 	SetUserTier(ctx context.Context, userID, tier string) error
 	GetUserTier(ctx context.Context, userID string) (string, error)
+
+	// System config (W17 yaml-deprecation Phase A) — single-row JSON blob
+	// that holds all runtime configuration. DB takes precedence over YAML.
+	GetSystemConfig(ctx context.Context) (string, error)
+	SetSystemConfig(ctx context.Context, v any) error
+
+	// Secrets (W17 yaml-deprecation Phase A) — named key-value store for
+	// session secret, JWT signing keys, admin API key, etc.
+	GetSecret(ctx context.Context, name string) (string, error)
+	SetSecret(ctx context.Context, name, value string) error
+	DeleteSecret(ctx context.Context, name string) error
 }
 
 // --- Entity types ---
