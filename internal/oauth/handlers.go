@@ -367,21 +367,36 @@ func getUserIDFromRequest(r *http.Request) string {
 }
 
 // storeDPoPJKT records the DPoP JWK thumbprint on the OAuthToken row created
-// by fosite. fosite's HMAC strategy stores opaque tokens whose identifiers are
-// opaque to us, so we look up by client ID and update the most-recently created
-// non-revoked access token for the client.
+// by fosite. We look up the exact token by the JTI we pinned into the session
+// before NewAccessResponse, so the update is precise and never touches a
+// different token for the same client (the old ListOAuthTokensByAgentID
+// approach was lossy under concurrent requests).
 //
 // This is best-effort: a failure here does NOT fail the token request.
 func (s *Server) storeDPoPJKT(ctx context.Context, ar fosite.AccessRequester, jkt string) {
-	clientID := ar.GetClient().GetID()
-	tokens, err := s.RawStore.ListOAuthTokensByAgentID(ctx, "agent_"+clientID, 1)
-	if err != nil || len(tokens) == 0 {
-		slog.Debug("oauth: storeDPoPJKT: no token found for client", "client_id", clientID)
+	sharkSess, ok := ar.GetSession().(*SharkSession)
+	if !ok || sharkSess == nil || sharkSess.JWTClaims == nil || sharkSess.JWTClaims.JTI == "" {
+		// Fall back to client-scoped lookup when the JTI is unavailable
+		// (e.g. HMAC strategy that doesn't use our SharkSession).
+		clientID := ar.GetClient().GetID()
+		tokens, err := s.RawStore.ListOAuthTokensByAgentID(ctx, "agent_"+clientID, 1)
+		if err != nil || len(tokens) == 0 {
+			slog.Debug("oauth: storeDPoPJKT: no token found for client", "client_id", clientID)
+			return
+		}
+		if updateErr := s.RawStore.UpdateOAuthTokenDPoPJKT(ctx, tokens[0].ID, jkt); updateErr != nil {
+			slog.Debug("oauth: storeDPoPJKT: update failed (fallback)", "error", updateErr)
+		}
 		return
 	}
-	tok := tokens[0]
-	tok.DPoPJKT = jkt
+
+	// Happy path: look up by the exact JTI pinned in the session before signing.
+	tok, err := s.RawStore.GetOAuthTokenByJTI(ctx, sharkSess.JWTClaims.JTI)
+	if err != nil || tok == nil {
+		slog.Debug("oauth: storeDPoPJKT: token not found by JTI", "jti", sharkSess.JWTClaims.JTI)
+		return
+	}
 	if updateErr := s.RawStore.UpdateOAuthTokenDPoPJKT(ctx, tok.ID, jkt); updateErr != nil {
-		slog.Debug("oauth: storeDPoPJKT: update failed", "error", updateErr)
+		slog.Debug("oauth: storeDPoPJKT: update failed", "jti", sharkSess.JWTClaims.JTI, "error", updateErr)
 	}
 }
