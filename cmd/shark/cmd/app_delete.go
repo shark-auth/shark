@@ -2,15 +2,12 @@ package cmd
 
 import (
 	"bufio"
-	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
-
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 var appDeleteYes bool
@@ -18,38 +15,33 @@ var appDeleteYes bool
 var appDeleteCmd = &cobra.Command{
 	Use:   "delete <id-or-client-id>",
 	Short: "Delete an OAuth application",
-	Args:  cobra.ExactArgs(1),
+	Long: `Delete an OAuth application by ID or client_id.
+
+Requires a running shark server (--url / SHARK_URL) and admin token (--token / SHARK_ADMIN_TOKEN).`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		idOrClientID := args[0]
 
-		configPath, _ := cmd.Flags().GetString("config")
-		if configPath == "" {
-			configPath = "sharkauth.yaml"
-		}
-		cfg, err := config.Load(configPath)
+		// Fetch the app first so we can show its name in the prompt and guard default apps.
+		appBody, appCode, err := adminDo(cmd, "GET", "/api/v1/admin/apps/"+idOrClientID, nil)
 		if err != nil {
-			return fmt.Errorf("load config: %w", err)
+			return fmt.Errorf("get application: %w", err)
+		}
+		if appCode != http.StatusOK {
+			return fmt.Errorf("get application: %s", apiError(appBody, appCode))
 		}
 
-		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
-		if err != nil {
-			return fmt.Errorf("open database: %w", err)
-		}
-		defer store.Close()
-
-		ctx := context.Background()
-		app, err := lookupApp(ctx, store, idOrClientID)
-		if err != nil {
-			return err
-		}
-
-		if app.IsDefault {
+		isDefault, _ := appBody["is_default"].(bool)
+		if isDefault {
 			fmt.Fprintln(os.Stderr, "cannot delete default application")
 			os.Exit(1)
 		}
 
+		appName, _ := appBody["name"].(string)
+		appID, _ := appBody["id"].(string)
+
 		if !appDeleteYes {
-			fmt.Printf("Delete application %q (%s)? [y/N] ", app.Name, app.ID)
+			fmt.Printf("Delete application %q (%s)? [y/N] ", appName, appID)
 			r := bufio.NewReader(os.Stdin)
 			line, _ := r.ReadString('\n')
 			line = strings.TrimSpace(strings.ToLower(line))
@@ -59,17 +51,20 @@ var appDeleteCmd = &cobra.Command{
 			}
 		}
 
-		if err := store.DeleteApplication(ctx, app.ID); err != nil {
+		body, code, err := adminDo(cmd, "DELETE", "/api/v1/admin/apps/"+appID, nil)
+		if err != nil {
 			return fmt.Errorf("delete application: %w", err)
 		}
+		if code != http.StatusOK && code != http.StatusNoContent {
+			return fmt.Errorf("delete application: %s", apiError(body, code))
+		}
 
-		fmt.Printf("Deleted application %s (%s)\n", app.Name, app.ID)
+		fmt.Printf("Deleted application %s (%s)\n", appName, appID)
 		return nil
 	},
 }
 
 func init() {
 	appDeleteCmd.Flags().BoolVar(&appDeleteYes, "yes", false, "skip confirmation prompt")
-	appDeleteCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
 	appCmd.AddCommand(appDeleteCmd)
 }

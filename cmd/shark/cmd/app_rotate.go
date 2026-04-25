@@ -1,60 +1,50 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"time"
+	"net/http"
 
 	"github.com/spf13/cobra"
-
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
 var appRotateCmd = &cobra.Command{
 	Use:   "rotate-secret <id-or-client-id>",
 	Short: "Rotate the client secret of an OAuth application",
-	Long:  `Generates a new client secret. The old secret is immediately invalid.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Generates a new client secret. The old secret is immediately invalid.
+
+Requires a running shark server (--url / SHARK_URL) and admin token (--token / SHARK_ADMIN_TOKEN).`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		idOrClientID := args[0]
 
-		configPath, _ := cmd.Flags().GetString("config")
-		if configPath == "" {
-			configPath = "sharkauth.yaml"
-		}
-		cfg, err := config.Load(configPath)
+		// Resolve the app ID first (the rotate endpoint uses the internal ID).
+		appBody, appCode, err := adminDo(cmd, "GET", "/api/v1/admin/apps/"+idOrClientID, nil)
 		if err != nil {
-			return maybeJSONErr(cmd, "config_load_failed", fmt.Errorf("load config: %w", err))
+			return maybeJSONErr(cmd, "request_failed", err)
+		}
+		if appCode != http.StatusOK {
+			return maybeJSONErr(cmd, "app_not_found", fmt.Errorf("get application: %s", apiError(appBody, appCode)))
 		}
 
-		store, err := storage.NewSQLiteStore(cfg.Storage.Path)
+		appID, _ := appBody["id"].(string)
+		appName, _ := appBody["name"].(string)
+		clientID, _ := appBody["client_id"].(string)
+
+		body, code, err := adminDo(cmd, "POST", "/api/v1/admin/apps/"+appID+"/rotate-secret", nil)
 		if err != nil {
-			return maybeJSONErr(cmd, "database_open_failed", fmt.Errorf("open database: %w", err))
+			return maybeJSONErr(cmd, "request_failed", err)
 		}
-		defer store.Close()
-
-		ctx := context.Background()
-		app, err := lookupApp(ctx, store, idOrClientID)
-		if err != nil {
-			return maybeJSONErr(cmd, "app_not_found", err)
+		if code != http.StatusOK {
+			return maybeJSONErr(cmd, "rotate_failed", fmt.Errorf("rotate secret: %s", apiError(body, code)))
 		}
 
-		newSecret, newHash, newPrefix, err := generateCLISecret()
-		if err != nil {
-			return maybeJSONErr(cmd, "secret_generation_failed", fmt.Errorf("generate secret: %w", err))
-		}
-
-		if err := store.RotateApplicationSecret(ctx, app.ID, newHash, newPrefix); err != nil {
-			return maybeJSONErr(cmd, "rotate_failed", fmt.Errorf("rotate secret: %w", err))
-		}
-
-		rotatedAt := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		newSecret, _ := body["client_secret"].(string)
+		rotatedAt, _ := body["rotated_at"].(string)
 
 		if jsonFlag(cmd) {
 			return writeJSON(cmd.OutOrStdout(), map[string]any{
-				"id":         app.ID,
-				"client_id":  app.ClientID,
+				"id":         appID,
+				"client_id":  clientID,
 				"secret":     newSecret,
 				"rotated_at": rotatedAt,
 			})
@@ -64,9 +54,11 @@ var appRotateCmd = &cobra.Command{
 		fmt.Println("  WARNING: Old secret immediately invalid.")
 		fmt.Println()
 		fmt.Println("  ============================================================")
-		fmt.Printf("    Secret rotated for: %s\n", app.Name)
-		fmt.Printf("    client_id:          %s\n", app.ClientID)
-		fmt.Printf("    client_secret:      %s   (shown once — save it)\n", newSecret)
+		fmt.Printf("    Secret rotated for: %s\n", appName)
+		fmt.Printf("    client_id:          %s\n", clientID)
+		if newSecret != "" {
+			fmt.Printf("    client_secret:      %s   (shown once — save it)\n", newSecret)
+		}
 		fmt.Println("  ============================================================")
 		fmt.Println()
 		return nil
@@ -74,7 +66,6 @@ var appRotateCmd = &cobra.Command{
 }
 
 func init() {
-	appRotateCmd.Flags().String("config", "sharkauth.yaml", "path to config file")
 	addJSONFlag(appRotateCmd)
 	appCmd.AddCommand(appRotateCmd)
 }
