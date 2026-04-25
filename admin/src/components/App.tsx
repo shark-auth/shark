@@ -18,7 +18,7 @@ import { DevInbox } from './dev_inbox'
 import { SSO } from './sso'
 import { IdentityHub } from './identity_hub'
 import { SigningKeys } from './signing_keys'
-import { SystemSettings } from './system_settings'
+import { Settings } from './settings'
 import { Consents } from './consents_manage'
 import { Vault } from './vault_manage'
 import { Tokens, APIExplorer, EventSchemas, OIDCProvider, Impersonation, Migrations } from './empty_shell'
@@ -184,7 +184,7 @@ export function App() {
     sso: SSO,
     auth: IdentityHub,
     signing: SigningKeys,
-    settings: SystemSettings,
+    settings: Settings,
     consents: Consents,
     tokens: Tokens,
     vault: Vault,
