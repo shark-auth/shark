@@ -4,15 +4,25 @@ import { Icon } from './shared'
 import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
-import { ProxyWizard } from './proxy_wizard'
 
+// ─── Tokens ───────────────────────────────────────────────────────────────────
 const HAIRLINE = '1px solid var(--hairline)';
+const HAIRLINE_STRONG = '1px solid var(--hairline-strong)';
 const SECTION_LABEL = {
   fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
-  color: 'var(--fg-dim)', fontWeight: 500,
+  color: 'var(--fg-dim)', fontWeight: 600,
+};
+const INPUT = {
+  width: '100%', boxSizing: 'border-box', height: 28, padding: '0 8px',
+  background: 'var(--surface-1)', border: HAIRLINE_STRONG, borderRadius: 4,
+  fontSize: 13, color: 'var(--fg)',
+};
+const TEXTAREA = {
+  ...INPUT, height: 'auto', padding: 8, minHeight: 64,
+  fontFamily: 'var(--font-mono)', fontSize: 12, resize: 'vertical',
 };
 
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
+// ─── Lifecycle hook ───────────────────────────────────────────────────────────
 
 function useLifecycle() {
   const [status, setStatus] = React.useState(null);
@@ -40,70 +50,32 @@ function useLifecycle() {
   }, [fetch_]);
 
   const act = async (action) => {
-    try {
-      const r = await API.post('/admin/proxy/' + action);
-      setStatus(r?.data || null);
-    } catch (e) {
-      throw e;
-    }
+    const r = await API.post('/admin/proxy/' + action);
+    setStatus(r?.data || null);
   };
 
   return { status, loading, missing, refresh: fetch_, act };
 }
 
-function LifecycleBar({ status, act, toast }) {
-  const state = status?.state_str || 'unknown';
-  const badgeCls = state === 'running' ? 'success' : state === 'reloading' ? 'warn' : 'error';
-  const [busy, setBusy] = React.useState(false);
-  const [errExpanded, setErrExpanded] = React.useState(false);
+// ─── Breaker / runtime status ─────────────────────────────────────────────────
 
-  const do_ = async (action, confirm_) => {
-    if (confirm_ && !window.confirm(confirm_)) return;
-    setBusy(true);
+function useRuntimeStatus() {
+  const [data, setData] = React.useState(null);
+  const fetch_ = React.useCallback(async () => {
     try {
-      await act(action);
-      toast.success(action.charAt(0).toUpperCase() + action.slice(1) + ' successful');
-    } catch (e) {
-      toast.error(e.message || 'Action failed');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-      <span className={'chip sm ' + badgeCls} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-        {state === 'reloading' && <span className="dot warn pulse" style={{ width: 6, height: 6 }}/>}
-        {state}
-      </span>
-      {status?.listeners != null && (
-        <span className="mono faint" style={{ fontSize: 11 }}>{status.listeners} listener{status.listeners !== 1 ? 's' : ''}</span>
-      )}
-      {status?.rules_loaded != null && (
-        <span className="mono faint" style={{ fontSize: 11 }}>{status.rules_loaded} rules</span>
-      )}
-      <div className="row" style={{ gap: 6 }}>
-        <button className="btn sm" disabled={busy || state === 'running' || state === 'reloading'} onClick={() => do_('start')}>Start</button>
-        <button className="btn sm" disabled={busy || state === 'stopped'} onClick={() => do_('stop', 'Stop the proxy? In-flight requests will drain.')}>Stop</button>
-        <button className="btn ghost sm" disabled={busy || state === 'stopped'} onClick={() => do_('reload')}>
-          <Icon.Refresh width={11}/>Reload
-        </button>
-      </div>
-      {status?.last_error && (
-        <button className="btn ghost sm" style={{ color: 'var(--error)' }} onClick={() => setErrExpanded(v => !v)}>
-          <Icon.Warn width={11}/> Last error
-        </button>
-      )}
-      {errExpanded && status?.last_error && (
-        <div className="mono" style={{ fontSize: 11, color: 'var(--error)', background: 'var(--surface-2)', padding: '4px 8px', borderRadius: 4, maxWidth: 400 }}>
-          {status.last_error}
-        </div>
-      )}
-    </div>
-  );
+      const r = await API.get('/admin/proxy/status');
+      setData(r?.data || null);
+    } catch (e) { /* 404 = disabled, ignore */ }
+  }, []);
+  React.useEffect(() => {
+    fetch_();
+    const iv = setInterval(fetch_, 5000);
+    return () => clearInterval(iv);
+  }, [fetch_]);
+  return { data, refresh: fetch_ };
 }
 
-// ─── Require grammar validator ────────────────────────────────────────────────
+// ─── Rule require validator ───────────────────────────────────────────────────
 
 const REQUIRE_RE = /^(anonymous|authenticated|agent|role:.+|global_role:.+|permission:.+:.+|scope:.+|tier:.+)$/;
 const ALLOW_VALUES = ['', 'anonymous'];
@@ -122,13 +94,282 @@ function validateRule(f) {
   return errs;
 }
 
-// ─── Rule form (create / edit) ────────────────────────────────────────────────
+const BLANK = {
+  name: '', pattern: '', methods: '', require: 'authenticated', allow: '',
+  scopes: '', enabled: true, priority: 0, tier_match: '', m2m: false, app_id: '',
+};
 
-const BLANK = { name: '', pattern: '', methods: '', require: 'authenticated', allow: '', scopes: '', enabled: true, priority: 0, tier_match: '', m2m: false, app_id: '' };
+// ─── Power toggle (the headline button) ───────────────────────────────────────
 
-function RuleModal({ rule, apps, onSave, onClose }) {
+function PowerToggle({ status, onAction }) {
+  const [busy, setBusy] = React.useState(false);
+  const toast = useToast();
+  const state = status?.state_str || 'unknown';
+  const isRunning = state === 'running';
+  const isReloading = state === 'reloading';
+
+  const click = async () => {
+    if (busy || isReloading) return;
+    if (isRunning && !window.confirm('Stop the proxy? In-flight requests will drain.')) return;
+    setBusy(true);
+    try {
+      await onAction(isRunning ? 'stop' : 'start');
+      toast.success(isRunning ? 'Proxy stopped' : 'Proxy started');
+    } catch (e) {
+      toast.error(e.message || 'Action failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const tone = isRunning ? 'success' : (isReloading ? 'warn' : 'fg-faint');
+  const label = isReloading ? 'Reloading' : (isRunning ? 'Stop proxy' : 'Start proxy');
+  const dotColor = isRunning ? 'var(--success)' : (isReloading ? 'var(--warn)' : 'var(--fg-faint)');
+
+  return (
+    <button
+      onClick={click}
+      disabled={busy || isReloading}
+      title={isRunning ? 'Click to stop' : 'Click to start'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        height: 30, padding: '0 12px',
+        background: isRunning ? 'var(--surface-2)' : 'var(--fg)',
+        color: isRunning ? 'var(--fg)' : 'var(--bg-0, #000)',
+        border: isRunning ? HAIRLINE_STRONG : '1px solid var(--fg)',
+        borderRadius: 5, cursor: busy ? 'wait' : 'pointer',
+        fontSize: 12, fontWeight: 600, letterSpacing: '0.01em',
+        transition: 'background 100ms ease',
+      }}
+    >
+      <span style={{
+        width: 8, height: 8, borderRadius: '50%',
+        background: dotColor,
+        boxShadow: isRunning ? `0 0 0 3px color-mix(in oklch, ${dotColor} 25%, transparent)` : 'none',
+        animation: isReloading ? 'pulse 1s ease-in-out infinite' : 'none',
+      }}/>
+      {busy ? '…' : label}
+    </button>
+  );
+}
+
+// ─── Status strip ─────────────────────────────────────────────────────────────
+
+function StatusStrip({ lifecycle, runtime }) {
+  const state = lifecycle.status?.state_str || 'unknown';
+  const stateTone =
+    state === 'running' ? 'var(--success)' :
+    state === 'reloading' ? 'var(--warn)' :
+    state === 'error' ? 'var(--danger)' :
+    'var(--fg-faint)';
+  const breakerState = runtime?.state || '—';
+  const breakerTone = breakerState === 'closed' ? 'var(--success)' : breakerState === 'open' ? 'var(--danger)' : 'var(--warn)';
+
+  const startedAt = lifecycle.status?.started_at;
+  const uptime = startedAt ? formatUptime(startedAt) : '—';
+
+  const items = [
+    { label: 'State', value: state, tone: stateTone, mono: true },
+    { label: 'Listeners', value: lifecycle.status?.listeners ?? 0, mono: true },
+    { label: 'Rules', value: lifecycle.status?.rules_loaded ?? 0, mono: true },
+    { label: 'Uptime', value: uptime, mono: true },
+    { label: 'Breaker', value: breakerState, tone: breakerTone, mono: true },
+    { label: 'Failures', value: runtime?.failures ?? 0, mono: true },
+    { label: 'Cache', value: runtime?.cache_size ?? 0, mono: true },
+    { label: 'Last latency', value: runtime?.last_latency_ms != null ? `${runtime.last_latency_ms}ms` : '—', mono: true },
+  ];
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+      borderTop: HAIRLINE, borderBottom: HAIRLINE,
+      background: 'var(--surface-1)',
+    }}>
+      {items.map((it, i) => (
+        <div key={it.label} style={{
+          padding: '8px 14px',
+          borderRight: i < items.length - 1 ? HAIRLINE : 'none',
+          minWidth: 0,
+        }}>
+          <div style={{ ...SECTION_LABEL, marginBottom: 3 }}>{it.label}</div>
+          <div className={it.mono ? 'mono' : ''} style={{
+            fontSize: 13, fontWeight: 500, color: it.tone || 'var(--fg)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{it.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatUptime(iso) {
+  try {
+    const ms = Date.now() - new Date(iso).getTime();
+    if (ms < 0) return '—';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + 'm';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ' + (m % 60) + 'm';
+    const d = Math.floor(h / 24);
+    return d + 'd ' + (h % 24) + 'h';
+  } catch { return '—'; }
+}
+
+// ─── Topology card ────────────────────────────────────────────────────────────
+
+function TopologyStrip({ apps, runtime, onReload, busy }) {
+  const proxiedApps = apps.filter(a => a.proxy_public_domain);
+
+  const upstreamFromConfig = runtime?.upstream;
+
+  return (
+    <div style={{ padding: '14px 20px', borderBottom: HAIRLINE }}>
+      <div className="row" style={{ ...SECTION_LABEL, justifyContent: 'space-between', marginBottom: 8 }}>
+        <span>Upstream Topology</span>
+        <button className="btn ghost sm" onClick={onReload} disabled={busy}
+          style={{ height: 22, fontSize: 11, padding: '0 8px' }}>
+          <Icon.Refresh width={10}/> Reload engine
+        </button>
+      </div>
+
+      {/* Default upstream from config (if proxy not multi-listener) */}
+      {upstreamFromConfig && proxiedApps.length === 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 10px', border: HAIRLINE, borderRadius: 4,
+          background: 'var(--surface-1)',
+        }}>
+          <Icon.Globe width={13} style={{ color: 'var(--fg-muted)' }}/>
+          <div className="mono" style={{ fontSize: 12, fontWeight: 500 }}>
+            default → <span className="faint">{upstreamFromConfig}</span>
+          </div>
+        </div>
+      )}
+
+      {proxiedApps.length > 0 && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: 6,
+        }}>
+          {proxiedApps.map(app => (
+            <div key={app.id} style={{
+              border: HAIRLINE, borderRadius: 4, padding: '8px 10px',
+              background: 'var(--surface-1)',
+              display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: 'var(--success)',
+                boxShadow: '0 0 0 3px color-mix(in oklch, var(--success) 22%, transparent)',
+                flexShrink: 0,
+              }}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="mono" style={{
+                  fontSize: 12, fontWeight: 500,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>{app.proxy_public_domain}</div>
+                <div className="faint mono" style={{
+                  fontSize: 10,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>→ {app.proxy_protected_url || '(no upstream)'}</div>
+              </div>
+              <span className="faint" style={{ fontSize: 10 }}>{app.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {proxiedApps.length === 0 && !upstreamFromConfig && (
+        <div className="faint" style={{ fontSize: 12, padding: '6px 0' }}>
+          No upstream configured. Add an application below or set <span className="mono">proxy.upstream</span> in <span className="mono">sharkauth.yaml</span>.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Quick add upstream (replaces wizard) ─────────────────────────────────────
+
+function AddUpstreamRow({ onCreated }) {
+  const [open, setOpen] = React.useState(false);
+  const [upstream, setUpstream] = React.useState('http://localhost:3000');
+  const [name, setName] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const toast = useToast();
+
+  const create = async () => {
+    setErr('');
+    let parsed;
+    try { parsed = new URL(upstream); }
+    catch { setErr('Invalid URL'); return; }
+    setBusy(true);
+    try {
+      const slug = (name || parsed.hostname).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const r = await API.post('/admin/apps', {
+        name: name || parsed.hostname,
+        slug,
+        integration_mode: 'proxy',
+        proxy_public_domain: parsed.host,
+        proxy_protected_url: upstream,
+      });
+      toast.success('Upstream added');
+      setOpen(false);
+      setUpstream('http://localhost:3000');
+      setName('');
+      onCreated?.(r?.data);
+    } catch (e) {
+      setErr(e.message || 'Create failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button className="btn ghost sm" onClick={() => setOpen(true)}
+        style={{ height: 24, fontSize: 11, padding: '0 8px' }}>
+        <Icon.Plus width={10}/> Add upstream
+      </button>
+    );
+  }
+
+  return (
+    <div className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
+      <input
+        autoFocus
+        placeholder="https://app.example.com"
+        value={upstream}
+        onChange={e => { setUpstream(e.target.value); setErr(''); }}
+        style={{ ...INPUT, width: 240, height: 24, fontSize: 12 }}
+      />
+      <input
+        placeholder="name (optional)"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        style={{ ...INPUT, width: 140, height: 24, fontSize: 12 }}
+      />
+      <button className="btn primary sm" onClick={create} disabled={busy}
+        style={{ height: 24, fontSize: 11, padding: '0 10px' }}>
+        {busy ? '…' : 'Create'}
+      </button>
+      <button className="btn ghost sm" onClick={() => { setOpen(false); setErr(''); }}
+        style={{ height: 24, fontSize: 11, padding: '0 8px' }}>Cancel</button>
+      {err && <div className="row" style={{ height: 24, alignItems: 'center', color: 'var(--danger)', fontSize: 11 }}>{err}</div>}
+    </div>
+  );
+}
+
+// ─── Right-drawer rule editor ─────────────────────────────────────────────────
+
+function RuleDrawer({ rule, apps, onClose, onSaved }) {
+  const isEdit = !!rule?.id;
   const [f, setF] = React.useState(() => rule ? {
-    ...rule,
+    ...BLANK, ...rule,
     methods: (rule.methods || []).join(', '),
     scopes: (rule.scopes || []).join(', '),
   } : { ...BLANK });
@@ -136,8 +377,13 @@ function RuleModal({ rule, apps, onSave, onClose }) {
   const [saving, setSaving] = React.useState(false);
   const [apiErr, setApiErr] = React.useState('');
   const toast = useToast();
-
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const submit = async () => {
     const e = validateRule(f);
@@ -146,22 +392,19 @@ function RuleModal({ rule, apps, onSave, onClose }) {
     try {
       const body = {
         ...f,
-        methods: f.methods ? f.methods.split(',').map(s => s.trim()).filter(Boolean) : [],
+        methods: f.methods ? f.methods.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [],
         scopes: f.scopes ? f.scopes.split(',').map(s => s.trim()).filter(Boolean) : [],
         priority: Number(f.priority) || 0,
       };
-      let res;
-      if (rule?.id) {
-        res = await API.patch('/admin/proxy/rules/db/' + rule.id, body);
-      } else {
-        res = await API.post('/admin/proxy/rules/db', body);
-      }
+      const res = isEdit
+        ? await API.patch('/admin/proxy/rules/db/' + rule.id, body)
+        : await API.post('/admin/proxy/rules/db', body);
       if (res?.engine_refresh_error) {
-        toast.warn('Saved — engine refresh warning: ' + res.engine_refresh_error);
+        toast.warn('Saved — engine refresh: ' + res.engine_refresh_error);
       } else {
-        toast.success(rule?.id ? 'Rule updated' : 'Rule created');
+        toast.success(isEdit ? 'Rule updated' : 'Rule created');
       }
-      onSave();
+      onSaved();
     } catch (e) {
       setApiErr(e.message || 'Save failed');
     } finally {
@@ -169,122 +412,218 @@ function RuleModal({ rule, apps, onSave, onClose }) {
     }
   };
 
-  const field = (label, key, type = 'text', extra = {}) => (
-    <div style={{ marginBottom: 14 }}>
-      <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>{label}</label>
-      <input
-        type={type}
-        value={f[key] ?? ''}
-        onChange={e => { set(key, e.target.value); setErrs(p => ({ ...p, [key]: undefined })); }}
-        style={{ width: '100%', boxSizing: 'border-box', ...(extra.style || {}) }}
-        placeholder={extra.placeholder || ''}
-        className={errs[key] ? 'input-err' : ''}
-      />
-      {errs[key] && <div style={{ fontSize: 11, color: 'var(--error)', marginTop: 3 }}>{errs[key]}</div>}
+  const del = async () => {
+    if (!isEdit) return;
+    if (!window.confirm(`Delete rule "${rule.name}"?`)) return;
+    try {
+      await API.del('/admin/proxy/rules/db/' + rule.id);
+      toast.success('Rule deleted');
+      onSaved();
+    } catch (e) {
+      toast.error(e.message || 'Delete failed');
+    }
+  };
+
+  const Field = ({ label, hint, children, error }) => (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4, fontWeight: 500 }}>{label}</label>
+      {children}
+      {error && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 3 }}>{error}</div>}
+      {hint && !error && <div style={{ fontSize: 10, color: 'var(--fg-faint)', marginTop: 3 }}>{hint}</div>}
     </div>
   );
 
   return (
-    <div style={{ background: 'var(--surface-0)', borderRadius: 8, border: HAIRLINE, padding: 20, width: 480 }} onClick={e => e.stopPropagation()}>
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
-        <h2 style={{ margin: 0, fontSize: 15 }}>{rule?.id ? 'Edit Rule' : 'New Rule'}</h2>
-        <button className="btn ghost icon sm" onClick={onClose}><Icon.X width={11}/></button>
-      </div>
+    <>
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, zIndex: 40,
+        background: 'rgba(0,0,0,0.35)',
+      }}/>
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '100vw',
+        zIndex: 41, borderLeft: HAIRLINE,
+        background: 'var(--surface-0)', display: 'flex', flexDirection: 'column',
+        animation: 'slideIn 140ms ease-out',
+      }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ padding: 14, borderBottom: HAIRLINE }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <button className="btn ghost sm" onClick={onClose} disabled={saving}
+              style={{ height: 24, fontSize: 11, padding: '0 8px' }}>
+              <Icon.X width={10}/> Close
+            </button>
+            <span className="faint mono" style={{ fontSize: 10 }}>
+              {isEdit ? `PATCH /admin/proxy/rules/db/${rule.id}` : 'POST /admin/proxy/rules/db'}
+            </span>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: 'var(--font-display)' }}>
+            {isEdit ? 'Edit rule' : 'New rule'}
+          </div>
+          <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
+            Path-pattern policy applied at the proxy edge before requests hit upstream.
+          </div>
+        </div>
 
-      {field('Name', 'name', 'text', { placeholder: 'block-unauth-writes' })}
-      {field('Pattern', 'pattern', 'text', { placeholder: '/api/*' })}
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
+          <Field label="Name" error={errs.name}>
+            <input
+              autoFocus
+              value={f.name}
+              onChange={e => { set('name', e.target.value); setErrs(p => ({ ...p, name: undefined })); }}
+              placeholder="block-unauth-writes"
+              style={INPUT}
+            />
+          </Field>
 
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Require</label>
-        <input
-          value={f.require}
-          onChange={e => { set('require', e.target.value); set('allow', ''); setErrs(p => ({ ...p, require: undefined })); }}
-          placeholder="authenticated, role:admin, tier:pro, scope:read, agent…"
-          style={{ width: '100%', boxSizing: 'border-box' }}
-          className={errs.require ? 'input-err' : ''}
-        />
-        {errs.require && <div style={{ fontSize: 11, color: 'var(--error)', marginTop: 3 }}>{errs.require}</div>}
-        <div style={{ fontSize: 10, color: 'var(--fg-faint)', marginTop: 3 }}>
-          anonymous · authenticated · agent · role:X · global_role:X · tier:X · scope:X · permission:X:Y
+          <Field label="Pattern" hint="chi-style: /api/*, /v1/orgs/{id}" error={errs.pattern}>
+            <input
+              value={f.pattern}
+              onChange={e => { set('pattern', e.target.value); setErrs(p => ({ ...p, pattern: undefined })); }}
+              placeholder="/api/*"
+              style={{ ...INPUT, fontFamily: 'var(--font-mono)' }}
+            />
+          </Field>
+
+          <Field
+            label="Require"
+            hint="anonymous · authenticated · agent · role:X · global_role:X · tier:X · scope:X · permission:X:Y"
+            error={errs.require}
+          >
+            <input
+              value={f.require}
+              onChange={e => { set('require', e.target.value); set('allow', ''); setErrs(p => ({ ...p, require: undefined })); }}
+              placeholder="authenticated"
+              style={{ ...INPUT, fontFamily: 'var(--font-mono)' }}
+            />
+          </Field>
+
+          <Field label="Allow override" hint="Public-by-pattern bypass — overrides require.">
+            <div className="row" style={{ gap: 6 }}>
+              <button
+                className={'btn sm ' + (f.allow === 'anonymous' ? 'primary' : 'ghost')}
+                onClick={() => { set('allow', 'anonymous'); set('require', ''); }}
+                style={{ height: 24, fontSize: 11, padding: '0 8px' }}
+              >anonymous</button>
+              <button
+                className="btn ghost sm"
+                onClick={() => set('allow', '')}
+                disabled={!f.allow}
+                style={{ height: 24, fontSize: 11, padding: '0 8px' }}
+              >clear</button>
+            </div>
+          </Field>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="Methods" hint="comma-sep · empty = any">
+              <input
+                value={f.methods}
+                onChange={e => set('methods', e.target.value)}
+                placeholder="GET, POST"
+                style={{ ...INPUT, fontFamily: 'var(--font-mono)' }}
+              />
+            </Field>
+            <Field label="Priority">
+              <input
+                type="number"
+                value={f.priority}
+                onChange={e => set('priority', e.target.value)}
+                style={INPUT}
+              />
+            </Field>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="Tier match" hint="free · pro · (empty)">
+              <input
+                value={f.tier_match}
+                onChange={e => set('tier_match', e.target.value)}
+                placeholder="(any)"
+                style={INPUT}
+              />
+            </Field>
+            <Field label="Scopes" hint="comma-sep">
+              <input
+                value={f.scopes}
+                onChange={e => set('scopes', e.target.value)}
+                placeholder="read:data"
+                style={{ ...INPUT, fontFamily: 'var(--font-mono)' }}
+              />
+            </Field>
+          </div>
+
+          {apps.length > 0 && (
+            <Field label="Application" hint="Scope this rule to a single app.">
+              <select
+                value={f.app_id}
+                onChange={e => set('app_id', e.target.value)}
+                style={INPUT}
+              >
+                <option value="">Global (all apps)</option>
+                {apps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </Field>
+          )}
+
+          <div style={{ display: 'flex', gap: 16, padding: '8px 0', borderTop: HAIRLINE, marginTop: 8 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!f.enabled} onChange={e => set('enabled', e.target.checked)}/>
+              Enabled
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!f.m2m} onChange={e => set('m2m', e.target.checked)}/>
+              M2M only
+            </label>
+          </div>
+
+          {apiErr && (
+            <div style={{
+              fontSize: 12, color: 'var(--danger)',
+              padding: '6px 8px', border: '1px solid var(--danger)',
+              borderRadius: 4, marginTop: 10, background: 'color-mix(in oklch, var(--danger) 8%, transparent)',
+            }}>{apiErr}</div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: 12, borderTop: HAIRLINE, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            {isEdit && (
+              <button className="btn ghost sm" onClick={del}
+                style={{ height: 26, fontSize: 11, padding: '0 10px', color: 'var(--danger)' }}>
+                Delete
+              </button>
+            )}
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn ghost sm" onClick={onClose} disabled={saving}
+              style={{ height: 26, fontSize: 11, padding: '0 10px' }}>Cancel</button>
+            <button className="btn primary sm" onClick={submit} disabled={saving}
+              style={{ height: 26, fontSize: 11, padding: '0 12px' }}>
+              {saving ? 'Saving…' : (isEdit ? 'Update' : 'Create')}
+            </button>
+          </div>
         </div>
       </div>
-
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Allow (public override)</label>
-        <div className="row" style={{ gap: 8 }}>
-          <button
-            className={'btn sm ' + (f.allow === 'anonymous' ? '' : 'ghost')}
-            onClick={() => { set('allow', 'anonymous'); set('require', ''); }}
-          >anonymous</button>
-          <button
-            className={'btn ghost sm ' + (f.allow === '' && f.require ? '' : '')}
-            onClick={() => { set('allow', ''); }}
-          >clear allow</button>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Methods (comma-sep)</label>
-          <input value={f.methods} onChange={e => set('methods', e.target.value)} placeholder="GET, POST — empty = any" style={{ width: '100%', boxSizing: 'border-box' }}/>
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Priority</label>
-          <input type="number" value={f.priority} onChange={e => set('priority', e.target.value)} style={{ width: '100%', boxSizing: 'border-box' }}/>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Tier match</label>
-          <input value={f.tier_match} onChange={e => set('tier_match', e.target.value)} placeholder="free · pro · (empty)" style={{ width: '100%', boxSizing: 'border-box' }}/>
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Scopes (comma-sep)</label>
-          <input value={f.scopes} onChange={e => set('scopes', e.target.value)} placeholder="read:data" style={{ width: '100%', boxSizing: 'border-box' }}/>
-        </div>
-      </div>
-
-      {apps.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Application (optional)</label>
-          <select value={f.app_id} onChange={e => set('app_id', e.target.value)} style={{ width: '100%' }}>
-            <option value="">Global</option>
-            {apps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
-      )}
-
-      <div className="row" style={{ gap: 16, marginBottom: 14 }}>
-        <label className="row" style={{ gap: 6, cursor: 'pointer', fontSize: 13 }}>
-          <input type="checkbox" checked={!!f.enabled} onChange={e => set('enabled', e.target.checked)}/>
-          Enabled
-        </label>
-        <label className="row" style={{ gap: 6, cursor: 'pointer', fontSize: 13 }}>
-          <input type="checkbox" checked={!!f.m2m} onChange={e => set('m2m', e.target.checked)}/>
-          M2M only
-        </label>
-      </div>
-
-      {apiErr && <div style={{ fontSize: 12, color: 'var(--error)', marginBottom: 12 }}>{apiErr}</div>}
-
-      <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn ghost sm" onClick={onClose}>Cancel</button>
-        <button className="btn primary sm" disabled={saving} onClick={submit}>{saving ? 'Saving…' : (rule?.id ? 'Update' : 'Create')}</button>
-      </div>
-    </div>
+    </>
   );
 }
 
-// ─── Import YAML modal ─────────────────────────────────────────────────────────
+// ─── YAML import drawer ───────────────────────────────────────────────────────
 
-function ImportModal({ onClose, onDone }) {
+function ImportDrawer({ onClose, onDone }) {
   const [yaml, setYaml] = React.useState('');
   const [result, setResult] = React.useState(null);
   const [importing, setImporting] = React.useState(false);
   const [apiErr, setApiErr] = React.useState('');
   const toast = useToast();
   const fileRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const doImport = async () => {
     if (!yaml.trim()) return;
@@ -306,7 +645,7 @@ function ImportModal({ onClose, onDone }) {
   };
 
   const onFile = (e) => {
-    const f = e.target.files[0];
+    const f = e.target.files?.[0];
     if (!f) return;
     const reader = new FileReader();
     reader.onload = (ev) => setYaml(ev.target.result);
@@ -314,101 +653,232 @@ function ImportModal({ onClose, onDone }) {
   };
 
   return (
-    <div style={{ background: 'var(--surface-0)', borderRadius: 8, border: HAIRLINE, padding: 20, width: 560 }} onClick={e => e.stopPropagation()}>
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 15 }}>Import YAML Rules</h2>
-        <button className="btn ghost icon sm" onClick={onClose}><Icon.X width={11}/></button>
-      </div>
-
-      <div
-        style={{ border: '2px dashed var(--hairline-strong)', borderRadius: 6, padding: '12px 16px', marginBottom: 10, textAlign: 'center', cursor: 'pointer', fontSize: 12, color: 'var(--fg-dim)' }}
-        onClick={() => fileRef.current?.click()}
-        onDragOver={e => e.preventDefault()}
-        onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { const r = new FileReader(); r.onload = ev => setYaml(ev.target.result); r.readAsText(f); } }}
-      >
-        Drop .yaml file here or click to browse
-        <input ref={fileRef} type="file" accept=".yaml,.yml" style={{ display: 'none' }} onChange={onFile}/>
-      </div>
-
-      <textarea
-        value={yaml}
-        onChange={e => setYaml(e.target.value)}
-        placeholder="Or paste YAML here…"
-        style={{ width: '100%', boxSizing: 'border-box', height: 160, fontFamily: 'var(--font-mono)', fontSize: 12, padding: 8, border: HAIRLINE, borderRadius: 4, background: 'var(--surface-1)', color: 'var(--fg)', resize: 'vertical' }}
-      />
-
-      {apiErr && <div style={{ fontSize: 12, color: 'var(--error)', margin: '6px 0' }}>{apiErr}</div>}
-
-      {result && result.errors?.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 11, color: 'var(--warn)', marginBottom: 6 }}>{result.errors.length} import error{result.errors.length !== 1 ? 's' : ''}:</div>
-          <table className="tbl" style={{ width: '100%', fontSize: 11 }}>
-            <thead><tr><th style={{ padding: '4px 8px' }}>#</th><th style={{ padding: '4px 8px' }}>Name</th><th style={{ padding: '4px 8px' }}>Message</th></tr></thead>
-            <tbody>
-              {result.errors.map((err, i) => (
-                <tr key={i} style={{ borderTop: HAIRLINE }}>
-                  <td style={{ padding: '4px 8px' }} className="mono">{err.index ?? i}</td>
-                  <td style={{ padding: '4px 8px' }}>{err.name || '—'}</td>
-                  <td style={{ padding: '4px 8px', color: 'var(--error)' }}>{err.message}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.35)' }}/>
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: 460, maxWidth: '100vw',
+        zIndex: 41, borderLeft: HAIRLINE,
+        background: 'var(--surface-0)', display: 'flex', flexDirection: 'column',
+        animation: 'slideIn 140ms ease-out',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: 14, borderBottom: HAIRLINE }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <button className="btn ghost sm" onClick={onClose} style={{ height: 24, fontSize: 11, padding: '0 8px' }}>
+              <Icon.X width={10}/> Close
+            </button>
+            <span className="faint mono" style={{ fontSize: 10 }}>POST /admin/proxy/rules/import</span>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 500, fontFamily: 'var(--font-display)' }}>Import YAML rules</div>
+          <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
+            Bulk-create rules from <span className="mono">sharkauth.yaml</span> snippets.
+          </div>
         </div>
-      )}
 
-      {result?.imported > 0 && (
-        <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 8 }}>
-          <Icon.Check width={12}/> {result.imported} rule{result.imported !== 1 ? 's' : ''} imported
+        <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
+          <div
+            style={{
+              border: '1px dashed var(--hairline-strong)', borderRadius: 4,
+              padding: '14px 12px', textAlign: 'center', cursor: 'pointer',
+              fontSize: 12, color: 'var(--fg-dim)', marginBottom: 10,
+              background: 'var(--surface-1)',
+            }}
+            onClick={() => fileRef.current?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) { const r = new FileReader(); r.onload = ev => setYaml(ev.target.result); r.readAsText(f); }
+            }}
+          >
+            Drop .yaml file or click to browse
+            <input ref={fileRef} type="file" accept=".yaml,.yml" style={{ display: 'none' }} onChange={onFile}/>
+          </div>
+
+          <textarea
+            value={yaml}
+            onChange={e => setYaml(e.target.value)}
+            placeholder="Or paste YAML here…"
+            style={{ ...TEXTAREA, height: 220 }}
+          />
+
+          {apiErr && (
+            <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{apiErr}</div>
+          )}
+
+          {result?.errors?.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ ...SECTION_LABEL, color: 'var(--warn)', marginBottom: 6 }}>
+                {result.errors.length} error{result.errors.length !== 1 ? 's' : ''}
+              </div>
+              <table className="tbl" style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--surface-1)' }}>
+                    <th style={{ padding: '4px 8px', textAlign: 'left' }}>#</th>
+                    <th style={{ padding: '4px 8px', textAlign: 'left' }}>Name</th>
+                    <th style={{ padding: '4px 8px', textAlign: 'left' }}>Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.errors.map((err, i) => (
+                    <tr key={i} style={{ borderTop: HAIRLINE }}>
+                      <td style={{ padding: '4px 8px' }} className="mono">{err.index ?? i}</td>
+                      <td style={{ padding: '4px 8px' }}>{err.name || '—'}</td>
+                      <td style={{ padding: '4px 8px', color: 'var(--danger)' }}>{err.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {result?.imported > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 8 }}>
+              <Icon.Check width={11}/> {result.imported} rule{result.imported !== 1 ? 's' : ''} imported
+            </div>
+          )}
         </div>
-      )}
 
-      <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-        <button className="btn ghost sm" onClick={onClose}>Close</button>
-        <button className="btn primary sm" disabled={importing || !yaml.trim()} onClick={doImport}>{importing ? 'Importing…' : 'Import'}</button>
+        <div style={{ padding: 12, borderTop: HAIRLINE, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+          <button className="btn ghost sm" onClick={onClose} style={{ height: 26, fontSize: 11, padding: '0 10px' }}>Close</button>
+          <button className="btn primary sm" disabled={importing || !yaml.trim()} onClick={doImport}
+            style={{ height: 26, fontSize: 11, padding: '0 12px' }}>
+            {importing ? 'Importing…' : 'Import'}
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
-// ─── Delete confirm ───────────────────────────────────────────────────────────
+// ─── Simulate drawer (test policy) ────────────────────────────────────────────
 
-function DeleteConfirm({ rule, onConfirm, onClose }) {
-  const [deleting, setDeleting] = React.useState(false);
-  const toast = useToast();
+function SimulateDrawer({ onClose }) {
+  const [path, setPath] = React.useState('/api/users');
+  const [method, setMethod] = React.useState('GET');
+  const [identity, setIdentity] = React.useState('{"user_email":"alice@example.com","roles":["admin"]}');
+  const [result, setResult] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
 
-  const go = async () => {
-    setDeleting(true);
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const run = async () => {
+    setBusy(true); setErr(''); setResult(null);
     try {
-      await API.del('/admin/proxy/rules/db/' + rule.id);
-      toast.success('Rule deleted');
-      onConfirm();
+      let id = {};
+      if (identity.trim()) {
+        try { id = JSON.parse(identity); }
+        catch { setErr('Identity must be valid JSON'); setBusy(false); return; }
+      }
+      const r = await API.post('/admin/proxy/simulate', { path, method, identity: id });
+      setResult(r);
     } catch (e) {
-      toast.error(e.message || 'Delete failed');
-      setDeleting(false);
+      setErr(e.message || 'Simulation failed');
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <div style={{ background: 'var(--surface-0)', borderRadius: 8, border: HAIRLINE, padding: 20, width: 380 }} onClick={e => e.stopPropagation()}>
-      <h2 style={{ margin: '0 0 10px', fontSize: 15 }}>Delete rule?</h2>
-      <div style={{ fontSize: 13, marginBottom: 16, color: 'var(--fg-muted)' }}>
-        <span className="mono" style={{ fontWeight: 600 }}>{rule.name}</span> will be removed permanently.
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.35)' }}/>
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '100vw',
+        zIndex: 41, borderLeft: HAIRLINE,
+        background: 'var(--surface-0)', display: 'flex', flexDirection: 'column',
+        animation: 'slideIn 140ms ease-out',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: 14, borderBottom: HAIRLINE }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <button className="btn ghost sm" onClick={onClose} style={{ height: 24, fontSize: 11, padding: '0 8px' }}>
+              <Icon.X width={10}/> Close
+            </button>
+            <span className="faint mono" style={{ fontSize: 10 }}>POST /admin/proxy/simulate</span>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 500, fontFamily: 'var(--font-display)' }}>Simulate request</div>
+          <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
+            Test what the engine would decide without sending a real request.
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Method</label>
+            <select value={method} onChange={e => setMethod(e.target.value)} style={INPUT}>
+              {['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Path</label>
+            <input value={path} onChange={e => setPath(e.target.value)}
+              style={{ ...INPUT, fontFamily: 'var(--font-mono)' }} placeholder="/api/users"/>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--fg-dim)', marginBottom: 4 }}>Identity (JSON)</label>
+            <textarea value={identity} onChange={e => setIdentity(e.target.value)}
+              style={{ ...TEXTAREA, height: 100 }}/>
+            <div style={{ fontSize: 10, color: 'var(--fg-faint)', marginTop: 3 }}>
+              Fields: user_id, user_email, roles[], agent_id, scopes[], auth_method.
+            </div>
+          </div>
+
+          <button className="btn primary sm" onClick={run} disabled={busy}
+            style={{ height: 26, fontSize: 11, padding: '0 12px', width: '100%' }}>
+            {busy ? 'Running…' : 'Run simulation'}
+          </button>
+
+          {err && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{err}</div>}
+
+          {result && (
+            <div style={{ marginTop: 14, border: HAIRLINE, borderRadius: 4, padding: 10, background: 'var(--surface-1)' }}>
+              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={SECTION_LABEL}>Result</span>
+                <span className="mono faint" style={{ fontSize: 10 }}>{result.eval_us ?? '?'}μs</span>
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginBottom: 6 }}>
+                <span style={{
+                  fontSize: 13, fontWeight: 600,
+                  color: result.decision === 'allow' ? 'var(--success)' : 'var(--danger)',
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                }}>{result.decision}</span>
+                <span className="faint mono" style={{ fontSize: 11 }}>{result.reason}</span>
+              </div>
+              {result.matched_rule && (
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: HAIRLINE }}>
+                  <div style={{ ...SECTION_LABEL, marginBottom: 3 }}>Matched rule</div>
+                  <div className="mono" style={{ fontSize: 11 }}>{result.matched_rule.path}</div>
+                  <div className="mono faint" style={{ fontSize: 10 }}>
+                    {(result.matched_rule.methods || []).join(', ') || 'any'} · {result.matched_rule.require}
+                  </div>
+                </div>
+              )}
+              {result.injected_headers && Object.keys(result.injected_headers).length > 0 && (
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: HAIRLINE }}>
+                  <div style={{ ...SECTION_LABEL, marginBottom: 3 }}>Injected headers</div>
+                  {Object.entries(result.injected_headers).map(([k, v]) => (
+                    <div key={k} className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>
+                      <span style={{ color: 'var(--fg-muted)' }}>{k}:</span> {v}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn ghost sm" onClick={onClose}>Cancel</button>
-        <button className="btn sm" style={{ background: 'var(--error)', color: '#fff' }} disabled={deleting} onClick={go}>{deleting ? 'Deleting…' : 'Delete'}</button>
-      </div>
-    </div>
+    </>
   );
 }
 
-// ─── Toggle enabled inline ────────────────────────────────────────────────────
+// ─── Inline enabled toggle ────────────────────────────────────────────────────
 
 function EnabledToggle({ rule, onToggled }) {
   const [busy, setBusy] = React.useState(false);
   const toast = useToast();
-
   const toggle = async (e) => {
     e.stopPropagation();
     setBusy(true);
@@ -421,159 +891,287 @@ function EnabledToggle({ rule, onToggled }) {
       setBusy(false);
     }
   };
-
   return (
-    <button className={'btn ghost icon sm' + (busy ? ' disabled' : '')} onClick={toggle} title={rule.enabled ? 'Disable' : 'Enable'} style={{ opacity: busy ? 0.5 : 1 }}>
-      {rule.enabled ? <Icon.Check width={12} style={{ color: 'var(--success)' }}/> : <Icon.X width={12} style={{ color: 'var(--fg-faint)' }}/>}
+    <button
+      onClick={toggle}
+      title={rule.enabled ? 'Click to disable' : 'Click to enable'}
+      disabled={busy}
+      style={{
+        width: 24, height: 14, padding: 0,
+        borderRadius: 3, border: HAIRLINE_STRONG, cursor: 'pointer',
+        background: rule.enabled ? 'var(--success)' : 'var(--surface-2)',
+        position: 'relative', transition: 'background 100ms ease',
+        opacity: busy ? 0.5 : 1,
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 1, left: rule.enabled ? 11 : 1,
+        width: 10, height: 10, borderRadius: 2,
+        background: rule.enabled ? '#000' : 'var(--fg-muted)',
+        transition: 'left 100ms ease',
+      }}/>
     </button>
   );
 }
 
-// ─── Main Proxy component ──────────────────────────────────────────────────────
+// ─── Disabled / not-wired state ───────────────────────────────────────────────
+
+function DisabledState({ onRetry }) {
+  return (
+    <div style={{ padding: 24, height: '100%', overflow: 'auto' }}>
+      <div style={{ maxWidth: 540 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+          <Icon.Globe width={16}/>
+          <h1 style={{ fontSize: 18, margin: 0, fontWeight: 600, fontFamily: 'var(--font-display)' }}>Proxy</h1>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            height: 20, padding: '0 7px', fontSize: 11, fontWeight: 500,
+            border: HAIRLINE_STRONG, borderRadius: 3,
+            color: 'var(--fg-muted)', background: 'var(--surface-2)',
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--fg-faint)' }}/>
+            disabled
+          </span>
+        </div>
+        <div className="faint" style={{ fontSize: 13, marginBottom: 18 }}>
+          Reverse proxy is not wired in this build. Enable it to protect upstream services without code changes.
+        </div>
+
+        <div style={{ border: HAIRLINE, borderRadius: 5, padding: 14, background: 'var(--surface-1)' }}>
+          <div style={{ ...SECTION_LABEL, marginBottom: 8 }}>Enable in sharkauth.yaml</div>
+          <pre className="mono" style={{
+            fontSize: 12, background: 'var(--surface-0)', border: HAIRLINE,
+            borderRadius: 4, padding: 10, overflow: 'auto', margin: 0, lineHeight: 1.5,
+          }}>{`proxy:
+  enabled: true
+  upstream: http://localhost:3000
+  listen: :8080
+  rules:
+    - name: protected
+      pattern: /api/*
+      require: authenticated`}</pre>
+          <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>
+            Restart the binary, then click below to retry.
+          </div>
+          <button className="btn primary sm" onClick={onRetry}
+            style={{ height: 26, fontSize: 11, padding: '0 12px', marginTop: 10 }}>
+            <Icon.Refresh width={10}/> Retry
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Proxy page ──────────────────────────────────────────────────────────
 
 export function Proxy() {
-  const toast = useToast();
   const lifecycle = useLifecycle();
+  const runtime = useRuntimeStatus();
   const { data: appsRaw } = useAPI('/admin/apps');
   const apps = appsRaw?.data || [];
   const { data: rulesRaw, refresh: refreshRules } = useAPI('/admin/proxy/rules/db');
   const allRules = rulesRaw?.data || [];
 
   const [appFilter, setAppFilter] = React.useState('all');
-  const [modal, setModal] = React.useState(null); // null | { type: 'create'|'edit'|'delete'|'import', rule? }
+  const [search, setSearch] = React.useState('');
+  const [drawer, setDrawer] = React.useState(null); // {kind:'rule'|'import'|'simulate', rule?}
+  const [reloadBusy, setReloadBusy] = React.useState(false);
+  const toast = useToast();
 
-  const rules = appFilter === 'all' ? allRules : allRules.filter(r => r.app_id === appFilter);
+  const rules = React.useMemo(() => {
+    let out = allRules;
+    if (appFilter !== 'all') out = out.filter(r => r.app_id === appFilter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      out = out.filter(r =>
+        r.name?.toLowerCase().includes(q) ||
+        r.pattern?.toLowerCase().includes(q) ||
+        r.require?.toLowerCase().includes(q) ||
+        r.allow?.toLowerCase().includes(q),
+      );
+    }
+    return out;
+  }, [allRules, appFilter, search]);
 
-  const closeModal = () => setModal(null);
+  const reload = async () => {
+    setReloadBusy(true);
+    try {
+      await lifecycle.act('reload');
+      toast.success('Engine reloaded');
+      refreshRules();
+    } catch (e) {
+      toast.error(e.message || 'Reload failed');
+    } finally {
+      setReloadBusy(false);
+    }
+  };
 
-  if (lifecycle.missing) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <div className="muted">Proxy Gateway disabled. Enable proxy in sharkauth.yaml.</div>
-        <div style={{ marginTop: 24, maxWidth: 500, margin: '24px auto' }}>
-          <ProxyWizard onComplete={() => lifecycle.refresh()}/>
-        </div>
-      </div>
-    );
-  }
+  if (lifecycle.missing) return <DisabledState onRetry={lifecycle.refresh}/>;
 
-  const state = lifecycle.status?.state_str || 'unknown';
-  const badgeCls = state === 'running' ? 'success' : state === 'reloading' ? 'warn' : 'error';
+  const lastError = lifecycle.status?.last_error;
 
   return (
-    <div className="col" style={{ height: '100%', overflow: 'auto' }}>
-      {/* Header */}
+    <div className="col" style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* ─── Header ──────────────────────────────────────────────── */}
       <div style={{ padding: '12px 20px', borderBottom: HAIRLINE }}>
-        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <div className="row" style={{ gap: 12 }}>
-            <h1 style={{ fontSize: 18, margin: 0, fontWeight: 600, fontFamily: 'var(--font-display)' }}>Proxy Gateway</h1>
-            {!lifecycle.loading && lifecycle.status && (
-              <LifecycleBar status={lifecycle.status} act={lifecycle.act} toast={toast}/>
-            )}
-            {!lifecycle.loading && !lifecycle.status && (
-              <span className="chip sm error">offline</span>
-            )}
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div className="row" style={{ gap: 10, alignItems: 'center', minWidth: 0 }}>
+            <h1 style={{
+              fontSize: 18, margin: 0, fontWeight: 600,
+              fontFamily: 'var(--font-display)', letterSpacing: '-0.01em',
+            }}>Proxy</h1>
+            <span className="faint" style={{ fontSize: 12 }}>
+              Reverse proxy engine · {allRules.length} rule{allRules.length !== 1 ? 's' : ''}
+            </span>
           </div>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn ghost sm" onClick={() => setModal({ type: 'import' })}>
+          <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+            <button className="btn ghost sm" onClick={() => setDrawer({ kind: 'simulate' })}
+              style={{ height: 28, fontSize: 12, padding: '0 10px' }}>
+              <Icon.Refresh width={11}/> Simulate
+            </button>
+            <button className="btn ghost sm" onClick={() => setDrawer({ kind: 'import' })}
+              style={{ height: 28, fontSize: 12, padding: '0 10px' }}>
               <Icon.Migration width={11}/> Import YAML
             </button>
-            <button className="btn primary sm" onClick={() => setModal({ type: 'create' })}>
-              <Icon.Plus width={11}/> New Rule
+            <button className="btn primary sm" onClick={() => setDrawer({ kind: 'rule', rule: null })}
+              style={{ height: 28, fontSize: 12, padding: '0 12px' }}>
+              <Icon.Plus width={11}/> New rule
             </button>
+            {/* The headline power toggle */}
+            <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--hairline)', margin: '0 4px' }}/>
+            {!lifecycle.loading && <PowerToggle status={lifecycle.status} onAction={lifecycle.act}/>}
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 1000, margin: '20px auto', width: '100%', padding: '0 20px 100px' }}>
+      {/* ─── Status strip ────────────────────────────────────────── */}
+      {!lifecycle.loading && lifecycle.status && (
+        <StatusStrip lifecycle={lifecycle} runtime={runtime.data}/>
+      )}
 
-        {/* Host topology */}
-        {apps.filter(a => a.proxy_public_domain).length > 0 && (
-          <>
-            <div style={{ ...SECTION_LABEL, marginBottom: 12 }}>Mesh Topology</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10, marginBottom: 28 }}>
-              {apps.filter(a => a.proxy_public_domain).map(app => (
-                <div key={app.id} className="card" style={{ padding: 10 }}>
-                  <div className="row" style={{ gap: 8 }}>
-                    <Icon.Globe width={13} style={{ color: 'var(--success)', flexShrink: 0 }}/>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="mono" style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.proxy_public_domain}</div>
-                      <div className="faint mono" style={{ fontSize: 10 }}>{app.proxy_protected_url}</div>
-                    </div>
-                    <span className="dot success pulse"/>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+      {/* ─── Last error banner ───────────────────────────────────── */}
+      {lastError && (
+        <div style={{
+          padding: '8px 20px', borderBottom: HAIRLINE,
+          background: 'color-mix(in oklch, var(--danger) 8%, var(--surface-0))',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <Icon.Warn width={12} style={{ color: 'var(--danger)', flexShrink: 0 }}/>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--danger)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {lastError}
+          </span>
+        </div>
+      )}
 
-        {/* Rules table */}
-        <div className="row" style={{ ...SECTION_LABEL, justifyContent: 'space-between', marginBottom: 10 }}>
-          <span>Route Policies ({rules.length})</span>
-          <select value={appFilter} onChange={e => setAppFilter(e.target.value)}
-            style={{ height: 24, fontSize: 11, background: 'var(--surface-2)', border: HAIRLINE, color: 'var(--fg)', padding: '0 4px', borderRadius: 4 }}>
-            <option value="all">All Applications</option>
-            {apps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
+      {/* ─── Topology ────────────────────────────────────────────── */}
+      <TopologyStrip apps={apps} runtime={runtime.data} onReload={reload} busy={reloadBusy}/>
+
+      {/* ─── Rules section ───────────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{
+          padding: '10px 20px', borderBottom: HAIRLINE,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          gap: 12, flexWrap: 'wrap',
+        }}>
+          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            <span style={SECTION_LABEL}>Route policies ({rules.length})</span>
+            <AddUpstreamRow onCreated={() => { refreshRules(); }}/>
+          </div>
+
+          <div className="row" style={{ gap: 6 }}>
+            <input
+              placeholder="Filter rules…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ ...INPUT, height: 24, width: 180, fontSize: 12 }}
+            />
+            <select
+              value={appFilter}
+              onChange={e => setAppFilter(e.target.value)}
+              style={{ ...INPUT, height: 24, width: 'auto', fontSize: 12, padding: '0 6px' }}
+            >
+              <option value="all">All apps</option>
+              {apps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
         </div>
 
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table className="tbl" style={{ width: '100%', fontSize: 12.5 }}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <table className="tbl" style={{ width: '100%', fontSize: 12.5, borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'var(--surface-1)' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', width: 44 }}>Prio</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Name</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Pattern</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Require</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left' }}>App</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', width: 60 }}>M2M</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', width: 60 }}>On</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', width: 80 }}></th>
+              <tr style={{
+                background: 'var(--surface-1)', position: 'sticky', top: 0, zIndex: 1,
+                borderBottom: HAIRLINE,
+              }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', width: 44, fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>Pri</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>Name</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>Pattern</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>Methods</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>Policy</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>Tier</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>App</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', width: 60, fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)' }}>On</th>
               </tr>
             </thead>
             <tbody>
               {rules.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center' }}>
-                  <div className="faint">No rules. Click <strong>New Rule</strong> or import YAML to get started.</div>
-                </td></tr>
+                <tr>
+                  <td colSpan={8} style={{ padding: 50, textAlign: 'center' }}>
+                    <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
+                      {allRules.length === 0 ? 'No rules yet.' : 'No rules match the current filter.'}
+                    </div>
+                    {allRules.length === 0 && (
+                      <button className="btn primary sm" onClick={() => setDrawer({ kind: 'rule', rule: null })}
+                        style={{ height: 26, fontSize: 11, padding: '0 12px' }}>
+                        <Icon.Plus width={10}/> Create first rule
+                      </button>
+                    )}
+                  </td>
+                </tr>
               ) : rules.map(r => (
-                <tr key={r.id} style={{ borderTop: HAIRLINE }}>
-                  <td className="mono muted" style={{ padding: '8px 12px' }}>{r.priority}</td>
-                  <td style={{ padding: '8px 12px', fontWeight: 500, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</td>
-                  <td style={{ padding: '8px 12px' }}>
-                    <div className="mono" style={{ fontSize: 12 }}>{r.pattern}</div>
-                    {r.methods?.length > 0 && <div className="faint" style={{ fontSize: 10 }}>{r.methods.join(', ')}</div>}
+                <tr
+                  key={r.id}
+                  onClick={() => setDrawer({ kind: 'rule', rule: r })}
+                  style={{
+                    borderTop: HAIRLINE, cursor: 'pointer',
+                    background: 'var(--surface-0)',
+                    opacity: r.enabled ? 1 : 0.55,
+                    transition: 'background 80ms ease',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-1)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-0)'}
+                >
+                  <td className="mono" style={{ padding: '7px 12px', color: 'var(--fg-muted)' }}>{r.priority ?? 0}</td>
+                  <td style={{ padding: '7px 12px', fontWeight: 500, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.name}
                   </td>
-                  <td style={{ padding: '8px 12px' }}>
+                  <td style={{ padding: '7px 12px' }}>
+                    <span className="mono" style={{ fontSize: 12 }}>{r.pattern}</span>
+                  </td>
+                  <td className="mono faint" style={{ padding: '7px 12px', fontSize: 11 }}>
+                    {r.methods?.length ? r.methods.join(', ') : '—'}
+                  </td>
+                  <td style={{ padding: '7px 12px' }}>
                     <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-                      {(r.require || r.allow) && (
-                        <span className={'chip sm ' + (r.allow ? 'ghost' : 'solid')} style={{ fontSize: 10 }}>
-                          {r.require || r.allow}
-                        </span>
-                      )}
-                      {r.tier_match && <span className="chip sm warn" style={{ fontSize: 10 }}>{r.tier_match}</span>}
+                      {r.allow ? (
+                        <span style={chip('var(--warn)')}>{r.allow}</span>
+                      ) : r.require ? (
+                        <span style={chip('var(--fg-muted)')} className="mono">{r.require}</span>
+                      ) : null}
+                      {r.m2m && <span style={chip('var(--agent, var(--fg-muted))')}>m2m</span>}
                     </div>
                   </td>
-                  <td className="faint" style={{ padding: '8px 12px', fontSize: 11 }}>
-                    {apps.find(a => a.id === r.app_id)?.name || <span style={{ opacity: 0.4 }}>global</span>}
+                  <td style={{ padding: '7px 12px' }}>
+                    {r.tier_match
+                      ? <span style={chip('var(--success)')}>{r.tier_match}</span>
+                      : <span className="faint" style={{ fontSize: 11 }}>—</span>}
                   </td>
-                  <td style={{ padding: '8px 12px' }}>
-                    {r.m2m && <span className="chip sm" style={{ fontSize: 10 }}>m2m</span>}
+                  <td className="faint" style={{ padding: '7px 12px', fontSize: 11 }}>
+                    {apps.find(a => a.id === r.app_id)?.name || <span style={{ opacity: 0.5 }}>global</span>}
                   </td>
-                  <td style={{ padding: '8px 12px' }}>
+                  <td style={{ padding: '7px 12px' }} onClick={e => e.stopPropagation()}>
                     <EnabledToggle rule={r} onToggled={refreshRules}/>
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                    <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                      <button className="btn ghost icon sm" title="Edit" onClick={() => setModal({ type: 'edit', rule: r })}>
-                        <Icon.Settings width={11}/>
-                      </button>
-                      <button className="btn ghost icon sm" title="Delete" onClick={() => setModal({ type: 'delete', rule: r })}
-                        style={{ color: 'var(--error)' }}>
-                        <Icon.X width={11}/>
-                      </button>
-                    </div>
                   </td>
                 </tr>
               ))}
@@ -582,26 +1180,41 @@ export function Proxy() {
         </div>
       </div>
 
-      {/* Modals */}
-      {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
-          onClick={closeModal}>
-          {modal.type === 'create' && (
-            <RuleModal apps={apps} onSave={() => { closeModal(); refreshRules(); }} onClose={closeModal}/>
-          )}
-          {modal.type === 'edit' && (
-            <RuleModal rule={modal.rule} apps={apps} onSave={() => { closeModal(); refreshRules(); }} onClose={closeModal}/>
-          )}
-          {modal.type === 'delete' && (
-            <DeleteConfirm rule={modal.rule} onConfirm={() => { closeModal(); refreshRules(); }} onClose={closeModal}/>
-          )}
-          {modal.type === 'import' && (
-            <ImportModal onClose={closeModal} onDone={refreshRules}/>
-          )}
-        </div>
+      {/* ─── Drawers ─────────────────────────────────────────────── */}
+      {drawer?.kind === 'rule' && (
+        <RuleDrawer
+          rule={drawer.rule}
+          apps={apps}
+          onClose={() => setDrawer(null)}
+          onSaved={() => { setDrawer(null); refreshRules(); }}
+        />
+      )}
+      {drawer?.kind === 'import' && (
+        <ImportDrawer
+          onClose={() => setDrawer(null)}
+          onDone={() => { refreshRules(); }}
+        />
+      )}
+      {drawer?.kind === 'simulate' && (
+        <SimulateDrawer onClose={() => setDrawer(null)}/>
       )}
 
       <CLIFooter command="shark proxy status"/>
     </div>
   );
+}
+
+// ─── small helpers ────────────────────────────────────────────────────────────
+
+function chip(color) {
+  return {
+    display: 'inline-flex', alignItems: 'center',
+    height: 18, padding: '0 6px',
+    fontSize: 10, fontWeight: 500,
+    color,
+    border: '1px solid ' + color,
+    borderRadius: 3,
+    background: 'color-mix(in oklch, ' + color + ' 8%, transparent)',
+    whiteSpace: 'nowrap',
+  };
 }
