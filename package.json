@@ -1,4 +1,8 @@
 {
   "private": true,
-  "packageManager": "pnpm@10.32.1"
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "docs:bundle": "python documentation/api_reference/bundle.py",
+    "docs:lint": "npx @apidevtools/swagger-cli validate documentation/api_reference/openapi.bundled.yaml"
+  }
 }
