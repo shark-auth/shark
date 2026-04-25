@@ -361,6 +361,18 @@ type Store interface {
 	// fields (e.g. custom app data) are preserved.
 	SetUserTier(ctx context.Context, userID, tier string) error
 	GetUserTier(ctx context.Context, userID string) (string, error)
+
+	// Phase C system operations.
+	// DBPath returns the filesystem path of the open SQLite database file.
+	// Returns ":memory:" for in-memory stores used in tests.
+	DBPath() string
+	// WipeAllData truncates all user-data tables (users, sessions, api_keys,
+	// OAuth accounts, passkeys, etc.) while preserving goose migration metadata.
+	// Used by the admin reset endpoints.
+	WipeAllData(ctx context.Context) error
+	// RevokeAllAdminAPIKeys soft-deletes every API key that has the "*" (admin)
+	// wildcard scope, so existing admin sessions are invalidated after a key rotation.
+	RevokeAllAdminAPIKeys(ctx context.Context) error
 }
 
 // --- Entity types ---
