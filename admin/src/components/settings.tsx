@@ -1,424 +1,906 @@
 // @ts-nocheck
 import React from 'react'
-import { Icon, CopyField } from './shared'
+import { Icon } from './shared'
 import { API, useAPI } from './api'
+import { useToast } from './toast'
 import { CLIFooter } from './CLIFooter'
+import { usePageActions } from './useKeyboardShortcuts'
 
-// Settings page — server info, email, session management, audit retention, danger zone
-// Refactored to support interactive configuration updates (Phase Wave 2).
+// Settings — global config command center.
+// Sibling page to users.tsx: dense, monochrome, hairline borders, 13px base,
+// editable inputs bound to GET/PATCH /admin/config, drawer for confirm/test
+// flows. No YAML, no read-only "info" sections, no JWT/session mode toggle.
 
-export function Settings() {
-  const { data: health, loading: healthLoading } = useAPI('/admin/health');
-  const { data: config, loading: configLoading, refresh: refreshConfig } = useAPI('/admin/config');
+// ─── Section registry ────────────────────────────────────────────────────────
+const SECTIONS = [
+  { id: 'server',       label: 'Server',         desc: 'Base URL, CORS, port' },
+  { id: 'tokens',       label: 'Sessions & Tokens', desc: 'Cookie + JWT lifetimes, signing key' },
+  { id: 'email',        label: 'Email Delivery', desc: 'Provider, sender, test send' },
+  { id: 'oauth',        label: 'OAuth Providers', desc: 'Per-provider credentials' },
+  { id: 'audit',        label: 'Audit & Data',   desc: 'Retention, purge' },
+  { id: 'maintenance',  label: 'Maintenance',    desc: 'Sessions + audit cleanup' },
+];
 
-  const [toast, setToast] = React.useState(null);
-  const [purgingSession, setPurgingSession] = React.useState(false);
-  const [purgingAudit, setPurgingAudit] = React.useState(false);
-  const [auditBefore, setAuditBefore] = React.useState('');
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function deepClone(o) { return JSON.parse(JSON.stringify(o ?? {})); }
+function fmtUptime(s) {
+  if (!s || s < 0) return '—';
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+function fingerprint(s) {
+  if (!s) return '—';
+  return s.length > 12 ? s.slice(0, 6) + '…' + s.slice(-4) : s;
+}
 
-  const [isDirty, setIsDirty] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const [formState, setFormState] = React.useState(null);
+// ─── Atoms ───────────────────────────────────────────────────────────────────
+function Field({ label, hint, children, span = 1 }) {
+  return (
+    <div style={{ gridColumn: `span ${span}` }}>
+      {label && (
+        <div style={{
+          fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
+          color: 'var(--fg-muted)', marginBottom: 4, lineHeight: 1.5,
+        }}>{label}</div>
+      )}
+      {children}
+      {hint && <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>{hint}</div>}
+    </div>
+  );
+}
 
-  // Initialize form state when config loads
+function Input({ value, onChange, placeholder, mono, type = 'text', width, disabled }) {
+  return (
+    <input
+      type={type}
+      value={value ?? ''}
+      onChange={(e) => onChange && onChange(type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
+      placeholder={placeholder}
+      disabled={disabled}
+      style={{
+        width: width || '100%', height: 28, padding: '0 8px',
+        background: 'var(--surface-1)',
+        border: '1px solid var(--hairline-strong)',
+        borderRadius: 4,
+        fontSize: 13, color: 'var(--fg)',
+        fontFamily: mono ? 'var(--font-mono)' : 'inherit',
+        opacity: disabled ? 0.55 : 1,
+      }}
+    />
+  );
+}
+
+function Select({ value, onChange, options, width }) {
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex', width: width || '100%' }}>
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          appearance: 'none', WebkitAppearance: 'none',
+          width: '100%', height: 28, padding: '0 26px 0 8px',
+          background: 'var(--surface-1)',
+          border: '1px solid var(--hairline-strong)',
+          borderRadius: 4, color: 'var(--fg)',
+          fontSize: 13, cursor: 'pointer', colorScheme: 'dark',
+        }}
+      >
+        {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
+      <Icon.ChevronDown width={10} height={10} style={{
+        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+        pointerEvents: 'none', opacity: 0.5,
+      }}/>
+    </div>
+  );
+}
+
+function MaskedInput({ value, onChange, placeholder, hasValue }) {
+  const [shown, setShown] = React.useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type={shown ? 'text' : 'password'}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="new-password"
+        style={{
+          width: '100%', height: 28, padding: '0 56px 0 8px',
+          background: 'var(--surface-1)',
+          border: '1px solid var(--hairline-strong)',
+          borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+          fontFamily: 'var(--font-mono)',
+        }}
+      />
+      <button type="button" onClick={() => setShown(s => !s)} style={{
+        position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+        height: 22, padding: '0 6px', background: 'transparent', border: 'none',
+        color: 'var(--fg-muted)', fontSize: 11, cursor: 'pointer',
+      }}>{shown ? 'Hide' : 'Show'}</button>
+    </div>
+  );
+}
+
+// Section block — anchored target for left-rail nav.
+function Section({ id, title, desc, children, onSection }) {
+  const ref = React.useRef(null);
   React.useEffect(() => {
-    if (config) {
-      setFormState({
-        auth: {
-          session_lifetime: config.auth?.session_lifetime || '30d',
-          password_min_length: config.auth?.password_min_length || 8,
-        },
-        passkeys: {
-          rp_name: config.passkeys?.rp_name || 'SharkAuth',
-          rp_id: config.passkeys?.rp_id || '',
-          user_verification: config.passkeys?.user_verification || 'preferred',
-        },
-        email: {
-          provider: config.email?.provider || 'shark',
-          api_key: config.email?.api_key || '',
-          from: config.email?.from || '',
-          from_name: config.email?.from_name || 'SharkAuth',
-        },
-        audit: {
-          retention: config.audit?.retention || '0',
-          cleanup_interval: config.audit?.cleanup_interval || '1h',
-        }
-      });
-      setIsDirty(false);
-    }
+    if (!ref.current || !onSection) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.find(e => e.isIntersecting);
+        if (visible) onSection(id);
+      },
+      { rootMargin: '-30% 0px -60% 0px', threshold: 0 }
+    );
+    obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [id, onSection]);
+  return (
+    <section ref={ref} id={id} style={{
+      borderBottom: '1px solid var(--hairline)',
+      padding: '20px 24px',
+    }}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{
+          fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
+          color: 'var(--fg-muted)', fontWeight: 600,
+        }}>{title}</div>
+        {desc && <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>{desc}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// Tag list — used by CORS origins. Compact, hairline, "+ add" inline input.
+function TagList({ values, onChange, placeholder = 'https://example.com' }) {
+  const [draft, setDraft] = React.useState('');
+  const list = Array.isArray(values) ? values : [];
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (list.includes(v)) { setDraft(''); return; }
+    onChange([...list, v]);
+    setDraft('');
+  };
+  const remove = (i) => onChange(list.filter((_, ix) => ix !== i));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {list.length === 0 && (
+        <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>No origins · all cross-origin requests blocked</span>
+      )}
+      {list.map((v, i) => (
+        <div key={i} className="row" style={{
+          gap: 6, padding: '4px 8px',
+          background: 'var(--surface-1)',
+          border: '1px solid var(--hairline)',
+          borderRadius: 4,
+        }}>
+          <span className="mono" style={{ fontSize: 12, flex: 1, color: 'var(--fg)' }}>{v}</span>
+          <button type="button"
+            onClick={() => remove(i)}
+            style={{
+              height: 20, padding: '0 6px', background: 'transparent',
+              border: 'none', color: 'var(--fg-muted)', fontSize: 11, cursor: 'pointer',
+            }}>
+            <Icon.X width={10} height={10}/>
+          </button>
+        </div>
+      ))}
+      <div className="row" style={{ gap: 6 }}>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={placeholder}
+          style={{
+            flex: 1, height: 28, padding: '0 8px',
+            background: 'var(--surface-1)',
+            border: '1px solid var(--hairline-strong)',
+            borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        />
+        <button type="button" className="btn sm" onClick={add} disabled={!draft.trim()}>
+          <Icon.Plus width={10} height={10}/>Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Drawer — right-side fixed panel. Used for Test email + confirm purge.
+// NEVER a modal — backdrop dims, panel slides from right, Esc closes.
+function Drawer({ title, subtitle, onClose, children, footer, width = 480 }) {
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.45)' }}
+      />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0,
+          width, maxWidth: '100vw',
+          zIndex: 41,
+          borderLeft: '1px solid var(--hairline)',
+          background: 'var(--surface-0)',
+          display: 'flex', flexDirection: 'column',
+          animation: 'slideIn 140ms ease-out',
+        }}
+      >
+        <div style={{ padding: 16, borderBottom: '1px solid var(--hairline)' }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <button className="btn ghost sm" onClick={onClose}>
+              <Icon.X width={12} height={12}/>Close
+            </button>
+          </div>
+          <div style={{
+            fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em',
+            fontFamily: 'var(--font-display)', lineHeight: 1.2,
+          }}>{title}</div>
+          {subtitle && <div className="faint" style={{ fontSize: 12, marginTop: 4 }}>{subtitle}</div>}
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>{children}</div>
+        {footer && (
+          <div style={{
+            padding: 12, borderTop: '1px solid var(--hairline)',
+            display: 'flex', justifyContent: 'flex-end', gap: 8,
+            background: 'var(--surface-0)',
+          }}>{footer}</div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+export function Settings() {
+  const { data: health } = useAPI('/admin/health');
+  const { data: config, loading, refresh } = useAPI('/admin/config');
+  const toast = useToast();
+
+  const [form, setForm] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const [active, setActive] = React.useState('server');
+  const [drawer, setDrawer] = React.useState(null);
+  const [rotating, setRotating] = React.useState(false);
+
+  // Initialize editable form from config payload. Sentinels:
+  //  - email.api_key === '********' means "set, masked".
+  React.useEffect(() => {
+    if (!config) return;
+    setForm({
+      server: {
+        base_url:     config.server?.base_url ?? config.base_url ?? '',
+        port:         config.server?.port ?? '',
+        cors_origins: config.server?.cors_origins ?? config.cors_origins ?? [],
+      },
+      auth: {
+        session_lifetime: config.auth?.session_lifetime || '30d',
+      },
+      jwt: {
+        // NO mode toggle. Cookie + JWT both always on.
+        lifetime: config.jwt?.lifetime || config.jwt?.access_token_ttl || '15m',
+      },
+      email: {
+        provider:  config.email?.provider || 'shark',
+        api_key:   config.email?.api_key || '',
+        from:      config.email?.from || '',
+        from_name: config.email?.from_name || '',
+      },
+      audit: {
+        retention:        config.audit?.retention || '30d',
+        cleanup_interval: config.audit?.cleanup_interval || '1h',
+      },
+    });
   }, [config]);
 
-  const updateForm = (path, val) => {
-    const parts = path.split('.');
-    setFormState(prev => {
-      const next = { ...prev };
-      let curr = next;
+  const set = (path, value) => {
+    setForm(prev => {
+      const next = deepClone(prev);
+      const parts = path.split('.');
+      let cur = next;
       for (let i = 0; i < parts.length - 1; i++) {
-        curr[parts[i]] = { ...curr[parts[i]] };
-        curr = curr[parts[i]];
+        cur[parts[i]] = cur[parts[i]] || {};
+        cur = cur[parts[i]];
       }
-      curr[parts[parts.length - 1]] = val;
+      cur[parts[parts.length - 1]] = value;
       return next;
     });
-    setIsDirty(true);
   };
 
+  const isDirty = React.useMemo(() => {
+    if (!form || !config) return false;
+    const baseline = {
+      server: {
+        base_url: config.server?.base_url ?? config.base_url ?? '',
+        port: config.server?.port ?? '',
+        cors_origins: config.server?.cors_origins ?? config.cors_origins ?? [],
+      },
+      auth:   { session_lifetime: config.auth?.session_lifetime || '30d' },
+      jwt:    { lifetime: config.jwt?.lifetime || config.jwt?.access_token_ttl || '15m' },
+      email:  {
+        provider: config.email?.provider || 'shark',
+        api_key: config.email?.api_key || '',
+        from: config.email?.from || '',
+        from_name: config.email?.from_name || '',
+      },
+      audit:  {
+        retention: config.audit?.retention || '30d',
+        cleanup_interval: config.audit?.cleanup_interval || '1h',
+      },
+    };
+    return JSON.stringify(baseline) !== JSON.stringify(form);
+  }, [form, config]);
+
   const handleSave = async () => {
+    if (!form || saving) return;
     setSaving(true);
     try {
-      await API.patch('/admin/config', formState);
-      showToast('Configuration updated and persisted');
-      setIsDirty(false);
-      refreshConfig();
+      const payload = deepClone(form);
+      // Don't echo the masked sentinel back — backend interprets unchanged.
+      if (payload.email?.api_key === '********') delete payload.email.api_key;
+      await API.patch('/admin/config', payload);
+      toast.success('Configuration saved');
+      refresh();
     } catch (e) {
-      showToast(e.message || 'Save failed', 'danger');
+      toast.error(e?.message || 'Save failed');
     } finally {
       setSaving(false);
     }
   };
 
-  function showToast(msg, type = 'success') {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  }
+  const handleDiscard = () => { if (config) { setForm(null); refresh(); } };
 
-  function formatUptime(s) {
-    if (s == null) return '—';
-    const d = Math.floor(s / 86400);
-    const hh = Math.floor((s % 86400) / 3600).toString().padStart(2, '0');
-    const mm = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
-    return `${d}d ${hh}:${mm}`;
-  }
-
-  function formatBytes(mb) {
-    if (mb == null) return '—';
-    if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-    return `${mb} MB`;
-  }
-
-  async function handlePurgeSessions() {
-    setPurgingSession(true);
+  const handleRotate = async () => {
+    if (rotating) return;
+    if (!confirm('Rotate JWT signing key? Existing tokens remain valid until expiry.')) return;
+    setRotating(true);
     try {
-      const res = await API.post('/admin/sessions/purge-expired');
-      showToast(`Purged ${res?.deleted ?? 0} expired session${res?.deleted !== 1 ? 's' : ''}`);
+      const res = await API.post('/admin/auth/rotate-signing-key', {});
+      toast.success(`Signing key rotated · kid ${res?.kid ? res.kid.slice(0, 8) : 'new'}`);
+      refresh();
     } catch (e) {
-      showToast(e?.message || 'Purge failed', 'danger');
+      toast.error(e?.message || 'Rotation failed');
     } finally {
-      setPurgingSession(false);
+      setRotating(false);
     }
-  }
+  };
 
-  async function handlePurgeAudit() {
-    if (!auditBefore) return;
-    setPurgingAudit(true);
-    try {
-      const isoDate = new Date(auditBefore).toISOString();
-      const res = await API.post('/admin/audit-logs/purge', { before: isoDate });
-      showToast(`Purged ${res?.deleted ?? 0} audit log entr${res?.deleted !== 1 ? 'ies' : 'y'}`);
-      setAuditBefore('');
-    } catch (e) {
-      showToast(e?.message || 'Purge failed', 'danger');
-    } finally {
-      setPurgingAudit(false);
-    }
-  }
+  // r refreshes
+  usePageActions({ onRefresh: refresh });
 
-  async function handleTestEmail() {
-    const to = prompt('Send test email to:');
-    if (!to) return;
-    try {
-      await API.post('/admin/test-email', { to });
-      showToast('Test email sent to ' + to);
-    } catch (e) {
-      showToast(e?.message || 'Failed to send', 'danger');
-    }
-  }
+  // Anchor scroll on left-rail click. ScrollIntoView smooth.
+  const goTo = (id) => {
+    setActive(id);
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
-  const baseUrl = config?.base_url || window.location.origin;
-  const corsOrigins = config?.cors_origins || [];
-  const isDevMode = config?.dev_mode === true || config?.environment === 'development';
-  const smtpConfigured = !!(config?.smtp_configured || health?.smtp?.configured);
-
-  function ConfigRow({ label, children, system }) {
+  if (loading || !form) {
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center',
-        padding: '9px 14px',
-        borderBottom: '1px solid var(--hairline)',
-        gap: 12,
-        minHeight: 38,
-      }}>
-        <div style={{ width: 160, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11.5, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
-          {system && <span className="chip faint sm" style={{fontSize: 8, height: 14, padding: '0 4px'}}>SYSTEM</span>}
-        </div>
-        <div style={{ flex: 1, fontSize: 12.5 }}>{children}</div>
-      </div>
+      <div style={{ padding: 32, color: 'var(--fg-muted)', fontSize: 13 }}>Loading configuration…</div>
     );
   }
 
-  function SectionHeader({ title, sub }) {
-    return (
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--fg)' }}>{title}</div>
-        {sub && <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 2 }}>{sub}</div>}
-      </div>
-    );
-  }
+  // Status strip data — derived only, never editable.
+  const version = health?.version || 'dev';
+  const uptime  = fmtUptime(health?.uptime_seconds);
+  const dbDriver = health?.db?.driver || 'sqlite';
+  const dbSize   = health?.db?.size_mb != null ? `${health.db.size_mb.toFixed(1)} MB` : '—';
+  const jwtKid   = config.jwt?.active_kid || config.jwt?.kid || '';
+  const activeKeys = health?.jwt?.active_keys ?? config.jwt?.active_keys ?? 0;
 
-  function Skeleton({ w = '60%', h = 13 }) {
-    return <div style={{ width: w, height: h, background: 'var(--surface-3)', borderRadius: 3 }}/>;
-  }
-
-  if (configLoading && !formState) {
-    return <div className="faint" style={{ padding: 24, fontSize: 12 }}>Loading configuration…</div>;
-  }
+  // Email config "set" — sentinel from server: api_key="********" means present.
+  const emailKeySet = (config.email?.api_key || '') !== '';
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', padding: 20, paddingBottom: 100 }}>
-      <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      {/* ── Left rail nav ── */}
+      <aside style={{
+        width: 200, flexShrink: 0,
+        borderRight: '1px solid var(--hairline)',
+        background: 'var(--surface-0)',
+        padding: '12px 0',
+        overflowY: 'auto',
+      }}>
+        <div style={{ padding: '0 16px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', fontWeight: 600 }}>
+          Settings
+        </div>
+        {SECTIONS.map(s => {
+          const on = active === s.id;
+          return (
+            <button key={s.id} onClick={() => goTo(s.id)} style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '7px 16px', fontSize: 13,
+              color: on ? 'var(--fg)' : 'var(--fg-muted)',
+              fontWeight: on ? 500 : 400,
+              borderLeft: on ? '2px solid var(--fg)' : '2px solid transparent',
+              cursor: 'pointer',
+              background: on ? 'var(--surface-1)' : 'transparent',
+            }}>
+              {s.label}
+            </button>
+          );
+        })}
+      </aside>
 
-        {/* ── Server ── */}
-        <section>
-          <SectionHeader title="Server" sub="Runtime info and immutable system-level configuration"/>
-          <div className="card">
-            <ConfigRow label="Base URL" system>
-              <CopyField value={baseUrl} truncate={48}/>
-            </ConfigRow>
-            <ConfigRow label="Version" system>
-              <span className="mono" style={{ fontSize: 12 }}>{health?.version ?? '—'}</span>
-            </ConfigRow>
-            <ConfigRow label="Uptime" system>
-              <span className="mono" style={{ fontSize: 12 }}>{formatUptime(health?.uptime_seconds)}</span>
-            </ConfigRow>
-            <ConfigRow label="DB Size" system>
-              <div className="row" style={{ gap: 8 }}>
-                <span className="mono" style={{ fontSize: 12 }}>{formatBytes(health?.db?.size_mb)}</span>
-                {health?.db?.status && (
-                  <span className={"chip" + (health.db.status === 'ok' ? ' success' : ' warn')} style={{ height: 16, fontSize: 10 }}>
-                    <span className={"dot" + (health.db.status === 'ok' ? ' success' : ' warn')} style={{ width: 5, height: 5 }}/>
-                    {health.db.status}
-                  </span>
-                )}
-              </div>
-            </ConfigRow>
-            <ConfigRow label="Environment" system>
-              <div className="row" style={{ gap: 8 }}>
-                <span className="mono" style={{ fontSize: 12 }}>{config?.environment ?? '—'}</span>
-                {isDevMode && (
-                  <span className="chip warn" style={{ height: 16, fontSize: 10 }}>dev mode</span>
-                )}
-              </div>
-            </ConfigRow>
-          </div>
-        </section>
-
-        {/* ── Authentication ── */}
-        <section>
-          <SectionHeader title="Authentication" sub="Policies for sessions and password security"/>
-          <div className="card">
-            <ConfigRow label="Session Lifetime">
-              <input
-                value={formState?.auth?.session_lifetime}
-                onChange={e => updateForm('auth.session_lifetime', e.target.value)}
-                className="input-inline mono"
-                placeholder="e.g. 30d, 12h"
-              />
-            </ConfigRow>
-            <ConfigRow label="Min Password Length">
-              <input
-                type="number"
-                value={formState?.auth?.password_min_length}
-                onChange={e => updateForm('auth.password_min_length', parseInt(e.target.value))}
-                className="input-inline mono"
-                style={{ width: 60 }}
-              />
-            </ConfigRow>
-          </div>
-        </section>
-
-        {/* ── Passkeys ── */}
-        <section>
-          <SectionHeader title="Passkeys" sub="WebAuthn rely-party and verification settings"/>
-          <div className="card">
-            <ConfigRow label="RP Name">
-              <input
-                value={formState?.passkeys?.rp_name}
-                onChange={e => updateForm('passkeys.rp_name', e.target.value)}
-                className="input-inline"
-                placeholder="Company Name"
-              />
-            </ConfigRow>
-            <ConfigRow label="RP ID">
-              <input
-                value={formState?.passkeys?.rp_id}
-                onChange={e => updateForm('passkeys.rp_id', e.target.value)}
-                className="input-inline mono"
-                placeholder="domain.com"
-              />
-            </ConfigRow>
-            <ConfigRow label="User Verification">
-              <select
-                value={formState?.passkeys?.user_verification}
-                onChange={e => updateForm('passkeys.user_verification', e.target.value)}
-                className="input-inline"
-              >
-                <option value="required">Required (biometrics only)</option>
-                <option value="preferred">Preferred (biometrics if avail)</option>
-                <option value="discouraged">Discouraged</option>
-              </select>
-            </ConfigRow>
-          </div>
-        </section>
-
-        {/* ── Email ── */}
-        <section>
-          <SectionHeader title="Email Provider" sub="Update delivery credentials for outbound mail"/>
-          <div className="card">
-            <ConfigRow label="Provider">
-              <select
-                value={formState?.email?.provider}
-                onChange={e => updateForm('email.provider', e.target.value)}
-                className="input-inline"
-              >
-                <option value="shark">Shark Managed (Native)</option>
-                <option value="resend">Resend (API Key)</option>
-                <option value="smtp">Custom SMTP Server</option>
-                <option value="dev">Dev Mode (Local Inbox)</option>
-              </select>
-            </ConfigRow>
-            {(formState?.email?.provider === 'resend' || formState?.email?.provider === 'shark') && (
-              <ConfigRow label="API Key">
-                <input
-                  type="password"
-                  value={formState?.email?.api_key}
-                  onChange={e => updateForm('email.api_key', e.target.value)}
-                  className="input-inline mono"
-                  placeholder="re_..."
-                />
-              </ConfigRow>
-            )}
-            <ConfigRow label="From Name">
-              <input
-                value={formState?.email?.from_name}
-                onChange={e => updateForm('email.from_name', e.target.value)}
-                className="input-inline"
-                placeholder="SharkAuth Notifications"
-              />
-            </ConfigRow>
-            <ConfigRow label="From Email">
-              <input
-                value={formState?.email?.from}
-                onChange={e => updateForm('email.from', e.target.value)}
-                className="input-inline mono"
-                placeholder="no-reply@yourdomain.com"
-              />
-            </ConfigRow>
-            <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button className="btn sm" onClick={handleTestEmail}>
-                <Icon.Mail width={11} height={11}/>
-                Send test email
-              </button>
-              <span className="faint" style={{ fontSize: 11 }}>Verify credentials before saving</span>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Governance ── */}
-        <section>
-          <SectionHeader title="Governance" sub="Audit retention and maintenance intervals"/>
-          <div className="card">
-            <ConfigRow label="Audit Retention">
-              <input
-                value={formState?.audit?.retention}
-                onChange={e => updateForm('audit.retention', e.target.value)}
-                className="input-inline mono"
-                placeholder="e.g. 90d, 0 (forever)"
-              />
-            </ConfigRow>
-            <ConfigRow label="Cleanup Interval">
-              <input
-                value={formState?.audit?.cleanup_interval}
-                onChange={e => updateForm('audit.cleanup_interval', e.target.value)}
-                className="input-inline mono"
-                placeholder="e.g. 1h, 24h"
-              />
-            </ConfigRow>
-          </div>
-        </section>
-
-        {/* ── Maintenance ── */}
-        <section>
-          <SectionHeader title="Maintenance" sub="Manual cleanup operations"/>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div className="card" style={{ padding: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>Purge Sessions</div>
-              <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginBottom: 12, lineHeight: 1.5 }}>Remove all expired sessions from the database now.</div>
-              <button className="btn sm" onClick={handlePurgeSessions} disabled={purgingSession}>
-                <Icon.Refresh width={11} height={11} style={purgingSession ? { animation: 'spin 0.8s linear infinite' } : {}}/>
-                Purge now
-              </button>
-            </div>
-            <div className="card" style={{ padding: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>Manual Audit Purge</div>
-              <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginBottom: 12, lineHeight: 1.5 }}>Delete entries older than the selected date.</div>
-              <div className="row" style={{ gap: 6 }}>
-                <input type="date" value={auditBefore} onChange={e => setAuditBefore(e.target.value)} className="mono" style={{ flex: 1, fontSize: 11, height: 26, background: 'var(--surface-2)', border: '1px solid var(--hairline)', borderRadius: 3, color: 'var(--fg)', colorScheme: 'dark', padding: '0 4px' }}/>
-                <button className="btn sm danger" onClick={handlePurgeAudit} disabled={!auditBefore || purgingAudit}>Purge</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-      </div>
-
-      {/* ── Dirty Bar ── */}
-      {isDirty && (
+      {/* ── Right pane ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative' }}>
+        {/* Status strip — derived facts only, NOT a section */}
         <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--surface-2)', border: '1px solid var(--hairline-strong)',
-          padding: '10px 16px', borderRadius: 8, boxShadow: 'var(--shadow-lg)',
-          display: 'flex', alignItems: 'center', gap: 16, zIndex: 100,
-          animation: 'slideUp 200ms ease-out',
+          padding: '8px 24px',
+          borderBottom: '1px solid var(--hairline)',
+          background: 'var(--surface-0)',
+          display: 'flex', alignItems: 'center', gap: 16,
+          fontSize: 11, lineHeight: 1.5,
         }}>
-          <div style={{ fontSize: 13, fontWeight: 500 }}>You have unsaved changes</div>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn ghost sm" onClick={() => refreshConfig()} disabled={saving}>Reset</button>
+          <span className="row" style={{ gap: 6 }}>
+            <span className={'dot' + (health?.status === 'ok' ? ' success' : '')}/>
+            <span style={{ color: 'var(--fg-muted)' }}>v</span>
+            <span className="mono" style={{ color: 'var(--fg)' }}>{version}</span>
+          </span>
+          <span className="faint">·</span>
+          <span><span style={{ color: 'var(--fg-muted)' }}>uptime </span><span className="mono">{uptime}</span></span>
+          <span className="faint">·</span>
+          <span><span style={{ color: 'var(--fg-muted)' }}>{dbDriver} </span><span className="mono">{dbSize}</span></span>
+          <span className="faint">·</span>
+          <span><span style={{ color: 'var(--fg-muted)' }}>migration </span><span className="mono">{health?.migrations?.current ?? '—'}</span></span>
+          <div style={{ flex: 1 }}/>
+          <span className="faint mono">GET /admin/config</span>
+        </div>
+
+        {/* Sections — anchored scroll */}
+        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 80 }}>
+          {/* Server */}
+          <Section id="server" title="Server" desc="HTTP listener, public base URL, allowed origins" onSection={setActive}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Field label="Base URL" hint="Public URL clients use to reach this server" span={2}>
+                <Input value={form.server.base_url}
+                  onChange={(v) => set('server.base_url', v)}
+                  mono
+                  placeholder="https://auth.example.com"/>
+              </Field>
+              <Field label="Port" hint="HTTP listener port (restart required)">
+                <Input value={form.server.port} type="number" mono
+                  onChange={(v) => set('server.port', v)} placeholder="8080" width={120}/>
+              </Field>
+              <Field label="Environment">
+                <Input value={config.environment || (config.dev_mode ? 'development' : 'production')} disabled/>
+              </Field>
+              <Field label="CORS origins" hint="Browser origins permitted to call the API · empty = same-origin only" span={2}>
+                <TagList values={form.server.cors_origins} onChange={(v) => set('server.cors_origins', v)}/>
+              </Field>
+            </div>
+          </Section>
+
+          {/* Sessions & Tokens — single section. Cookie + JWT both ON, no mode toggle. */}
+          <Section id="tokens" title="Sessions & Tokens" desc="Cookie sessions and JWT access tokens are both always active. Configure lifetimes and rotate the signing key." onSection={setActive}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Field label="Cookie session lifetime" hint="How long a sign-in remains valid · accepts 30m, 24h, 30d">
+                <Input value={form.auth.session_lifetime} mono
+                  onChange={(v) => set('auth.session_lifetime', v)} placeholder="30d" width={140}/>
+              </Field>
+              <Field label="JWT access token lifetime" hint="Short-lived bearer tokens for SDKs and APIs">
+                <Input value={form.jwt.lifetime} mono
+                  onChange={(v) => set('jwt.lifetime', v)} placeholder="15m" width={140}/>
+              </Field>
+              <Field label="JWT signing key" hint={`${activeKeys} active key${activeKeys === 1 ? '' : 's'} · keys retire after 2× access TTL`} span={2}>
+                <div className="row" style={{ gap: 8 }}>
+                  <div style={{
+                    flex: 1, height: 28, padding: '0 10px',
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                    background: 'var(--surface-1)',
+                    border: '1px solid var(--hairline)',
+                    borderRadius: 4,
+                  }}>
+                    <Icon.Shield width={11} height={11} style={{ color: 'var(--fg-muted)' }}/>
+                    <span className="mono" style={{ fontSize: 12, color: 'var(--fg)' }}>{fingerprint(jwtKid) || (activeKeys > 0 ? 'active' : 'no key')}</span>
+                    <span className="faint" style={{ fontSize: 11, marginLeft: 'auto' }}>{health?.jwt?.algorithm || 'RS256'}</span>
+                  </div>
+                  <button type="button" className="btn sm" onClick={handleRotate} disabled={rotating}>
+                    {rotating ? 'Rotating…' : 'Rotate key'}
+                  </button>
+                </div>
+              </Field>
+            </div>
+          </Section>
+
+          {/* Email Delivery */}
+          <Section id="email" title="Email Delivery" desc="Outbound mail for verifications, magic links, and password resets" onSection={setActive}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Field label="Provider">
+                <Select value={form.email.provider} onChange={(v) => set('email.provider', v)}
+                  options={[
+                    { v: 'shark',  l: 'Shark (managed)' },
+                    { v: 'resend', l: 'Resend' },
+                    { v: 'smtp',   l: 'SMTP' },
+                    { v: 'dev',    l: 'Dev inbox (capture only)' },
+                  ]} width={240}/>
+              </Field>
+              <Field label={form.email.provider === 'smtp' ? 'SMTP password' : 'API key'} hint={emailKeySet ? 'Set · paste a new value to replace' : 'Required for non-dev providers'}>
+                <MaskedInput
+                  value={form.email.api_key}
+                  hasValue={emailKeySet}
+                  onChange={(v) => set('email.api_key', v)}
+                  placeholder={emailKeySet ? '••••••••' : 're_••• or smtp password'}/>
+              </Field>
+              <Field label="From address" hint="Verified sender · must match your provider domain">
+                <Input value={form.email.from} mono
+                  onChange={(v) => set('email.from', v)} placeholder="auth@example.com"/>
+              </Field>
+              <Field label="From name">
+                <Input value={form.email.from_name}
+                  onChange={(v) => set('email.from_name', v)} placeholder="Acme Auth"/>
+              </Field>
+              <Field span={2}>
+                <div className="row" style={{ gap: 8, marginTop: 4 }}>
+                  <button type="button" className="btn sm" onClick={() => setDrawer('test_email')}>
+                    <Icon.Mail width={11} height={11}/>Send test email
+                  </button>
+                  <span className="faint" style={{ fontSize: 11 }}>Save changes first if you edited provider settings</span>
+                </div>
+              </Field>
+            </div>
+          </Section>
+
+          {/* OAuth Providers — quick-link to Identity Hub */}
+          <Section id="oauth" title="OAuth Providers" desc="Per-provider client credentials live in the Identity Hub" onSection={setActive}>
+            <div style={{
+              padding: 14,
+              border: '1px solid var(--hairline)',
+              borderRadius: 5,
+              background: 'var(--surface-1)',
+              display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center',
+            }}>
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--fg)', marginBottom: 4 }}>
+                  {(config.oauth_providers || []).length} provider{(config.oauth_providers || []).length === 1 ? '' : 's'} configured
+                </div>
+                <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+                  Google, GitHub, Apple, Discord — client IDs, secrets, redirect URLs, and per-provider scopes are managed in Identity Hub to keep this surface focused.
+                </div>
+                <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+                  {(config.oauth_providers || []).map((p) => (
+                    <span key={p} className="chip" style={{ height: 18 }}>{p}</span>
+                  ))}
+                  {(!config.oauth_providers || config.oauth_providers.length === 0) && (
+                    <span className="faint" style={{ fontSize: 11 }}>No providers active</span>
+                  )}
+                </div>
+              </div>
+              <a href="/admin/identity-hub" className="btn sm" style={{ textDecoration: 'none' }}>
+                Open Identity Hub →
+              </a>
+            </div>
+          </Section>
+
+          {/* Audit & Data */}
+          <Section id="audit" title="Audit & Data" desc="How long audit logs are kept, and how often expired records are cleaned" onSection={setActive}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Field label="Retention" hint="Audit logs older than this are eligible for purge">
+                <Input value={form.audit.retention} mono
+                  onChange={(v) => set('audit.retention', v)} placeholder="30d" width={140}/>
+              </Field>
+              <Field label="Cleanup interval" hint="How often the background sweeper runs">
+                <Input value={form.audit.cleanup_interval} mono
+                  onChange={(v) => set('audit.cleanup_interval', v)} placeholder="1h" width={140}/>
+              </Field>
+              <Field span={2}>
+                <button type="button" className="btn sm danger" onClick={() => setDrawer('purge_audit')}>
+                  Purge audit logs older than retention
+                </button>
+              </Field>
+            </div>
+          </Section>
+
+          {/* Maintenance */}
+          <Section id="maintenance" title="Maintenance" desc="Manual cleanup operations. Use carefully." onSection={setActive}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="row" style={{
+                padding: 12, gap: 12,
+                border: '1px solid var(--hairline)',
+                borderRadius: 5,
+                background: 'var(--surface-1)',
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>Purge expired sessions</div>
+                  <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>Removes session rows past their expiry. Active users keep their sessions.</div>
+                </div>
+                <button type="button" className="btn sm danger" onClick={() => setDrawer('purge_sessions')}>
+                  Purge expired
+                </button>
+              </div>
+              <div className="row" style={{
+                padding: 12, gap: 12,
+                border: '1px solid var(--hairline)',
+                borderRadius: 5,
+                background: 'var(--surface-1)',
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>Purge audit logs</div>
+                  <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>Manual one-shot cleanup of audit rows older than the retention window above.</div>
+                </div>
+                <button type="button" className="btn sm danger" onClick={() => setDrawer('purge_audit')}>
+                  Purge older
+                </button>
+              </div>
+            </div>
+          </Section>
+        </div>
+
+        <CLIFooter command="shark admin config dump"/>
+
+        {/* Floating dirty bar — pinned to bottom of right pane */}
+        {isDirty && (
+          <div style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: 56,
+            transform: 'translateX(-50%)',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--hairline-strong)',
+            borderRadius: 5,
+            padding: '8px 12px',
+            display: 'flex', gap: 10, alignItems: 'center',
+            zIndex: 30,
+            boxShadow: '0 12px 32px -8px rgba(0,0,0,0.6), 0 0 0 1px var(--hairline)',
+          }}>
+            <span className="dot" style={{ background: 'var(--warn)', boxShadow: '0 0 0 3px color-mix(in oklch, var(--warn) 20%, transparent)' }}/>
+            <span style={{ fontSize: 12, color: 'var(--fg)' }}>Unsaved changes</span>
+            <button className="btn ghost sm" onClick={handleDiscard} disabled={saving}>Discard</button>
             <button className="btn primary sm" onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save Changes'}
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* ── Toast ── */}
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 20, right: 20, zIndex: 110,
-          padding: '9px 14px', borderRadius: 6,
-          display: 'flex', alignItems: 'center', gap: 8,
-          fontSize: 12.5, fontWeight: 500,
-          background: toast.type === 'danger' ? 'var(--danger-bg)' : toast.type === 'warn' ? 'var(--warn-bg)' : 'var(--success-bg)',
-          border: '1px solid ' + (toast.type === 'danger' ? 'var(--danger)' : toast.type === 'warn' ? 'var(--warn)' : 'var(--success)'),
-          color: toast.type === 'danger' ? 'var(--danger)' : toast.type === 'warn' ? 'var(--warn)' : 'var(--success)',
-          boxShadow: 'var(--shadow-lg)',
-        }}>
-          {toast.type === 'danger' ? <Icon.X width={13} height={13}/> : toast.type === 'warn' ? <Icon.Warn width={13} height={13}/> : <Icon.Check width={13} height={13}/>}
-          {toast.msg}
-        </div>
+      {/* Drawers */}
+      {drawer === 'test_email' && (
+        <TestEmailDrawer
+          fromAddress={form.email.from}
+          onClose={() => setDrawer(null)}
+        />
       )}
-
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-        .input-inline {
-          background: transparent; border: 1px solid transparent; border-radius: 4px;
-          padding: 4px 8px; color: var(--fg); width: 100%; outline: none; transition: all 0.1s;
-        }
-        .input-inline:hover { background: var(--surface-2); border-color: var(--hairline); }
-        .input-inline:focus { background: var(--surface-2); border-color: var(--fg-muted); }
-      `}</style>
-      <CLIFooter command="shark admin config dump"/>
+      {drawer === 'purge_audit' && (
+        <PurgeAuditDrawer
+          retention={form.audit.retention}
+          onClose={() => setDrawer(null)}
+          onDone={refresh}
+        />
+      )}
+      {drawer === 'purge_sessions' && (
+        <PurgeSessionsDrawer
+          onClose={() => setDrawer(null)}
+          onDone={refresh}
+        />
+      )}
     </div>
+  );
+}
+
+// SystemSettings alias is exported from system_settings.tsx (compat shim).
+
+// ─── Drawers ────────────────────────────────────────────────────────────────
+
+function TestEmailDrawer({ fromAddress, onClose }) {
+  const toast = useToast();
+  const [to, setTo] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+
+  const send = async () => {
+    if (!to.trim() || busy) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await API.post('/admin/test-email', { to: to.trim() });
+      setResult({ ok: true, msg: `Delivered to ${res?.to || to.trim()}` });
+      toast.success('Test email sent');
+    } catch (e) {
+      setResult({ ok: false, msg: e?.message || 'Send failed' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Drawer
+      title="Send test email"
+      subtitle={`Routes through your active email provider · From ${fromAddress || '(not configured)'}`}
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn primary sm" onClick={send} disabled={busy || !to.trim()}>
+            {busy ? 'Sending…' : 'Send test'}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Field label="Send to" hint="An inbox you own — message subject is 'SharkAuth Test Email'">
+          <input
+            type="email"
+            autoFocus
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="you@example.com"
+            style={{
+              width: '100%', height: 28, padding: '0 8px',
+              background: 'var(--surface-1)',
+              border: '1px solid var(--hairline-strong)',
+              borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+            }}/>
+        </Field>
+        {result && (
+          <div style={{
+            padding: 10,
+            border: '1px solid ' + (result.ok ? 'color-mix(in oklch, var(--success) 35%, var(--hairline))' : 'color-mix(in oklch, var(--danger) 35%, var(--hairline))'),
+            borderRadius: 4,
+            background: result.ok
+              ? 'color-mix(in oklch, var(--success) 8%, var(--surface-1))'
+              : 'color-mix(in oklch, var(--danger) 8%, var(--surface-1))',
+            fontSize: 12, lineHeight: 1.5,
+            color: result.ok ? 'var(--success)' : 'var(--danger)',
+          }}>
+            {result.msg}
+          </div>
+        )}
+        <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>POST /admin/test-email</div>
+      </div>
+    </Drawer>
+  );
+}
+
+function PurgeAuditDrawer({ retention, onClose, onDone }) {
+  const toast = useToast();
+  const [confirmText, setConfirmText] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  // Use the configured retention to compute a "before" timestamp client-side.
+  // The endpoint accepts {before: <RFC3339 timestamp>}.
+  const beforeISO = React.useMemo(() => {
+    const m = (retention || '30d').match(/^(\d+)([smhd])$/);
+    if (!m) return null;
+    const n = Number(m[1]);
+    const unit = m[2];
+    const ms = unit === 's' ? n*1000 : unit === 'm' ? n*60000 : unit === 'h' ? n*3600000 : n*86400000;
+    return new Date(Date.now() - ms).toISOString();
+  }, [retention]);
+
+  const run = async () => {
+    if (busy || confirmText !== 'PURGE') return;
+    setBusy(true);
+    try {
+      await API.post('/admin/audit-logs/purge', beforeISO ? { before: beforeISO } : {});
+      toast.success('Audit logs purged');
+      onDone && onDone();
+      onClose();
+    } catch (e) {
+      toast.error(e?.message || 'Purge failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Drawer
+      title="Purge audit logs"
+      subtitle="Permanently delete audit rows older than the retention window"
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn sm danger" onClick={run} disabled={busy || confirmText !== 'PURGE'}>
+            {busy ? 'Purging…' : 'Purge logs'}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{
+          padding: 10,
+          border: '1px solid color-mix(in oklch, var(--danger) 35%, var(--hairline))',
+          borderRadius: 4,
+          background: 'color-mix(in oklch, var(--danger) 6%, var(--surface-1))',
+          fontSize: 12, lineHeight: 1.5, color: 'var(--fg)',
+        }}>
+          This permanently removes audit rows older than <span className="mono" style={{ color: 'var(--danger)' }}>{retention}</span>{beforeISO && <> (before <span className="mono">{beforeISO}</span>)</>}. This action cannot be undone.
+        </div>
+        <Field label="Type PURGE to confirm">
+          <input
+            autoFocus
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="PURGE"
+            style={{
+              width: '100%', height: 28, padding: '0 8px',
+              background: 'var(--surface-1)',
+              border: '1px solid var(--hairline-strong)',
+              borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+              fontFamily: 'var(--font-mono)',
+            }}/>
+        </Field>
+        <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>POST /admin/audit-logs/purge</div>
+      </div>
+    </Drawer>
+  );
+}
+
+function PurgeSessionsDrawer({ onClose, onDone }) {
+  const toast = useToast();
+  const [confirmText, setConfirmText] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+
+  const run = async () => {
+    if (busy || confirmText !== 'PURGE') return;
+    setBusy(true);
+    try {
+      await API.post('/admin/sessions/purge-expired', {});
+      toast.success('Expired sessions purged');
+      onDone && onDone();
+      onClose();
+    } catch (e) {
+      toast.error(e?.message || 'Purge failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Drawer
+      title="Purge expired sessions"
+      subtitle="Remove session rows whose expiry has passed"
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn sm danger" onClick={run} disabled={busy || confirmText !== 'PURGE'}>
+            {busy ? 'Purging…' : 'Purge expired'}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{
+          padding: 10,
+          border: '1px solid color-mix(in oklch, var(--warn) 35%, var(--hairline))',
+          borderRadius: 4,
+          background: 'color-mix(in oklch, var(--warn) 6%, var(--surface-1))',
+          fontSize: 12, lineHeight: 1.5, color: 'var(--fg)',
+        }}>
+          Active users are not affected — only sessions whose <span className="mono">expires_at</span> is in the past are deleted.
+        </div>
+        <Field label="Type PURGE to confirm">
+          <input
+            autoFocus
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="PURGE"
+            style={{
+              width: '100%', height: 28, padding: '0 8px',
+              background: 'var(--surface-1)',
+              border: '1px solid var(--hairline-strong)',
+              borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+              fontFamily: 'var(--font-mono)',
+            }}/>
+        </Field>
+        <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>POST /admin/sessions/purge-expired</div>
+      </div>
+    </Drawer>
   );
 }
