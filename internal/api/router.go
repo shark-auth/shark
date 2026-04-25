@@ -482,13 +482,6 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 			r.Post("/export", s.handleExportAuditLogs)
 		})
 
-		// Migration (admin)
-		r.Route("/migrate", func(r chi.Router) {
-			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
-			r.Post("/auth0", notImplemented)
-			r.Get("/{id}", notImplemented)
-		})
-
 		// Webhooks (admin)
 		r.Route("/webhooks", func(r chi.Router) {
 			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
@@ -921,11 +914,3 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"}) //#nosec G104 -- write to ResponseWriter; no actionable recovery
 }
 
-func notImplemented(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	json.NewEncoder(w).Encode(map[string]string{ //#nosec G104 -- write to ResponseWriter; no actionable recovery
-		"error":   "not_implemented",
-		"message": "This endpoint is not yet implemented",
-	})
-}
