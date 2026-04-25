@@ -16,7 +16,7 @@ auth:
     key_length: 32
   jwt:
     enabled: true
-    mode: session
+    mode: jwt
     issuer: ""
     audience: shark
     access_token_ttl: 15m
@@ -101,12 +101,6 @@ proxy:
   timeout_seconds: 0
   trusted_headers: []
   strip_incoming: null
-  rules:
-    - path: /*
-      methods: []
-      require: authenticated
-      allow: ""
-      scopes: []
   listeners:
     - bind: ""
       upstream: http://localhost:3000
@@ -114,12 +108,6 @@ proxy:
       trusted_headers: []
       strip_incoming: null
       timeout_seconds: 0
-      rules:
-        - path: /*
-          methods: []
-          require: authenticated
-          allow: ""
-          scopes: []
 telemetry:
   enabled: true
   endpoint: https://telemetry.shark-auth.com/v1/ping
