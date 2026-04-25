@@ -525,8 +525,8 @@ function ConsentPreview({ app }) {
   return (
     <div style={{ padding: 16 }}>
       <div style={{
-        background: '#fff', color: '#0a0a0a',
-        borderRadius: 10, padding: 24,
+        background: 'var(--surface-0)', color: 'var(--fg)',
+        borderRadius: 0, padding: 24,
         border: '1px solid var(--hairline-strong)',
         fontFamily: 'var(--font-sans)',
         boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 6px 18px rgba(0,0,0,0.25)',
@@ -534,33 +534,33 @@ function ConsentPreview({ app }) {
         <div style={{textAlign:'center', marginBottom: 20}}>
           <div style={{
             width: 48, height: 48, margin: '0 auto 10px',
-            borderRadius: 10, background: '#111',
+            borderRadius: 0, background: 'var(--surface-3)',
             display:'flex', alignItems:'center', justifyContent:'center',
-            color:'#fff', fontWeight: 700, fontSize: 22,
+            color:'var(--fg)', fontWeight: 700, fontSize: 22,
           }}>{app.name[0]}</div>
-          <div style={{fontSize: 15, fontWeight: 600, color:'#0a0a0a'}}>{app.name} wants to sign you in</div>
-          <div style={{fontSize: 12, color:'#666', marginTop: 4}}>with your Shark account</div>
+          <div style={{fontSize: 15, fontWeight: 600, color:'var(--fg)'}}>{app.name} wants to sign you in</div>
+          <div style={{fontSize: 12, color:'var(--fg-muted)', marginTop: 4}}>with your Shark account</div>
         </div>
 
-        <div style={{background:'#f7f7f8', borderRadius: 6, padding: '10px 12px', marginBottom: 12, fontSize: 12, color:'#0a0a0a'}}>
+        <div style={{background:'var(--surface-1)', borderRadius: 0, padding: '10px 12px', marginBottom: 12, fontSize: 12, color:'var(--fg)'}}>
           <div style={{fontWeight: 500, marginBottom: 6, fontSize: 11}}>{app.name} will be able to:</div>
           {scopes.map(s => (
             <div key={s.scope} style={{display: 'flex', gap: 8, padding: '4px 0', alignItems:'flex-start', fontSize: 11.5}}>
-              <span style={{color:'#22a06b', fontWeight:600, marginTop: 1}}>✓</span>
+              <span style={{color:'var(--success)', fontWeight:600, marginTop: 1}}>✓</span>
               <div>
-                <div style={{color:'#0a0a0a'}}>{s.desc}</div>
-                <div style={{color: '#999', fontSize: 10, fontFamily:'var(--font-mono)', marginTop: 1}}>scope: {s.scope}</div>
+                <div style={{color:'var(--fg)'}}>{s.desc}</div>
+                <div style={{color: 'var(--fg-muted)', fontSize: 10, fontFamily:'var(--font-mono)', marginTop: 1}}>scope: {s.scope}</div>
               </div>
             </div>
           ))}
         </div>
 
         <div style={{display:'flex', gap: 6, marginTop: 16}}>
-          <button style={{flex:1, padding:'9px 12px', background:'#f0f0f0', color:'#222', border:0, borderRadius: 6, fontSize: 12, fontWeight: 500}}>Cancel</button>
-          <button style={{flex:1, padding:'9px 12px', background:'#000', color:'#fff', border:0, borderRadius: 6, fontSize: 12, fontWeight: 500}}>Allow</button>
+          <button style={{flex:1, padding:'9px 12px', background:'var(--surface-2)', color:'var(--fg)', border:'1px solid var(--hairline-strong)', borderRadius: 0, fontSize: 12, fontWeight: 500}}>Cancel</button>
+          <button style={{flex:1, padding:'9px 12px', background:'var(--fg)', color:'var(--bg)', border:0, borderRadius: 0, fontSize: 12, fontWeight: 500}}>Allow</button>
         </div>
 
-        <div style={{textAlign:'center', fontSize: 10, color:'#999', marginTop: 14, borderTop:'1px solid #eee', paddingTop: 10}}>
+        <div style={{textAlign:'center', fontSize: 10, color:'var(--fg-muted)', marginTop: 14, borderTop:'1px solid var(--hairline)', paddingTop: 10}}>
           Redirects to <span style={{fontFamily:'var(--font-mono)'}}>{redirectUris[0] || '(no redirect URIs)'}</span>
         </div>
       </div>

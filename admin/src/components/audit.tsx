@@ -469,8 +469,8 @@ function Seg({ value, onChange, opts, mono }) {
           style={{
             padding: '0 8px', height: 22,
             fontSize: 10.5,
-            background: value === v ? '#fafafa' : 'var(--surface-2)',
-            color: value === v ? '#000' : 'var(--fg-muted)',
+            background: value === v ? 'var(--surface-3)' : 'var(--surface-2)',
+            color: value === v ? 'var(--fg)' : 'var(--fg-muted)',
             borderRight: '1px solid var(--hairline)',
           }}>{label}</button>
       ))}

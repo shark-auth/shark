@@ -250,7 +250,14 @@ export function Sessions() {
             </button>
           </div>
 
-          <button className="btn sm">Export</button>
+          <button className="btn sm" onClick={() => {
+            const rows = filtered.map(s => [s.id, s.user, s.ip, s.city, s.client, s.risk, s.current ? 'current' : '', s.blocked ? 'blocked' : ''].join(','));
+            const csv = ['id,user,ip,city,client,risk,current,blocked', ...rows].join('\n');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+            a.download = 'sessions.csv';
+            a.click();
+          }}>Export</button>
           <button className="btn sm danger" onClick={handleRevokeAll}>Revoke all</button>
         </div>
 
@@ -320,8 +327,8 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
         </div>
         <StackedBar
           entries={[
-            { k: 'web',    v: clientCounts.web,    color: '#fafafa' },
-            { k: 'mobile', v: clientCounts.mobile, color: '#888'    },
+            { k: 'web',    v: clientCounts.web,    color: 'var(--fg)' },
+            { k: 'mobile', v: clientCounts.mobile, color: 'var(--fg-muted)' },
             { k: 'api',    v: clientCounts.api,    color: '#4a4a4a' },
             { k: 'agent',  v: clientCounts.agent,  color: 'var(--agent)' },
           ]}
@@ -712,6 +719,7 @@ function AbstractMap({ sessions, pulse, setSelected }) {
 function SessionSlideover({ session, onClose, onRevoke }) {
   const [tab, setTab] = React.useState('overview');
   const [revoking, setRevoking] = React.useState(false);
+  const [moreOpen, setMoreOpen] = React.useState(false);
 
   const handleRevoke = async () => {
     setRevoking(true);
@@ -741,7 +749,6 @@ function SessionSlideover({ session, onClose, onRevoke }) {
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <button className="btn ghost sm" onClick={onClose}><Icon.X width={12} height={12}/>Close</button>
           <div className="row" style={{ gap: 4 }}>
-            <button className="btn ghost sm">Replay</button>
             {/* Revoke: ghost danger sm — present but not screaming */}
             <button
               className="btn ghost sm"
@@ -751,7 +758,29 @@ function SessionSlideover({ session, onClose, onRevoke }) {
             >
               {revoking ? 'Revoking…' : 'Revoke'}
             </button>
-            <button className="btn ghost icon sm"><Icon.More width={12} height={12}/></button>
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn ghost icon sm"
+                aria-label="More options"
+                onClick={() => setMoreOpen(o => !o)}
+              ><Icon.More width={12} height={12}/></button>
+              {moreOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                  background: 'var(--surface-1)', border: '1px solid var(--hairline-strong)',
+                  zIndex: 50, minWidth: 140,
+                }} onClick={() => setMoreOpen(false)}>
+                  <button className="btn ghost sm" style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start', borderRadius: 0, color: 'var(--danger)' }}
+                    onClick={handleRevoke} disabled={revoking}>
+                    Revoke session
+                  </button>
+                  <button className="btn ghost sm" style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start', borderRadius: 0 }}
+                    onClick={() => navigator.clipboard?.writeText(session.id)}>
+                    Copy session ID
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         {/* User identity */}
