@@ -9,6 +9,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sharkauth/sharkauth/internal/cli"
 )
 
 // migrationsFS is injected by main.go at startup; holds the embedded migrations/.
@@ -41,13 +43,14 @@ func Execute() error {
 }
 
 // configureLogger wires slog.Default() to stderr at INFO or DEBUG depending on verbose.
+// When stderr is a TTY (and NO_COLOR is not set), uses the pretty PrettyHandler;
+// otherwise falls back to the standard text handler for log-aggregator parsability.
 func configureLogger(v bool) {
 	level := slog.LevelInfo
 	if v {
 		level = slog.LevelDebug
 	}
-	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
-	slog.SetDefault(slog.New(h))
+	slog.SetDefault(cli.NewServerLogger(os.Stderr, level))
 }
 
 // jsonFlag returns true if the command has a --json flag and it is set.

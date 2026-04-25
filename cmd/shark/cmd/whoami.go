@@ -12,6 +12,8 @@ import (
 	"net/http"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sharkauth/sharkauth/internal/cli"
 )
 
 var whoamiCmd = &cobra.Command{
@@ -40,7 +42,7 @@ If the token is an admin API key (not a user JWT), the endpoint will return
 						"stats":      statsBody,
 					})
 				}
-				fmt.Fprintln(cmd.OutOrStdout(), "token_type: admin_api_key (valid)")
+				cli.PrintSuccess(cmd.OutOrStdout(), "token_type: admin_api_key (valid)")
 				return nil
 			}
 			return maybeJSONErr(cmd, "unauthorized",

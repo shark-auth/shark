@@ -5,6 +5,8 @@ import (
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sharkauth/sharkauth/internal/cli"
 )
 
 // version is injected at build time via -ldflags "-X ...cmd.version=vX.Y.Z".
@@ -15,7 +17,9 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the shark version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(resolveVersion())
+		out := cmd.OutOrStdout()
+		cli.PrintHeader(out)
+		fmt.Fprintf(out, "\nVersion: %s\n", resolveVersion())
 	},
 }
 

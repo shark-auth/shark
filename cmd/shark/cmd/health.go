@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sharkauth/sharkauth/internal/cli"
 )
 
 var healthURL string
@@ -48,7 +50,7 @@ var healthCmd = &cobra.Command{
 			return writeJSON(cmd.OutOrStdout(), payload)
 		}
 
-		fmt.Printf("ok — %s\n", healthURL)
+		cli.PrintSuccess(cmd.OutOrStdout(), "ok — "+healthURL)
 		return nil
 	},
 }

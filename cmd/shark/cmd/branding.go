@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sharkauth/sharkauth/internal/cli"
 )
 
 var brandingCmd = &cobra.Command{
@@ -76,7 +78,7 @@ Or as a JSON file with --from-file:
 		if jsonFlag(cmd) {
 			return writeJSON(cmd.OutOrStdout(), body)
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), "design tokens updated")
+		cli.PrintSuccess(cmd.OutOrStdout(), "design tokens updated")
 		return nil
 	},
 }
