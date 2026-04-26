@@ -336,6 +336,8 @@ function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
           ['tokens', 'Tokens'],
           ['consents', 'Consents'],
           ['audit', 'Audit'],
+          ['security', 'Security'],
+          ['delegation', 'Delegation Policies'],
         ].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             style={{
@@ -352,6 +354,8 @@ function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
         {tab === 'tokens' && <AgentTokens agent={agent} tokensVersion={tokensVersion}/>}
         {tab === 'consents' && <AgentConsents agent={agent}/>}
         {tab === 'audit' && <AgentAudit agent={agent}/>}
+        {tab === 'security' && <AgentSecurity agent={agent}/>}
+        {tab === 'delegation' && <AgentDelegationPolicies agent={agent}/>}
       </div>
       {rotateModalOpen && (
         <RotateSecretModal
@@ -963,6 +967,331 @@ function RotateSecretModal({ agent, onClose }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// Truncate a string: first 8 chars + "..." + last 4 chars
+function jktShort(s) {
+  if (!s) return '—';
+  if (s.length <= 12) return s;
+  return s.slice(0, 8) + '...' + s.slice(-4);
+}
+
+function AgentSecurity({ agent }) {
+  const toast = useToast();
+  const [rotHistOpen, setRotHistOpen] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  // Pull DPoP fields from the agent object (populated by GET /api/v1/agents/:id)
+  const keyId   = agent.dpop_key_id   || agent.key_id   || null;
+  const jkt     = agent.dpop_jkt      || agent.jkt      || null;
+
+  // Pull rotation history from the agent's audit log (last 5 key-rotation events)
+  const { data: auditData, loading: auditLoading } = useAPI(
+    '/agents/' + agent.id + '/audit?limit=50',
+    [agent.id]
+  );
+  const allEvents = auditData?.data || [];
+  const rotations = allEvents
+    .filter(e => e.action && (
+      e.action.includes('key_rotation') ||
+      e.action.includes('dpop') ||
+      e.action.includes('rotate_key')
+    ))
+    .slice(0, 5);
+
+  const copyJkt = () => {
+    if (!jkt) return;
+    navigator.clipboard.writeText(jkt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+      toast.success('Thumbprint copied');
+    }).catch(() => toast.error('Copy failed'));
+  };
+
+  return (
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* DPoP keypair section */}
+      <Section label="DPoP keypair">
+        <div style={{
+          background: 'var(--surface-1)', border: '1px solid var(--hairline)',
+          borderRadius: 3, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          {/* Algorithm + key_id row */}
+          <div className="row" style={{ gap: 10, fontSize: 12 }}>
+            <Icon.Key width={12} height={12} style={{ opacity: 0.6, flexShrink: 0 }} />
+            <span className="mono" style={{ flex: 1 }}>
+              ECDSA P-256
+              {keyId ? (
+                <span className="faint"> · key_id: {keyId}</span>
+              ) : (
+                <span className="faint"> · key_id: —</span>
+              )}
+            </span>
+          </div>
+
+          {/* Thumbprint (jkt) row */}
+          <div className="row" style={{ gap: 10, fontSize: 12 }}>
+            <Icon.Shield width={12} height={12} style={{ opacity: 0.6, flexShrink: 0 }} />
+            <span className="faint" style={{ flexShrink: 0, fontSize: 11 }}>Thumbprint (jkt):</span>
+            <span className="mono" style={{ flex: 1, fontSize: 11, wordBreak: 'break-all' }}>
+              {jkt ? jktShort(jkt) : '—'}
+            </span>
+            {jkt && (
+              <button
+                className="btn ghost icon sm"
+                onClick={copyJkt}
+                title="Copy full thumbprint"
+                style={{ flexShrink: 0 }}
+              >
+                {copied
+                  ? <Icon.Check width={11} height={11} style={{ color: 'var(--success)' }} />
+                  : <Icon.Copy width={11} height={11} />}
+              </button>
+            )}
+          </div>
+
+          {/* Empty state when no DPoP data */}
+          {!keyId && !jkt && (
+            <div className="faint" style={{ fontSize: 11, marginTop: 2 }}>
+              No DPoP keypair registered for this agent.
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* Rotation history section */}
+      <Section label="Rotation history">
+        <div style={{
+          border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)', overflow: 'hidden',
+        }}>
+          {/* Collapsible header */}
+          <button
+            onClick={() => setRotHistOpen(o => !o)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px', background: 'transparent', border: 0, cursor: 'pointer',
+              fontSize: 11.5, color: 'var(--fg-muted)',
+            }}
+          >
+            {rotHistOpen
+              ? <Icon.ChevronDown width={11} height={11} />
+              : <Icon.ChevronRight width={11} height={11} />}
+            <span style={{ flex: 1, textAlign: 'left' }}>Last 5 key rotations</span>
+            {!auditLoading && (
+              <span className="mono faint" style={{ fontSize: 10 }}>{rotations.length} event{rotations.length !== 1 && 's'}</span>
+            )}
+          </button>
+
+          {rotHistOpen && (
+            <div style={{ borderTop: '1px solid var(--hairline)' }}>
+              {auditLoading ? (
+                <div className="faint" style={{ padding: '10px 12px', fontSize: 11 }}>Loading…</div>
+              ) : rotations.length === 0 ? (
+                <div className="faint" style={{ padding: '10px 12px', fontSize: 11 }}>
+                  No key rotation events found in audit log.
+                </div>
+              ) : rotations.map((e, i) => (
+                <div
+                  key={e.id || i}
+                  className="row"
+                  style={{
+                    padding: '7px 12px', gap: 8, fontSize: 11,
+                    borderBottom: i < rotations.length - 1 ? '1px solid var(--hairline)' : 0,
+                  }}
+                >
+                  <SevDot sev={e.severity} />
+                  <span className="mono" style={{ flex: 1 }}>{e.action}</span>
+                  <span className="faint" style={{ fontSize: 10.5 }}>{e.actor || e.actor_id || '—'}</span>
+                  <span className="faint mono" style={{ fontSize: 10 }}>{relativeTime(e.created_at || e.t)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+function AgentDelegationPolicies({ agent }) {
+  const toast = useToast();
+  const { data: allAgentsRaw, loading: agentsLoading } = useAPI('/agents?limit=200');
+  const { data: policiesRaw, loading: policiesLoading, refresh: refreshPolicies } = useAPI(
+    '/agents/' + agent.id + '/policies',
+    [agent.id]
+  );
+
+  const allAgents = (allAgentsRaw?.data || []).filter(a => a.id !== agent.id);
+  const savedPolicies = policiesRaw?.data || policiesRaw?.policies || [];
+
+  // editMode: false = read-only summary, true = checkbox grid
+  const [editMode, setEditMode] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  // Local draft: map of agentId -> { enabled: bool, scope: string }
+  const [draft, setDraft] = React.useState({});
+
+  // When entering edit mode, seed draft from saved policies
+  React.useEffect(() => {
+    if (!editMode) return;
+    const initial = {};
+    for (const a of allAgents) {
+      const saved = savedPolicies.find(p => p.delegate_to_id === a.id || p.agent_id === a.id);
+      initial[a.id] = {
+        enabled: !!saved,
+        scope: saved?.scope || '',
+      };
+    }
+    setDraft(initial);
+  }, [editMode, agent.id, policiesLoading]);
+
+  const delegatedNames = savedPolicies
+    .map(p => {
+      const match = allAgents.find(a => a.id === (p.delegate_to_id || p.agent_id));
+      return match ? match.name : p.delegate_to_id || p.agent_id || '?';
+    })
+    .filter(Boolean);
+
+  const toggleAgent = (id) => {
+    setDraft(d => ({ ...d, [id]: { ...d[id], enabled: !d[id]?.enabled } }));
+  };
+
+  const setScopeFor = (id, scope) => {
+    setDraft(d => ({ ...d, [id]: { ...d[id], scope } }));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const policies = Object.entries(draft)
+        .filter(([, v]) => v.enabled)
+        .map(([id, v]) => ({ delegate_to_id: id, scope: v.scope || '' }));
+      await API.post('/agents/' + agent.id + '/policies', { policies });
+      toast.success('Delegation policies saved');
+      refreshPolicies();
+      setEditMode(false);
+    } catch (e) {
+      toast.error('Save failed: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loading = agentsLoading || policiesLoading;
+
+  if (loading) {
+    return <div className="faint" style={{ padding: 20, fontSize: 11 }}>Loading…</div>;
+  }
+
+  return (
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Read-only summary / empty state */}
+      {!editMode && (
+        <Section label="Delegation Policies">
+          {savedPolicies.length === 0 ? (
+            <div style={{
+              background: 'var(--surface-1)', border: '1px solid var(--hairline)',
+              borderRadius: 3, padding: '14px 16px', display: 'flex', flexDirection: 'column',
+              gap: 10, alignItems: 'flex-start',
+            }}>
+              <div style={{ fontSize: 12, color: 'var(--fg-muted)' }}>
+                No delegation policies set. This agent cannot delegate to any other agent.
+              </div>
+              <button className="btn ghost sm" onClick={() => setEditMode(true)}>
+                Configure
+              </button>
+            </div>
+          ) : (
+            <div style={{
+              background: 'var(--surface-1)', border: '1px solid var(--hairline)',
+              borderRadius: 3, padding: '10px 12px', fontSize: 12,
+            }}>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <span style={{ color: 'var(--fg-muted)', flexShrink: 0 }}>This agent can delegate to:</span>
+                {delegatedNames.map(name => (
+                  <span key={name} className="chip mono" style={{ height: 20, fontSize: 10.5 }}>{name}</span>
+                ))}
+                <button
+                  className="btn ghost sm"
+                  onClick={() => setEditMode(true)}
+                  style={{ marginLeft: 4, fontSize: 11 }}
+                >
+                  edit
+                </button>
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* Edit mode: checkbox grid */}
+      {editMode && (
+        <Section label="Delegation Policies">
+          {allAgents.length === 0 ? (
+            <div className="faint" style={{ fontSize: 11.5, padding: '8px 0' }}>
+              No other agents in this workspace to delegate to.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {allAgents.map(a => {
+                const row = draft[a.id] || { enabled: false, scope: '' };
+                return (
+                  <div
+                    key={a.id}
+                    style={{
+                      display: 'grid', gridTemplateColumns: '20px 1fr auto',
+                      gap: 8, alignItems: 'center',
+                      padding: '6px 10px', background: 'var(--surface-1)',
+                      border: '1px solid var(--hairline)', borderRadius: 3,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={row.enabled}
+                      onChange={() => toggleAgent(a.id)}
+                      disabled={saving}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {a.name}
+                      {a.description && (
+                        <span className="faint" style={{ fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
+                          {a.description}
+                        </span>
+                      )}
+                    </span>
+                    <input
+                      placeholder="scope (optional)"
+                      value={row.scope}
+                      onChange={e => setScopeFor(a.id, e.target.value)}
+                      disabled={!row.enabled || saving}
+                      style={{
+                        fontSize: 11, padding: '3px 7px', width: 160,
+                        border: '1px solid var(--hairline)', borderRadius: 3,
+                        background: row.enabled ? 'var(--surface-0)' : 'var(--surface-2)',
+                        color: 'var(--fg)', outline: 'none', opacity: row.enabled ? 1 : 0.5,
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="row" style={{ gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+            <button className="btn ghost sm" onClick={() => setEditMode(false)} disabled={saving}>
+              Cancel
+            </button>
+            <button className="btn primary sm" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : 'Save policies'}
+            </button>
+          </div>
+        </Section>
+      )}
     </div>
   );
 }

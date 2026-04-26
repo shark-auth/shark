@@ -370,16 +370,198 @@ export function Overview({ setPage } = {}) {
           </div>
         </div>
       </div>
-      <AttentionPanel healthRaw={healthRaw} stats={stats} onRefresh={refreshHealth}/>
+      <AttentionPanel healthRaw={healthRaw} stats={stats} onRefresh={refreshHealth} setPage={setPage}/>
     </div>
     </div>
   );
 }
 
-function AttentionPanel({ healthRaw, stats, onRefresh }) {
+// useAgentSecurityMetrics — derives 4 agent-security KPIs from existing endpoints.
+// No new backend: uses /api/v1/admin/audit-logs (token.exchange events) and
+// /api/v1/agents + /api/v1/agents/{id}/tokens (DPoP binding, delegation depth).
+function useAgentSecurityMetrics() {
+  const [metrics, setMetrics] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  const compute = React.useCallback(() => {
+    const key = localStorage.getItem('shark_admin_key');
+    if (!key) { setLoading(false); return; }
+    const headers = { Authorization: 'Bearer ' + key };
+
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    Promise.all([
+      // token-exchange grants last 24h
+      fetch(`/api/v1/admin/audit-logs?action=token.exchange&from=${encodeURIComponent(since24h)}&limit=200`, { headers })
+        .then(r => r.ok ? r.json() : { data: [] }),
+      // all agents (for delegation + DPoP stats)
+      fetch('/api/v1/agents?limit=200', { headers })
+        .then(r => r.ok ? r.json() : { data: [] }),
+    ]).then(([auditResp, agentsResp]) => {
+      const auditEvents = Array.isArray(auditResp?.data) ? auditResp.data : [];
+      const agents = Array.isArray(agentsResp?.data) ? agentsResp.data : [];
+
+      // 1. Active token-exchange grants last 24h
+      const tokenExchangeGrants = auditEvents.length;
+
+      // 2. Delegation chains: count events with act_chain length > 1; max depth across all
+      let chainCount = 0;
+      let maxDepth = 0;
+      for (const ev of auditEvents) {
+        const chain = ev.act_chain;
+        if (Array.isArray(chain) && chain.length > 1) {
+          chainCount++;
+          if (chain.length > maxDepth) maxDepth = chain.length;
+        } else if (ev.oauth?.act) {
+          // legacy single-hop delegation
+          chainCount++;
+          if (2 > maxDepth) maxDepth = 2;
+        }
+      }
+
+      // 3 & 4. DPoP binding % + expired DPoP keys — derive from agent token list
+      // Fetch tokens for each agent (cap at 10 agents to stay cheap)
+      const agentSlice = agents.slice(0, 10);
+      const tokenFetches = agentSlice.map(ag =>
+        fetch(`/api/v1/agents/${ag.id}/tokens`, { headers })
+          .then(r => r.ok ? r.json() : { data: [] })
+          .catch(() => ({ data: [] }))
+      );
+
+      Promise.all(tokenFetches).then(tokenResps => {
+        let totalTokens = 0;
+        let dpopBound = 0;
+        let expiredDpop = 0;
+        const now = Date.now();
+
+        for (const tr of tokenResps) {
+          const toks = Array.isArray(tr?.data) ? tr.data : [];
+          for (const tok of toks) {
+            totalTokens++;
+            const hasDpop = !!(tok.dpop_jkt || tok.cnf?.jkt);
+            if (hasDpop) dpopBound++;
+            // expired DPoP key: token has a DPoP binding but the token itself is expired
+            if (hasDpop && tok.expires_at) {
+              const exp = new Date(tok.expires_at).getTime();
+              if (exp < now) expiredDpop++;
+            }
+          }
+        }
+
+        const dpopPct = totalTokens > 0 ? Math.round((dpopBound / totalTokens) * 100) : 0;
+
+        setMetrics({ tokenExchangeGrants, chainCount, maxDepth, dpopPct, expiredDpop });
+        setLoading(false);
+      });
+    }).catch(() => setLoading(false));
+  }, []);
+
+  React.useEffect(() => {
+    compute();
+    // refresh every 60s to stay in sync with SSE-driven live data
+    const id = setInterval(compute, 60000);
+    return () => clearInterval(id);
+  }, [compute]);
+
+  return { metrics, loading, refresh: compute };
+}
+
+function AgentSecurityCard({ setPage }) {
+  const { metrics, loading } = useAgentSecurityMetrics();
+
+  const navigate = () => {
+    if (typeof setPage === 'function') {
+      setPage('agents');
+    } else {
+      window.history.pushState(null, '', '/admin/agents');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
+
+  const rows = loading || !metrics ? null : [
+    {
+      label: 'Active token-exchange grants',
+      value: `${metrics.tokenExchangeGrants}`,
+      sub: 'last 24h',
+      warn: false,
+    },
+    {
+      label: 'Delegation chains',
+      value: `${metrics.chainCount}`,
+      sub: `max depth: ${metrics.maxDepth || '—'}`,
+      warn: false,
+    },
+    {
+      label: 'DPoP binding',
+      value: `${metrics.dpopPct}%`,
+      sub: 'of agent tokens',
+      warn: false,
+    },
+    {
+      label: 'Expired DPoP keys',
+      value: `${metrics.expiredDpop}`,
+      sub: metrics.expiredDpop > 0 ? 'rotate recommended' : 'none',
+      warn: metrics.expiredDpop > 0,
+    },
+  ];
+
+  return (
+    <div
+      onClick={navigate}
+      style={{
+        borderBottom: '1px solid var(--hairline)',
+        padding: '12px 14px',
+        cursor: 'pointer',
+        transition: 'background 0.1s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+      onMouseLeave={e => e.currentTarget.style.background = ''}
+    >
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+      }}>
+        <span style={{
+          fontSize: 11,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          color: 'var(--fg-muted)',
+          fontWeight: 600,
+        }}>Agent Security</span>
+        <span className="chip agent sm">live</span>
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 12, color: 'var(--fg-muted)' }}>Loading…</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {rows.map((row, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)', flexShrink: 0 }}>{row.label}</span>
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <span style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  fontFamily: 'var(--font-mono)',
+                  color: row.warn ? 'var(--warn, #d97706)' : 'var(--fg)',
+                }}>{row.value}</span>
+                <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{row.sub}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AttentionPanel({ healthRaw, stats, onRefresh, setPage }) {
   return (
     <div className="card" style={{ alignSelf: 'start', position: 'sticky', top: 0 }}>
       <div className="card-header">Attention <button className="btn ghost sm" onClick={onRefresh}><Icon.Refresh width={11}/></button></div>
+      <AgentSecurityCard setPage={setPage}/>
       <div style={{ padding: 12, fontSize: 13, color: 'var(--fg-muted)' }}>All systems healthy.</div>
     </div>
   );
