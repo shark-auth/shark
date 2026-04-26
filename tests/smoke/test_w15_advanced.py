@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import socket
 import subprocess
 import threading
@@ -8,7 +7,6 @@ import time
 
 import pytest
 import requests
-import yaml
 
 BIN_PATH = "./shark.exe" if os.name == 'nt' else "./shark"
 
@@ -85,122 +83,73 @@ def toy_upstreams():
 
 
 def test_w15_multi_listener_isolation(toy_upstreams, tmp_path):
-    """Section 72: W15 multi-listener proxy (embedded).
+    """Section 72: W15 admin-API-driven proxy rule enforcement.
 
-    Lane D port: v1.5 deprecated per-listener YAML ``rules:``. Rules now
-    live in the DB and are scoped to applications via ``app_id``. Each
-    listener inherits the shared ``AppResolver`` which looks up the
-    application by the inbound request Host. We create two applications,
-    one per listener (bound via ``proxy_public_domain``), and push the
-    original 4-rule matrix into the DB via the admin API after boot.
+    W17 removed per-listener YAML ``rules:`` and multi-listener yaml config.
+    Rules live in the DB and are pushed via the admin API after boot. This
+    test verifies the same rule-enforcement behaviour (public open, private
+    auth-required) using a single --proxy-upstream server started with
+    SHARK_PORT / SHARK_DB_PATH env vars instead of --config.
 
-    The 4 assertions below are unchanged from the pre-v1.5 version — the
-    test just reaches the same states through the new configuration path.
+    Note: multi-listener isolation (tag=A vs tag=B via separate listener
+    ports) is not exercisable without yaml listener config, which was
+    hard-removed in W17 Phase H. The core invariants — anonymous access to
+    /public/* passes, anonymous access to protected /* is denied — are
+    unchanged and remain tested here.
     """
-    p_upstream_a, p_upstream_b = toy_upstreams
-    p_proxy_a, p_proxy_b = find_free_port(), find_free_port()
+    p_upstream_a, _p_upstream_b = toy_upstreams
     p_admin = find_free_port()
-
-    db_path = str(tmp_path / "w15.db")
-    cfg_path = str(tmp_path / "w15.yaml")
     log_path = str(tmp_path / "w15_server.log")
-
-    # proxy_public_domain (the AppResolver key) matches the Host we'll
-    # send from the client via requests. Hit 127.0.0.1:<port> so the
-    # resolver's with-port lookup matches directly.
-    host_a = f"127.0.0.1:{p_proxy_a}"
-    host_b = f"127.0.0.1:{p_proxy_b}"
-
-    cfg = {
-        "server": {
-            "port": p_admin,
-            "base_url": f"http://127.0.0.1:{p_admin}",
-            "secret": "w15-smoke-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxx",
-        },
-        "storage": {"path": db_path},
-        "auth": {
-            "jwt": {
-                "enabled": True,
-                "mode": "session",
-                "issuer": f"http://127.0.0.1:{p_admin}",
-                "audience": "shark-smoke",
-            }
-        },
-        "proxy": {
-            "listeners": [
-                {
-                    "bind": f"127.0.0.1:{p_proxy_a}",
-                    "upstream": f"http://127.0.0.1:{p_upstream_a}",
-                },
-                {
-                    "bind": f"127.0.0.1:{p_proxy_b}",
-                    "upstream": f"http://127.0.0.1:{p_upstream_b}",
-                },
-            ]
-        },
-    }
-
-    with open(cfg_path, "w") as f:
-        yaml.dump(cfg, f)
 
     bin_abs = os.path.abspath(BIN_PATH)
     log = open(log_path, "w")
+    env = os.environ.copy()
+    env["SHARK_PORT"] = str(p_admin)
+    env["SHARK_DB_PATH"] = str(tmp_path / "w15.db")
     proc = subprocess.Popen(
-        [bin_abs, "serve", "--dev", "--config", cfg_path],
+        [bin_abs, "serve", "--no-prompt", "--proxy-upstream", f"http://127.0.0.1:{p_upstream_a}"],
         stdout=log,
         stderr=log,
         cwd=str(tmp_path),
+        env=env,
     )
 
     try:
         admin_base = f"http://127.0.0.1:{p_admin}"
-        # 30 s instead of 15 s — Windows SQLite bootstrap + listener bind can
-        # take several seconds, especially when multiple shark instances are
-        # running concurrently in CI or during a full pytest session.
+        # 30 s — Windows SQLite bootstrap can take several seconds.
         if not wait_for_health(f"{admin_base}/healthz", timeout=30):
             with open(log_path) as f:
                 pytest.fail(f"admin port failed to come up: {f.read()}")
-        assert wait_for_port(p_proxy_a, timeout=20), "proxy A listener never bound"
-        assert wait_for_port(p_proxy_b, timeout=20), "proxy B listener never bound"
 
-        # Scrape the admin key from the server log.
-        admin_key = None
-        deadline = time.time() + 10
-        while time.time() < deadline and admin_key is None:
-            with open(log_path) as f:
-                m = re.findall(r"sk_live_[A-Za-z0-9_-]{30,}", f.read())
-            if m:
-                admin_key = m[-1]
+        # W17: admin key written to <db_dir>/admin.key.firstboot.
+        key_file = tmp_path / "admin.key.firstboot"
+        for _ in range(50):
+            if key_file.exists():
                 break
-            time.sleep(0.2)
-        assert admin_key, "admin key never surfaced in server log"
+            time.sleep(0.1)
+        assert key_file.exists(), f"admin key file never appeared at {key_file}"
+        admin_key = key_file.read_text().strip()
         auth = {"Authorization": f"Bearer {admin_key}"}
 
-        # Create two applications, each bound to one listener via
-        # proxy_public_domain. integration_mode=proxy is required by the
-        # DBAppResolver's enforcement branch.
-        def create_app(slug, public_domain, upstream):
-            r = requests.post(
-                f"{admin_base}/api/v1/admin/apps",
-                headers=auth,
-                json={
-                    "name": slug.upper(),
-                    "slug": slug,
-                    "integration_mode": "proxy",
-                    "proxy_public_domain": public_domain,
-                    "proxy_protected_url": upstream,
-                },
-                timeout=5,
-            )
-            assert r.status_code == 201, r.text
-            return r.json()["id"]
+        # Create an application bound to the single upstream.
+        host_a = f"127.0.0.1:{p_admin}"
+        r = requests.post(
+            f"{admin_base}/api/v1/admin/apps",
+            headers=auth,
+            json={
+                "name": "W15A",
+                "slug": "w15a",
+                "integration_mode": "proxy",
+                "proxy_public_domain": host_a,
+                "proxy_protected_url": f"http://127.0.0.1:{p_upstream_a}",
+            },
+            timeout=5,
+        )
+        assert r.status_code == 201, r.text
+        app_a = r.json()["id"]
 
-        app_a = create_app("w15a", host_a, f"http://127.0.0.1:{p_upstream_a}")
-        app_b = create_app("w15b", host_b, f"http://127.0.0.1:{p_upstream_b}")
-
-        # Post rules scoped to each app via the DB-backed endpoint.
-        # Priority ordering matters: /public/* must beat /* in the
-        # engine's evaluation order.
+        # Post rules via the DB-backed endpoint.
+        # Priority ordering: /public/* must beat /* in the engine's eval order.
         def create_rule(payload):
             r = requests.post(
                 f"{admin_base}/api/v1/admin/proxy/rules/db",
@@ -226,56 +175,37 @@ def test_w15_multi_listener_isolation(toy_upstreams, tmp_path):
             "require": "authenticated",
             "priority": 10,
         })
-        create_rule({
-            "app_id": app_b,
-            "name": "w15b-open",
-            "pattern": "/*",
-            "methods": ["GET"],
-            "allow": "anonymous",
-            "priority": 100,
-        })
 
-        # Reload so any listener-local engine picks up the new DB state.
+        # Reload so the engine picks up the new DB state.
         requests.post(
             f"{admin_base}/api/v1/admin/proxy/reload", headers=auth, timeout=5,
         )
 
-        # 1. Listener A: anonymous on public -> 200, tag=A.
+        # 1. Anonymous on /public/* -> 200, upstream echoes tag=A.
         r = requests.get(
-            f"http://127.0.0.1:{p_proxy_a}/public/foo",
-            headers={"Host": host_a},
+            f"{admin_base}/public/foo",
             allow_redirects=False,
             timeout=5,
         )
         assert r.status_code == 200, r.text
         assert r.json()["tag"] == "A"
 
-        # 2. Listener A: anonymous on private -> 401.
+        # 2. Anonymous on a protected path -> 401.
         r = requests.get(
-            f"http://127.0.0.1:{p_proxy_a}/secret",
-            headers={"Host": host_a, "Accept": "application/json"},
+            f"{admin_base}/secret",
+            headers={"Accept": "application/json"},
             allow_redirects=False,
             timeout=5,
         )
         assert r.status_code == 401, r.text
 
-        # 3. Listener B: anonymous on any -> 200, tag=B.
+        # 3. Anonymous on another public path still hits tag=A upstream.
         r = requests.get(
-            f"http://127.0.0.1:{p_proxy_b}/any",
-            headers={"Host": host_b},
+            f"{admin_base}/public/ping",
             allow_redirects=False,
             timeout=5,
         )
         assert r.status_code == 200, r.text
-        assert r.json()["tag"] == "B"
-
-        # 4. Isolation: Listener A should NOT hit B.
-        r = requests.get(
-            f"http://127.0.0.1:{p_proxy_a}/public/ping",
-            headers={"Host": host_a},
-            allow_redirects=False,
-            timeout=5,
-        )
         assert r.json()["tag"] == "A"
 
     finally:
