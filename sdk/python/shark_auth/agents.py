@@ -109,6 +109,28 @@ class AuditEvent:
     created_at: Optional[str] = None
 
 
+@dataclass
+class DPoPRotationResult:
+    """Result of a DPoP key rotation operation.
+
+    Attributes
+    ----------
+    old_jkt:
+        JWK thumbprint of the replaced keypair.
+    new_jkt:
+        JWK thumbprint of the newly registered keypair.
+    revoked_token_count:
+        Number of tokens bound to the old key that were revoked.
+    audit_event_id:
+        Identifier of the ``agent.dpop_key_rotated`` audit event.
+    """
+
+    old_jkt: str
+    new_jkt: str
+    revoked_token_count: int
+    audit_event_id: str
+
+
 class AgentsClient:
     """Admin client for managing machine-to-machine agents.
 
@@ -343,6 +365,72 @@ class AgentsClient:
                 client_id=data.get("client_id", ""),
                 client_secret=data.get("client_secret", ""),
                 rotated_at=data.get("rotated_at"),
+            )
+        _raise(resp)
+
+    # ------------------------------------------------------------------
+    # W2 Method 10 — DPoP key rotation
+    # ------------------------------------------------------------------
+
+    def rotate_dpop_key(
+        self,
+        agent_id: str,
+        *,
+        new_public_key_jwk: Dict[str, Any],
+        reason: Optional[str] = None,
+    ) -> DPoPRotationResult:
+        """Rotate an agent's DPoP keypair binding (admin-forced).
+
+        Caller supplies the new public key JWK; the server records it as the
+        new ``cnf.jkt`` for future token issuance and invalidates all tokens
+        bound to the old key.
+
+        Wraps ``POST /api/v1/agents/{id}/rotate-dpop-key``. Admin auth required.
+
+        Parameters
+        ----------
+        agent_id:
+            The ``agent_*`` identifier of the agent.
+        new_public_key_jwk:
+            The new public key as a JWK dict. The server derives ``cnf.jkt``
+            from this using RFC 7638 SHA-256 thumbprint.
+        reason:
+            Optional audit-log reason string.
+
+        Returns
+        -------
+        DPoPRotationResult
+            Old and new JWK thumbprints, count of revoked tokens, and the
+            audit event ID.
+
+        Raises
+        ------
+        ~shark_auth.SharkAPIError:
+            On any 4xx/5xx response.
+
+        Example
+        -------
+        >>> from shark_auth import DPoPProver
+        >>> new_prover = DPoPProver.generate()
+        >>> result = client.agents.rotate_dpop_key(
+        ...     "agent_abc",
+        ...     new_public_key_jwk=new_prover.public_key_jwk(),
+        ...     reason="scheduled rotation 2026-04-26",
+        ... )
+        >>> print(result.old_jkt, "->", result.new_jkt)
+        """
+        url = f"{self._base}{self._PREFIX}/{agent_id}/rotate-dpop-key"
+        body: Dict[str, Any] = {"new_public_jwk": new_public_key_jwk}
+        if reason is not None:
+            body["reason"] = reason
+        resp = _http.request(self._session, "POST", url, headers=self._auth(), json=body)
+        if resp.status_code == 200:
+            data = resp.json()
+            return DPoPRotationResult(
+                old_jkt=data.get("old_jkt", ""),
+                new_jkt=data.get("new_jkt", ""),
+                revoked_token_count=data.get("revoked_token_count", 0),
+                audit_event_id=data.get("audit_event_id", ""),
             )
         _raise(resp)
 

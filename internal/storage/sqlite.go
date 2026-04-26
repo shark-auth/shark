@@ -49,7 +49,7 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	// busy_timeout: if a second goroutine somehow still contends (e.g. the
 	// Python test db_conn or an external tool opens the DB), wait up to 5 s
 	// before returning SQLITE_BUSY instead of failing immediately.
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	if _, err := db.Exec("PRAGMA busy_timeout=30000"); err != nil {
 		db.Close() //#nosec G104 -- cleanup after pragma failure; primary error is returned below
 		return nil, fmt.Errorf("setting busy_timeout: %w", err)
 	}

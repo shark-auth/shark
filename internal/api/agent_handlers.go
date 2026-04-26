@@ -4,10 +4,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -570,4 +573,164 @@ func (s *Server) getAgentByIDOrClientID(r *http.Request, idParam string) (*stora
 		return nil, err
 	}
 	return s.Store.GetAgentByClientID(r.Context(), idParam)
+}
+
+// computeJWKThumbprint computes an RFC 7638 SHA-256 JWK thumbprint and returns
+// it as a base64url-encoded string.  Only EC P-256 keys are supported (the
+// only curve SharkAuth agents use).  The canonical member set is {crv, kty, x, y}
+// sorted lexicographically per RFC 7638 §3.3.
+func computeJWKThumbprint(jwk map[string]any) (string, error) {
+	kty, _ := jwk["kty"].(string)
+	switch kty {
+	case "EC":
+		crv, _ := jwk["crv"].(string)
+		x, _ := jwk["x"].(string)
+		y, _ := jwk["y"].(string)
+		if crv == "" || x == "" || y == "" {
+			return "", fmt.Errorf("EC JWK missing crv/x/y")
+		}
+		// Canonical JSON: members sorted, no spaces.
+		canonical := fmt.Sprintf(`{"crv":%q,"kty":%q,"x":%q,"y":%q}`, crv, kty, x, y)
+		sum := sha256.Sum256([]byte(canonical))
+		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+	case "RSA":
+		e, _ := jwk["e"].(string)
+		n, _ := jwk["n"].(string)
+		if e == "" || n == "" {
+			return "", fmt.Errorf("RSA JWK missing e/n")
+		}
+		canonical := fmt.Sprintf(`{"e":%q,"kty":%q,"n":%q}`, e, kty, n)
+		sum := sha256.Sum256([]byte(canonical))
+		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+	case "OKP":
+		crv, _ := jwk["crv"].(string)
+		x, _ := jwk["x"].(string)
+		if crv == "" || x == "" {
+			return "", fmt.Errorf("OKP JWK missing crv/x")
+		}
+		canonical := fmt.Sprintf(`{"crv":%q,"kty":%q,"x":%q}`, crv, kty, x)
+		sum := sha256.Sum256([]byte(canonical))
+		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+	default:
+		// Generic fallback: marshal all public members sorted.
+		public := make(map[string]string)
+		for k, v := range jwk {
+			// Skip private key fields (d, p, q, dp, dq, qi, k)
+			switch k {
+			case "d", "p", "q", "dp", "dq", "qi", "k":
+				continue
+			}
+			if s, ok := v.(string); ok {
+				public[k] = s
+			}
+		}
+		keys := make([]string, 0, len(public))
+		for k := range public {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		b, _ := json.Marshal(public)
+		sum := sha256.Sum256(b)
+		_ = keys // used implicitly via json.Marshal which sorts map keys in Go 1.12+
+		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+	}
+}
+
+// POST /api/v1/agents/{id}/rotate-dpop-key
+// Body: {"new_public_jwk": {...}, "reason": "..."}
+// Response: {old_jkt, new_jkt, revoked_token_count, audit_event_id}
+func (s *Server) handleRotateAgentDPoPKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	agent, err := s.getAgentByIDOrClientID(r, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Agent not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	var req struct {
+		NewPublicJWK map[string]any `json:"new_public_jwk"`
+		Reason       string         `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+	if len(req.NewPublicJWK) == 0 {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "new_public_jwk is required"))
+		return
+	}
+
+	// Compute old_jkt from agent Metadata["dpop_public_jwk"], if present.
+	oldJKT := ""
+	if agent.Metadata != nil {
+		if oldJWKRaw, ok := agent.Metadata["dpop_public_jwk"]; ok {
+			var oldJWK map[string]any
+			switch v := oldJWKRaw.(type) {
+			case map[string]any:
+				oldJWK = v
+			case string:
+				_ = json.Unmarshal([]byte(v), &oldJWK)
+			}
+			if len(oldJWK) > 0 {
+				oldJKT, _ = computeJWKThumbprint(oldJWK)
+			}
+		}
+	}
+
+	// Compute new_jkt from the supplied JWK.
+	newJKT, err := computeJWKThumbprint(req.NewPublicJWK)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_jwk", err.Error()))
+		return
+	}
+
+	// Persist the new JWK into agent Metadata.
+	if agent.Metadata == nil {
+		agent.Metadata = map[string]any{}
+	}
+	agent.Metadata["dpop_public_jwk"] = req.NewPublicJWK
+	agent.UpdatedAt = time.Now().UTC()
+	if err := s.Store.UpdateAgent(r.Context(), agent); err != nil {
+		internal(w, err)
+		return
+	}
+
+	// Revoke all current tokens for this agent (old key is no longer valid).
+	revokedCount, err := s.Store.RevokeOAuthTokensByClientID(r.Context(), agent.ClientID)
+	if err != nil {
+		// Non-fatal; log but continue — JWK is already updated.
+		revokedCount = 0
+	}
+
+	// Emit audit event.
+	auditMeta := map[string]any{
+		"old_jkt":             oldJKT,
+		"new_jkt":             newJKT,
+		"revoked_token_count": revokedCount,
+		"reason":              req.Reason,
+	}
+	s.auditAgentWithMeta(r, "agent.dpop_key_rotated", agent.ID, auditMeta)
+
+	// Fetch the audit event ID from the last log entry for this agent.
+	auditEventID := ""
+	if s.AuditLogger != nil {
+		logs, qErr := s.AuditLogger.Query(r.Context(), storage.AuditLogQuery{
+			TargetID: agent.ID,
+			Limit:    1,
+		})
+		if qErr == nil && len(logs) > 0 {
+			auditEventID = logs[0].ID
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"old_jkt":             oldJKT,
+		"new_jkt":             newJKT,
+		"revoked_token_count": revokedCount,
+		"audit_event_id":      auditEventID,
+	})
 }

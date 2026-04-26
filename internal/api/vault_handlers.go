@@ -852,6 +852,10 @@ func (s *Server) handleAdminListVaultConnections(w http.ResponseWriter, r *http.
 // handleAdminDeleteVaultConnection handles DELETE /api/v1/admin/vault/connections/{id}.
 // Cross-user revoke — admin can disconnect any vault connection without owning
 // the session. Audited as admin-actor for traceability.
+//
+// Layer 5 cascade: after disconnect, all OAuth tokens belonging to agents that
+// ever fetched from this vault connection are revoked. Two audit events are
+// emitted: vault.disconnected and vault.disconnect_cascade.
 func (s *Server) handleAdminDeleteVaultConnection(w http.ResponseWriter, r *http.Request) {
 	connID := chi.URLParam(r, "id")
 	conn, err := s.Store.GetVaultConnectionByID(r.Context(), connID)
@@ -871,9 +875,39 @@ func (s *Server) handleAdminDeleteVaultConnection(w http.ResponseWriter, r *http
 		internal(w, err)
 		return
 	}
+
+	// Layer 5 cascade: revoke tokens of all agents that ever fetched from this vault connection.
+	agents, _ := s.Store.ListAgentsByVaultRetrieval(r.Context(), connID)
+	revokedAgentIDs := make([]string, 0, len(agents))
+	totalRevoked := int64(0)
+	for _, ag := range agents {
+		n, err := s.Store.RevokeOAuthTokensByClientID(r.Context(), ag.ClientID)
+		if err != nil {
+			continue
+		}
+		if n > 0 {
+			revokedAgentIDs = append(revokedAgentIDs, ag.ID)
+			totalRevoked += n
+		}
+	}
+
+	// Audit: vault.disconnected
 	s.auditVault(r, "admin", auditVaultConnectionDeleted, "vault_connection", connID, map[string]any{
 		"provider_id": conn.ProviderID,
 		"user_id":     conn.UserID,
 	})
-	w.WriteHeader(http.StatusNoContent)
+
+	// Audit: vault.disconnect_cascade
+	s.auditVault(r, "admin", "vault.disconnect_cascade", "vault_connection", connID, map[string]any{
+		"vault_connection_id":  connID,
+		"revoked_agent_ids":    revokedAgentIDs,
+		"revoked_token_count":  totalRevoked,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"disconnected":        true,
+		"connection_id":       connID,
+		"revoked_agent_ids":   revokedAgentIDs,
+		"revoked_token_count": totalRevoked,
+	})
 }

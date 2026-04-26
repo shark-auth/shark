@@ -17,9 +17,13 @@ Public API
 - :class:`AuditEvent`      — audit log entry (W2 Method 5)
 - :class:`CascadeRevokeResult` — cascade-revoke result (W2 Method 6)
 - :class:`AgentList`       — user-agent listing result (W2 Method 7)
+- :class:`BulkRevokeResult` — bulk-revoke-by-pattern result (W2 Method 8)
+- :class:`VaultDisconnectResult` — vault connection disconnect result (W2 Method 9)
+- :class:`VaultTokenResult` — vault DPoP token fetch result (W2 Method 9)
+- :class:`DPoPRotationResult` — DPoP key rotation result (W2 Method 10)
 """
 
-from .agents import AgentCredentials, AgentsClient, AuditEvent, RevokeResult, TokenInfo
+from .agents import AgentCredentials, AgentsClient, AuditEvent, DPoPRotationResult, RevokeResult, TokenInfo
 from .branding import BrandingClient
 from .claims import ActorClaim, AgentTokenClaims as DelegationTokenClaims
 from .client import Client
@@ -35,7 +39,7 @@ from .errors import (
 )
 from .http_client import DPoPHTTPClient
 from .magic_link import MagicLinkClient
-from .oauth import OAuthClient, Token
+from .oauth import BulkRevokeResult, OAuthClient, Token
 from .paywall import PaywallClient
 from .proxy_lifecycle import ProxyLifecycleClient, ProxyStatus
 from .proxy_rules import (
@@ -49,7 +53,7 @@ from .proxy_rules import (
 from .session import AgentSession
 from .tokens import AgentTokenClaims, clear_jwks_cache, decode_agent_token, exchange_token
 from .users import AgentList, CascadeRevokeResult, UsersClient
-from .vault import VaultClient, VaultToken
+from .vault import VaultClient, VaultDisconnectResult, VaultToken, VaultTokenResult
 
 __version__ = "0.1.0"
 
@@ -105,5 +109,12 @@ __all__ = [
     "CascadeRevokeResult",
     # W2 Method 7 — user agent listing
     "AgentList",
+    # W2 Method 8 — bulk revoke by pattern
+    "BulkRevokeResult",
+    # W2 Method 9 — vault disconnect + DPoP token fetch
+    "VaultDisconnectResult",
+    "VaultTokenResult",
+    # W2 Method 10 — DPoP key rotation
+    "DPoPRotationResult",
     "__version__",
 ]

@@ -93,6 +93,30 @@ If something is in the codebase but NOT mentioned in launch posts, it's because 
 
 **Re-introduction plan:** when a paid pilot from a Replit/Cursor/Lovable-tier team requests it. Build to demand, not to spec.
 
+## CUT 7 — Harness self-register skill + MCP server (eureka 2026-04-26, scoped to W19+)
+
+**Status:** Eureka logged 2026-04-26. Backend primitive (DCR `POST /oauth/register`, RFC 7591) already ships at `internal/api/router.go:755`. Wrapper distribution (Claude Code skill + `shark serve --mcp` subcommand) is post-launch only.
+
+**Why cut from Monday launch:**
+- Monday launch leads on **five-layer revocation** ("auth for products that give customers their own agents"). Adding "we also ship a Claude Code skill" to launch posts dilutes the security-moat framing YC reviewers respond to.
+- Skill / MCP wrapper is a **sales objection-neutralizer** used inside deals, not a primary pitch. Mixing the two messages in one launch dilutes both.
+- Wrappers are 4-5 days CC build (W19a-d). Monday launch budget is exhausted by Wave 1.5 / 1.6 / 1.7 / 1.8 + Wave 2 + Wave 3.
+- Separate news cycle 2-3 weeks post-launch buys a second wave of HN attention.
+
+**Re-introduction plan:**
+- W19a: shark CC skill (1 day CC) — `skills/shark-cc/SKILL.md` + bash setup + project scaffolding
+- W19b: `shark serve --mcp` subcommand (2-3 days CC) — Go, MCP stdio + SSE, 5 initial tools
+- W19c: Skill marketplace + MCP registry submission packets (0.5 day human)
+- W19d: Demo screencast — skill install → agent self-registers → first DPoP token in 30s (0.5 day)
+- W20: Single news-cycle post: HN + Twitter + Discord + LinkedIn ("now in your Claude Desktop")
+
+**Full design sketch:** `09-post-launch-harness-skill-eureka.md`.
+
+**What launch communications can and cannot say:**
+- Monday HN post / Twitter thread: silent on skill + MCP wrapper. Five-layer revocation only.
+- Monday README "Roadmap" section: may name "Claude Code skill + MCP server (W19+)" as a one-line item alongside proxy / TS-SDK / hosted tier.
+- YC application long-form: pushback answer in `07-yc-application-strategy.md` may include the secondary skill-as-distribution paragraph, but ONLY as a follow-up after the orchestration-vs-auth primary answer.
+
 ## What this list means for launch communications
 
 The HN post body (in `04-wave4-launch.md`) explicitly says:

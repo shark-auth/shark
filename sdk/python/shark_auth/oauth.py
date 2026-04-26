@@ -13,6 +13,25 @@ from .proxy_rules import _raise
 
 
 @dataclass
+class BulkRevokeResult:
+    """Result of a bulk-revoke-by-pattern operation.
+
+    Attributes
+    ----------
+    revoked_count:
+        Number of tokens revoked across all matching client_ids.
+    audit_event_id:
+        Identifier of the emitted audit event.
+    pattern_matched:
+        The GLOB pattern that was applied (echoed from the server).
+    """
+
+    revoked_count: int
+    audit_event_id: str
+    pattern_matched: str
+
+
+@dataclass
 class Token:
     """OAuth token returned by the server, optionally DPoP-bound.
 
@@ -271,6 +290,72 @@ class OAuthClient:
             body[k] = str(v)
 
         return self._post_token_request(body, proof)
+
+    # ------------------------------------------------------------------
+    # W2 Method 8 — bulk revoke by client_id GLOB pattern
+    # ------------------------------------------------------------------
+
+    def bulk_revoke_by_pattern(
+        self,
+        *,
+        client_id_pattern: str,
+        reason: str,
+    ) -> "BulkRevokeResult":
+        """Revoke all tokens whose client_id matches a SQLite GLOB pattern.
+
+        Pattern syntax: ``*`` matches any sequence, ``?`` matches one char.
+        Example: ``'shark_agent_v3.2_*'`` kills all v3.2 instances across
+        all customers.
+
+        Parameters
+        ----------
+        client_id_pattern:
+            SQLite GLOB pattern to match against token ``client_id`` values.
+        reason:
+            Audit-log reason string (stored on the emitted audit event).
+
+        Returns
+        -------
+        BulkRevokeResult
+            Number of tokens revoked, audit event id, and the pattern used.
+
+        Raises
+        ------
+        OAuthError:
+            On any 4xx/5xx response.
+
+        Example
+        -------
+        >>> result = client.oauth.bulk_revoke_by_pattern(
+        ...     client_id_pattern="shark_agent_v3.2_*",
+        ...     reason="emergency rollback 2026-04-26",
+        ... )
+        >>> print(result.revoked_count, result.audit_event_id)
+        """
+        url = f"{self._base}/api/v1/admin/oauth/revoke-by-pattern"
+        body = {"client_id_pattern": client_id_pattern, "reason": reason}
+        resp = _http.request(
+            self._session, "POST", url, headers=self._auth(), json=body
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return BulkRevokeResult(
+                revoked_count=data.get("revoked_count", data.get("count", 0)),
+                audit_event_id=data.get("audit_event_id", ""),
+                pattern_matched=data.get("pattern_matched", client_id_pattern),
+            )
+        try:
+            err_body = resp.json()
+            error = err_body.get("error", "bulk_revoke_failed")
+            error_description = err_body.get("error_description") or err_body.get("message")
+        except Exception:
+            error = "bulk_revoke_failed"
+            error_description = resp.text or None
+        raise OAuthError(
+            error=error,
+            error_description=error_description,
+            status_code=resp.status_code,
+        )
 
     def token_exchange(
         self,

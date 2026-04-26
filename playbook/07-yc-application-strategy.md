@@ -265,6 +265,12 @@ Variant of the same answer, shorter (use if interview is rapid):
 
 > "Claude Code does delegation between its own subagents. We do delegation between an agent and the customer's external resources. Different problem. Claude Code's customer is the platform that ships it to enterprises — that platform is ours."
 
+**Secondary answer — only use if interviewer pushes a second time** (logged 2026-04-26, see `09-post-launch-harness-skill-eureka.md`):
+
+> "Claude Code is also our distribution channel. Post-launch we ship a Claude Code skill plus an MCP server wrapper. Subagents inside any harness — Claude Code, Cursor, Cline, OpenClaw — self-register against shark via the existing DCR endpoint with zero harness-team buy-in. Harnesses become our user-acquisition surface, not our competition. Every harness install is a foothold inside a platform team's existing developer flow."
+
+Do NOT lead with this. The five-layer revocation answer above is the load-bearing one. The skill / MCP answer is a sales objection-neutralizer used inside deals, not a primary pitch.
+
 ### "Why did you pick this idea?"
 
 Lead with transport hack. One paragraph. Then bridge to agent auth.

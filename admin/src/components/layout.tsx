@@ -17,7 +17,6 @@ export const NAV = [
   ]},
   { group: 'AGENTS', items: [
     { id: 'agents', label: 'Agents', icon: 'Agent', badge: 'new' },
-    { id: 'me-agents', label: 'My Agents', icon: 'Agent' },
     { id: 'consents', label: 'Consents', icon: 'Consent' },
     { id: 'tokens', label: 'Tokens', icon: 'Token' },
     { id: 'vault', label: 'Vault', icon: 'Vault' },
@@ -230,7 +229,6 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
     sessions: 'Sessions',
     orgs: 'Organizations',
     agents: 'Agents',
-    'me-agents': 'My Agents',
     'device-flow': 'Device Flow',
     audit: 'Audit Log',
     apps: 'Applications',

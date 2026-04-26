@@ -181,3 +181,184 @@ result = client.users.list_agents("usr_abc", filter="created", limit=50)
 for agent in result.data:
     print(agent["name"], agent["id"])
 ```
+
+---
+
+## Method 8 — `OAuthClient.bulk_revoke_by_pattern()`
+
+**File:** `sdk/python/shark_auth/oauth.py`
+
+Revoke all OAuth tokens whose `client_id` matches a SQLite GLOB pattern. Useful for emergency rollback of an entire agent class (e.g. all v3.2 instances).
+
+### Types
+
+```python
+@dataclass
+class BulkRevokeResult:
+    revoked_count: int      # tokens revoked across all matching client_ids
+    audit_event_id: str     # ID of the emitted audit event
+    pattern_matched: str    # GLOB pattern echoed from the server
+```
+
+### Signature
+
+```python
+def bulk_revoke_by_pattern(
+    self,
+    *,
+    client_id_pattern: str,   # SQLite GLOB — * any sequence, ? one char
+    reason: str,
+) -> BulkRevokeResult
+```
+
+**Auth:** Admin API key only. Wraps `POST /api/v1/admin/oauth/revoke-by-pattern`.
+
+### Example
+
+```python
+from shark_auth import OAuthClient
+
+oauth = OAuthClient(base_url="https://auth.example.com", token="sk_live_...")
+result = oauth.bulk_revoke_by_pattern(
+    client_id_pattern="shark_agent_v3.2_*",
+    reason="emergency rollback 2026-04-26",
+)
+print(result.revoked_count)    # e.g. 47
+print(result.audit_event_id)   # "audit_abc123"
+print(result.pattern_matched)  # "shark_agent_v3.2_*"
+```
+
+---
+
+## Method 9 — `VaultClient.disconnect()` + `VaultClient.fetch_token()`
+
+**File:** `sdk/python/shark_auth/vault.py`
+
+### Types
+
+```python
+@dataclass
+class VaultDisconnectResult:
+    connection_id: str
+    revoked_agent_ids: list[str]       # agents cascade-revoked
+    revoked_token_count: int
+    cascade_audit_event_id: str | None
+
+@dataclass
+class VaultTokenResult:
+    access_token: str
+    token_type: str              # usually "Bearer"
+    expires_at: str | None       # ISO-8601 or None
+    provider: str | None         # e.g. "google_gmail"
+```
+
+### `VaultClient.disconnect()`
+
+```python
+def disconnect(
+    self,
+    connection_id: str,
+    *,
+    cascade_to_agents: bool = True,
+) -> VaultDisconnectResult
+```
+
+Wraps `DELETE /api/v1/vault/connections/{id}`. When `cascade_to_agents=True` (default), the server also revokes tokens for any agent that has accessed this connection.
+
+```python
+from shark_auth import VaultClient
+
+vault = VaultClient(base_url="https://auth.example.com", admin_key="sk_live_...")
+result = vault.disconnect("conn_abc123", cascade_to_agents=True)
+print(result.revoked_agent_ids)    # ["agent_x", "agent_y"]
+print(result.revoked_token_count)  # 5
+```
+
+### `VaultClient.fetch_token()`
+
+```python
+def fetch_token(
+    self,
+    *,
+    provider: str,
+    bearer_token: str,
+    prover: DPoPProver,
+) -> VaultTokenResult
+```
+
+Wraps `GET /api/v1/vault/{provider}/token`. The server validates the DPoP proof bound to `bearer_token`, confirms the `vault:read` scope, and returns the decrypted 3rd-party token.
+
+```python
+from shark_auth import DPoPProver, OAuthClient, VaultClient
+
+prover = DPoPProver.generate()
+oauth = OAuthClient(base_url="https://auth.example.com")
+token = oauth.get_token_with_dpop(
+    grant_type="client_credentials",
+    dpop_prover=prover,
+    client_id="shark_agent_...",
+    client_secret="...",
+    scope="vault:read",
+)
+
+vault = VaultClient(base_url="https://auth.example.com", admin_key="sk_live_...")
+result = vault.fetch_token(
+    provider="google_gmail",
+    bearer_token=token.access_token,
+    prover=prover,
+)
+print(result.access_token)  # decrypted Google access token
+```
+
+---
+
+## Method 10 — `AgentsClient.rotate_dpop_key()`
+
+**File:** `sdk/python/shark_auth/agents.py`
+
+Rotate an agent's DPoP keypair binding. The caller generates a new keypair locally, supplies its public JWK, and the server atomically replaces the binding and revokes all tokens bound to the old key.
+
+### Types
+
+```python
+@dataclass
+class DPoPRotationResult:
+    old_jkt: str              # thumbprint of the replaced key (empty if none was stored)
+    new_jkt: str              # thumbprint of the new key (RFC 7638 SHA-256)
+    revoked_token_count: int  # tokens revoked
+    audit_event_id: str       # ID of "agent.dpop_key_rotated" audit event
+```
+
+### Signature
+
+```python
+def rotate_dpop_key(
+    self,
+    agent_id: str,
+    *,
+    new_public_key_jwk: dict,
+    reason: str | None = None,
+) -> DPoPRotationResult
+```
+
+**Auth:** Admin API key only. Wraps `POST /api/v1/agents/{id}/rotate-dpop-key`.
+
+### Example
+
+```python
+from shark_auth import AgentsClient, DPoPProver
+
+agents = AgentsClient(base_url="https://auth.example.com", token="sk_live_...")
+new_prover = DPoPProver.generate()
+
+result = agents.rotate_dpop_key(
+    "agent_abc123",
+    new_public_key_jwk=new_prover.public_key_jwk(),
+    reason="scheduled rotation 2026-04-26",
+)
+print(result.old_jkt, "->", result.new_jkt)
+print(result.revoked_token_count)   # e.g. 3
+print(result.audit_event_id)        # "audit_xyz789"
+```
+
+After rotation, all tokens bound to the old key are immediately revoked. Issue new tokens using the new prover's keypair.

@@ -139,8 +139,18 @@ def admin_client(admin_key):
     s.headers.update({"Authorization": f"Bearer {admin_key}"})
     return s
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def db_conn(server):
-    conn = sqlite3.connect(DB_PATH)
-    yield conn
-    conn.close()
+    # Function-scoped + 30s busy_timeout to avoid contending with shark's writer.
+    # Session-scoped sqlite3 connections caused SQLITE_BUSY cascades against shark's
+    # backend, since SQLite is single-writer even under WAL.
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA busy_timeout=30000")
+    try:
+        yield conn
+    finally:
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        conn.close()

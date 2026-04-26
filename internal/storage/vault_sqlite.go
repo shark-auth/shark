@@ -378,6 +378,41 @@ func (s *SQLiteStore) DeleteVaultConnection(ctx context.Context, id string) erro
 	return err
 }
 
+// ListAgentsByVaultRetrieval returns agents that have ever fetched a token from
+// the given vault connection. It queries the audit_logs table for
+// vault.token.retrieved events whose target_id matches connectionID, then
+// resolves each distinct actor_id to an Agent row.
+func (s *SQLiteStore) ListAgentsByVaultRetrieval(ctx context.Context, connectionID string) ([]*Agent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT actor_id FROM audit_logs WHERE action = 'vault.token.retrieved' AND target_id = ?`,
+		connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var actorIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		if id != "" {
+			actorIDs = append(actorIDs, id)
+		}
+	}
+
+	agents := make([]*Agent, 0, len(actorIDs))
+	for _, aid := range actorIDs {
+		ag, err := s.GetAgentByID(ctx, aid)
+		if err != nil || ag == nil {
+			continue
+		}
+		agents = append(agents, ag)
+	}
+	return agents, nil
+}
+
 func (s *SQLiteStore) scanVaultConnection(row *sql.Row) (*VaultConnection, error) {
 	var c VaultConnection
 	var refreshTok sql.NullString

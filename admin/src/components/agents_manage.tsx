@@ -28,6 +28,11 @@ export function Agents({ setPage }) {
   const [creatorFilter, setCreatorFilter] = React.useState(''); // '' = all, or user ID
   const [createOpen, setCreateOpen] = React.useState(false);
   const [deactivateModal, setDeactivateModal] = React.useState(null);
+  const [bulkRevokeOpen, setBulkRevokeOpen] = React.useState(false);
+  const [bulkRevokePattern, setBulkRevokePattern] = React.useState('');
+  const [bulkRevokeReason, setBulkRevokeReason] = React.useState('');
+  const [bulkRevokeLoading, setBulkRevokeLoading] = React.useState(false);
+  const toast = useToast();
 
   // Fetch users for creator filter dropdown
   const { data: usersRaw } = useAPI('/users?limit=200');
@@ -96,6 +101,9 @@ export function Agents({ setPage }) {
                 OAuth 2.1 clients · {agents.length} registered · {activeCount} active
               </p>
             </div>
+            <button className="btn" onClick={() => setBulkRevokeOpen(true)} style={{ fontSize: 11 }}>
+              Bulk Revoke by Pattern
+            </button>
             <button className="btn primary" onClick={() => setCreateOpen(true)}>
               <Icon.Plus width={11} height={11}/> New agent
             </button>
@@ -293,6 +301,89 @@ export function Agents({ setPage }) {
           }}
         />
       )}
+
+      {bulkRevokeOpen && (
+        <BulkRevokeModal
+          pattern={bulkRevokePattern}
+          reason={bulkRevokeReason}
+          loading={bulkRevokeLoading}
+          onPatternChange={setBulkRevokePattern}
+          onReasonChange={setBulkRevokeReason}
+          onClose={() => { setBulkRevokeOpen(false); setBulkRevokePattern(''); setBulkRevokeReason(''); }}
+          onConfirm={async () => {
+            setBulkRevokeLoading(true);
+            try {
+              const res = await API.post('/admin/oauth/revoke-by-pattern', {
+                client_id_pattern: bulkRevokePattern,
+                reason: bulkRevokeReason,
+              });
+              toast.success(`Revoked ${res.revoked_count} token(s) matching "${res.pattern_matched}"`);
+              setBulkRevokeOpen(false);
+              setBulkRevokePattern('');
+              setBulkRevokeReason('');
+              refresh();
+            } catch (e) {
+              toast.error(e?.message || 'Bulk revoke failed');
+            } finally {
+              setBulkRevokeLoading(false);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// BulkRevokeModal — pattern-based token revocation for admin use
+function BulkRevokeModal({ pattern, reason, loading, onPatternChange, onReasonChange, onClose, onConfirm }) {
+  return (
+    <div style={modalBackdrop} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ ...modalCard, width: 420, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>Bulk Revoke Tokens by Pattern</span>
+          <button className="btn ghost sm" onClick={onClose} style={{ padding: '2px 6px' }}>✕</button>
+        </div>
+        <p style={{ margin: 0, fontSize: 11.5, color: 'var(--fg-dim)', lineHeight: 1.5 }}>
+          Revokes all active tokens whose <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>client_id</code> matches the given SQLite GLOB pattern (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>*</code> = any sequence, <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>?</code> = one char).
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <p style={sectionLabelStyle}>Client ID Pattern</p>
+          <input
+            value={pattern}
+            onChange={e => onPatternChange(e.target.value)}
+            placeholder="shark_agent_v3.2_*"
+            style={{
+              fontSize: 12, padding: '6px 10px', borderRadius: 4,
+              border: '1px solid var(--hairline-strong)', background: 'var(--surface-0)',
+              color: 'var(--fg)', outline: 'none', fontFamily: 'var(--font-mono)',
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <p style={sectionLabelStyle}>Reason (optional)</p>
+          <input
+            value={reason}
+            onChange={e => onReasonChange(e.target.value)}
+            placeholder="Compromised credentials, rotating keys…"
+            style={{
+              fontSize: 12, padding: '6px 10px', borderRadius: 4,
+              border: '1px solid var(--hairline-strong)', background: 'var(--surface-0)',
+              color: 'var(--fg)', outline: 'none',
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn" onClick={onClose} disabled={loading} style={{ fontSize: 12 }}>Cancel</button>
+          <button
+            className="btn danger"
+            onClick={onConfirm}
+            disabled={loading || !pattern.trim()}
+            style={{ fontSize: 12 }}
+          >
+            {loading ? 'Revoking…' : 'Revoke'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

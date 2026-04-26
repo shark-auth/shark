@@ -218,6 +218,16 @@ func (s *SQLiteStore) RevokeOAuthTokensByClientID(ctx context.Context, clientID 
 	return res.RowsAffected()
 }
 
+func (s *SQLiteStore) RevokeOAuthTokensByClientIDPattern(ctx context.Context, pattern string) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE oauth_tokens SET revoked_at = ? WHERE client_id GLOB ? AND revoked_at IS NULL`,
+		time.Now().UTC().Format(time.RFC3339), pattern)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (s *SQLiteStore) RevokeOAuthTokenFamily(ctx context.Context, familyID string) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `UPDATE oauth_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL`,
 		time.Now().UTC().Format(time.RFC3339), familyID)

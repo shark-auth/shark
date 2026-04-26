@@ -526,6 +526,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{id}/tokens", s.handleListAgentTokens)
 			r.Post("/{id}/tokens/revoke-all", s.handleRevokeAgentTokens)
 			r.Post("/{id}/rotate-secret", s.handleAgentRotateSecret)
+			r.Post("/{id}/rotate-dpop-key", s.handleRotateAgentDPoPKey)
 			r.Get("/{id}/audit", s.handleAgentAuditLogs)
 			r.Get("/{id}/policies", s.handleGetAgentPolicies)
 			r.Post("/{id}/policies", s.handlePostAgentPolicies)
@@ -626,6 +627,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// endpoint is session-scoped; the dashboard needs a tenant view.
 			r.Get("/oauth/consents", s.handleAdminListConsents)
 			r.Delete("/oauth/consents/{id}", s.handleAdminRevokeConsent)
+			r.Post("/oauth/revoke-by-pattern", s.handleAdminBulkRevokeByPattern)
 
 			// Admin grant of an oauth_consents row (used by smoke tests +
 			// dashboard "authorize agent on behalf of user" flow).

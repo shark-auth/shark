@@ -125,6 +125,7 @@ See `playbook/04-wave4-launch.md` for detail.
 - Python SDK: PyPI release tagged with launch version. CI workflow already exists (verify before launch).
 - Binary: GitHub Releases with prebuilt darwin/linux/windows artifacts. Existing build pipeline.
 - Launch posts: HN (timed for 9am ET), MCP Discord, Cloudflare Agents Discord, Twitter, LinkedIn (Hang Huang DM).
+- Post-launch distribution levers (W19+, NOT in Monday launch): Claude Code skill (`skills/shark-cc/`) + `shark serve --mcp` MCP server. See `09-post-launch-harness-skill-eureka.md` for design sketch and CUT 7 in `08-launch-scope-cuts.md` for scope discipline.
 
 ## Dependencies
 

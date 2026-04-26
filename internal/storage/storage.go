@@ -273,6 +273,7 @@ type Store interface {
 	RevokeOAuthToken(ctx context.Context, id string) error
 	RevokeActiveOAuthTokenByRequestID(ctx context.Context, requestID, tokenType string) (bool, error)
 	RevokeOAuthTokensByClientID(ctx context.Context, clientID string) (int64, error)
+	RevokeOAuthTokensByClientIDPattern(ctx context.Context, pattern string) (int64, error)
 	RevokeOAuthTokenFamily(ctx context.Context, familyID string) (int64, error)
 	ListOAuthTokensByAgentID(ctx context.Context, agentID string, limit int) ([]*OAuthToken, error)
 	DeleteExpiredOAuthTokens(ctx context.Context) (int64, error)
@@ -324,6 +325,9 @@ type Store interface {
 	UpdateVaultConnectionTokens(ctx context.Context, id, accessEnc, refreshEnc string, expiresAt *time.Time) error
 	MarkVaultConnectionNeedsReauth(ctx context.Context, id string, needs bool) error
 	DeleteVaultConnection(ctx context.Context, id string) error
+	// ListAgentsByVaultRetrieval returns agents that have ever fetched a token
+	// from the given vault connection (via audit_logs vault.token.retrieved events).
+	ListAgentsByVaultRetrieval(ctx context.Context, connectionID string) ([]*Agent, error)
 
 	// Auth Flows (Phase 6 Visual Flow Builder)
 	CreateAuthFlow(ctx context.Context, flow *AuthFlow) error

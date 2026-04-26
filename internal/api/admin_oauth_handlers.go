@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
@@ -133,5 +134,54 @@ func (s *Server) adminDecideDeviceCode(w http.ResponseWriter, r *http.Request, d
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user_code": userCode,
 		"status":    decision,
+	})
+}
+
+// handleAdminBulkRevokeByPattern handles POST /api/v1/admin/oauth/revoke-by-pattern.
+// Revokes all non-revoked oauth_tokens whose client_id matches the given GLOB
+// pattern (SQLite GLOB syntax: * matches any sequence, ? matches one char).
+// Returns revoked_count, audit_event_id, and pattern_matched.
+func (s *Server) handleAdminBulkRevokeByPattern(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ClientIDPattern string `json:"client_id_pattern"`
+		Reason          string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+	if body.ClientIDPattern == "" {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "client_id_pattern is required"))
+		return
+	}
+	count, err := s.Store.RevokeOAuthTokensByClientIDPattern(r.Context(), body.ClientIDPattern)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	actor := actorID(r.Context())
+	meta, _ := json.Marshal(map[string]any{
+		"pattern":       body.ClientIDPattern,
+		"revoked_count": count,
+		"reason":        body.Reason,
+	})
+	nid, _ := gonanoid.New()
+	auditID := "audit_" + nid
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ID:        auditID,
+			Action:    "oauth.bulk_revoke_pattern",
+			ActorID:   actor,
+			ActorType: "admin",
+			Status:    "success",
+			Metadata:  string(meta),
+			IP:        ipOf(r),
+			UserAgent: uaOf(r),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"revoked_count":   count,
+		"audit_event_id":  auditID,
+		"pattern_matched": body.ClientIDPattern,
 	})
 }
