@@ -1,6 +1,3 @@
-import pytest
-pytestmark = pytest.mark.skip(reason="W+1: SDK lacks agent-create method; tests rely on env vars not wired by conftest. Functional via admin HTTP in test_cascade_revoke.py")
-
 """Smoke tests for OAuthClient.get_token_with_dpop() — W2 Method 1.
 
 DO NOT RUN via pytest locally — these tests hit a live SharkAuth server and
@@ -16,6 +13,8 @@ from __future__ import annotations
 import os
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="W+1: SDK lacks agent-create method; tests rely on env vars not wired by conftest. Functional via admin HTTP in test_cascade_revoke.py")
 
 from shark_auth.dpop import DPoPProver
 from shark_auth.errors import OAuthError

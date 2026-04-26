@@ -1,6 +1,3 @@
-import pytest
-pytestmark = pytest.mark.skip(reason="W+1: SDK token_exchange smoke depends on agent-create method not in SDK + env vars not wired by conftest.")
-
 """Smoke tests for OAuthClient.token_exchange() — RFC 8693.
 
 Requires a live shark instance. The orchestrator runs these via pytest;
@@ -15,6 +12,8 @@ Cases:
 from __future__ import annotations
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="W+1: SDK token_exchange smoke depends on agent-create method not in SDK + env vars not wired by conftest.")
 
 from shark_auth.dpop import DPoPProver
 from shark_auth.errors import OAuthError

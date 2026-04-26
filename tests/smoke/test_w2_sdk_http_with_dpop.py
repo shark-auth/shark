@@ -1,6 +1,3 @@
-import pytest
-pytestmark = pytest.mark.skip(reason="W+1: AgentsClient.register doesn't exist in SDK; tests invented method. Real coverage via test_cascade_revoke.py.")
-
 """Smoke test — W2 SDK Method 3: HTTP helpers with DPoP.
 
 DO NOT RUN directly via pytest — orchestrator-only (see MEMORY: pytest is
@@ -16,6 +13,8 @@ Happy path:
 from __future__ import annotations
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="W+1: AgentsClient.register doesn't exist in SDK; tests invented method. Real coverage via test_cascade_revoke.py.")
 
 from shark_auth import Client
 from shark_auth.dpop import DPoPProver
