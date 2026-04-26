@@ -164,27 +164,19 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	cfg.Server.DevMode = opts.DevMode
 
-	// Phase 2: enforce the 3 minimum YAML vars in production. --dev bypasses
-	// because it generates its own secret, uses dev.db, and captures email
-	// via the dev inbox.
+	// Phase 2: enforce minimum required vars. DevMode bypasses for
+	// first-boot ergonomics (uses dev.db, dev inbox auto-selected by config).
 	if !opts.DevMode {
 		if cfg.Server.BaseURL == "" {
 			return nil, fmt.Errorf("server.base_url is required (phase 2 minimum config)")
 		}
 		if cfg.Email.Provider == "" && cfg.SMTP.Host == "" {
-			return nil, fmt.Errorf("email is not configured: set email.provider + email.api_key, or legacy smtp.*, or run with --dev")
+			return nil, fmt.Errorf("email is not configured: set email.provider + email.api_key, or legacy smtp.*")
 		}
 	}
 
 	if opts.StoragePathOverride != "" {
 		cfg.Storage.Path = opts.StoragePathOverride
-	}
-	if opts.DevMode {
-		// Wide-open CORS is the standard dev ergonomic — never runs in prod
-		// because --dev is only set via the CLI flag, not YAML.
-		if len(cfg.Server.CORSOrigins) == 0 {
-			cfg.Server.CORSOrigins = []string{"*"}
-		}
 	}
 
 	dataDir := filepath.Dir(cfg.Storage.Path)
@@ -233,8 +225,8 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	sender := opts.EmailSenderOverride
 	if sender == nil {
-		if opts.DevMode {
-			slog.Info("dev mode: using in-db dev inbox for email capture")
+		if cfg.Email.Provider == "dev" {
+			slog.Info("email: provider=dev — using in-db dev inbox for capture")
 			sender = email.NewDevInboxSender(store)
 		} else {
 			sender = chooseEmailSender(cfg)

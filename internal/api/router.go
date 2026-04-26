@@ -210,9 +210,14 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 	r.Use(mw.SecurityHeaders())
 	r.Use(mw.RateLimit(100, 100)) // 100 req/s burst, 100 tokens
 
-	// CORS (must be before route handlers)
-	if len(cfg.Server.CORSOrigins) > 0 {
-		r.Use(mw.CORS(cfg.Server.CORSOrigins))
+	// CORS (must be before route handlers).
+	// CORSRelaxed injects "*" so all origins are accepted — local dev only.
+	corsOrigins := cfg.Server.CORSOrigins
+	if cfg.Server.CORSRelaxed {
+		corsOrigins = []string{"*"}
+	}
+	if len(corsOrigins) > 0 {
+		r.Use(mw.CORS(corsOrigins))
 	}
 
 	// Health check
