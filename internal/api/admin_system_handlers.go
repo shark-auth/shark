@@ -84,6 +84,7 @@ type adminServerConfig struct {
 	Port        int      `json:"port"`
 	BaseURL     string   `json:"base_url"`
 	CORSOrigins []string `json:"cors_origins"`
+	CORSRelaxed bool     `json:"cors_relaxed"`
 	DevMode     bool     `json:"dev_mode"`
 }
 
@@ -102,10 +103,11 @@ type adminAuditConfig struct {
 }
 
 type adminEmailConfig struct {
-	Provider string `json:"provider"`
-	APIKey   string `json:"api_key,omitempty"`
-	From     string `json:"from"`
-	FromName string `json:"from_name"`
+	Provider         string `json:"provider"`
+	APIKey           string `json:"api_key,omitempty"`
+	From             string `json:"from"`
+	FromName         string `json:"from_name"`
+	PreviousProvider string `json:"previous_provider,omitempty"`
 }
 
 type adminPasskeyConfig struct {
@@ -226,6 +228,7 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 			Port:        cfg.Server.Port,
 			BaseURL:     cfg.Server.BaseURL,
 			CORSOrigins: cors,
+			CORSRelaxed: cfg.Server.CORSRelaxed,
 			DevMode:     cfg.Server.DevMode,
 		},
 		Auth: adminAuthConfig{
@@ -241,10 +244,11 @@ func (s *Server) buildConfigSummary(ctx context.Context) adminConfigSummary {
 			Attestation:      cfg.Passkeys.Attestation,
 		},
 		Email: adminEmailConfig{
-			Provider: cfg.Email.Provider,
-			APIKey:   cfg.Email.APIKey,
-			From:     cfg.Email.From,
-			FromName: cfg.Email.FromName,
+			Provider:         cfg.Email.Provider,
+			APIKey:           cfg.Email.APIKey,
+			From:             cfg.Email.From,
+			FromName:         cfg.Email.FromName,
+			PreviousProvider: cfg.Email.PreviousProvider,
 		},
 		Audit: adminAuditConfig{
 			Retention:       cfg.Audit.Retention,
@@ -591,11 +595,15 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 			UserVerification *string `json:"user_verification"`
 		} `json:"passkeys"`
 		Email struct {
-			Provider *string `json:"provider"`
-			APIKey   *string `json:"api_key"`
-			From     *string `json:"from"`
-			FromName *string `json:"from_name"`
+			Provider         *string `json:"provider"`
+			APIKey           *string `json:"api_key"`
+			From             *string `json:"from"`
+			FromName         *string `json:"from_name"`
+			PreviousProvider *string `json:"previous_provider"`
 		} `json:"email"`
+		Server struct {
+			CORSRelaxed *bool `json:"cors_relaxed"`
+		} `json:"server"`
 		Audit struct {
 			Retention       *string `json:"retention"`
 			CleanupInterval *string `json:"cleanup_interval"`
@@ -645,7 +653,17 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 		cfg.Passkeys.UserVerification = *req.Passkeys.UserVerification
 	}
 	if req.Email.Provider != nil {
-		cfg.Email.Provider = *req.Email.Provider
+		newProvider := *req.Email.Provider
+		// When switching to dev, preserve the previous provider so the toggle
+		// is reversible. When switching away from dev, restore only if the
+		// caller doesn't supply an explicit previous_provider.
+		if newProvider == "dev" && cfg.Email.Provider != "dev" {
+			cfg.Email.PreviousProvider = cfg.Email.Provider
+		}
+		cfg.Email.Provider = newProvider
+	}
+	if req.Email.PreviousProvider != nil {
+		cfg.Email.PreviousProvider = *req.Email.PreviousProvider
 	}
 	if req.Email.APIKey != nil {
 		cfg.Email.APIKey = *req.Email.APIKey
@@ -655,6 +673,9 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 	}
 	if req.Email.FromName != nil {
 		cfg.Email.FromName = *req.Email.FromName
+	}
+	if req.Server.CORSRelaxed != nil {
+		cfg.Server.CORSRelaxed = *req.Server.CORSRelaxed
 	}
 	if req.Audit.Retention != nil {
 		cfg.Audit.Retention = *req.Audit.Retention
@@ -732,10 +753,8 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 	// Hot-reload services
 	if s.MagicLinkManager != nil && req.Email.Provider != nil {
 		var newSender email.Sender
-		switch *req.Email.Provider {
-		case "shark":
-			newSender = email.NewResendSender(cfg.SMTP)
-		case "resend":
+		switch cfg.Email.Provider {
+		case "shark", "resend":
 			newSender = email.NewResendSender(cfg.SMTP)
 		case "smtp":
 			newSender = email.NewSMTPSender(cfg.SMTP)
@@ -744,7 +763,7 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 		}
 		if newSender != nil {
 			s.MagicLinkManager.SetSender(newSender)
-			slog.Info("config: email sender re-initialized")
+			slog.Info("config: email sender re-initialized", "provider", cfg.Email.Provider)
 		}
 	}
 

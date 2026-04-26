@@ -146,22 +146,28 @@ func (p *ProxyConfig) StripIncomingOrDefault() bool {
 }
 
 type EmailConfig struct {
-	Provider string `koanf:"provider" yaml:"provider"`
-	APIKey   string `koanf:"api_key" yaml:"api_key"`
-	From     string `koanf:"from" yaml:"from"`
-	FromName string `koanf:"from_name" yaml:"from_name"`
-	Host     string `koanf:"host" yaml:"host"`
-	Port     int    `koanf:"port" yaml:"port"`
-	Username string `koanf:"username" yaml:"username"`
-	Password string `koanf:"password" yaml:"password"`
+	Provider         string `koanf:"provider" yaml:"provider"`
+	APIKey           string `koanf:"api_key" yaml:"api_key"`
+	From             string `koanf:"from" yaml:"from"`
+	FromName         string `koanf:"from_name" yaml:"from_name"`
+	Host             string `koanf:"host" yaml:"host"`
+	Port             int    `koanf:"port" yaml:"port"`
+	Username         string `koanf:"username" yaml:"username"`
+	Password         string `koanf:"password" yaml:"password"`
+	// PreviousProvider stores the last non-dev provider so the dev-inbox
+	// toggle is reversible without losing the original provider setting.
+	PreviousProvider string `koanf:"previous_provider" yaml:"previous_provider"`
 }
 
 type ServerConfig struct {
-	Port        int      `koanf:"port" yaml:"port"`
-	Secret      string   `koanf:"secret" yaml:"secret"`
-	BaseURL     string   `koanf:"base_url" yaml:"base_url"`
-	CORSOrigins []string `koanf:"cors_origins" yaml:"cors_origins"`
-	DevMode     bool     `koanf:"-" yaml:"-"`
+	Port         int      `koanf:"port" yaml:"port"`
+	Secret       string   `koanf:"secret" yaml:"secret"`
+	BaseURL      string   `koanf:"base_url" yaml:"base_url"`
+	CORSOrigins  []string `koanf:"cors_origins" yaml:"cors_origins"`
+	// CORSRelaxed, when true, makes the CORS middleware accept any Origin.
+	// Intended for local development only — toggle via Settings → Server.
+	CORSRelaxed  bool     `koanf:"cors_relaxed" yaml:"cors_relaxed"`
+	DevMode      bool     `koanf:"-" yaml:"-"`
 }
 
 type StorageConfig struct {

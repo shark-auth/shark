@@ -289,6 +289,7 @@ export function Settings() {
         base_url:     config.server?.base_url ?? config.base_url ?? '',
         port:         config.server?.port ?? '',
         cors_origins: config.server?.cors_origins ?? config.cors_origins ?? [],
+        cors_relaxed: config.server?.cors_relaxed ?? false,
       },
       auth: {
         session_lifetime:    config.auth?.session_lifetime || '30d',
@@ -308,10 +309,11 @@ export function Settings() {
         redirect_url: config.social?.redirect_url || '',
       },
       email: {
-        provider:  config.email?.provider || 'shark',
-        api_key:   config.email?.api_key || '',
-        from:      config.email?.from || '',
-        from_name: config.email?.from_name || '',
+        provider:          config.email?.provider || 'shark',
+        api_key:           config.email?.api_key || '',
+        from:              config.email?.from || '',
+        from_name:         config.email?.from_name || '',
+        previous_provider: config.email?.previous_provider || '',
       },
       audit: {
         retention:        config.audit?.retention || '30d',
@@ -341,6 +343,7 @@ export function Settings() {
         base_url: config.server?.base_url ?? config.base_url ?? '',
         port: config.server?.port ?? '',
         cors_origins: config.server?.cors_origins ?? config.cors_origins ?? [],
+        cors_relaxed: config.server?.cors_relaxed ?? false,
       },
       auth:           { session_lifetime: config.auth?.session_lifetime || '30d', password_min_length: config.auth?.password_min_length ?? 8 },
       jwt:            { lifetime: config.jwt?.lifetime || config.jwt?.access_token_ttl || '15m' },
@@ -348,10 +351,11 @@ export function Settings() {
       password_reset: { ttl: config.password_reset?.ttl || '1h' },
       social:         { redirect_url: config.social?.redirect_url || '' },
       email:  {
-        provider: config.email?.provider || 'shark',
-        api_key: config.email?.api_key || '',
-        from: config.email?.from || '',
-        from_name: config.email?.from_name || '',
+        provider:          config.email?.provider || 'shark',
+        api_key:           config.email?.api_key || '',
+        from:              config.email?.from || '',
+        from_name:         config.email?.from_name || '',
+        previous_provider: config.email?.previous_provider || '',
       },
       audit:  {
         retention: config.audit?.retention || '30d',
@@ -501,6 +505,22 @@ export function Settings() {
               <Field label="CORS origins" hint="Browser origins permitted to call the API · empty = same-origin only" span={2}>
                 <TagList values={form.server.cors_origins} onChange={(v) => set('server.cors_origins', v)}/>
               </Field>
+              <Field label="Relaxed CORS" hint="" span={2}>
+                <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!form.server.cors_relaxed}
+                      onChange={(e) => set('server.cors_relaxed', e.target.checked)}
+                      style={{ width: 14, height: 14, accentColor: 'var(--danger)' }}
+                    />
+                    <span style={{ fontSize: 12 }}>Accept any origin (<code>*</code>)</span>
+                  </label>
+                  <span style={{ fontSize: 11, color: 'var(--danger)' }}>
+                    Insecure — for local development only
+                  </span>
+                </div>
+              </Field>
             </div>
           </Section>
 
@@ -558,13 +578,41 @@ export function Settings() {
           <Section id="email" title="Email Delivery" desc="Outbound mail for verifications, magic links, and password resets" onSection={setActive}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <Field label="Provider">
-                <Select value={form.email.provider} onChange={(v) => set('email.provider', v)}
-                  options={[
-                    { v: 'shark',  l: 'Shark (managed)' },
-                    { v: 'resend', l: 'Resend' },
-                    { v: 'smtp',   l: 'SMTP' },
-                    { v: 'dev',    l: 'Dev inbox (capture only)' },
-                  ]} width={240}/>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Select value={form.email.provider} onChange={(v) => set('email.provider', v)}
+                    options={[
+                      { v: 'shark',  l: 'Shark (managed)' },
+                      { v: 'resend', l: 'Resend' },
+                      { v: 'smtp',   l: 'SMTP' },
+                      { v: 'dev',    l: 'Dev inbox (capture only)' },
+                    ]} width={240}/>
+                  {form.email.provider === 'dev' ? (
+                    <button
+                      type="button"
+                      className="btn sm ghost"
+                      style={{ alignSelf: 'flex-start' }}
+                      onClick={() => {
+                        const prev = config?.email?.previous_provider || form.email.previous_provider || 'shark';
+                        set('email.provider', prev);
+                        set('email.previous_provider', '');
+                      }}
+                    >
+                      Switch back to {config?.email?.previous_provider || 'production provider'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn sm ghost"
+                      style={{ alignSelf: 'flex-start' }}
+                      onClick={() => {
+                        set('email.previous_provider', form.email.provider);
+                        set('email.provider', 'dev');
+                      }}
+                    >
+                      Switch to dev inbox (testing)
+                    </button>
+                  )}
+                </div>
               </Field>
               <Field label={form.email.provider === 'smtp' ? 'SMTP password' : 'API key'} hint={emailKeySet ? 'Set · paste a new value to replace' : 'Required for non-dev providers'}>
                 <MaskedInput

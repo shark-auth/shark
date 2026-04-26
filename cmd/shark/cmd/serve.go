@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"os"
 	"os/signal"
 	"syscall"
 
@@ -13,8 +12,6 @@ import (
 
 var (
 	serveConfigPath    string
-	serveDev           bool
-	serveDevReset      bool
 	serveProxyUpstream string
 	serveNoPrompt      bool
 )
@@ -27,25 +24,11 @@ var serveCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		configPath := serveConfigPath
-		if serveDev {
-			// In dev mode a missing config is expected — don't force the user
-			// to run `shark init` first. Only load the YAML if it exists.
-			if _, err := os.Stat(configPath); err != nil {
-				configPath = ""
-			}
-		}
-
 		opts := server.Options{
-			ConfigPath:    configPath,
+			ConfigPath:    serveConfigPath,
 			MigrationsFS:  migrationsFS,
 			MigrationsDir: "migrations",
 			NoPrompt:      serveNoPrompt,
-		}
-		if serveDev {
-			if err := applyDevMode(&opts, serveDevReset); err != nil {
-				return err
-			}
 		}
 		if serveProxyUpstream != "" {
 			opts.ProxyUpstream = serveProxyUpstream
@@ -57,8 +40,6 @@ var serveCmd = &cobra.Command{
 
 func init() {
 	serveCmd.Flags().StringVar(&serveConfigPath, "config", "sharkauth.yaml", "path to config file")
-	serveCmd.Flags().BoolVar(&serveDev, "dev", false, "enable dev mode (ephemeral storage, dev inbox, relaxed CORS)")
-	serveCmd.Flags().BoolVar(&serveDevReset, "reset", false, "wipe dev.db before starting (requires --dev)")
 	serveCmd.Flags().StringVar(&serveProxyUpstream, "proxy-upstream", "", "mount reverse proxy to this upstream URL (e.g. http://localhost:3000)")
 	serveCmd.Flags().BoolVar(&serveNoPrompt, "no-prompt", false, "skip first-boot browser-open prompt (for CI / headless environments)")
 }
