@@ -324,7 +324,6 @@ function AppConfig({ app, onUpdate }) {
   
   // Internal state for the form
   const [mode, setMode] = React.useState(app.integration_mode === 'proxy' ? 'proxy' : 'sdk');
-  const [sdkSubMode, setSdkSubMode] = React.useState(app.integration_mode === 'proxy' ? 'hosted' : (app.integration_mode || 'custom'));
   const [proxyPublicDomain, setProxyPublicDomain] = React.useState(app.proxy_public_domain || '');
   const [proxyProtectedUrl, setProxyProtectedUrl] = React.useState(app.proxy_protected_url || '');
 
@@ -361,13 +360,8 @@ function AppConfig({ app, onUpdate }) {
     if (newMode === 'proxy') {
       save({ integration_mode: 'proxy' });
     } else {
-      save({ integration_mode: sdkSubMode });
+      save({ integration_mode: 'custom' });
     }
-  };
-
-  const setSdkType = (type) => {
-    setSdkSubMode(type);
-    save({ integration_mode: type });
   };
 
   const saveProxy = () => {
@@ -383,14 +377,16 @@ function AppConfig({ app, onUpdate }) {
       
       <Section label="Deployment Model">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: 'var(--surface-1)', padding: 4, borderRadius: 6, border: '1px solid var(--hairline)' }}>
-          <button 
-            className={"btn sm " + (mode === 'proxy' ? 'primary' : 'ghost')}
-            onClick={() => setIntegrationMode('proxy')}
-            style={{ border: 0, fontWeight: mode === 'proxy' ? 600 : 400 }}
+          <button
+            className="btn sm ghost"
+            disabled
+            title="Proxy Gateway integration coming soon"
+            style={{ border: 0, opacity: 0.5, cursor: 'not-allowed', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 8px' }}
           >
-            Proxy Gateway
+            <span>Proxy Gateway</span>
+            <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Coming soon</span>
           </button>
-          <button 
+          <button
             className={"btn sm " + (mode === 'sdk' ? 'primary' : 'ghost')}
             onClick={() => setIntegrationMode('sdk')}
             style={{ border: 0, fontWeight: mode === 'sdk' ? 600 : 400 }}
@@ -399,17 +395,7 @@ function AppConfig({ app, onUpdate }) {
           </button>
         </div>
         <div className="faint" style={{ fontSize: 10.5, marginTop: 10, textAlign: 'center', minHeight: 14 }}>
-          {saving ? (
-             <span className="row" style={{ justifyContent: 'center', gap: 6 }}>
-               <Icon.Refresh width={10} style={{ animation: 'spin 800ms linear infinite' }}/> Saving deployment model…
-             </span>
-          ) : saveOk ? (
-             <span style={{ color: 'var(--success)' }}>✓ Deployment model updated</span>
-          ) : (
-            mode === 'proxy' 
-              ? "SharkAuth sits in front of your app. Zero code changes required." 
-              : "Your application code calls SharkAuth for authentication."
-          )}
+          Your application code calls SharkAuth for authentication.
         </div>
       </Section>
 
@@ -449,25 +435,6 @@ function AppConfig({ app, onUpdate }) {
         </Section>
       ) : (
         <>
-          <Section label="SDK Integration Type">
-             <div className="row" style={{ gap: 8, marginBottom: 12 }}>
-                <button className={"btn sm " + (sdkSubMode === 'hosted' ? 'solid' : 'ghost')} onClick={() => setSdkType('hosted')}>Hosted Pages</button>
-                <button className={"btn sm " + (sdkSubMode === 'components' ? 'solid' : 'ghost')} onClick={() => setSdkType('components')}>Components</button>
-                <button className={"btn sm " + (sdkSubMode === 'custom' ? 'solid' : 'ghost')} onClick={() => setSdkType('custom')}>Custom API</button>
-             </div>
-             <div className="faint" style={{ fontSize: 11, lineHeight: 1.4, minHeight: 30 }}>
-                {saving && sdkSubMode !== app.integration_mode ? (
-                   <span className="row" style={{ gap: 6 }}><Icon.Refresh width={10} style={{ animation: 'spin 800ms linear infinite' }}/> Updating type…</span>
-                ) : (
-                  <>
-                    {sdkSubMode === 'hosted' && "Use SharkAuth's pre-built login and user profile pages."}
-                    {sdkSubMode === 'components' && "Embed SharkAuth React/Vue components directly into your UI."}
-                    {sdkSubMode === 'custom' && "Build your own UI using the SharkAuth REST API."}
-                  </>
-                )}
-             </div>
-          </Section>
-
           <Section label="SDK Credentials">
              <div style={{ background: 'var(--surface-1)', padding: 12, borderRadius: 5, border: '1px solid var(--hairline)' }}>
                <div className="faint" style={{ fontSize: 11, marginBottom: 8 }}>Client ID</div>
