@@ -336,6 +336,7 @@ function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
           ['tokens', 'Tokens'],
           ['consents', 'Consents'],
           ['audit', 'Audit'],
+          ['security', 'Security'],
         ].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             style={{
@@ -352,6 +353,7 @@ function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
         {tab === 'tokens' && <AgentTokens agent={agent} tokensVersion={tokensVersion}/>}
         {tab === 'consents' && <AgentConsents agent={agent}/>}
         {tab === 'audit' && <AgentAudit agent={agent}/>}
+        {tab === 'security' && <AgentSecurity agent={agent}/>}
       </div>
       {rotateModalOpen && (
         <RotateSecretModal
@@ -963,6 +965,151 @@ function RotateSecretModal({ agent, onClose }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// Truncate a string: first 8 chars + "..." + last 4 chars
+function jktShort(s) {
+  if (!s) return '—';
+  if (s.length <= 12) return s;
+  return s.slice(0, 8) + '...' + s.slice(-4);
+}
+
+function AgentSecurity({ agent }) {
+  const toast = useToast();
+  const [rotHistOpen, setRotHistOpen] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  // Pull DPoP fields from the agent object (populated by GET /api/v1/agents/:id)
+  const keyId   = agent.dpop_key_id   || agent.key_id   || null;
+  const jkt     = agent.dpop_jkt      || agent.jkt      || null;
+
+  // Pull rotation history from the agent's audit log (last 5 key-rotation events)
+  const { data: auditData, loading: auditLoading } = useAPI(
+    '/agents/' + agent.id + '/audit?limit=50',
+    [agent.id]
+  );
+  const allEvents = auditData?.data || [];
+  const rotations = allEvents
+    .filter(e => e.action && (
+      e.action.includes('key_rotation') ||
+      e.action.includes('dpop') ||
+      e.action.includes('rotate_key')
+    ))
+    .slice(0, 5);
+
+  const copyJkt = () => {
+    if (!jkt) return;
+    navigator.clipboard.writeText(jkt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+      toast.success('Thumbprint copied');
+    }).catch(() => toast.error('Copy failed'));
+  };
+
+  return (
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* DPoP keypair section */}
+      <Section label="DPoP keypair">
+        <div style={{
+          background: 'var(--surface-1)', border: '1px solid var(--hairline)',
+          borderRadius: 3, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          {/* Algorithm + key_id row */}
+          <div className="row" style={{ gap: 10, fontSize: 12 }}>
+            <Icon.Key width={12} height={12} style={{ opacity: 0.6, flexShrink: 0 }} />
+            <span className="mono" style={{ flex: 1 }}>
+              ECDSA P-256
+              {keyId ? (
+                <span className="faint"> · key_id: {keyId}</span>
+              ) : (
+                <span className="faint"> · key_id: —</span>
+              )}
+            </span>
+          </div>
+
+          {/* Thumbprint (jkt) row */}
+          <div className="row" style={{ gap: 10, fontSize: 12 }}>
+            <Icon.Shield width={12} height={12} style={{ opacity: 0.6, flexShrink: 0 }} />
+            <span className="faint" style={{ flexShrink: 0, fontSize: 11 }}>Thumbprint (jkt):</span>
+            <span className="mono" style={{ flex: 1, fontSize: 11, wordBreak: 'break-all' }}>
+              {jkt ? jktShort(jkt) : '—'}
+            </span>
+            {jkt && (
+              <button
+                className="btn ghost icon sm"
+                onClick={copyJkt}
+                title="Copy full thumbprint"
+                style={{ flexShrink: 0 }}
+              >
+                {copied
+                  ? <Icon.Check width={11} height={11} style={{ color: 'var(--success)' }} />
+                  : <Icon.Copy width={11} height={11} />}
+              </button>
+            )}
+          </div>
+
+          {/* Empty state when no DPoP data */}
+          {!keyId && !jkt && (
+            <div className="faint" style={{ fontSize: 11, marginTop: 2 }}>
+              No DPoP keypair registered for this agent.
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* Rotation history section */}
+      <Section label="Rotation history">
+        <div style={{
+          border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)', overflow: 'hidden',
+        }}>
+          {/* Collapsible header */}
+          <button
+            onClick={() => setRotHistOpen(o => !o)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px', background: 'transparent', border: 0, cursor: 'pointer',
+              fontSize: 11.5, color: 'var(--fg-muted)',
+            }}
+          >
+            {rotHistOpen
+              ? <Icon.ChevronDown width={11} height={11} />
+              : <Icon.ChevronRight width={11} height={11} />}
+            <span style={{ flex: 1, textAlign: 'left' }}>Last 5 key rotations</span>
+            {!auditLoading && (
+              <span className="mono faint" style={{ fontSize: 10 }}>{rotations.length} event{rotations.length !== 1 && 's'}</span>
+            )}
+          </button>
+
+          {rotHistOpen && (
+            <div style={{ borderTop: '1px solid var(--hairline)' }}>
+              {auditLoading ? (
+                <div className="faint" style={{ padding: '10px 12px', fontSize: 11 }}>Loading…</div>
+              ) : rotations.length === 0 ? (
+                <div className="faint" style={{ padding: '10px 12px', fontSize: 11 }}>
+                  No key rotation events found in audit log.
+                </div>
+              ) : rotations.map((e, i) => (
+                <div
+                  key={e.id || i}
+                  className="row"
+                  style={{
+                    padding: '7px 12px', gap: 8, fontSize: 11,
+                    borderBottom: i < rotations.length - 1 ? '1px solid var(--hairline)' : 0,
+                  }}
+                >
+                  <SevDot sev={e.severity} />
+                  <span className="mono" style={{ flex: 1 }}>{e.action}</span>
+                  <span className="faint" style={{ fontSize: 10.5 }}>{e.actor || e.actor_id || '—'}</span>
+                  <span className="faint mono" style={{ fontSize: 10 }}>{relativeTime(e.created_at || e.t)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Section>
     </div>
   );
 }
