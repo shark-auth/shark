@@ -89,7 +89,10 @@ func (s *Server) handleAdminCreateOrganization(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	s.auditAdminOrg(r.Context(), "admin.organization.create", org.ID, ipOf(r), uaOf(r))
+	s.auditAdminOrg(r, "admin.organization.create", org.ID, map[string]any{
+		"org_name": org.Name,
+		"org_slug": org.Slug,
+	})
 	s.emit(r.Context(), storage.WebhookEventOrgCreated, map[string]any{
 		"id": org.ID, "name": org.Name, "slug": org.Slug,
 	})
@@ -127,10 +130,14 @@ func (s *Server) handleAdminUpdateOrganization(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Track which fields the request actually mutated so the audit row can
+	// surface a `changed_fields` array instead of a generic update event.
+	changedFields := []string{}
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
-		if name != "" {
+		if name != "" && name != org.Name {
 			org.Name = name
+			changedFields = append(changedFields, "name")
 		}
 	}
 	if req.Slug != nil {
@@ -145,11 +152,18 @@ func (s *Server) handleAdminUpdateOrganization(w http.ResponseWriter, r *http.Re
 				writeJSON(w, http.StatusConflict, errPayload("slug_taken", "An organization with this slug already exists"))
 				return
 			}
-			org.Slug = slug
+			if slug != org.Slug {
+				org.Slug = slug
+				changedFields = append(changedFields, "slug")
+			}
 		}
 	}
 	if req.Metadata != nil {
-		org.Metadata = normalizeMetadata(*req.Metadata)
+		newMeta := normalizeMetadata(*req.Metadata)
+		if newMeta != org.Metadata {
+			org.Metadata = newMeta
+			changedFields = append(changedFields, "metadata")
+		}
 	}
 	org.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
@@ -157,7 +171,9 @@ func (s *Server) handleAdminUpdateOrganization(w http.ResponseWriter, r *http.Re
 		internal(w, err)
 		return
 	}
-	s.auditAdminOrg(r.Context(), "admin.organization.update", orgID, ipOf(r), uaOf(r))
+	s.auditAdminOrg(r, "admin.organization.update", orgID, map[string]any{
+		"changed_fields": changedFields,
+	})
 	writeJSON(w, http.StatusOK, orgToResponse(org))
 }
 
@@ -167,7 +183,8 @@ func (s *Server) handleAdminDeleteOrganization(w http.ResponseWriter, r *http.Re
 	orgID := chi.URLParam(r, "id")
 
 	// Verify exists for a clean 404 (DeleteOrganization is a no-op for missing rows).
-	if _, err := s.Store.GetOrganizationByID(r.Context(), orgID); errors.Is(err, sql.ErrNoRows) {
+	org, err := s.Store.GetOrganizationByID(r.Context(), orgID)
+	if errors.Is(err, sql.ErrNoRows) {
 		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
 		return
 	} else if err != nil {
@@ -175,11 +192,21 @@ func (s *Server) handleAdminDeleteOrganization(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Snapshot member count BEFORE delete so the audit row records the
+	// blast radius. Best-effort: a failure here is non-fatal.
+	memberCount := 0
+	if members, mErr := s.Store.ListOrganizationMembers(r.Context(), orgID); mErr == nil {
+		memberCount = len(members)
+	}
+
 	if err := s.Store.DeleteOrganization(r.Context(), orgID); err != nil {
 		internal(w, err)
 		return
 	}
-	s.auditAdminOrg(r.Context(), "admin.organization.delete", orgID, ipOf(r), uaOf(r))
+	s.auditAdminOrg(r, "admin.organization.delete", orgID, map[string]any{
+		"org_name":     org.Name,
+		"member_count": memberCount,
+	})
 	s.emit(r.Context(), storage.WebhookEventOrgDeleted, map[string]any{"id": orgID})
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Organization deleted"})
 }
@@ -218,7 +245,14 @@ func (s *Server) handleAdminCreateOrgRole(w http.ResponseWriter, r *http.Request
 		internal(w, err)
 		return
 	}
-	s.auditAdminOrg(r.Context(), "admin.org.role.create", orgID, ipOf(r), uaOf(r))
+	// Permission attachment is a separate API call, so on creation the
+	// permissions count is always 0. Surface it explicitly so the audit row
+	// is self-describing rather than implying we just couldn't be bothered.
+	s.auditAdminOrg(r, "admin.organization.role.create", orgID, map[string]any{
+		"role_name":         role.Name,
+		"role_id":           role.ID,
+		"permissions_count": 0,
+	})
 	writeJSON(w, http.StatusCreated, orgRoleToResponse(role))
 }
 
@@ -310,7 +344,10 @@ func (s *Server) handleAdminDeleteOrgInvitation(w http.ResponseWriter, r *http.R
 		internal(w, err)
 		return
 	}
-	s.auditAdminOrg(r.Context(), "admin.org.invitation.delete", orgID, ipOf(r), uaOf(r))
+	s.auditAdminOrg(r, "admin.organization.invitation.delete", orgID, map[string]any{
+		"invitation_id": invID,
+		"email":         inv.Email,
+	})
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Invitation deleted"})
 }
 
@@ -368,7 +405,10 @@ func (s *Server) handleAdminResendOrgInvitation(w http.ResponseWriter, r *http.R
 		emailSent = true
 	}
 
-	s.auditAdminOrg(r.Context(), "admin.org.invitation.resend", orgID, ipOf(r), uaOf(r))
+	s.auditAdminOrg(r, "admin.organization.invitation.resend", orgID, map[string]any{
+		"invitation_id": invID,
+		"email":         inv.Email,
+	})
 	resp := map[string]any{
 		"message":    "Invitation resent",
 		"id":         inv.ID,
@@ -437,29 +477,51 @@ func (s *Server) handleAdminRemoveOrgMember(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
+	// Best-effort lookup of the member's email for the audit row — the
+	// membership record only holds user_id, so a user delete after this
+	// point would erase the email forever otherwise.
+	memberEmail := ""
+	if u, uErr := s.Store.GetUserByID(r.Context(), targetUserID); uErr == nil && u != nil {
+		memberEmail = u.Email
+	}
 	if err := s.Store.DeleteOrganizationMember(r.Context(), orgID, targetUserID); err != nil {
 		internal(w, err)
 		return
 	}
-	s.auditAdminOrg(r.Context(), "admin.org.member.remove", orgID, ipOf(r), uaOf(r))
+	s.auditAdminOrg(r, "admin.organization.member.remove", orgID, map[string]any{
+		"member_id":    targetUserID,
+		"member_email": memberEmail,
+	})
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Member removed"})
 }
 
-// auditAdminOrg writes an admin-actor audit log row. ActorID is empty since
-// admin-key auth doesn't carry a user identity; the action prefix
-// `admin.organization.*` makes the source obvious.
-func (s *Server) auditAdminOrg(ctx context.Context, action, orgID, ip, ua string) {
+// auditAdminOrg writes an admin-actor audit log row with structured metadata.
+// ActorID is hardcoded to "admin_key" — admin-key auth doesn't carry a per-user
+// identity, but tagging it explicitly lets dashboard filters distinguish
+// admin-driven events from user/session/agent actor types. The metadata map
+// is per-action (e.g. {org_name, org_slug} for create, {changed_fields: [...]}
+// for update) so the audit table can render diff fields without re-parsing
+// the action string.
+func (s *Server) auditAdminOrg(r *http.Request, action, orgID string, meta map[string]any) {
 	if s.AuditLogger == nil {
 		return
 	}
-	_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
+	metaJSON := []byte("{}")
+	if meta != nil {
+		if b, err := json.Marshal(meta); err == nil {
+			metaJSON = b
+		}
+	}
+	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 		ActorType:  "admin",
+		ActorID:    "admin_key",
 		Action:     action,
 		TargetType: "organization",
 		TargetID:   orgID,
-		IP:         ip,
-		UserAgent:  ua,
+		IP:         ipOf(r),
+		UserAgent:  uaOf(r),
 		Status:     "success",
+		Metadata:   string(metaJSON),
 	})
 }
 

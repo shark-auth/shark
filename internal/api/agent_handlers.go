@@ -38,30 +38,23 @@ func generateAgentSecret() (secret, secretHash string, err error) {
 	return
 }
 
-// auditAgent logs an agent-related audit event.
-func (s *Server) auditAgent(r *http.Request, action, targetID string) {
-	if s.AuditLogger == nil {
-		return
-	}
-	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
-		ActorType:  "admin",
-		Action:     action,
-		TargetType: "agent",
-		TargetID:   targetID,
-		IP:         r.RemoteAddr,
-		UserAgent:  r.UserAgent(),
-		Status:     "success",
-	})
-}
-
-// auditAgentWithMeta logs an agent audit event with additional metadata fields.
+// auditAgentWithMeta logs an agent audit event with structured metadata.
+// ActorID is hardcoded to "admin_key" — admin-key auth doesn't carry a
+// per-user identity, but tagging it explicitly lets dashboard filters
+// distinguish admin-driven events from user/session/agent actor types.
 func (s *Server) auditAgentWithMeta(r *http.Request, action, targetID string, meta map[string]any) {
 	if s.AuditLogger == nil {
 		return
 	}
-	metaJSON, _ := json.Marshal(meta)
+	metaJSON := []byte("{}")
+	if meta != nil {
+		if b, err := json.Marshal(meta); err == nil {
+			metaJSON = b
+		}
+	}
 	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 		ActorType:  "admin",
+		ActorID:    "admin_key",
 		Action:     action,
 		TargetType: "agent",
 		TargetID:   targetID,
@@ -188,7 +181,11 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditAgent(r, "agent.created", agent.ID)
+	s.auditAgentWithMeta(r, "agent.created", agent.ID, map[string]any{
+		"agent_name": agent.Name,
+		"client_id":  agent.ClientID,
+		"scopes":     agent.Scopes,
+	})
 	s.emitAgentEvent(r, "agent.created", agent)
 
 	writeJSON(w, http.StatusCreated, agentCreateResponse{
@@ -290,39 +287,53 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Track which fields the request actually mutated so the audit row can
+	// surface a `changed_fields` array instead of a generic "agent.updated".
+	changedFields := []string{}
 	if req.Name != nil {
 		agent.Name = *req.Name
+		changedFields = append(changedFields, "name")
 	}
 	if req.Description != nil {
 		agent.Description = *req.Description
+		changedFields = append(changedFields, "description")
 	}
 	if req.RedirectURIs != nil {
 		agent.RedirectURIs = *req.RedirectURIs
+		changedFields = append(changedFields, "redirect_uris")
 	}
 	if req.AllowedCallbackURLs != nil {
 		agent.RedirectURIs = append(agent.RedirectURIs, *req.AllowedCallbackURLs...)
+		changedFields = append(changedFields, "allowed_callback_urls")
 	}
 	if req.GrantTypes != nil {
 		agent.GrantTypes = *req.GrantTypes
+		changedFields = append(changedFields, "grant_types")
 	}
 	if req.Scopes != nil {
 		agent.Scopes = *req.Scopes
+		changedFields = append(changedFields, "scopes")
 	}
 	if req.TokenLifetime != nil {
 		agent.TokenLifetime = *req.TokenLifetime
+		changedFields = append(changedFields, "token_lifetime")
 	}
 	if req.Metadata != nil {
 		agent.Metadata = *req.Metadata
+		changedFields = append(changedFields, "metadata")
 	}
 	if req.LogoURI != nil {
 		agent.LogoURI = *req.LogoURI
+		changedFields = append(changedFields, "logo_uri")
 	}
 	if req.HomepageURI != nil {
 		agent.HomepageURI = *req.HomepageURI
+		changedFields = append(changedFields, "homepage_uri")
 	}
 	deactivating := req.Active != nil && !*req.Active && agent.Active
 	if req.Active != nil {
 		agent.Active = *req.Active
+		changedFields = append(changedFields, "active")
 	}
 
 	if err := s.Store.UpdateAgent(r.Context(), agent); err != nil {
@@ -336,10 +347,13 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		revokedCount, revokeErr := s.Store.RevokeOAuthTokensByClientID(r.Context(), agent.ClientID)
 		_ = revokeErr // non-fatal; agent already deactivated
 		s.auditAgentWithMeta(r, "agent.deactivated_with_revocation", agent.ID, map[string]any{
+			"reason":              "admin_deactivate",
 			"revoked_token_count": revokedCount,
 		})
 	} else {
-		s.auditAgent(r, "agent.updated", agent.ID)
+		s.auditAgentWithMeta(r, "agent.updated", agent.ID, map[string]any{
+			"changed_fields": changedFields,
+		})
 	}
 	s.emitAgentEvent(r, "agent.updated", agent)
 
@@ -375,7 +389,9 @@ func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
 		_ = err
 	}
 
-	s.auditAgent(r, "agent.deactivated", agent.ID)
+	s.auditAgentWithMeta(r, "agent.deactivated", agent.ID, map[string]any{
+		"reason": "admin_delete",
+	})
 	s.emitAgentEvent(r, "agent.deactivated", map[string]string{"id": agent.ID, "client_id": agent.ClientID})
 
 	w.WriteHeader(http.StatusNoContent)
@@ -433,7 +449,9 @@ func (s *Server) handleRevokeAgentTokens(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	s.auditAgent(r, "agent.tokens_revoked", agent.ID)
+	s.auditAgentWithMeta(r, "agent.tokens_revoked", agent.ID, map[string]any{
+		"revoked_token_count": count,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message": "Tokens revoked",
@@ -456,6 +474,17 @@ func (s *Server) handleAgentRotateSecret(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Capture the existing secret hash prefix so the audit log can render
+	// `diff.old_kid` → `diff.new_kid` in the dashboard's audit view. The
+	// secret itself is never logged; only the first 12 hex chars of the
+	// SHA-256 hash, which behaves like a stable, redacted key id.
+	oldKID := ""
+	if len(agent.ClientSecretHash) >= 12 {
+		oldKID = agent.ClientSecretHash[:12]
+	} else {
+		oldKID = agent.ClientSecretHash
+	}
+
 	secret, secretHash, err := generateAgentSecret()
 	if err != nil {
 		internal(w, err)
@@ -467,7 +496,17 @@ func (s *Server) handleAgentRotateSecret(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	s.auditAgent(r, "agent.secret.rotated", agent.ID)
+	newKID := ""
+	if len(secretHash) >= 12 {
+		newKID = secretHash[:12]
+	} else {
+		newKID = secretHash
+	}
+
+	s.auditAgentWithMeta(r, "agent.secret.rotated", agent.ID, map[string]any{
+		"old_kid": oldKID,
+		"new_kid": newKID,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"client_id":     agent.ClientID,

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -81,7 +82,7 @@ func writeDCRError(w http.ResponseWriter, status int, errCode, desc string) {
 }
 
 // writeDCRJSON writes a JSON DCR response.
-func writeDCRJSON(w http.ResponseWriter, status int, v interface{}) {
+func writeDCRJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
@@ -113,13 +114,7 @@ func validateDCRMetadata(md *dcrMetadata) error {
 	}
 
 	// If authorization_code is requested, redirect_uris is required.
-	needsRedirect := false
-	for _, gt := range md.GrantTypes {
-		if gt == "authorization_code" {
-			needsRedirect = true
-			break
-		}
-	}
+	needsRedirect := slices.Contains(md.GrantTypes, "authorization_code")
 	if needsRedirect && len(md.RedirectURIs) == 0 {
 		return fmt.Errorf("invalid_redirect_uri: redirect_uris is required for authorization_code grant")
 	}
@@ -261,18 +256,60 @@ func dcrResponseFromDCRClient(dcr *storage.OAuthDCRClient, regClientURI string) 
 	return resp, &md, nil
 }
 
-// logDCRAudit records an audit log entry for DCR operations.
-func (s *Server) logDCRAudit(ctx context.Context, action, clientID, ip string) {
+// stringSlicesEqual reports whether two string slices contain the same
+// elements in the same order. Used to compute changed_fields_count for the
+// DCR update audit event.
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// dcrActorID derives a stable, low-cardinality actor identifier from the
+// registration access token in the request, falling back to "anonymous" for
+// the open POST /oauth/register endpoint. We use the first 12 hex chars of
+// the raw token to keep the audit row useful for grouping without leaking
+// the secret (the full token is never logged).
+func dcrActorID(r *http.Request) string {
+	tok := extractRegistrationToken(r)
+	if tok == "" {
+		return "anonymous"
+	}
+	if len(tok) > 12 {
+		return tok[:12]
+	}
+	return tok
+}
+
+// logDCRAudit records an audit log entry for DCR operations with structured
+// per-action metadata. The metadata shape varies by action (register vs
+// update vs delete) so dashboard filters can render diff fields without
+// re-parsing the action string.
+func (s *Server) logDCRAudit(ctx context.Context, r *http.Request, action, clientID string, meta map[string]any) {
 	id, _ := gonanoid.New()
+	metaJSON := []byte("{}")
+	if meta != nil {
+		if b, err := json.Marshal(meta); err == nil {
+			metaJSON = b
+		}
+	}
 	if err := s.RawStore.CreateAuditLog(ctx, &storage.AuditLog{
 		ID:         "aud_" + id,
 		ActorType:  "client",
+		ActorID:    dcrActorID(r),
 		Action:     action,
 		TargetType: "oauth_client",
 		TargetID:   clientID,
-		IP:         ip,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
 		Status:     "success",
-		Metadata:   "{}",
+		Metadata:   string(metaJSON),
 		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 	}); err != nil {
 		slog.Warn("dcr: audit log write failed", "action", action, "client_id", clientID, "err", err)
@@ -410,7 +447,12 @@ func (s *Server) HandleDCRRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	regClientURI := s.Issuer + "/oauth/register/" + clientID
-	s.logDCRAudit(ctx, "oauth.dcr.registered", clientID, r.RemoteAddr)
+	s.logDCRAudit(ctx, r, "oauth.dcr.registered", clientID, map[string]any{
+		"client_name":                md.ClientName,
+		"grant_types_count":          len(md.GrantTypes),
+		"redirect_uris_count":        len(md.RedirectURIs),
+		"token_endpoint_auth_method": md.TokenEndpointAuthMethod,
+	})
 
 	resp := dcrResponseFromAgent(agent, &md, secret, regToken, regClientURI, now.Unix())
 	writeDCRJSON(w, http.StatusCreated, resp)
@@ -484,6 +526,33 @@ func (s *Server) HandleDCRUpdate(w http.ResponseWriter, r *http.Request) {
 		scopes = []string{}
 	}
 
+	// Count fields that actually changed for the audit metadata.
+	changedFields := 0
+	if agent.Name != md.ClientName {
+		changedFields++
+	}
+	if agent.AuthMethod != md.TokenEndpointAuthMethod {
+		changedFields++
+	}
+	if !stringSlicesEqual(agent.RedirectURIs, md.RedirectURIs) {
+		changedFields++
+	}
+	if !stringSlicesEqual(agent.GrantTypes, md.GrantTypes) {
+		changedFields++
+	}
+	if !stringSlicesEqual(agent.ResponseTypes, md.ResponseTypes) {
+		changedFields++
+	}
+	if !stringSlicesEqual(agent.Scopes, scopes) {
+		changedFields++
+	}
+	if agent.LogoURI != md.LogoURI {
+		changedFields++
+	}
+	if agent.HomepageURI != md.ClientURI {
+		changedFields++
+	}
+
 	agent.Name = md.ClientName
 	agent.AuthMethod = md.TokenEndpointAuthMethod
 	agent.RedirectURIs = md.RedirectURIs
@@ -524,7 +593,10 @@ func (s *Server) HandleDCRUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logDCRAudit(ctx, "oauth.dcr.updated", clientID, r.RemoteAddr)
+	s.logDCRAudit(ctx, r, "oauth.dcr.updated", clientID, map[string]any{
+		"client_id":             clientID,
+		"changed_fields_count":  changedFields,
+	})
 
 	regClientURI := s.Issuer + "/oauth/register/" + clientID
 	resp := dcrResponseFromAgent(agent, &md, "", "", regClientURI, dcr.CreatedAt.Unix())
@@ -572,7 +644,11 @@ func (s *Server) HandleDCRDelete(w http.ResponseWriter, r *http.Request) {
 		// Non-fatal: agent is already deactivated.
 	}
 
-	s.logDCRAudit(ctx, "oauth.dcr.deleted", clientID, r.RemoteAddr)
+	regAge := int64(time.Since(dcr.CreatedAt).Seconds())
+	s.logDCRAudit(ctx, r, "oauth.dcr.deleted", clientID, map[string]any{
+		"client_id":                clientID,
+		"registration_age_seconds": regAge,
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -615,7 +691,9 @@ func (s *Server) HandleDCRRotateSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logDCRAudit(ctx, "oauth.dcr.secret_rotated", clientID, r.RemoteAddr)
+	s.logDCRAudit(ctx, r, "oauth.dcr.secret_rotated", clientID, map[string]any{
+		"client_id": clientID,
+	})
 
 	// Return same shape as initial registration response.
 	resp := dcrResponse{
@@ -654,7 +732,9 @@ func (s *Server) HandleDCRRotateRegistrationToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	s.logDCRAudit(ctx, "oauth.dcr.registration_token_rotated", clientID, r.RemoteAddr)
+	s.logDCRAudit(ctx, r, "oauth.dcr.registration_token_rotated", clientID, map[string]any{
+		"client_id": clientID,
+	})
 
 	resp := dcrResponse{
 		ClientID:                clientID,
