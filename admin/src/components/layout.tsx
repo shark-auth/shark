@@ -50,7 +50,7 @@ export const NAV = [
   ]},
   { group: 'ENTERPRISE', items: [
     { id: 'impersonation', label: 'Impersonation', icon: 'Impersonate', ph: 9 },
-    { id: 'compliance', label: 'Compliance', icon: 'Compliance' },
+    { id: 'compliance', label: 'Exporting logs', icon: 'Compliance' },
     { id: 'migrations', label: 'Migrations', icon: 'Migration', ph: 9 },
     { id: 'branding', label: 'Branding', icon: 'Brand' },
   ]},
@@ -250,7 +250,7 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
     proxy: 'Proxy Gateway',
     oidc: 'OIDC Provider',
     impersonation: 'Impersonation',
-    compliance: 'Compliance',
+    compliance: 'Exporting logs',
     migrations: 'Migrations',
     branding: 'Branding',
     flow: 'Flow Builder',
