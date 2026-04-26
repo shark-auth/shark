@@ -117,6 +117,27 @@ export function Overview({ setPage } = {}) {
   const [heroHidden, setHeroHidden] = React.useState(
     () => localStorage.getItem('shark_hide_hero') === '1'
   );
+
+  // Tutorial tab: visible after first-boot banner dismissed, until walkthrough is seen.
+  const [walkthroughSeen, setWalkthroughSeen] = React.useState(
+    () => localStorage.getItem('shark_walkthrough_seen') === '1'
+  );
+  const firstBootDone = localStorage.getItem('shark_first_boot_done') === '1';
+  const showTutorialTab = firstBootDone && !walkthroughSeen;
+
+  const dismissTutorialTab = () => {
+    try { localStorage.setItem('shark_walkthrough_seen', '1'); } catch {}
+    setWalkthroughSeen(true);
+  };
+
+  const openGetStarted = () => {
+    if (typeof setPage === 'function') {
+      setPage('get-started');
+    } else {
+      window.history.pushState(null, '', '/admin/get-started');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
   const usersZero = (statsRaw?.users?.total ?? null) === 0;
   const showHero = !heroHidden && usersZero && proxyConfigured === false;
   
@@ -241,7 +262,48 @@ export function Overview({ setPage } = {}) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, padding: 16, height: '100%', overflow: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {showTutorialTab && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '8px 16px',
+          background: 'var(--surface-2)',
+          borderBottom: '1px solid var(--hairline)',
+          flexShrink: 0,
+          fontSize: 13,
+        }}>
+          <span style={{ flex: 1, color: 'var(--fg-muted)' }}>Finish setup tour →</span>
+          <button
+            onClick={openGetStarted}
+            style={{
+              fontSize: 12,
+              padding: '3px 10px',
+              background: 'none',
+              border: '1px solid var(--hairline-strong)',
+              borderRadius: 4,
+              cursor: 'pointer',
+              color: 'var(--fg)',
+              fontFamily: 'inherit',
+            }}
+          >Open</button>
+          <button
+            onClick={dismissTutorialTab}
+            style={{
+              fontSize: 12,
+              padding: '3px 10px',
+              background: 'none',
+              border: '1px solid var(--hairline)',
+              borderRadius: 4,
+              cursor: 'pointer',
+              color: 'var(--fg-muted)',
+              fontFamily: 'inherit',
+            }}
+          >nvm</button>
+        </div>
+      )}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, padding: 16, flex: 1, overflow: 'auto' }}>
       <div className="col" style={{ minWidth: 0 }}>
         {showHero ? <MagicalMomentTile onGo={goConfigureProxy} onSkip={dismissHero}/> : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
@@ -309,6 +371,7 @@ export function Overview({ setPage } = {}) {
         </div>
       </div>
       <AttentionPanel healthRaw={healthRaw} stats={stats} onRefresh={refreshHealth}/>
+    </div>
     </div>
   );
 }
