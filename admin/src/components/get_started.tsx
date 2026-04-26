@@ -151,6 +151,66 @@ return session?.user
   },
 ];
 
+// ─── Agent Onboarding tasks (appended after SDK steps) ───────────────────────
+// These appear as a collapsible sub-section when the SDK tab is active.
+// IDs are stable; they share the same localStorage tasks map (STORAGE_KEY).
+
+const AGENT_TASKS = [
+  {
+    id: 'agent.register',
+    title: 'Create an agent',
+    summary: 'Register a machine identity for your agent. SharkAuth issues a client_credentials grant scoped to the agent. Agents appear in /agents.',
+    page: 'agents',
+    pageLabel: '→ /agents/new',
+    cli: 'shark agent register --name my-agent',
+  },
+  {
+    id: 'agent.dpop',
+    title: 'Generate a DPoP keypair',
+    summary: 'DPoP (RFC 9449) binds tokens to a private key so stolen access tokens cannot be replayed. Generate the keypair once; the prover signs every request.',
+    page: null,
+    pageLabel: null,
+    cli: 'prover = DPoPProver.generate()',
+    extraSnippets: [
+      {
+        label: 'curl alternative',
+        code: `# Generate EC P-256 keypair (curl-only, no SDK)\nopenssl ecparam -name prime256v1 -genkey -noout -out dpop.pem\nopenssl ec -in dpop.pem -pubout -out dpop_pub.pem`,
+      },
+    ],
+  },
+  {
+    id: 'agent.delegation',
+    title: 'Exchange token via delegation (RFC 8693)',
+    summary: 'Use token exchange to obtain an access token that carries an act claim naming the agent. The Python SDK method lands in Wave 2; raw curl works today.',
+    page: null,
+    pageLabel: null,
+    code: `# Python SDK (Wave 2+)
+token = client.oauth.token_exchange(
+    subject_token=user_access_token,
+    actor_token=agent_access_token,
+    requested_token_type="urn:ietf:params:oauth:token-type:access_token",
+)`,
+    extraSnippets: [
+      {
+        label: 'curl (available now)',
+        code: `curl -X POST https://auth.example.com/oauth/token \\
+  -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \\
+  -d subject_token=$USER_TOKEN \\
+  -d actor_token=$AGENT_TOKEN \\
+  -d requested_token_type=urn:ietf:params:oauth:token-type:access_token`,
+      },
+    ],
+  },
+  {
+    id: 'agent.audit',
+    title: 'Verify audit trail shows act claim + delegation chain',
+    summary: 'Open the audit log filtered to delegation events. Each row should show the act claim (agent identity) alongside the subject (user). Confirms end-to-end chain.',
+    page: 'audit',
+    pageLabel: '→ /audit?delegation=true',
+    cli: 'curl -sH "Authorization: Bearer $KEY" "/api/v1/admin/audit?delegation=true"',
+  },
+];
+
 // ─── State helpers ───────────────────────────────────────────────────────────
 
 function loadState() {
@@ -236,6 +296,7 @@ export function GetStarted({ setPage }) {
   const [tab, setTab] = React.useState(initial.tab);
   const [tasks, setTasks] = React.useState(initial.tasks);
   const [selectedId, setSelectedId] = React.useState(null);
+  const [agentSectionOpen, setAgentSectionOpen] = React.useState(true);
   const toast = useToast();
   const { checks, refresh: refreshChecks } = useAutoChecks();
 
@@ -246,7 +307,7 @@ export function GetStarted({ setPage }) {
     setTasks(prev => {
       const next = { ...prev };
       let changed = false;
-      for (const t of [...PROXY_TASKS, ...SDK_TASKS]) {
+      for (const t of [...PROXY_TASKS, ...SDK_TASKS, ...AGENT_TASKS]) {
         if (t.autoCheck && checks[t.autoCheck] && next[t.id] !== 'done' && next[t.id] !== 'skipped') {
           next[t.id] = 'done';
           changed = true;
@@ -257,7 +318,8 @@ export function GetStarted({ setPage }) {
   }, [checks]);
 
   const list = tab === 'proxy' ? PROXY_TASKS : SDK_TASKS;
-  const selected = list.find(t => t.id === selectedId) || null;
+  const allSdkTasks = [...SDK_TASKS, ...AGENT_TASKS];
+  const selected = (tab === 'proxy' ? list : allSdkTasks).find(t => t.id === selectedId) || null;
 
   const setStatus = (id, status) => {
     setTasks(prev => {
@@ -267,10 +329,12 @@ export function GetStarted({ setPage }) {
     });
   };
 
-  const total = list.length;
-  const done = list.filter(t => tasks[t.id] === 'done').length;
-  const skipped = list.filter(t => tasks[t.id] === 'skipped').length;
+  const activeTasks = tab === 'proxy' ? list : allSdkTasks;
+  const total = activeTasks.length;
+  const done = activeTasks.filter(t => tasks[t.id] === 'done').length;
+  const skipped = activeTasks.filter(t => tasks[t.id] === 'skipped').length;
   const pending = total - done - skipped;
+  // Agent section offset: SDK tasks are 0-indexed rows; agent rows start after SDK_TASKS
   const pct = Math.round((done / Math.max(total, 1)) * 100);
 
   const dismissOnboarding = () => {
@@ -382,6 +446,76 @@ export function GetStarted({ setPage }) {
                   </tr>
                 );
               })}
+
+              {/* ── Agent Onboarding section — SDK tab only ─────────────────── */}
+              {tab === 'sdk' && (
+                <>
+                  {/* Section header row — collapsible toggle */}
+                  <tr style={{ cursor: 'pointer', background: 'var(--surface-1)' }}
+                      onClick={() => setAgentSectionOpen(o => !o)}>
+                    <td style={{ paddingLeft: 16 }}>
+                      <Icon.ChevronRight
+                        width={11} height={11}
+                        style={{
+                          opacity: 0.6,
+                          transform: agentSectionOpen ? 'rotate(90deg)' : 'none',
+                          transition: 'transform 140ms',
+                        }}
+                      />
+                    </td>
+                    <td colSpan={3}>
+                      <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: 'var(--fg-muted)', textTransform: 'uppercase' }}>
+                        Agent Onboarding
+                      </span>
+                      <span className="faint mono" style={{ fontSize: 10, marginLeft: 8, lineHeight: 1.5 }}>
+                        machine-to-machine · DPoP · RFC 8693 delegation
+                      </span>
+                    </td>
+                    <td/>
+                  </tr>
+
+                  {/* Agent task rows — hidden when collapsed */}
+                  {agentSectionOpen && AGENT_TASKS.map((t, idx) => {
+                    const status = tasks[t.id] || 'pending';
+                    return (
+                      <tr key={t.id}
+                          className={selectedId === t.id ? 'active' : ''}
+                          onClick={() => setSelectedId(t.id)}
+                          style={{ cursor: 'pointer', background: 'var(--surface-0)' }}>
+                        <td style={{ paddingLeft: 16 }}>
+                          <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+                            {String(SDK_TASKS.length + idx + 1).padStart(2, '0')}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 500, fontSize: 13 }}>{t.title}</div>
+                            <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 560 }}>
+                              {t.summary}
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="row" style={{ gap: 6 }}>
+                            <StatusDot status={status}/>
+                            <span style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.5, textTransform: 'capitalize' }}>{status}</span>
+                          </span>
+                        </td>
+                        <td>
+                          {t.pageLabel ? (
+                            <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{t.pageLabel}</span>
+                          ) : (
+                            <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>—</span>
+                          )}
+                        </td>
+                        <td onClick={e => e.stopPropagation()}>
+                          <Icon.ChevronRight width={12} height={12} style={{ opacity: 0.5 }}/>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </>
+              )}
             </tbody>
           </table>
         </div>
