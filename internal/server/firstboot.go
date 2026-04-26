@@ -199,17 +199,11 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 	if len(kidShort) > 8 {
 		kidShort = kidShort[:8]
 	}
-	maskedKey := fullKey
-	if len(maskedKey) > 20 {
-		maskedKey = maskedKey[:12] + "..." + maskedKey[len(maskedKey)-4:]
-	}
-
 	fmt.Println("  ✓ Generated server secret")
 	fmt.Printf("  ✓ Generated JWT signing key (kid: bootstrap-%s)\n", kidShort)
 	fmt.Println("  ✓ Generated admin API key")
-	fmt.Println()
-	fmt.Printf("  Admin key: %s  (save this — you can't see it again)\n", maskedKey)
-	fmt.Println()
+	// W18: full admin key surfaced via cli.PrintAdminKeyBanner in server.Serve
+	// (wide one-time banner). Old masked-print here removed to avoid duplicate.
 
 	return &FirstBootResult{
 		AdminKey:   fullKey,

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/api"
 	"github.com/sharkauth/sharkauth/internal/auth"
+	"github.com/sharkauth/sharkauth/internal/cli"
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/email"
@@ -101,6 +103,19 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	cfg, err := config.Load("")
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	// W17 Phase D: honor SHARK_PORT / SHARK_DB_PATH env vars when EXPLICITLY
+	// set (not via bootstrap's fall-through defaults — those would clobber
+	// the system_config defaults we just loaded). Tests in tests/smoke/ rely
+	// on this for per-test port + DB isolation.
+	if v := os.Getenv("SHARK_PORT"); v != "" {
+		if p, perr := strconv.Atoi(v); perr == nil && p > 0 {
+			cfg.Server.Port = p
+		}
+	}
+	if v := os.Getenv("SHARK_DB_PATH"); v != "" {
+		cfg.Storage.Path = v
 	}
 
 	// W15a: warn when legacy proxy fields coexist with the new listeners
@@ -303,12 +318,20 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		}
 	}
 
+	// W18: prefer the just-generated first-boot key over bootstrapAdminKey's
+	// "" return so the wide PrintAdminKeyBanner in Serve() can show the full
+	// sk_live_* value instead of falling through silently on first boot.
+	surfacedKey := adminKey
+	if fbResult != nil && fbResult.AdminKey != "" {
+		surfacedKey = fbResult.AdminKey
+	}
+
 	return &Bootstrap{
 		Config:         cfg,
 		Store:          store,
 		API:            apiSrv,
 		Dispatcher:     dispatcher,
-		AdminKey:       adminKey,
+		AdminKey:       surfacedKey,
 		ProxyListeners: proxyListeners,
 	}, nil
 }
@@ -376,18 +399,29 @@ func Serve(ctx context.Context, opts Options) error {
 	}
 	defer b.Close()
 
-	if b.AdminKey != "" {
-		printAdminKey(b.AdminKey)
+	// W18: mint bootstrap URL FIRST so we can include it in the wide
+	// admin-key banner (single eye-catching block instead of two prints).
+	var bootstrapURL string
+	if tok, mintErr := b.API.MintBootstrapToken(ctx); mintErr != nil {
+		slog.Warn("bootstrap token: mint failed", "err", mintErr)
+	} else if tok != "" {
+		bootstrapURL = fmt.Sprintf("http://localhost:%d/admin/?bootstrap=%s", b.Config.Server.Port, tok)
 	}
 
-	// T15: mint a one-time bootstrap token if no admin has ever acted on
-	// this install. Prints a URL the operator can click to log in without
-	// pasting the sk_live_ key. Best-effort — failures just skip the print.
-	if tok, err := b.API.MintBootstrapToken(ctx); err != nil {
-		slog.Warn("bootstrap token: mint failed", "err", err)
-	} else if tok != "" {
-		url := fmt.Sprintf("http://localhost:%d/admin/?bootstrap=%s", b.Config.Server.Port, tok)
-		printBootstrapURL(url)
+	// W18: on first boot, print the full admin key in a wide banner so the
+	// operator cannot miss it. The key file path is shown for scripted pickup.
+	// On non-first-boot (b.AdminKey empty), nothing prints — the daemon stays quiet.
+	if b.AdminKey != "" {
+		keyFilePath := filepath.Join(filepath.Dir(b.Config.Storage.Path), "admin.key.firstboot")
+		cli.PrintAdminKeyBanner(os.Stdout, b.AdminKey, bootstrapURL, keyFilePath)
+	} else if bootstrapURL != "" {
+		// Non-first-boot but bootstrap token still minted (rare): print the URL
+		// alone since there's no key to show.
+		printBootstrapURL(bootstrapURL)
+	}
+
+	if bootstrapURL != "" {
+		url := bootstrapURL
 
 		// DX: First-boot prompt. Only when: no --no-prompt flag, stdout is a TTY,
 		// 0 users detected, and the first-boot sentinel hasn't been written yet.

@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
+	"github.com/sharkauth/sharkauth/internal/cli"
 	"github.com/sharkauth/sharkauth/internal/server"
 )
 
@@ -20,6 +22,10 @@ var serveCmd = &cobra.Command{
 	Short: "Run the SharkAuth HTTP server",
 	Long:  "Starts the HTTP server with the admin API, dashboard, and OAuth endpoints.",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// W18: print branded header on every boot so the operator has a
+		// visible signal the binary started, plus version + size + URLs.
+		cli.PrintHeader(os.Stdout)
+
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 

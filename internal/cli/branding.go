@@ -12,14 +12,18 @@ import (
 	"golang.org/x/term"
 )
 
-// sharkGlyphASCII is a hand-crafted shark silhouette (~12 lines, ~28 chars wide).
+// sharkGlyphASCII is a hand-crafted shark silhouette (~10 lines, ~50 chars wide).
 // Intentionally simple — the goal is "looks intentional", not photorealistic.
 const sharkGlyphASCII = `
-    __
-   /  \___
-  /   ____>==---  ><>
- /   /
-<____\
+                       __
+                     _/  \________
+                   _/              \_____
+                  /        o             \>=---><>
+                 /                       /
+               _/                      _/
+              /                      _/
+         ____/_____________________/
+              \\          \\
 `
 
 // PrintHeader writes the branded SharkAuth header to out.
@@ -70,6 +74,43 @@ func binarySize() string {
 		return fmt.Sprintf("%.0f KB", float64(info.Size())/1024)
 	}
 	return fmt.Sprintf("%.0f MB", mb)
+}
+
+// PrintAdminKeyBanner prints a wide, eye-catching banner with the full admin
+// API key on first boot. This is the operator's ONE chance to copy it before
+// it's hashed away. Setup URL prints below the key. Width 80 cols.
+func PrintAdminKeyBanner(out io.Writer, adminKey, setupURL, keyFilePath string) {
+	const bar = "════════════════════════════════════════════════════════════════════════════════"
+	c := IsColorEnabled(out)
+	yellow := func(s string) string {
+		if c {
+			return ansiYellow + s + ansiReset
+		}
+		return s
+	}
+	cyan := func(s string) string {
+		if c {
+			return ansiCyan + s + ansiReset
+		}
+		return s
+	}
+
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, yellow(bar))
+	fmt.Fprintln(out, yellow("              ⚠  ADMIN API KEY — YOU WILL ONLY SEE THIS ONCE  ⚠"))
+	fmt.Fprintln(out, yellow(bar))
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "    %s\n", cyan(adminKey))
+	fmt.Fprintln(out)
+	if setupURL != "" {
+		fmt.Fprintf(out, "    Setup URL:  %s\n", setupURL)
+	}
+	if keyFilePath != "" {
+		fmt.Fprintf(out, "    Saved to:   %s  (perms 0600 — delete after pickup)\n", keyFilePath)
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, yellow(bar))
+	fmt.Fprintln(out)
 }
 
 // IsColorEnabled reports whether ANSI color codes should be emitted to w.
