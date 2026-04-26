@@ -136,6 +136,64 @@ class OAuthClient:
             return resp.json()
         _raise(resp)
 
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _post_token_request(
+        self,
+        form_body: Dict[str, str],
+        dpop_proof: str,
+    ) -> Token:
+        """POST ``form_body`` to /oauth/token with a DPoP proof header.
+
+        Shared by :meth:`get_token_with_dpop` and :meth:`token_exchange`.
+        Parses the 200 response into a :class:`Token`; raises
+        :class:`~shark_auth.OAuthError` on 4xx/5xx.
+        """
+        token_endpoint = f"{self._base}/oauth/token"
+        headers = {**self._auth(), "DPoP": dpop_proof}
+
+        resp = _http.request(
+            self._session,
+            "POST",
+            token_endpoint,
+            headers=headers,
+            data=form_body,
+        )
+
+        if resp.status_code == 200:
+            data: Dict[str, Any] = resp.json()
+            cnf = data.get("cnf") or {}
+            return Token(
+                access_token=data["access_token"],
+                token_type=data.get("token_type", "DPoP"),
+                expires_in=data.get("expires_in"),
+                scope=data.get("scope"),
+                refresh_token=data.get("refresh_token"),
+                cnf_jkt=cnf.get("jkt"),
+                raw=data,
+            )
+
+        # Parse RFC 6749 error body when possible.
+        try:
+            err_body = resp.json()
+            error = err_body.get("error", "token_request_failed")
+            error_description = err_body.get("error_description")
+        except Exception:
+            error = "token_request_failed"
+            error_description = resp.text or None
+
+        raise OAuthError(
+            error=error,
+            error_description=error_description,
+            status_code=resp.status_code,
+        )
+
+    # ------------------------------------------------------------------
+    # Public methods
+    # ------------------------------------------------------------------
+
     def get_token_with_dpop(
         self,
         *,
@@ -212,40 +270,108 @@ class OAuthClient:
         for k, v in extra.items():
             body[k] = str(v)
 
-        headers = {**self._auth(), "DPoP": proof}
+        return self._post_token_request(body, proof)
 
-        resp = _http.request(
-            self._session,
-            "POST",
-            token_endpoint,
-            headers=headers,
-            data=body,
-        )
+    def token_exchange(
+        self,
+        *,
+        subject_token: str,
+        dpop_prover: DPoPProver,
+        scope: str | None = None,
+        audience: str | None = None,
+        actor_token: str | None = None,
+        subject_token_type: str = "urn:ietf:params:oauth:token-type:access_token",
+        requested_token_type: str = "urn:ietf:params:oauth:token-type:access_token",
+        **extra: Any,
+    ) -> Token:
+        """RFC 8693 OAuth Token Exchange.
 
-        if resp.status_code == 200:
-            data: Dict[str, Any] = resp.json()
-            cnf = data.get("cnf") or {}
-            return Token(
-                access_token=data["access_token"],
-                token_type=data.get("token_type", "DPoP"),
-                expires_in=data.get("expires_in"),
-                scope=data.get("scope"),
-                refresh_token=data.get("refresh_token"),
-                cnf_jkt=cnf.get("jkt"),
-                raw=data,
-            )
+        Issues a downscoped or audience-restricted token derived from
+        ``subject_token``. The new token is DPoP-bound to the same prover
+        keypair (``cnf.jkt`` matches). Use this for delegation chains: agent A
+        receives a token, narrows it to a sub-scope, hands it to agent B (which
+        carries the ``act``-claim chain proving the original human's
+        authorization).
 
-        # Parse RFC 6749 error body when possible.
-        try:
-            err_body = resp.json()
-            error = err_body.get("error", "token_request_failed")
-            error_description = err_body.get("error_description")
-        except Exception:
-            error = "token_request_failed"
-            error_description = resp.text or None
+        Parameters
+        ----------
+        subject_token:
+            The existing access token to exchange (e.g. ``token.access_token``).
+        dpop_prover:
+            Same :class:`~shark_auth.DPoPProver` used for the original token
+            (key binding preserved).
+        scope:
+            Narrower scope to downscope to (e.g. ``"mcp:read"`` from
+            ``"mcp:write mcp:read"``). ``None`` omits the parameter.
+        audience:
+            Restrict the new token to a specific resource server. ``None``
+            omits the parameter.
+        actor_token:
+            Optional ``act``-claim parent (the agent doing the delegation).
+            When provided, ``actor_token_type`` is automatically included.
+        subject_token_type:
+            RFC 8693 type URI for ``subject_token``.
+            Defaults to ``"urn:ietf:params:oauth:token-type:access_token"``.
+        requested_token_type:
+            RFC 8693 type URI for the token to be issued.
+            Defaults to ``"urn:ietf:params:oauth:token-type:access_token"``.
+        **extra:
+            Any additional form fields forwarded to the token endpoint.
 
-        raise OAuthError(
-            error=error,
-            error_description=error_description,
-            status_code=resp.status_code,
-        )
+        Returns
+        -------
+        Token:
+            Populated :class:`Token` dataclass with new ``access_token``.
+            ``scope`` / ``audience`` reflect the narrowing; ``cnf_jkt`` is
+            unchanged from the original (same keypair).
+
+        Raises
+        ------
+        OAuthError:
+            On any 4xx or 5xx response, e.g. ``"invalid_token"`` if
+            ``subject_token`` is revoked, or ``"invalid_scope"`` if the
+            requested scope exceeds the parent's grant.
+
+        Example
+        -------
+        >>> prover = DPoPProver.generate()
+        >>> client = OAuthClient(base_url="https://auth.example.com")
+        >>> parent = client.get_token_with_dpop(
+        ...     grant_type="client_credentials",
+        ...     dpop_prover=prover,
+        ...     client_id="agent-a",
+        ...     client_secret="s3cr3t",
+        ...     scope="mcp:read mcp:write",
+        ... )
+        >>> child = client.token_exchange(
+        ...     subject_token=parent.access_token,
+        ...     dpop_prover=prover,
+        ...     scope="mcp:read",
+        ...     audience="https://mcp.example.com",
+        ... )
+        >>> assert child.cnf_jkt == parent.cnf_jkt  # same keypair bound
+        >>> print(child.scope)  # "mcp:read"
+        """
+        token_endpoint = f"{self._base}/oauth/token"
+
+        # Generate DPoP proof bound to this exact request.
+        proof = dpop_prover.make_proof(htm="POST", htu=token_endpoint)
+
+        # Build RFC 8693 form body.
+        body: Dict[str, str] = {
+            "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "subject_token": subject_token,
+            "subject_token_type": subject_token_type,
+            "requested_token_type": requested_token_type,
+        }
+        if scope is not None:
+            body["scope"] = scope
+        if audience is not None:
+            body["audience"] = audience
+        if actor_token is not None:
+            body["actor_token"] = actor_token
+            body["actor_token_type"] = "urn:ietf:params:oauth:token-type:access_token"
+        for k, v in extra.items():
+            body[k] = str(v)
+
+        return self._post_token_request(body, proof)
