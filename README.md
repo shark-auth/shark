@@ -26,6 +26,43 @@ Auth0 charges $23/mo for 1,000 users. Clerk charges $25/mo. Both lock you into t
 
 ---
 
+## Agent auth in 10 lines
+
+```python
+from shark_auth import Client, DPoPProver
+
+client = Client(base_url="https://auth.example.com", token="sk_live_...")
+prover = DPoPProver.generate()
+
+# Auth0 cannot do this: DPoP-bound token in one line
+token = client.oauth.get_token_with_dpop(
+    grant_type="client_credentials",
+    dpop_prover=prover,
+    client_id="agent-123",
+    client_secret="secret",
+    scope="mcp:write",
+)
+
+# Delegation (RFC 8693) — scoped sub-token bound to the same key
+sub_token = client.oauth.token_exchange(
+    subject_token=token.access_token,
+    scope="mcp:read",
+    dpop_prover=prover,
+)
+
+# Use it — DPoP proof auto-signed per request
+result = client.http.get_with_dpop("/resource", token=sub_token.access_token, prover=prover)
+```
+
+Why this matters: every line above is something Auth0 / Clerk / WorkOS cannot ship today.
+- DPoP RFC 9449 — token bound to the agent's keypair. Theft alone is useless.
+- Token exchange RFC 8693 — delegated sub-tokens with auditable `act` chain.
+- Per-request proof — `htm`+`htu`+`ath` binding, no replay.
+
+Try it: `pip install shark-auth && shark serve` → see the demo at /demo
+
+---
+
 ## quickstart
 
 New here? **[Hello Agent — 15-minute walkthrough](docs/hello-agent.md)**

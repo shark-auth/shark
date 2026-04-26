@@ -5,229 +5,291 @@ import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
 
-// Get Started — onboarding checklist.
-// Sibling page to users.tsx: monochrome, square, hairline, 13px base, dense rows.
-// Two integration paths shown via a tab strip. Per-task status persists in
-// localStorage; auto-verify probes /admin/proxy/status and /admin/apps to flip
-// task state when admin completes config elsewhere.
+// Get Started — agent-first onboarding. Rebuilt Wave 1.7 Edit 4.
+// Design: monochrome, square, hairline, 13px base, matches users.tsx density.
+// Three tracks: Agent (primary), Human auth, Both. Track selection sticky in localStorage.
+// Each section is an accordion row; clicking opens the task drawer.
+// Auto-verify probes backend to flip tasks done.
 
-const STORAGE_KEY = 'shark_get_started_state_v1';
+const STORAGE_KEY = 'shark_get_started_v2';
 
-// ─── Task definitions ────────────────────────────────────────────────────────
-// Tasks are derived from the live admin surface (proxy_handlers.go,
-// application_handlers.go, branding admin, shark-auth-react SDK).
-// IDs are stable — they key the localStorage status map.
-
-const PROXY_TASKS = [
-  {
-    id: 'proxy.upstream',
-    title: 'Configure proxy upstream',
-    summary: 'Point SharkAuth at the app it should sit in front of. The reverse proxy forwards every request and stamps identity headers.',
-    page: 'proxy',
-    pageLabel: 'Proxy → Lifecycle',
-    cli: 'shark serve --dev --proxy-upstream http://localhost:3000',
-    autoCheck: 'proxyEnabled',
-  },
-  {
-    id: 'proxy.rule',
-    title: 'Add a protect rule',
-    summary: 'Pick which paths require auth. A rule matches a path pattern + method, requires an identity (user / role / scope), and is evaluated at the edge before the upstream sees the request.',
-    page: 'proxy',
-    pageLabel: 'Proxy → Rules',
-    cli: 'curl -sH "Authorization: Bearer $KEY" /api/v1/admin/proxy/rules',
-    autoCheck: 'proxyHasRules',
-  },
-  {
-    id: 'proxy.methods',
-    title: 'Pick login methods',
-    summary: 'Decide which sign-in surfaces the hosted login page exposes — passwords, magic links, social, SSO, passkeys. Disabled methods do not render.',
-    page: 'authentication',
-    pageLabel: 'Authentication',
-    cli: 'shark methods enable password,oauth_google',
-  },
-  {
-    id: 'proxy.redirect',
-    title: 'Set post-login redirect',
-    summary: 'Where the hosted login page sends users once authentication completes. Must match an allowed redirect on the proxy app.',
-    page: 'proxy',
-    pageLabel: 'Proxy → Config',
-    cli: 'shark proxy set-redirect /home',
-  },
-  {
-    id: 'proxy.brand',
-    title: 'Brand the hosted login page',
-    summary: 'Upload a logo and override design tokens. Branding lives in /admin/branding and is content-addressed for cache safety.',
-    page: 'branding',
-    pageLabel: 'Branding',
-    cli: 'curl -X PATCH /api/v1/admin/branding -d \'{"name":"Acme"}\'',
-    autoCheck: 'brandingSet',
-  },
-  {
-    id: 'proxy.test',
-    title: 'Test the proxy URL',
-    summary: 'Hit the proxy from a browser. You should land on the hosted login page, sign in, and bounce to the upstream with X-Shark-User-Id stamped on the request.',
-    page: 'proxy',
-    pageLabel: 'Proxy → Simulate',
-    cli: 'curl -i http://localhost:8080/',
-  },
+// ─── Section markers (smoke-tested, do not rename) ───────────────────────────
+export const SECTION_IDS = [
+  'why-sharkauth',
+  'sixty-second-setup',
+  'your-first-agent',
+  'dpop-token-ten-lines',
+  'delegation-chain-demo',
+  'next-steps',
 ];
 
-const SDK_TASKS = [
+// ─── Why SharkAuth (Section 1) ───────────────────────────────────────────────
+const WHY_BULLETS = [
+  'Per-token, per-agent, and per-customer revocation — five independent layers, RFC-correct.',
+  'DPoP-bound tokens (RFC 9449): stolen access tokens cannot be replayed by a different client.',
+  'Delegation chain audit (RFC 8693): every act claim is logged with full chain traceability.',
+];
+
+// ─── 60-second setup tasks (Section 2) ──────────────────────────────────────
+const SETUP_TASKS = [
   {
-    id: 'sdk.app',
-    title: 'Create an Application',
-    summary: 'Register an OAuth/OIDC client. You get a publishable key (public) and an issuer URL the SDK points at.',
-    page: 'apps',
-    pageLabel: 'Applications',
-    cli: 'shark apps create --name "My App" --redirect http://localhost:5173/shark/callback',
-    autoCheck: 'hasApp',
-  },
-  {
-    id: 'sdk.install',
-    title: 'Install the SDK package',
-    summary: 'Pick the SDK that matches your stack. The React package wraps the TypeScript core SDK with hooks and components.',
-    page: null,
-    pageLabel: null,
-    cli: 'npm install @sharkauth/react',
+    id: 'setup.install',
+    title: 'Install',
+    summary: 'Download the binary or build from source. Single binary, no external dependencies.',
+    cli: 'curl -fsSL https://sharkauth.dev/install.sh | sh',
     extraSnippets: [
-      { label: 'TypeScript core', code: 'npm install @shark-auth/sdk' },
-      { label: 'Python', code: 'pip install shark-auth' },
+      { label: 'Build from source', code: 'git clone https://github.com/sharkauth/sharkauth && cd sharkauth && go build ./cmd/shark' },
     ],
   },
   {
-    id: 'sdk.provider',
-    title: 'Mount SharkProvider',
-    summary: 'Wrap the app root with SharkProvider. It loads tokens from storage, refreshes on schedule, and exposes the session via context.',
-    page: null,
-    pageLabel: null,
-    code: `import { SharkProvider } from '@sharkauth/react';
-
-export default function App() {
-  return (
-    <SharkProvider
-      authUrl="https://auth.example.com"
-      publishableKey="pk_live_…"
-    >
-      <Routes/>
-    </SharkProvider>
-  );
-}`,
+    id: 'setup.serve',
+    title: 'Run shark serve',
+    summary: 'Starts the auth server on port 8080. First boot prints a one-time admin key.',
+    cli: 'shark serve',
+    extraSnippets: [
+      { label: 'Dev mode (local email capture)', code: 'shark serve --dev' },
+    ],
   },
   {
-    id: 'sdk.signin',
-    title: 'Wire a Sign-in button',
-    summary: 'Trigger the OAuth 2.1 + PKCE flow. startAuthFlow stores the verifier in sessionStorage and redirects to /oauth/authorize on the issuer.',
-    page: null,
-    pageLabel: null,
-    code: `import { useShark } from '@sharkauth/react';
-
-export function SignInButton() {
-  const { signIn } = useShark();
-  return <button onClick={() => signIn()}>Sign in</button>;
-}`,
-  },
-  {
-    id: 'sdk.callback',
-    title: 'Mount the callback route',
-    summary: 'The redirect_uri is /shark/callback by default. The route exchanges ?code= for tokens via /oauth/token, then bounces to the post-login redirect saved in sessionStorage.',
-    page: null,
-    pageLabel: null,
-    code: `import { SharkCallback } from '@sharkauth/react';
-
-// In your router:
-{ path: '/shark/callback', element: <SharkCallback/> }`,
-  },
-  {
-    id: 'sdk.session',
-    title: 'Read the session',
-    summary: 'Use the useShark hook anywhere under the provider. session.user is null until exchange completes; use isLoading to guard.',
-    page: null,
-    pageLabel: null,
-    code: `const { session, isLoading } = useShark();
-if (isLoading) return null;
-return session?.user
-  ? <p>Hi {session.user.email}</p>
-  : <p>Signed out</p>;`,
+    id: 'setup.adminkey',
+    title: 'Copy the admin key',
+    summary: 'The one-time key appears in stdout on first boot. Paste it in the banner at the top of this dashboard. Shown once — store it.',
+    page: 'overview',
+    pageLabel: 'Overview → Admin key banner',
+    autoCheck: 'hasAdminKey',
   },
 ];
 
-// ─── Agent Onboarding tasks (appended after SDK steps) ───────────────────────
-// These appear as a collapsible sub-section when the SDK tab is active.
-// IDs are stable; they share the same localStorage tasks map (STORAGE_KEY).
-
+// ─── Your first agent tasks (Section 3) ─────────────────────────────────────
 const AGENT_TASKS = [
   {
     id: 'agent.register',
-    title: 'Create an agent',
-    summary: 'Register a machine identity for your agent. SharkAuth issues a client_credentials grant scoped to the agent. Agents appear in /agents.',
+    title: 'Register an agent',
+    summary: 'Creates a machine identity. SharkAuth issues a client_credentials grant scoped to this agent.',
     page: 'agents',
     pageLabel: '→ /agents/new',
-    cli: 'shark agent register --name my-agent',
+    cli: 'shark agents create --name my-agent',
+    autoCheck: 'hasAgent',
   },
   {
-    id: 'agent.dpop',
-    title: 'Generate a DPoP keypair',
-    summary: 'DPoP (RFC 9449) binds tokens to a private key so stolen access tokens cannot be replayed. Generate the keypair once; the prover signs every request.',
-    page: null,
-    pageLabel: null,
-    cli: 'prover = DPoPProver.generate()',
-    extraSnippets: [
-      {
-        label: 'curl alternative',
-        code: `# Generate EC P-256 keypair (curl-only, no SDK)\nopenssl ecparam -name prime256v1 -genkey -noout -out dpop.pem\nopenssl ec -in dpop.pem -pubout -out dpop_pub.pem`,
-      },
-    ],
+    id: 'agent.credentials',
+    title: 'Get credentials',
+    summary: 'After registration, copy the client_id and client_secret from the agent detail drawer. The secret is shown once.',
+    page: 'agents',
+    pageLabel: '→ /agents',
+    code: `# Store securely — shown once
+CLIENT_ID=ag_01abc...
+CLIENT_SECRET=sk_...`,
+    autoCheck: 'hasAgent',
   },
   {
-    id: 'agent.delegation',
-    title: 'Exchange token via delegation (RFC 8693)',
-    summary: 'Use token exchange to obtain an access token that carries an act claim naming the agent. The Python SDK method lands in Wave 2; raw curl works today.',
-    page: null,
-    pageLabel: null,
-    code: `# Python SDK (Wave 2+)
-token = client.oauth.token_exchange(
-    subject_token=user_access_token,
-    actor_token=agent_access_token,
-    requested_token_type="urn:ietf:params:oauth:token-type:access_token",
-)`,
-    extraSnippets: [
-      {
-        label: 'curl (available now)',
-        code: `curl -X POST https://auth.example.com/oauth/token \\
-  -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \\
-  -d subject_token=$USER_TOKEN \\
-  -d actor_token=$AGENT_TOKEN \\
-  -d requested_token_type=urn:ietf:params:oauth:token-type:access_token`,
-      },
-    ],
-  },
-  {
-    id: 'agent.audit',
-    title: 'Verify audit trail shows act claim + delegation chain',
-    summary: 'Open the audit log filtered to delegation events. Each row should show the act claim (agent identity) alongside the subject (user). Confirms end-to-end chain.',
-    page: 'audit',
-    pageLabel: '→ /audit?delegation=true',
-    cli: 'curl -sH "Authorization: Bearer $KEY" "/api/v1/admin/audit?delegation=true"',
+    id: 'agent.policy',
+    title: 'Set a delegation policy',
+    summary: 'Grant this agent permission to act on behalf of a user or another agent within a scope.',
+    page: 'agents',
+    pageLabel: '→ Agent detail → Delegation Policies',
+    cli: 'shark agents policy set <agent-id> --may-act <other-agent-id> --scope email:read',
+    autoCheck: 'hasAgentPolicy',
   },
 ];
 
-// ─── State helpers ───────────────────────────────────────────────────────────
+// ─── DPoP-bound token in 10 lines (Section 4) ───────────────────────────────
+// DATA-MARKER: dpop-python-10-liner — smoke test asserts this string is present in the bundle
+const DPOP_PYTHON_SNIPPET = `import shark_auth
 
+client = shark_auth.Client(
+    issuer="https://auth.example.com",
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET,
+)
+
+prover = shark_auth.DPoPProver.generate()
+token = client.oauth.get_token_with_dpop(prover)
+print(token.access_token)`;
+
+const DPOP_CURL_SNIPPET = `# 1. Generate EC P-256 keypair
+openssl ecparam -name prime256v1 -genkey -noout -out dpop.pem
+openssl ec -in dpop.pem -pubout -out dpop_pub.pem
+
+# 2. Request token with DPoP header
+curl -X POST https://auth.example.com/oauth/token \\
+  -H "DPoP: <signed-proof-jwt>" \\
+  -d "grant_type=client_credentials&client_id=$CLIENT_ID&client_secret=$CLIENT_SECRET"`;
+
+const DPOP_TASKS = [
+  {
+    id: 'dpop.generate',
+    title: 'Generate a DPoP keypair',
+    summary: 'DPoP (RFC 9449) binds tokens to a private key. Stolen tokens cannot be replayed from a different client.',
+    code: DPOP_PYTHON_SNIPPET,
+    extraSnippets: [
+      { label: 'curl (no SDK)', code: DPOP_CURL_SNIPPET },
+      { label: 'TypeScript — coming W18', code: '// TypeScript SDK ships W18. Use curl alternative above.' },
+    ],
+    autoCheck: 'hasDPoPToken',
+  },
+];
+
+// ─── Delegation chain demo (Section 5) ──────────────────────────────────────
+const DELEGATION_TASKS = [
+  {
+    id: 'delegation.run',
+    title: 'Run the delegation chain demo',
+    summary: 'Issues a DPoP-bound token, exchanges it for a delegated sub-token, and prints the full act claim chain.',
+    cli: 'shark demo delegation-with-trace',
+    autoCheck: 'hasDelegationEvent',
+  },
+  {
+    id: 'delegation.audit',
+    title: 'Verify the audit trail',
+    summary: 'Open the audit log filtered to delegation events. Each row shows the act claim (agent) alongside the subject (user).',
+    page: 'audit',
+    pageLabel: '→ /audit?delegation=true',
+    cli: 'curl -sH "Authorization: Bearer $ADMIN_KEY" "http://localhost:8080/api/v1/admin/audit?delegation=true"',
+    autoCheck: 'hasDelegationEvent',
+  },
+];
+
+// ─── Next steps (Section 6) ──────────────────────────────────────────────────
+const NEXT_STEPS = [
+  {
+    id: 'next.docs',
+    title: 'Read the API reference',
+    summary: 'Full REST + SDK docs including DPoP flows, token exchange parameters, revocation endpoints.',
+    href: 'https://sharkauth.dev/docs',
+    label: 'sharkauth.dev/docs →',
+  },
+  {
+    id: 'next.screencast',
+    title: 'Watch the screencast',
+    summary: '90-second walkthrough: install, first agent, first DPoP token, delegation chain.',
+    href: 'https://sharkauth.dev/screencast',
+    label: 'sharkauth.dev/screencast →',
+  },
+  {
+    id: 'next.github',
+    title: 'GitHub',
+    summary: 'Source code, issues, roadmap. Star if you find it useful.',
+    href: 'https://github.com/sharkauth/sharkauth',
+    label: 'github.com/sharkauth/sharkauth →',
+  },
+];
+
+// ─── All sections in display order ───────────────────────────────────────────
+// SECTION_IDS above are the smoke-verified marker strings.
+const SECTIONS = [
+  { id: 'why-sharkauth',       label: 'Why SharkAuth',              kind: 'why' },
+  { id: 'sixty-second-setup',  label: '60-second setup',            kind: 'tasks', tasks: SETUP_TASKS },
+  { id: 'your-first-agent',    label: 'Your first agent',           kind: 'tasks', tasks: AGENT_TASKS },
+  { id: 'dpop-token-ten-lines',label: 'DPoP-bound token in 10 lines', kind: 'tasks', tasks: DPOP_TASKS },
+  { id: 'delegation-chain-demo', label: 'Delegation chain demo',    kind: 'tasks', tasks: DELEGATION_TASKS },
+  { id: 'next-steps',          label: 'Next steps',                 kind: 'next' },
+];
+
+// ─── Human auth tasks (secondary track) ──────────────────────────────────────
+const HUMAN_TASKS = [
+  {
+    id: 'human.email',
+    title: 'Configure email delivery',
+    summary: 'SharkAuth needs an outbound mail provider to send magic links and password resets.',
+    page: 'settings',
+    pageLabel: 'Settings → Email Delivery',
+  },
+  {
+    id: 'human.providers',
+    title: 'Enable OAuth providers',
+    summary: 'Add Google, GitHub, Apple, or Discord social login. Each provider needs a client_id + client_secret.',
+    page: 'settings',
+    pageLabel: 'Settings → OAuth & SSO',
+  },
+  {
+    id: 'human.magiclink',
+    title: 'Test magic-link login',
+    summary: 'Send a magic link to your own address. Confirm delivery and that it redirects to the right post-login URL.',
+    page: 'dev-email',
+    pageLabel: 'Dev Email (captured locally in --dev mode)',
+  },
+  {
+    id: 'human.sdk',
+    title: 'Install the SDK',
+    summary: 'The React SDK wraps the core TypeScript client with hooks and a provider.',
+    cli: 'npm install @sharkauth/react',
+    extraSnippets: [
+      { label: 'Python', code: 'pip install shark-auth' },
+      { label: 'TypeScript core', code: 'npm install @sharkauth/sdk' },
+    ],
+  },
+];
+
+// ─── State helpers ────────────────────────────────────────────────────────────
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { tab: 'proxy', tasks: {} };
-    const parsed = JSON.parse(raw);
-    return { tab: parsed.tab === 'sdk' ? 'sdk' : 'proxy', tasks: parsed.tasks || {} };
-  } catch { return { tab: 'proxy', tasks: {} }; }
+    if (!raw) return { track: 'agent', tasks: {}, open: {} };
+    const p = JSON.parse(raw);
+    return {
+      track: ['agent', 'human', 'both'].includes(p.track) ? p.track : 'agent',
+      tasks: p.tasks || {},
+      open: p.open || {},
+    };
+  } catch { return { track: 'agent', tasks: {}, open: {} }; }
 }
 
 function persist(state) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
 }
 
-// ─── Status dot — only colored element on the page ───────────────────────────
-//    pending → neutral, done → success, skipped → warn, blocked → danger
+// ─── Auto-verify hook ─────────────────────────────────────────────────────────
+function useAutoChecks() {
+  const [checks, setChecks] = React.useState({
+    hasAdminKey: false,
+    hasAgent: false,
+    hasAgentPolicy: false,
+    hasDPoPToken: false,
+    hasDelegationEvent: false,
+  });
+
+  const probe = React.useCallback(async () => {
+    const next = { hasAdminKey: false, hasAgent: false, hasAgentPolicy: false, hasDPoPToken: false, hasDelegationEvent: false };
+    try {
+      const r = await API.get('/admin/bootstrap/status');
+      next.hasAdminKey = !!(r && (r.consumed || r.bootstrapped));
+    } catch {}
+    try {
+      const r = await API.get('/admin/agents?limit=1');
+      const agents = r?.agents || r?.data || (Array.isArray(r) ? r : []);
+      next.hasAgent = Array.isArray(agents) && agents.length > 0;
+    } catch {}
+    try {
+      const r = await API.get('/admin/agents?limit=1');
+      const agents = r?.agents || r?.data || (Array.isArray(r) ? r : []);
+      if (Array.isArray(agents) && agents.length > 0) {
+        const agentId = agents[0]?.id || agents[0]?.agent_id;
+        if (agentId) {
+          const pr = await API.get(`/admin/agents/${agentId}/policies`);
+          const policies = pr?.policies || pr?.data || (Array.isArray(pr) ? pr : []);
+          next.hasAgentPolicy = Array.isArray(policies) && policies.length > 0;
+        }
+      }
+    } catch {}
+    try {
+      const r = await API.get('/admin/audit?event_type=oauth.token.issued&limit=5');
+      const events = r?.events || r?.data || (Array.isArray(r) ? r : []);
+      next.hasDPoPToken = Array.isArray(events) && events.some(e => e.dpop || e.metadata?.dpop);
+    } catch {}
+    try {
+      const r = await API.get('/admin/audit?delegation=true&limit=1');
+      const events = r?.events || r?.data || (Array.isArray(r) ? r : []);
+      next.hasDelegationEvent = Array.isArray(events) && events.length > 0;
+    } catch {}
+    setChecks(next);
+  }, []);
+
+  React.useEffect(() => { probe(); }, [probe]);
+  return { checks, refresh: probe };
+}
+
+// ─── Status dot ───────────────────────────────────────────────────────────────
 function StatusDot({ status }) {
   const color = status === 'done' ? 'var(--success)'
     : status === 'skipped' ? 'var(--warn)'
@@ -235,79 +297,39 @@ function StatusDot({ status }) {
     : 'var(--fg-faint)';
   const fill = status === 'done' || status === 'blocked' || status === 'skipped';
   return (
-    <span
-      style={{
-        width: 8, height: 8, borderRadius: '50%',
-        background: fill ? color : 'transparent',
-        border: '1px solid ' + color,
-        flexShrink: 0,
-      }}
-      aria-label={status || 'pending'}
-    />
+    <span style={{
+      width: 8, height: 8, borderRadius: '50%',
+      background: fill ? color : 'transparent',
+      border: '1px solid ' + color,
+      flexShrink: 0,
+      display: 'inline-block',
+    }} aria-label={status || 'pending'} />
   );
 }
 
-// ─── Auto-verify hook ────────────────────────────────────────────────────────
-//   Probes /admin/proxy/status (404 when proxy disabled), /admin/proxy/rules,
-//   /admin/apps, /admin/branding. Returns booleans for autoCheck keys.
-
-function useAutoChecks() {
-  const [checks, setChecks] = React.useState({
-    proxyEnabled: false,
-    proxyHasRules: false,
-    hasApp: false,
-    brandingSet: false,
-  });
-
-  const probe = React.useCallback(async () => {
-    const next = { proxyEnabled: false, proxyHasRules: false, hasApp: false, brandingSet: false };
-    // Proxy enabled: status returns 200 with data; 404 when disabled.
-    try {
-      const r = await API.get('/admin/proxy/status');
-      next.proxyEnabled = !!(r && (r.data || r.state || r.upstream));
-    } catch {}
-    try {
-      const r = await API.get('/admin/proxy/rules');
-      const rules = r?.data || r?.rules || (Array.isArray(r) ? r : []);
-      next.proxyHasRules = Array.isArray(rules) && rules.length > 0;
-    } catch {}
-    try {
-      const r = await API.get('/admin/apps');
-      const apps = r?.applications || r?.data || (Array.isArray(r) ? r : []);
-      next.hasApp = Array.isArray(apps) && apps.length > 0;
-    } catch {}
-    try {
-      const r = await API.get('/admin/branding');
-      const b = r?.data || r;
-      next.brandingSet = !!(b && (b.name || b.logo_url || b.logo));
-    } catch {}
-    setChecks(next);
-  }, []);
-
-  React.useEffect(() => { probe(); }, [probe]);
-
-  return { checks, refresh: probe };
-}
-
-// ─── Component ───────────────────────────────────────────────────────────────
-
+// ─── Main component ───────────────────────────────────────────────────────────
 export function GetStarted({ setPage }) {
   const initial = React.useMemo(loadState, []);
-  const [tab, setTab] = React.useState(initial.tab);
+  const [track, setTrack] = React.useState(initial.track);
   const [tasks, setTasks] = React.useState(initial.tasks);
+  const [openSections, setOpenSections] = React.useState(
+    initial.open && Object.keys(initial.open).length > 0
+      ? initial.open
+      : { 'why-sharkauth': true, 'sixty-second-setup': true, 'your-first-agent': true, 'dpop-token-ten-lines': true, 'delegation-chain-demo': false, 'next-steps': false }
+  );
   const [selectedId, setSelectedId] = React.useState(null);
-  const [agentSectionOpen, setAgentSectionOpen] = React.useState(true);
   const toast = useToast();
   const { checks, refresh: refreshChecks } = useAutoChecks();
 
-  React.useEffect(() => { persist({ tab, tasks }); }, [tab, tasks]);
+  React.useEffect(() => { persist({ track, tasks, open: openSections }); }, [track, tasks, openSections]);
 
-  // Apply auto-checks: any pending task whose autoCheck flips true → done.
+  // Apply auto-checks
   React.useEffect(() => {
     setTasks(prev => {
       const next = { ...prev };
       let changed = false;
-      for (const t of [...PROXY_TASKS, ...SDK_TASKS, ...AGENT_TASKS]) {
+      const allTasks = [...SETUP_TASKS, ...AGENT_TASKS, ...DPOP_TASKS, ...DELEGATION_TASKS, ...HUMAN_TASKS];
+      for (const t of allTasks) {
         if (t.autoCheck && checks[t.autoCheck] && next[t.id] !== 'done' && next[t.id] !== 'skipped') {
           next[t.id] = 'done';
           changed = true;
@@ -317,9 +339,21 @@ export function GetStarted({ setPage }) {
     });
   }, [checks]);
 
-  const list = tab === 'proxy' ? PROXY_TASKS : SDK_TASKS;
-  const allSdkTasks = [...SDK_TASKS, ...AGENT_TASKS];
-  const selected = (tab === 'proxy' ? list : allSdkTasks).find(t => t.id === selectedId) || null;
+  // All task lists for this track
+  const trackTasks = React.useMemo(() => {
+    if (track === 'human') return HUMAN_TASKS;
+    if (track === 'both') return [...SETUP_TASKS, ...AGENT_TASKS, ...DPOP_TASKS, ...DELEGATION_TASKS, ...HUMAN_TASKS];
+    return [...SETUP_TASKS, ...AGENT_TASKS, ...DPOP_TASKS, ...DELEGATION_TASKS];
+  }, [track]);
+
+  const total = trackTasks.length;
+  const done = trackTasks.filter(t => tasks[t.id] === 'done').length;
+  const skipped = trackTasks.filter(t => tasks[t.id] === 'skipped').length;
+  const pct = Math.round((done / Math.max(total, 1)) * 100);
+
+  // All task list for drawer lookup
+  const allTasksFlat = [...SETUP_TASKS, ...AGENT_TASKS, ...DPOP_TASKS, ...DELEGATION_TASKS, ...HUMAN_TASKS];
+  const selectedTask = allTasksFlat.find(t => t.id === selectedId) || null;
 
   const setStatus = (id, status) => {
     setTasks(prev => {
@@ -329,45 +363,48 @@ export function GetStarted({ setPage }) {
     });
   };
 
-  const activeTasks = tab === 'proxy' ? list : allSdkTasks;
-  const total = activeTasks.length;
-  const done = activeTasks.filter(t => tasks[t.id] === 'done').length;
-  const skipped = activeTasks.filter(t => tasks[t.id] === 'skipped').length;
-  const pending = total - done - skipped;
-  // Agent section offset: SDK tasks are 0-indexed rows; agent rows start after SDK_TASKS
-  const pct = Math.round((done / Math.max(total, 1)) * 100);
+  const toggleSection = (id) => {
+    setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const dismissOnboarding = () => {
     try { localStorage.setItem('shark_admin_onboarded', '1'); } catch {}
     if (typeof setPage === 'function') setPage('overview');
   };
 
+  // Sections to display based on track
+  const visibleSections = track === 'human'
+    ? [{ id: 'why-sharkauth', label: 'Why SharkAuth', kind: 'why' }, { id: 'next-steps', label: 'Next steps', kind: 'next' }]
+    : SECTIONS;
+
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* Toolbar — same rhythm as users.tsx */}
+
+        {/* ── Toolbar ─────────────────────────────────────────────────────── */}
         <div style={{
           padding: '10px 16px',
           borderBottom: '1px solid var(--hairline)',
           display: 'flex', gap: 8, alignItems: 'center',
           background: 'var(--surface-0)',
         }}>
+          {/* Track selector */}
           <div style={{ display: 'flex', gap: 0 }}>
-            <TabBtn on={tab === 'proxy'} onClick={() => { setTab('proxy'); setSelectedId(null); }}>
-              Proxy + hosted UI
+            <TabBtn on={track === 'agent'} onClick={() => { setTrack('agent'); setSelectedId(null); }}>
+              Agent integration
             </TabBtn>
-            <TabBtn on={tab === 'sdk'} onClick={() => { setTab('sdk'); setSelectedId(null); }}>
-              SDK
+            <TabBtn on={track === 'human'} onClick={() => { setTrack('human'); setSelectedId(null); }}>
+              Human auth
+            </TabBtn>
+            <TabBtn on={track === 'both'} onClick={() => { setTrack('both'); setSelectedId(null); }}>
+              Both
             </TabBtn>
           </div>
           <div style={{ flex: 1 }}/>
           <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
             {done}/{total} done{skipped ? ` · ${skipped} skipped` : ''}
           </span>
-          <div style={{
-            width: 80, height: 4, background: 'var(--surface-2)',
-            borderRadius: 2, overflow: 'hidden',
-          }}>
+          <div style={{ width: 80, height: 4, background: 'var(--surface-2)', borderRadius: 2, overflow: 'hidden' }}>
             <div style={{ width: pct + '%', height: '100%', background: 'var(--fg)' }}/>
           </div>
           <button className="btn ghost sm" onClick={refreshChecks} title="Re-probe state">
@@ -378,149 +415,40 @@ export function GetStarted({ setPage }) {
           </button>
         </div>
 
-        {/* Sub-header — small framing line, no hero */}
+        {/* ── Sub-header ──────────────────────────────────────────────────── */}
         <div style={{
           padding: '7px 16px',
           borderBottom: '1px solid var(--hairline)',
           background: 'var(--surface-0)',
           fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
         }}>
-          {tab === 'proxy'
-            ? 'SharkAuth runs as a reverse proxy in front of your app. Auth happens at the edge — no SDK needed.'
-            : 'Embed SharkAuth in your own UI. Drop in the SDK, mount the provider, wire sign-in.'}
+          {track === 'human'
+            ? 'Add human sign-in to your product: email, social, magic link, SSO, passkeys.'
+            : track === 'both'
+            ? 'Full integration: agent DPoP-bound tokens + human sign-in. Agent track first — it is the moat.'
+            : 'Auth for products that give customers their own agents. Get to first DPoP-bound token in 5 minutes.'}
         </div>
 
-        {/* Task table */}
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <table className="tbl">
-            <thead style={{ background: 'var(--surface-0)' }}>
-              <tr>
-                <th style={{ width: 28, paddingLeft: 16, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}/>
-                <th style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Task</th>
-                <th style={{ width: 110, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Status</th>
-                <th style={{ width: 160, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Goes to</th>
-                <th style={{ width: 60, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}/>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((t, idx) => {
-                const status = tasks[t.id] || 'pending';
-                const auto = t.autoCheck && checks[t.autoCheck];
-                return (
-                  <tr key={t.id}
-                      className={selectedId === t.id ? 'active' : ''}
-                      onClick={() => setSelectedId(t.id)}
-                      style={{ cursor: 'pointer' }}>
-                    <td style={{ paddingLeft: 16 }}>
-                      <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-                        {String(idx + 1).padStart(2, '0')}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, fontSize: 13 }}>{t.title}</div>
-                        <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 560 }}>
-                          {t.summary}
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="row" style={{ gap: 6 }}>
-                        <StatusDot status={status}/>
-                        <span style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.5, textTransform: 'capitalize' }}>{status}</span>
-                        {auto && status === 'done' && (
-                          <span className="faint mono" style={{ fontSize: 10, lineHeight: 1.5 }}>auto</span>
-                        )}
-                      </span>
-                    </td>
-                    <td>
-                      {t.pageLabel ? (
-                        <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{t.pageLabel}</span>
-                      ) : (
-                        <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>—</span>
-                      )}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <Icon.ChevronRight width={12} height={12} style={{ opacity: 0.5 }}/>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {/* ── Agent Onboarding section — SDK tab only ─────────────────── */}
-              {tab === 'sdk' && (
-                <>
-                  {/* Section header row — collapsible toggle */}
-                  <tr style={{ cursor: 'pointer', background: 'var(--surface-1)' }}
-                      onClick={() => setAgentSectionOpen(o => !o)}>
-                    <td style={{ paddingLeft: 16 }}>
-                      <Icon.ChevronRight
-                        width={11} height={11}
-                        style={{
-                          opacity: 0.6,
-                          transform: agentSectionOpen ? 'rotate(90deg)' : 'none',
-                          transition: 'transform 140ms',
-                        }}
-                      />
-                    </td>
-                    <td colSpan={3}>
-                      <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: 'var(--fg-muted)', textTransform: 'uppercase' }}>
-                        Agent Onboarding
-                      </span>
-                      <span className="faint mono" style={{ fontSize: 10, marginLeft: 8, lineHeight: 1.5 }}>
-                        machine-to-machine · DPoP · RFC 8693 delegation
-                      </span>
-                    </td>
-                    <td/>
-                  </tr>
-
-                  {/* Agent task rows — hidden when collapsed */}
-                  {agentSectionOpen && AGENT_TASKS.map((t, idx) => {
-                    const status = tasks[t.id] || 'pending';
-                    return (
-                      <tr key={t.id}
-                          className={selectedId === t.id ? 'active' : ''}
-                          onClick={() => setSelectedId(t.id)}
-                          style={{ cursor: 'pointer', background: 'var(--surface-0)' }}>
-                        <td style={{ paddingLeft: 16 }}>
-                          <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-                            {String(SDK_TASKS.length + idx + 1).padStart(2, '0')}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 500, fontSize: 13 }}>{t.title}</div>
-                            <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 560 }}>
-                              {t.summary}
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="row" style={{ gap: 6 }}>
-                            <StatusDot status={status}/>
-                            <span style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.5, textTransform: 'capitalize' }}>{status}</span>
-                          </span>
-                        </td>
-                        <td>
-                          {t.pageLabel ? (
-                            <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{t.pageLabel}</span>
-                          ) : (
-                            <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>—</span>
-                          )}
-                        </td>
-                        <td onClick={e => e.stopPropagation()}>
-                          <Icon.ChevronRight width={12} height={12} style={{ opacity: 0.5 }}/>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </>
-              )}
-            </tbody>
-          </table>
+        {/* ── Section accordion body ───────────────────────────────────────── */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {visibleSections.map(section => (
+            <SectionBlock
+              key={section.id}
+              section={section}
+              open={!!openSections[section.id]}
+              onToggle={() => toggleSection(section.id)}
+              tasks={section.tasks || []}
+              taskStates={tasks}
+              checks={checks}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              track={track}
+              humanTasks={HUMAN_TASKS}
+            />
+          ))}
         </div>
 
-        {/* Footer */}
+        {/* ── Footer ──────────────────────────────────────────────────────── */}
         <div style={{
           padding: '8px 16px',
           borderTop: '1px solid var(--hairline)',
@@ -528,24 +456,25 @@ export function GetStarted({ setPage }) {
           background: 'var(--surface-0)',
           fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
         }}>
-          <span>{pending} pending</span>
+          <span>{total - done - skipped} pending</span>
           <span>·</span>
           <span>{done} done</span>
           {skipped > 0 && <><span>·</span><span>{skipped} skipped</span></>}
           <div style={{ flex: 1 }}/>
-          <span className="faint">Status auto-syncs from /admin/proxy/status, /admin/apps, /admin/branding.</span>
+          <span className="faint">Status auto-syncs from /admin/agents, /admin/audit.</span>
         </div>
 
         <CLIFooter command="shark help"/>
       </div>
 
-      {selected && (
+      {/* ── Task drawer ─────────────────────────────────────────────────── */}
+      {selectedTask && (
         <TaskDrawer
-          task={selected}
-          status={tasks[selected.id] || 'pending'}
+          task={selectedTask}
+          status={tasks[selectedTask.id] || 'pending'}
           onClose={() => setSelectedId(null)}
           onStatus={(s) => {
-            setStatus(selected.id, s);
+            setStatus(selectedTask.id, s);
             if (s === 'done') toast.success('Marked done');
             else if (s === 'skipped') toast.success('Skipped');
             else if (s === null) toast.success('Reset');
@@ -554,13 +483,182 @@ export function GetStarted({ setPage }) {
             try { localStorage.setItem('shark_admin_onboarded', '1'); } catch {}
             if (typeof setPage === 'function') setPage(p);
           }}
+          checks={checks}
         />
       )}
     </div>
   );
 }
 
-// ─── Tab button — matches users.tsx slideover tab idiom ──────────────────────
+// ─── Section block ────────────────────────────────────────────────────────────
+function SectionBlock({ section, open, onToggle, tasks: sectionTasks, taskStates, checks, selectedId, onSelect, track, humanTasks }) {
+  return (
+    <div data-section={section.id} style={{ borderBottom: '1px solid var(--hairline)' }}>
+      {/* Section header — clickable to toggle */}
+      <div
+        onClick={onToggle}
+        style={{
+          padding: '9px 16px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          cursor: 'pointer',
+          background: 'var(--surface-1)',
+          userSelect: 'none',
+        }}
+      >
+        <Icon.ChevronRight
+          width={11} height={11}
+          style={{
+            opacity: 0.6, flexShrink: 0,
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 120ms',
+          }}
+        />
+        <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
+          {section.label}
+        </span>
+        {section.kind === 'tasks' && sectionTasks.length > 0 && (
+          <SectionProgress tasks={sectionTasks} taskStates={taskStates} />
+        )}
+      </div>
+
+      {/* Section body */}
+      {open && (
+        <div>
+          {section.kind === 'why' && <WhySection />}
+          {section.kind === 'next' && <NextStepsSection />}
+          {section.kind === 'tasks' && sectionTasks.map((t, idx) => {
+            const status = taskStates[t.id] || 'pending';
+            const autoVerified = t.autoCheck && checks[t.autoCheck] && status === 'done';
+            return (
+              <div
+                key={t.id}
+                onClick={() => onSelect(t.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 0,
+                  borderBottom: '1px solid var(--hairline)',
+                  cursor: 'pointer',
+                  background: selectedId === t.id ? 'var(--surface-2)' : 'var(--surface-0)',
+                  padding: '8px 16px',
+                  transition: 'background 80ms',
+                }}
+                onMouseEnter={e => { if (selectedId !== t.id) e.currentTarget.style.background = 'var(--surface-1)'; }}
+                onMouseLeave={e => { if (selectedId !== t.id) e.currentTarget.style.background = 'var(--surface-0)'; }}
+              >
+                <span className="mono faint" style={{ fontSize: 10.5, width: 22, flexShrink: 0 }}>
+                  {String(idx + 1).padStart(2, '0')}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{t.title}</div>
+                  <div className="faint" style={{
+                    fontSize: 11, lineHeight: 1.5,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 560,
+                  }}>
+                    {t.summary}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 12, flexShrink: 0 }}>
+                  <StatusDot status={status}/>
+                  <span style={{ fontSize: 11, color: 'var(--fg-muted)', textTransform: 'capitalize', minWidth: 48 }}>{status}</span>
+                  {autoVerified && (
+                    <span className="faint mono" style={{ fontSize: 10 }}>auto</span>
+                  )}
+                </div>
+                <Icon.ChevronRight width={11} height={11} style={{ opacity: 0.4, marginLeft: 8, flexShrink: 0 }}/>
+              </div>
+            );
+          })}
+          {section.kind === 'tasks' && track === 'human' && section.id === 'next-steps' && (
+            humanTasks.map((t, idx) => {
+              const status = taskStates[t.id] || 'pending';
+              return (
+                <div key={t.id} onClick={() => onSelect(t.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 0,
+                    borderBottom: '1px solid var(--hairline)',
+                    cursor: 'pointer',
+                    background: selectedId === t.id ? 'var(--surface-2)' : 'var(--surface-0)',
+                    padding: '8px 16px',
+                  }}>
+                  <span className="mono faint" style={{ fontSize: 10.5, width: 22, flexShrink: 0 }}>
+                    {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{t.title}</div>
+                    <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 560 }}>
+                      {t.summary}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 12, flexShrink: 0 }}>
+                    <StatusDot status={status}/>
+                    <span style={{ fontSize: 11, color: 'var(--fg-muted)', textTransform: 'capitalize', minWidth: 48 }}>{status}</span>
+                  </div>
+                  <Icon.ChevronRight width={11} height={11} style={{ opacity: 0.4, marginLeft: 8, flexShrink: 0 }}/>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionProgress({ tasks, taskStates }) {
+  const done = tasks.filter(t => taskStates[t.id] === 'done').length;
+  const total = tasks.length;
+  if (total === 0) return null;
+  return (
+    <span className="faint mono" style={{ fontSize: 10, marginLeft: 4, lineHeight: 1.5 }}>
+      {done}/{total}
+    </span>
+  );
+}
+
+// ─── Why SharkAuth section body ───────────────────────────────────────────────
+function WhySection() {
+  return (
+    <div style={{ padding: '12px 16px 14px 38px' }}>
+      {WHY_BULLETS.map((b, i) => (
+        <div key={i} style={{
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+          marginBottom: i < WHY_BULLETS.length - 1 ? 8 : 0,
+        }}>
+          <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--fg-muted)', marginTop: 7, flexShrink: 0 }}/>
+          <span style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--fg-secondary)' }}>{b}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Next steps section body ──────────────────────────────────────────────────
+function NextStepsSection() {
+  return (
+    <div style={{ padding: '12px 16px 14px 38px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {NEXT_STEPS.map(ns => (
+        <div key={ns.id} style={{
+          border: '1px solid var(--hairline)',
+          borderRadius: 4,
+          padding: '10px 12px',
+          background: 'var(--surface-0)',
+        }}>
+          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 3 }}>{ns.title}</div>
+          <div className="faint" style={{ fontSize: 11, lineHeight: 1.5, marginBottom: 6 }}>{ns.summary}</div>
+          <a
+            href={ns.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 11, color: 'var(--fg)', textDecoration: 'underline', fontFamily: 'var(--font-mono)' }}
+          >
+            {ns.label}
+          </a>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Tab button ───────────────────────────────────────────────────────────────
 function TabBtn({ on, onClick, children }) {
   return (
     <button
@@ -572,7 +670,7 @@ function TabBtn({ on, onClick, children }) {
         background: on ? 'var(--surface-3)' : 'var(--surface-2)',
         color: on ? 'var(--fg)' : 'var(--fg-muted)',
         border: '1px solid var(--hairline-strong)',
-        borderRadius: 5,
+        borderRadius: 4,
         marginRight: -1,
         cursor: 'pointer',
       }}
@@ -580,10 +678,11 @@ function TabBtn({ on, onClick, children }) {
   );
 }
 
-// ─── Drawer ──────────────────────────────────────────────────────────────────
-function TaskDrawer({ task, status, onClose, onStatus, onGo }) {
+// ─── Task drawer ──────────────────────────────────────────────────────────────
+function TaskDrawer({ task, status, onClose, onStatus, onGo, checks }) {
   const toast = useToast();
-  // ESC closes
+  const [snippetTab, setSnippetTab] = React.useState(0);
+
   React.useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -594,6 +693,14 @@ function TaskDrawer({ task, status, onClose, onStatus, onGo }) {
     try { await navigator.clipboard.writeText(text); toast.success('Copied'); }
     catch { toast.error('Copy failed'); }
   };
+
+  // Build snippet tabs: primary code first, then extraSnippets
+  const snippets = [];
+  if (task.code) snippets.push({ label: 'Python', code: task.code });
+  if (task.cli) snippets.push({ label: 'CLI', code: task.cli });
+  if (task.extraSnippets) snippets.push(...task.extraSnippets);
+
+  const activeSnippet = snippets[Math.min(snippetTab, snippets.length - 1)];
 
   return (
     <div style={{
@@ -617,25 +724,24 @@ function TaskDrawer({ task, status, onClose, onStatus, onGo }) {
         <div className="row" style={{ gap: 6, marginTop: 8 }}>
           <StatusDot status={status}/>
           <span style={{ fontSize: 12, color: 'var(--fg-muted)', textTransform: 'capitalize' }}>{status}</span>
+          {task.autoCheck && checks[task.autoCheck] && status === 'done' && (
+            <span className="faint mono" style={{ fontSize: 10 }}>auto-verified</span>
+          )}
         </div>
       </div>
 
       {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         <Field label="What this does">
-          <div style={{ fontSize: 13, color: 'var(--fg-muted)', lineHeight: 1.55 }}>
-            {task.summary}
-          </div>
+          <div style={{ fontSize: 13, color: 'var(--fg-muted)', lineHeight: 1.55 }}>{task.summary}</div>
         </Field>
 
         {task.pageLabel && task.page && (
           <div style={{ marginTop: 16 }}>
             <Field label="Configure here">
               <div style={{
-                padding: 10,
-                border: '1px solid var(--hairline-strong)',
-                borderRadius: 4,
-                background: 'var(--surface-1)',
+                padding: 10, border: '1px solid var(--hairline-strong)',
+                borderRadius: 4, background: 'var(--surface-1)',
                 display: 'flex', alignItems: 'center', gap: 8,
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -650,36 +756,53 @@ function TaskDrawer({ task, status, onClose, onStatus, onGo }) {
           </div>
         )}
 
-        {task.cli && (
+        {task.href && (
           <div style={{ marginTop: 16 }}>
-            <Field label="CLI">
-              <Snippet text={task.cli} onCopy={copy} mono/>
+            <Field label="Link">
+              <a href={task.href} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--fg)', textDecoration: 'underline' }}>
+                {task.label || task.href}
+              </a>
             </Field>
           </div>
         )}
 
-        {task.code && (
+        {/* Tabbed code/CLI snippets */}
+        {snippets.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <Field label="Code">
-              <Snippet text={task.code} onCopy={copy} mono multiline/>
+              {snippets.length > 1 && (
+                <div style={{ display: 'flex', gap: 0, marginBottom: 6 }}>
+                  {snippets.map((s, i) => (
+                    <button
+                      key={s.label}
+                      onClick={() => setSnippetTab(i)}
+                      style={{
+                        padding: '3px 10px', fontSize: 11,
+                        fontWeight: snippetTab === i ? 600 : 400,
+                        background: snippetTab === i ? 'var(--surface-3)' : 'var(--surface-2)',
+                        color: snippetTab === i ? 'var(--fg)' : 'var(--fg-muted)',
+                        border: '1px solid var(--hairline)',
+                        borderRadius: 3,
+                        marginRight: -1,
+                        cursor: 'pointer',
+                      }}
+                    >{s.label}</button>
+                  ))}
+                </div>
+              )}
+              {activeSnippet && (
+                <Snippet text={activeSnippet.code} onCopy={copy} multiline={activeSnippet.code.includes('\n')}/>
+              )}
             </Field>
           </div>
         )}
-
-        {task.extraSnippets && task.extraSnippets.map(s => (
-          <div key={s.label} style={{ marginTop: 12 }}>
-            <Field label={s.label}>
-              <Snippet text={s.code} onCopy={copy} mono/>
-            </Field>
-          </div>
-        ))}
 
         {task.autoCheck && (
           <div style={{
             marginTop: 16, padding: 8,
             border: '1px solid var(--hairline)',
-            borderRadius: 4,
-            background: 'var(--surface-1)',
+            borderRadius: 4, background: 'var(--surface-1)',
             fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
           }}>
             <Icon.Info width={11} height={11} style={{ verticalAlign: 'middle', marginRight: 6, opacity: 0.7 }}/>
@@ -700,14 +823,10 @@ function TaskDrawer({ task, status, onClose, onStatus, onGo }) {
           </button>
         )}
         {status !== 'skipped' && (
-          <button className="btn sm" onClick={() => onStatus('skipped')}>
-            Skip
-          </button>
+          <button className="btn sm" onClick={() => onStatus('skipped')}>Skip</button>
         )}
         {status !== 'pending' && (
-          <button className="btn ghost sm" onClick={() => onStatus(null)}>
-            Reset
-          </button>
+          <button className="btn ghost sm" onClick={() => onStatus(null)}>Reset</button>
         )}
         <div style={{ flex: 1 }}/>
         {task.page && (
@@ -723,13 +842,15 @@ function TaskDrawer({ task, status, onClose, onStatus, onGo }) {
 function Field({ label, children }) {
   return (
     <div>
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 6, lineHeight: 1.5 }}>{label}</div>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', marginBottom: 6, lineHeight: 1.5 }}>
+        {label}
+      </div>
       {children}
     </div>
   );
 }
 
-function Snippet({ text, onCopy, mono = true, multiline = false }) {
+function Snippet({ text, onCopy, multiline = false }) {
   return (
     <div style={{
       position: 'relative',
@@ -737,7 +858,7 @@ function Snippet({ text, onCopy, mono = true, multiline = false }) {
       borderRadius: 4,
       background: 'var(--surface-1)',
       padding: multiline ? '10px 36px 10px 10px' : '6px 36px 6px 10px',
-      fontFamily: mono ? 'var(--font-mono)' : 'inherit',
+      fontFamily: 'var(--font-mono)',
       fontSize: 12, lineHeight: 1.55,
       color: 'var(--fg)',
       whiteSpace: multiline ? 'pre' : 'nowrap',

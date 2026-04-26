@@ -2,10 +2,54 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
 
 from . import _http
 from .proxy_rules import _raise
+
+
+# ---------------------------------------------------------------------------
+# W2 Methods 6 & 7 — typed response dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CascadeRevokeResult:
+    """Result of a cascade-revoke operation.
+
+    Attributes
+    ----------
+    revoked_agent_ids:
+        List of agent IDs whose tokens were revoked.
+    revoked_consent_count:
+        Number of OAuth consent records also revoked.
+    audit_event_id:
+        Audit log event ID for this operation.
+    """
+
+    revoked_agent_ids: List[str] = field(default_factory=list)
+    revoked_consent_count: int = 0
+    audit_event_id: Optional[str] = None
+
+
+@dataclass
+class AgentList:
+    """Result of listing agents tied to a user.
+
+    Attributes
+    ----------
+    data:
+        List of agent dicts (same shape as AgentsClient.get_agent()).
+    total:
+        Total count (may exceed ``len(data)`` when paginated).
+    filter:
+        The filter applied (``"created"``, ``"authorized"``, or ``"all"``).
+    """
+
+    data: List[Dict[str, Any]] = field(default_factory=list)
+    total: int = 0
+    filter: str = "all"
 
 
 class UsersClient:
@@ -197,4 +241,128 @@ class UsersClient:
         )
         if resp.status_code == 200:
             return resp.json().get("data", resp.json())
+        _raise(resp)
+
+    # ------------------------------------------------------------------
+    # W2 Method 6 — cascade revoke agents
+    # ------------------------------------------------------------------
+
+    def revoke_agents(
+        self,
+        user_id: str,
+        *,
+        agent_ids: Optional[List[str]] = None,
+        reason: Optional[str] = None,
+    ) -> CascadeRevokeResult:
+        """Cascade-revoke agents owned by a user (Layer 3 depth-of-defense).
+
+        Wraps ``POST /api/v1/users/{id}/revoke-agents``.
+
+        If *agent_ids* is provided, only those agents are revoked (still scoped
+        to this user's agents). If ``None``, revokes ALL agents created by this
+        user AND all consents granted by this user.
+
+        Parameters
+        ----------
+        user_id:
+            The ``usr_*`` identifier of the user.
+        agent_ids:
+            Optional list of specific ``agent_*`` IDs to revoke.
+            Omit to revoke all agents belonging to this user.
+        reason:
+            Human-readable reason for the revocation (recorded in audit log).
+
+        Returns
+        -------
+        CascadeRevokeResult
+            Contains ``revoked_agent_ids``, ``revoked_consent_count``,
+            and ``audit_event_id``.
+
+        Raises
+        ------
+        SharkAuthError
+            On HTTP error from the server.
+
+        Example
+        -------
+        >>> result = client.users.revoke_agents("usr_abc")
+        >>> print(result.revoked_agent_ids)
+        >>> print(result.audit_event_id)
+        """
+        body: Dict[str, Any] = {}
+        if agent_ids is not None:
+            body["agent_ids"] = agent_ids
+        if reason is not None:
+            body["reason"] = reason
+        url = f"{self._base}/api/v1/users/{user_id}/revoke-agents"
+        resp = _http.request(self._session, "POST", url, headers=self._auth(), json=body)
+        if resp.status_code in (200, 204):
+            if resp.status_code == 204 or not resp.content:
+                return CascadeRevokeResult()
+            data = resp.json()
+            if isinstance(data, dict) and "data" in data:
+                data = data["data"]
+            return CascadeRevokeResult(
+                revoked_agent_ids=data.get("revoked_agent_ids", []),
+                revoked_consent_count=data.get("revoked_consent_count", 0),
+                audit_event_id=data.get("audit_event_id"),
+            )
+        _raise(resp)
+
+    # ------------------------------------------------------------------
+    # W2 Method 7 — list user agents
+    # ------------------------------------------------------------------
+
+    def list_agents(
+        self,
+        user_id: str,
+        *,
+        filter: Literal["created", "authorized", "all"] = "all",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> AgentList:
+        """List agents tied to a user.
+
+        Wraps ``GET /api/v1/users/{id}/agents?filter=...``.
+
+        Parameters
+        ----------
+        user_id:
+            The ``usr_*`` identifier of the user.
+        filter:
+            - ``"created"``: agents where ``created_by = user_id``
+            - ``"authorized"``: agents this user has granted consent to
+            - ``"all"``: union of the above (server may return ``"created"`` as default)
+        limit:
+            Maximum agents to return. Default: 100.
+        offset:
+            Pagination offset. Default: 0.
+
+        Returns
+        -------
+        AgentList
+            ``data`` list, ``total`` count, and effective ``filter`` string.
+
+        Example
+        -------
+        >>> result = client.users.list_agents("usr_abc", filter="created")
+        >>> for agent in result.data:
+        ...     print(agent["name"])
+        """
+        params: Dict[str, Any] = {
+            "filter": filter,
+            "limit": limit,
+            "offset": offset,
+        }
+        url = f"{self._base}/api/v1/users/{user_id}/agents"
+        resp = _http.request(self._session, "GET", url, headers=self._auth(), params=params)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict):
+                return AgentList(
+                    data=data.get("data", []),
+                    total=data.get("total", len(data.get("data", []))),
+                    filter=data.get("filter", filter),
+                )
+            return AgentList(data=data if isinstance(data, list) else [], total=len(data or []))
         _raise(resp)

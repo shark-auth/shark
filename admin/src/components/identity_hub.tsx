@@ -3,18 +3,11 @@ import React from 'react'
 import { Icon, CopyField } from './shared'
 import { useAPI } from './api'
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// IdentityHub — WHO can authenticate.
+// Scope: Authentication methods only (Password, Magic Link, Passkeys, Social providers).
+// Sessions, Tokens, SSO, OAuth Server, MFA enforcement → Settings tab (source of truth).
 
-function relTime(iso: string): string {
-  if (!iso) return '—';
-  const d = Date.parse(iso);
-  if (isNaN(d)) return iso;
-  const diff = (Date.now() - d) / 1000;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
-}
+// ─── helpers ────────────────────────────────────────────────────────────────
 
 function truncateMiddle(s: string, max = 24): string {
   if (!s || s.length <= max) return s || '—';
@@ -185,48 +178,23 @@ function Drawer({ open, onClose, title, width = 420, children }: {
 export function IdentityHub() {
   const { data: rawConfig, loading } = useAPI('/admin/config');
 
-  // Form state — mirroring the shape returned by GET /api/v1/admin/config
+  // Form state — only auth-method fields (password, magic link, passkeys, social)
   const [form, setForm] = React.useState<any>(null);
   const [original, setOriginal] = React.useState<any>(null);
   const [busy, setBusy] = React.useState(false);
   const [saveMsg, setSaveMsg] = React.useState('');
 
-  // Active sessions state
-  const [sessions, setSessions] = React.useState<any[]>([]);
-  const [sessionsLoading, setSessionsLoading] = React.useState(false);
-  const [sessionsTick, setSessionsTick] = React.useState(0);
-  const [revokeConfirm, setRevokeConfirm] = React.useState(false);
-  const [revoking, setRevoking] = React.useState<string | null>(null);
-
-  // JWKS / signing keys
-  const [keys, setKeys] = React.useState<any[]>([]);
-  const [keysLoading, setKeysLoading] = React.useState(false);
-  const [keyDrawer, setKeyDrawer] = React.useState<any>(null);
-
-  // SSO connections
-  const [ssoConns, setSsoConns] = React.useState<any[]>([]);
-  const [ssoLoading, setSsoLoading] = React.useState(false);
-  const [ssoTick, setSsoTick] = React.useState(0);
-  const [ssoDrawer, setSsoDrawer] = React.useState<any>(null);
-  const [deletingSSO, setDeletingSSO] = React.useState<string | null>(null);
-
   // Social provider drawer
   const [socialDrawer, setSocialDrawer] = React.useState<null | { provider: string; cfg: any }>(null);
-
-  // OAuth device codes
-  const [deviceCodes, setDeviceCodes] = React.useState<any[]>([]);
-  const [dcLoading, setDcLoading] = React.useState(false);
-  const [dcTick, setDcTick] = React.useState(0);
-  const [dcActing, setDcActing] = React.useState<string | null>(null);
 
   const adminKey = localStorage.getItem('shark_admin_key') || '';
   const headers = { Authorization: `Bearer ${adminKey}`, 'Content-Type': 'application/json' };
 
   // ── shape helpers ──────────────────────────────────────────────────────────
+  // Only auth-method fields — Sessions/Tokens/OAuth/SSO/MFA live in Settings.
   const toForm = (d: any) => ({
     auth: {
       password_min_length: d?.auth?.password_min_length ?? 8,
-      session_lifetime:    d?.auth?.session_lifetime    ?? '24h',
       password_reset_ttl:  d?.auth?.password_reset_ttl  ?? '1h',
     },
     magic_link: {
@@ -244,23 +212,6 @@ export function IdentityHub() {
       apple:   { client_id: d?.social?.apple?.client_id   ?? '', client_secret: d?.social?.apple?.client_secret   ?? '', callback: d?.social?.apple?.callback   ?? '' },
       discord: { client_id: d?.social?.discord?.client_id ?? '', client_secret: d?.social?.discord?.client_secret ?? '', callback: d?.social?.discord?.callback ?? '' },
     },
-    jwt: {
-      lifetime: d?.jwt?.lifetime ?? '15m',
-      issuer:   d?.jwt?.issuer   ?? '',
-      audience: d?.jwt?.audience ?? '',
-    },
-    mfa: {
-      enforcement:    d?.mfa?.enforcement    ?? 'optional',
-      issuer:         d?.mfa?.issuer         ?? '',
-      recovery_codes: d?.mfa?.recovery_codes ?? 10,
-    },
-    oauth_server: {
-      enabled:                d?.oauth_server?.enabled                ?? true,
-      issuer:                 d?.oauth_server?.issuer                 ?? '',
-      access_token_lifetime:  d?.oauth_server?.access_token_lifetime  ?? '15m',
-      refresh_token_lifetime: d?.oauth_server?.refresh_token_lifetime ?? '30d',
-      require_dpop:           d?.oauth_server?.require_dpop           ?? false,
-    },
   });
 
   React.useEffect(() => {
@@ -269,42 +220,6 @@ export function IdentityHub() {
     setForm(f);
     setOriginal(JSON.stringify(f));
   }, [rawConfig]);
-
-  // Active sessions fetch
-  React.useEffect(() => {
-    setSessionsLoading(true);
-    fetch('/api/v1/admin/sessions?limit=50', { headers })
-      .then(r => r.ok ? r.json() : { data: [] })
-      .then(j => { setSessions(j?.data || j?.sessions || []); setSessionsLoading(false); })
-      .catch(() => { setSessions([]); setSessionsLoading(false); });
-  }, [sessionsTick]);
-
-  // JWKS / signing keys
-  React.useEffect(() => {
-    setKeysLoading(true);
-    fetch('/.well-known/jwks.json')
-      .then(r => r.ok ? r.json() : { keys: [] })
-      .then(j => { setKeys(j?.keys || []); setKeysLoading(false); })
-      .catch(() => { setKeys([]); setKeysLoading(false); });
-  }, []);
-
-  // SSO connections
-  React.useEffect(() => {
-    setSsoLoading(true);
-    fetch('/api/v1/sso/connections', { headers })
-      .then(r => r.ok ? r.json() : { data: [] })
-      .then(j => { setSsoConns(j?.data || j?.connections || []); setSsoLoading(false); })
-      .catch(() => { setSsoConns([]); setSsoLoading(false); });
-  }, [ssoTick]);
-
-  // Device codes
-  React.useEffect(() => {
-    setDcLoading(true);
-    fetch('/api/v1/admin/oauth/device-codes', { headers })
-      .then(r => r.ok ? r.json() : { data: [] })
-      .then(j => { setDeviceCodes(j?.data || j?.codes || []); setDcLoading(false); })
-      .catch(() => { setDeviceCodes([]); setDcLoading(false); });
-  }, [dcTick]);
 
   // ── form setters ───────────────────────────────────────────────────────────
   const set = (path: string[], value: any) => {
@@ -327,7 +242,6 @@ export function IdentityHub() {
     try {
       const payload = {
         auth: {
-          session_lifetime:    form.auth.session_lifetime,
           password_min_length: Number(form.auth.password_min_length),
           password_reset_ttl:  form.auth.password_reset_ttl,
         },
@@ -340,24 +254,7 @@ export function IdentityHub() {
           enabled: form.magic_link.enabled,
           ttl:     form.magic_link.ttl,
         },
-        jwt: {
-          lifetime: form.jwt.lifetime,
-          issuer:   form.jwt.issuer,
-          audience: form.jwt.audience,
-        },
         social: form.social,
-        mfa: {
-          enforcement:    form.mfa.enforcement,
-          issuer:         form.mfa.issuer,
-          recovery_codes: Number(form.mfa.recovery_codes),
-        },
-        oauth_server: {
-          enabled:                form.oauth_server.enabled,
-          issuer:                 form.oauth_server.issuer,
-          access_token_lifetime:  form.oauth_server.access_token_lifetime,
-          refresh_token_lifetime: form.oauth_server.refresh_token_lifetime,
-          require_dpop:           form.oauth_server.require_dpop,
-        },
       };
       const r = await fetch('/api/v1/admin/config', {
         method: 'PUT',
@@ -379,42 +276,6 @@ export function IdentityHub() {
     }
   };
 
-  // ── session actions ────────────────────────────────────────────────────────
-  const revokeSession = async (id: string) => {
-    setRevoking(id);
-    await fetch(`/api/v1/admin/sessions/${id}`, { method: 'DELETE', headers }).catch(() => {});
-    setRevoking(null);
-    setSessionsTick(t => t + 1);
-  };
-
-  const revokeAll = async () => {
-    await fetch('/api/v1/admin/sessions', { method: 'DELETE', headers }).catch(() => {});
-    setRevokeConfirm(false);
-    setSessionsTick(t => t + 1);
-  };
-
-  const purgeExpired = async () => {
-    await fetch('/api/v1/admin/sessions/purge-expired', { method: 'POST', headers }).catch(() => {});
-    setSessionsTick(t => t + 1);
-  };
-
-  // ── SSO actions ────────────────────────────────────────────────────────────
-  const deleteSSOConn = async (id: string) => {
-    setDeletingSSO(id);
-    await fetch(`/api/v1/sso/connections/${id}`, { method: 'DELETE', headers }).catch(() => {});
-    setDeletingSSO(null);
-    setSsoDrawer(null);
-    setSsoTick(t => t + 1);
-  };
-
-  // ── OAuth device code actions ──────────────────────────────────────────────
-  const deviceCodeAction = async (userCode: string, action: 'approve' | 'deny') => {
-    setDcActing(userCode);
-    await fetch(`/api/v1/admin/oauth/device-codes/${userCode}/${action}`, { method: 'POST', headers }).catch(() => {});
-    setDcActing(null);
-    setDcTick(t => t + 1);
-  };
-
   // ── loading / not ready ────────────────────────────────────────────────────
   if (loading || !form) {
     return (
@@ -425,10 +286,10 @@ export function IdentityHub() {
   }
 
   const socialProviders = [
-    { key: 'google',  label: 'Google',  icon: '𝙂' },
-    { key: 'github',  label: 'GitHub',  icon: '𝙂𝙃' },
-    { key: 'apple',   label: 'Apple',   icon: '𝘼' },
-    { key: 'discord', label: 'Discord', icon: '𝘿' },
+    { key: 'google',  label: 'Google' },
+    { key: 'github',  label: 'GitHub' },
+    { key: 'apple',   label: 'Apple' },
+    { key: 'discord', label: 'Discord' },
   ] as const;
 
   const thStyle: React.CSSProperties = {
@@ -469,7 +330,7 @@ export function IdentityHub() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════
-          1. Authentication Methods
+          1. Authentication Methods — WHO can authenticate (source of truth here)
       ═══════════════════════════════════════════════════════════════════ */}
       <Section title="Authentication Methods" icon={<Icon.Lock width={13} height={13}/>}>
         {/* Password */}
@@ -562,317 +423,30 @@ export function IdentityHub() {
       </Section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          2. Sessions & Tokens
+          Cross-link: Sessions, Tokens, OAuth Server, SSO, MFA → Settings
+          (source of truth for HOW the system operates)
       ═══════════════════════════════════════════════════════════════════ */}
-      <Section title="Sessions & Tokens" icon={<Icon.Token width={13} height={13}/>}>
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-dim)', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-            COOKIE SESSION
-            <Chip label="always on" variant="dim"/>
+      <div style={{
+        padding: '10px 14px',
+        border: '1px solid var(--hairline)',
+        borderRadius: 5,
+        background: 'var(--surface-1)',
+        display: 'flex', alignItems: 'center', gap: 12,
+        marginBottom: 12,
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--fg)', marginBottom: 3 }}>
+            Sessions, Tokens, OAuth Server, SSO &amp; MFA
           </div>
-          <ConfigRow label="Session lifetime" sublabel="Duration before cookie sessions expire">
-            <Inp value={form.auth.session_lifetime} onChange={v => set(['auth', 'session_lifetime'], v)} placeholder="24h"/>
-          </ConfigRow>
+          <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+            Lifetimes, signing keys, DPoP enforcement, SSO connections, and MFA policy
+            are configured in <strong>Settings</strong> (source of truth for system operation).
+          </div>
         </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-dim)', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-            JWT ACCESS TOKEN
-            <Chip label="always on" variant="dim"/>
-          </div>
-          <ConfigRow label="Access token lifetime" sublabel="Duration of JWT access tokens">
-            <Inp value={form.jwt.lifetime} onChange={v => set(['jwt', 'lifetime'], v)} placeholder="15m"/>
-          </ConfigRow>
-          <ConfigRow label="Issuer (iss)" sublabel="JWT iss claim value">
-            <Inp value={form.jwt.issuer} onChange={v => set(['jwt', 'issuer'], v)} placeholder="https://auth.example.com"/>
-          </ConfigRow>
-          <ConfigRow label="Audience (aud)" sublabel="JWT aud claim value">
-            <Inp value={form.jwt.audience} onChange={v => set(['jwt', 'audience'], v)} placeholder="https://api.example.com"/>
-          </ConfigRow>
-        </div>
-
-        {/* Signing keys */}
-        <div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            marginBottom: 6,
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-dim)', letterSpacing: '0.08em' }}>SIGNING KEYS</div>
-            <div style={{ flex: 1 }}/>
-            <span className="faint" style={{ fontSize: 11 }}>{keys.length} key{keys.length !== 1 ? 's' : ''}</span>
-          </div>
-          {keysLoading ? (
-            <span className="faint" style={{ fontSize: 11 }}>Loading…</span>
-          ) : keys.length === 0 ? (
-            <span className="faint" style={{ fontSize: 11 }}>No keys found in JWKS</span>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>KID</th>
-                  <th style={thStyle}>Algorithm</th>
-                  <th style={thStyle}>Use</th>
-                  <th style={thStyle}>Status</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {keys.map((k, i) => (
-                  <tr key={k.kid || i}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <td style={tdStyle}><span className="mono" style={{ fontSize: 10.5 }}>{truncateMiddle(k.kid, 24)}</span></td>
-                    <td style={tdStyle}><span className="mono" style={{ fontSize: 11 }}>{k.alg || '—'}</span></td>
-                    <td style={tdStyle}><span className="mono faint" style={{ fontSize: 11 }}>{k.use || '—'}</span></td>
-                    <td style={tdStyle}><Chip label={i === 0 ? 'active' : 'rotated'} variant={i === 0 ? 'success' : 'dim'}/></td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      <button className="btn ghost sm" onClick={() => setKeyDrawer(k)}>Inspect</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </Section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          3. Active Sessions
-      ═══════════════════════════════════════════════════════════════════ */}
-      <Section
-        title="Active Sessions"
-        icon={<Icon.Session width={13} height={13}/>}
-        actions={
-          <div className="row" style={{ gap: 6 }}>
-            <button className="btn ghost sm" onClick={() => setSessionsTick(t => t + 1)}>
-              <Icon.Refresh width={11} height={11}/>
-              Refresh
-            </button>
-            <button className="btn ghost sm" onClick={purgeExpired}>
-              Purge expired
-            </button>
-            {!revokeConfirm ? (
-              <button className="btn ghost sm" style={{ color: 'var(--danger)' }} onClick={() => setRevokeConfirm(true)}>
-                Revoke all
-              </button>
-            ) : (
-              <div className="row" style={{ gap: 4 }}>
-                <span style={{ fontSize: 11, color: 'var(--danger)' }}>Revoke all?</span>
-                <button className="btn ghost sm" onClick={() => setRevokeConfirm(false)}>Cancel</button>
-                <button className="btn sm" style={{ background: 'var(--danger)', color: '#fff', border: 'none' }} onClick={revokeAll}>
-                  Confirm
-                </button>
-              </div>
-            )}
-          </div>
-        }
-      >
-        {sessionsLoading ? (
-          <span className="faint" style={{ fontSize: 11 }}>Loading…</span>
-        ) : sessions.length === 0 ? (
-          <span className="faint" style={{ fontSize: 11 }}>No active sessions</span>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>User</th>
-                <th style={thStyle}>Auth method</th>
-                <th style={thStyle}>MFA</th>
-                <th style={thStyle}>Created</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map(s => (
-                <tr key={s.id || s.session_id}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <td style={tdStyle}>
-                    <div style={{ fontSize: 12.5 }}>{s.user_email || s.email || '—'}</div>
-                  </td>
-                  <td style={tdStyle}>
-                    <span className="mono faint" style={{ fontSize: 11 }}>{s.auth_method || s.method || '—'}</span>
-                  </td>
-                  <td style={tdStyle}>
-                    {s.mfa_passed ? <Chip label="MFA" variant="success"/> : <span className="faint" style={{ fontSize: 11 }}>—</span>}
-                  </td>
-                  <td style={tdStyle}>
-                    <span className="faint" style={{ fontSize: 11 }}>{relTime(s.created_at || s.created)}</span>
-                  </td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    <button
-                      className="btn ghost sm"
-                      style={{ color: 'var(--danger)' }}
-                      disabled={revoking === (s.id || s.session_id)}
-                      onClick={() => revokeSession(s.id || s.session_id)}
-                    >
-                      {revoking === (s.id || s.session_id) ? '…' : 'Revoke'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          4. MFA
-      ═══════════════════════════════════════════════════════════════════ */}
-      <Section title="Multi-Factor Authentication" icon={<Icon.Shield width={13} height={13}/>}>
-        <ConfigRow label="Enforcement" sublabel="Whether MFA is required for users">
-          <Sel value={form.mfa.enforcement} onChange={v => set(['mfa', 'enforcement'], v)} options={[
-            { value: 'off',      label: 'Off' },
-            { value: 'optional', label: 'Optional' },
-            { value: 'required', label: 'Required' },
-          ]}/>
-        </ConfigRow>
-        <ConfigRow label="TOTP issuer" sublabel="Displayed in authenticator apps">
-          <Inp value={form.mfa.issuer} onChange={v => set(['mfa', 'issuer'], v)} placeholder="MyApp"/>
-        </ConfigRow>
-        <ConfigRow label="Recovery code count" sublabel="Backup codes generated per user">
-          <Inp value={form.mfa.recovery_codes} onChange={v => set(['mfa', 'recovery_codes'], v)} type="number" style={{ width: 80 }}/>
-        </ConfigRow>
-      </Section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          5. SSO Connections
-      ═══════════════════════════════════════════════════════════════════ */}
-      <Section
-        title="SSO Connections"
-        icon={<Icon.SSO width={13} height={13}/>}
-        actions={
-          <button className="btn ghost sm" onClick={() => setSsoTick(t => t + 1)}>
-            <Icon.Refresh width={11} height={11}/>
-            Refresh
-          </button>
-        }
-      >
-        {ssoLoading ? (
-          <span className="faint" style={{ fontSize: 11 }}>Loading…</span>
-        ) : ssoConns.length === 0 ? (
-          <div style={{ padding: '12px 0' }}>
-            <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>No SSO connections configured.</div>
-            <div className="faint" style={{ fontSize: 11 }}>Create connections via the Admin API: <span className="mono" style={{ fontSize: 10.5 }}>POST /api/v1/admin/sso/connections</span></div>
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Name / ID</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Domain</th>
-                <th style={thStyle}>Status</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ssoConns.map(conn => (
-                <tr key={conn.id}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setSsoDrawer(conn)}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <td style={tdStyle}>
-                    <div style={{ fontSize: 12.5 }}>{conn.name || conn.id}</div>
-                    <div className="mono faint" style={{ fontSize: 10 }}>{truncateMiddle(conn.id, 24)}</div>
-                  </td>
-                  <td style={tdStyle}><span className="mono faint" style={{ fontSize: 11 }}>{conn.type || conn.provider || '—'}</span></td>
-                  <td style={tdStyle}><span className="faint" style={{ fontSize: 11 }}>{conn.domain || '—'}</span></td>
-                  <td style={tdStyle}><Chip label={conn.enabled !== false ? 'active' : 'disabled'} variant={conn.enabled !== false ? 'success' : 'dim'}/></td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    <button className="btn ghost sm" onClick={e => { e.stopPropagation(); setSsoDrawer(conn); }}>Inspect</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          6. OAuth Server
-      ═══════════════════════════════════════════════════════════════════ */}
-      <Section title="OAuth Server" icon={<Icon.Globe width={13} height={13}/>}>
-        <ConfigRow label="Enabled">
-          <Sel value={form.oauth_server.enabled ? 'true' : 'false'} onChange={v => set(['oauth_server', 'enabled'], v === 'true')} options={[{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }]}/>
-        </ConfigRow>
-        <ConfigRow label="Issuer URL" sublabel="Authorization server issuer (iss)">
-          <Inp value={form.oauth_server.issuer} onChange={v => set(['oauth_server', 'issuer'], v)} placeholder="https://auth.example.com" style={{ width: 240 }}/>
-        </ConfigRow>
-        <ConfigRow label="Access token lifetime">
-          <Inp value={form.oauth_server.access_token_lifetime} onChange={v => set(['oauth_server', 'access_token_lifetime'], v)} placeholder="15m"/>
-        </ConfigRow>
-        <ConfigRow label="Refresh token lifetime">
-          <Inp value={form.oauth_server.refresh_token_lifetime} onChange={v => set(['oauth_server', 'refresh_token_lifetime'], v)} placeholder="30d"/>
-        </ConfigRow>
-        <ConfigRow label="Require DPoP" sublabel="Enforce Demonstrating Proof of Possession">
-          <Sel value={form.oauth_server.require_dpop ? 'true' : 'false'} onChange={v => set(['oauth_server', 'require_dpop'], v === 'true')} options={[{ value: 'false', label: 'Off' }, { value: 'true', label: 'Required' }]}/>
-        </ConfigRow>
-
-        {/* Device code queue */}
-        <div style={{ marginTop: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-dim)', letterSpacing: '0.08em' }}>DEVICE CODE APPROVAL QUEUE</div>
-            <div style={{ flex: 1 }}/>
-            <button className="btn ghost sm" onClick={() => setDcTick(t => t + 1)}>
-              <Icon.Refresh width={11} height={11}/>
-            </button>
-          </div>
-          {dcLoading ? (
-            <span className="faint" style={{ fontSize: 11 }}>Loading…</span>
-          ) : deviceCodes.length === 0 ? (
-            <span className="faint" style={{ fontSize: 11 }}>No pending device codes</span>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>User code</th>
-                  <th style={thStyle}>Client</th>
-                  <th style={thStyle}>Scopes</th>
-                  <th style={thStyle}>Expires</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {deviceCodes.map(dc => (
-                  <tr key={dc.user_code}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <td style={tdStyle}><span className="mono" style={{ fontSize: 11 }}>{dc.user_code}</span></td>
-                    <td style={tdStyle}><span className="faint" style={{ fontSize: 11 }}>{dc.client_id ? truncateMiddle(dc.client_id, 18) : '—'}</span></td>
-                    <td style={tdStyle}><span className="faint" style={{ fontSize: 11 }}>{Array.isArray(dc.scopes) ? dc.scopes.join(' ') : (dc.scope || '—')}</span></td>
-                    <td style={tdStyle}><span className="faint" style={{ fontSize: 11 }}>{relTime(dc.expires_at)}</span></td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                        <button
-                          className="btn ghost sm"
-                          disabled={dcActing === dc.user_code}
-                          onClick={() => deviceCodeAction(dc.user_code, 'approve')}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          className="btn ghost sm"
-                          style={{ color: 'var(--danger)' }}
-                          disabled={dcActing === dc.user_code}
-                          onClick={() => deviceCodeAction(dc.user_code, 'deny')}
-                        >
-                          Deny
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </Section>
+        <a href="/admin/settings" className="btn ghost sm" style={{ textDecoration: 'none', flexShrink: 0 }}>
+          Open Settings →
+        </a>
+      </div>
 
       {/* ═══════════════════════════════════════════════════════════════════
           Drawers
@@ -935,50 +509,6 @@ export function IdentityHub() {
             </div>
           );
         })()}
-      </Drawer>
-
-      {/* Key inspect drawer */}
-      <Drawer open={!!keyDrawer} onClose={() => setKeyDrawer(null)} title="Signing Key">
-        {keyDrawer && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {Object.entries(keyDrawer).map(([k, v]) => (
-              <div key={k}>
-                <div style={{ fontSize: 10, color: 'var(--fg-dim)', fontWeight: 500, marginBottom: 2, letterSpacing: '0.06em' }}>{k.toUpperCase()}</div>
-                <div className="row" style={{ gap: 6 }}>
-                  <span className="mono" style={{ fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{String(v)}</span>
-                  {String(v).length > 6 && <CopyField value={String(v)}/>}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Drawer>
-
-      {/* SSO inspect drawer */}
-      <Drawer open={!!ssoDrawer} onClose={() => setSsoDrawer(null)} title={ssoDrawer?.name || 'SSO Connection'}>
-        {ssoDrawer && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {Object.entries(ssoDrawer).map(([k, v]) => (
-              <div key={k}>
-                <div style={{ fontSize: 10, color: 'var(--fg-dim)', fontWeight: 500, marginBottom: 2, letterSpacing: '0.06em' }}>{k.toUpperCase()}</div>
-                <div className="row" style={{ gap: 6 }}>
-                  <span className="mono" style={{ fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{String(v)}</span>
-                  {String(v).length > 6 && <CopyField value={String(v)}/>}
-                </div>
-              </div>
-            ))}
-            <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
-              <button
-                className="btn ghost sm"
-                style={{ color: 'var(--danger)' }}
-                disabled={deletingSSO === ssoDrawer.id}
-                onClick={() => deleteSSOConn(ssoDrawer.id)}
-              >
-                {deletingSSO === ssoDrawer.id ? 'Deleting…' : 'Delete connection'}
-              </button>
-            </div>
-          </div>
-        )}
       </Drawer>
     </div>
   );

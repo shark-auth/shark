@@ -1,0 +1,281 @@
+/* SharkAuth Demo Report — monochrome/square per .impeccable.md v3 */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #ffffff;
+  --fg: #0a0a0a;
+  --gray-100: #f5f5f5;
+  --gray-200: #e8e8e8;
+  --gray-400: #999999;
+  --gray-600: #555555;
+  --accent: #0a0a0a;
+  --border: 1px solid #e0e0e0;
+  --radius: 2px;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 0;
+}
+
+/* ── Header ── */
+.header {
+  background: var(--fg);
+  color: var(--bg);
+  padding: 20px 32px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-family: var(--font-mono);
+}
+
+.header .ts {
+  font-size: 12px;
+  color: #aaa;
+  font-family: var(--font-mono);
+}
+
+/* ── Layout ── */
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+section {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray-400);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: var(--border);
+}
+
+/* ── Breadcrumb ── */
+.breadcrumb {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.bc-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bc-label {
+  background: var(--fg);
+  color: var(--bg);
+  padding: 4px 10px;
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+
+.bc-jkt {
+  font-size: 10px;
+  color: var(--gray-400);
+  margin-top: 4px;
+  text-align: center;
+}
+
+.bc-arrow {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--gray-400);
+  font-size: 18px;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+/* ── Token cards ── */
+.token-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  border: var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.card-header {
+  background: var(--gray-100);
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-body {
+  padding: 14px;
+}
+
+.card-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.card-row .label {
+  color: var(--gray-400);
+  min-width: 70px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding-top: 1px;
+}
+
+.card-row .value {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.act-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.act-tag {
+  background: var(--gray-200);
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  font-size: 11px;
+}
+
+/* ── Collapsible JWT ── */
+.jwt-toggle {
+  background: none;
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--gray-600);
+  font-family: var(--font-mono);
+}
+
+.jwt-toggle:hover {
+  background: var(--gray-100);
+}
+
+.jwt-detail {
+  display: none;
+  margin-top: 10px;
+  background: var(--gray-100);
+  padding: 10px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  word-break: break-all;
+  position: relative;
+}
+
+.jwt-detail.open {
+  display: block;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--fg);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  padding: 2px 7px;
+  font-size: 10px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+}
+
+/* ── Vault card ── */
+.vault-card {
+  border: var(--border);
+  border-radius: var(--radius);
+}
+
+.vault-card .card-header {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.check-mark {
+  color: #2c7a2c;
+  font-weight: 700;
+}
+
+/* ── Audit table ── */
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+.audit-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray-400);
+  border-bottom: var(--border);
+}
+
+.audit-table td {
+  padding: 8px 10px;
+  border-bottom: var(--border);
+  color: var(--fg);
+}
+
+.audit-table tr:last-child td {
+  border-bottom: none;
+}
+
+.audit-table tr:hover td {
+  background: var(--gray-100);
+}

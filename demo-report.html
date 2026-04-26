@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SharkAuth · Delegation Trace · 2026-04-26 12:49:30</title>
+<style>/* SharkAuth Demo Report — monochrome/square per .impeccable.md v3 */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #ffffff;
+  --fg: #0a0a0a;
+  --gray-100: #f5f5f5;
+  --gray-200: #e8e8e8;
+  --gray-400: #999999;
+  --gray-600: #555555;
+  --accent: #0a0a0a;
+  --border: 1px solid #e0e0e0;
+  --radius: 2px;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 0;
+}
+
+/* ── Header ── */
+.header {
+  background: var(--fg);
+  color: var(--bg);
+  padding: 20px 32px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-family: var(--font-mono);
+}
+
+.header .ts {
+  font-size: 12px;
+  color: #aaa;
+  font-family: var(--font-mono);
+}
+
+/* ── Layout ── */
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+section {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray-400);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: var(--border);
+}
+
+/* ── Breadcrumb ── */
+.breadcrumb {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.bc-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bc-label {
+  background: var(--fg);
+  color: var(--bg);
+  padding: 4px 10px;
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+
+.bc-jkt {
+  font-size: 10px;
+  color: var(--gray-400);
+  margin-top: 4px;
+  text-align: center;
+}
+
+.bc-arrow {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--gray-400);
+  font-size: 18px;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+/* ── Token cards ── */
+.token-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  border: var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.card-header {
+  background: var(--gray-100);
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-body {
+  padding: 14px;
+}
+
+.card-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.card-row .label {
+  color: var(--gray-400);
+  min-width: 70px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding-top: 1px;
+}
+
+.card-row .value {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.act-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.act-tag {
+  background: var(--gray-200);
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  font-size: 11px;
+}
+
+/* ── Collapsible JWT ── */
+.jwt-toggle {
+  background: none;
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--gray-600);
+  font-family: var(--font-mono);
+}
+
+.jwt-toggle:hover {
+  background: var(--gray-100);
+}
+
+.jwt-detail {
+  display: none;
+  margin-top: 10px;
+  background: var(--gray-100);
+  padding: 10px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  word-break: break-all;
+  position: relative;
+}
+
+.jwt-detail.open {
+  display: block;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--fg);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  padding: 2px 7px;
+  font-size: 10px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+}
+
+/* ── Vault card ── */
+.vault-card {
+  border: var(--border);
+  border-radius: var(--radius);
+}
+
+.vault-card .card-header {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.check-mark {
+  color: #2c7a2c;
+  font-weight: 700;
+}
+
+/* ── Audit table ── */
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+.audit-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray-400);
+  border-bottom: var(--border);
+}
+
+.audit-table td {
+  padding: 8px 10px;
+  border-bottom: var(--border);
+  color: var(--fg);
+}
+
+.audit-table tr:last-child td {
+  border-bottom: none;
+}
+
+.audit-table tr:hover td {
+  background: var(--gray-100);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>SharkAuth · Delegation Trace</h1>
+  <span class="ts">2026-04-26 12:49:30</span>
+</div>
+
+<div class="container">
+
+  
+  <section>
+    <div class="section-title">Delegation Chain</div>
+    <div class="breadcrumb">
+      <div class="bc-node">
+        <span class="bc-label">[user]</span>
+        <span class="bc-jkt">demo-user@sharkauth.dev</span>
+      </div>
+      
+      <div class="bc-arrow">→</div>
+      <div class="bc-node">
+        <span class="bc-label">[demo-user-proxy]</span>
+        <span class="bc-jkt">jkt: NHS0..._VK0</span>
+      </div>
+      
+      <div class="bc-arrow">→</div>
+      <div class="bc-node">
+        <span class="bc-label">[demo-email-service]</span>
+        <span class="bc-jkt">jkt: OLx4...hkgU</span>
+      </div>
+      
+      <div class="bc-arrow">→</div>
+      <div class="bc-node">
+        <span class="bc-label">[demo-followup-service]</span>
+        <span class="bc-jkt">jkt: iwcw...oYC0</span>
+      </div>
+      
+    </div>
+  </section>
+
+  
+  <section>
+    <div class="section-title">Tokens</div>
+    <div class="token-grid">
+      
+      <div class="card">
+        <div class="card-header">
+          Token 1
+          <button class="jwt-toggle">show JWT</button>
+        </div>
+        <div class="card-body">
+          <div class="card-row">
+            <span class="label">sub</span>
+            <span class="value">shark_agent_bfNrnxZkvvfdnCGYuNT5G</span>
+          </div>
+          <div class="card-row">
+            <span class="label">scope</span>
+            <span class="value">email:*</span>
+          </div>
+          <div class="card-row">
+            <span class="label">cnf.jkt</span>
+            <span class="value">NHS0..._VK0</span>
+          </div>
+          <div class="card-row">
+            <span class="label">act</span>
+            <span class="value">
+              —
+            </span>
+          </div>
+          <div class="jwt-detail">
+            <button class="copy-btn">copy</button>
+            <span class="jwt-text">eyJhbGciOiJFUzI1NiIsImtpZCI6Im9YYXBvVExiZllVdHdJWFkiLCJ0eXAiOiJKV1QifQ.eyJhdWQiOlsic2hhcmtfYWdlbnRfYmZOcm54Wmt2dmZkbkNHWXVOVDVHIl0sImNsaWVudF9pZCI6InNoYXJrX2FnZW50X2JmTnJueFprdnZmZG5DR1l1TlQ1RyIsImNuZiI6eyJqa3QiOiJOSFMwR3Rzd3hfa09kNktGdTBCRDhpQk5uUVh0UlZYekRsQ2wyR0pfVkswIn0sImV4cCI6MTc3NzIzMDI3MCwiaWF0IjoxNzc3MjI5MzcwLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwODAiLCJqdGkiOiJqdGlfNTBmMWQwNmMtNmNjMy00OWFhLThhNWItOTBiOTEwNWUyM2E2Iiwic2NvcGUiOiJlbWFpbDoqIiwic3ViIjoic2hhcmtfYWdlbnRfYmZOcm54Wmt2dmZkbkNHWXVOVDVHIn0.DVr0smjDXfyPFKogDe2ILBeHk1j0L3C_pKQ74S58VmjhqlL9y0mA4y6ILp2XrZjNlt30LUm6Xp5XMrrHHs4kxw</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          Token 2
+          <button class="jwt-toggle">show JWT</button>
+        </div>
+        <div class="card-body">
+          <div class="card-row">
+            <span class="label">sub</span>
+            <span class="value">shark_agent_bfNrnxZkvvfdnCGYuNT5G</span>
+          </div>
+          <div class="card-row">
+            <span class="label">scope</span>
+            <span class="value">email:*</span>
+          </div>
+          <div class="card-row">
+            <span class="label">cnf.jkt</span>
+            <span class="value">OLx4...hkgU</span>
+          </div>
+          <div class="card-row">
+            <span class="label">act</span>
+            <span class="value">
+              
+              <span class="act-chain">
+                <span class="act-tag">shark_agent_bfNrnxZkvvfdnCGYuNT5G</span>
+              </span>
+              
+            </span>
+          </div>
+          <div class="jwt-detail">
+            <button class="copy-btn">copy</button>
+            <span class="jwt-text">eyJhbGciOiJFUzI1NiIsImtpZCI6Im9YYXBvVExiZllVdHdJWFkiLCJ0eXAiOiJKV1QifQ.eyJhY3QiOnsic3ViIjoic2hhcmtfYWdlbnRfYmZOcm54Wmt2dmZkbkNHWXVOVDVHIn0sImFnZW50X2lkIjoiYWdlbnRfM3pHLUZ3UHdaNUd5VjVvdnFERnRyIiwiYWdlbnRfbmFtZSI6ImRlbW8tdXNlci1wcm94eSIsImNsaWVudF9pZCI6InNoYXJrX2FnZW50X2JmTnJueFprdnZmZG5DR1l1TlQ1RyIsImV4cCI6MTc3NzIzMDI3MCwiaWF0IjoxNzc3MjI5MzcwLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwODAiLCJqdGkiOiJ4MHVIbkJaTFFHQmFKcjQ4TDdzS2UiLCJzY29wZSI6ImVtYWlsOioiLCJzdWIiOiJzaGFya19hZ2VudF9iZk5ybnhaa3Z2ZmRuQ0dZdU5UNUcifQ.ZxehCFM-M1MZyVbds4FZMvxcc1blSEXOUkP0j8xB-ni9ZmR19B-YgnYruiq3YutGKlIgPMyzoXHtt-05Wrpiog</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          Token 3
+          <button class="jwt-toggle">show JWT</button>
+        </div>
+        <div class="card-body">
+          <div class="card-row">
+            <span class="label">sub</span>
+            <span class="value">shark_agent_bfNrnxZkvvfdnCGYuNT5G</span>
+          </div>
+          <div class="card-row">
+            <span class="label">scope</span>
+            <span class="value">email:*</span>
+          </div>
+          <div class="card-row">
+            <span class="label">cnf.jkt</span>
+            <span class="value">iwcw...oYC0</span>
+          </div>
+          <div class="card-row">
+            <span class="label">act</span>
+            <span class="value">
+              
+              <span class="act-chain">
+                <span class="act-tag">shark_agent_GoV5vVFICUMYzA1yzY1yE</span><span class="act-tag">shark_agent_bfNrnxZkvvfdnCGYuNT5G</span>
+              </span>
+              
+            </span>
+          </div>
+          <div class="jwt-detail">
+            <button class="copy-btn">copy</button>
+            <span class="jwt-text">eyJhbGciOiJFUzI1NiIsImtpZCI6Im9YYXBvVExiZllVdHdJWFkiLCJ0eXAiOiJKV1QifQ.eyJhY3QiOnsiYWN0Ijp7InN1YiI6InNoYXJrX2FnZW50X2JmTnJueFprdnZmZG5DR1l1TlQ1RyJ9LCJzdWIiOiJzaGFya19hZ2VudF9Hb1Y1dlZGSUNVTVl6QTF5elkxeUUifSwiYWdlbnRfaWQiOiJhZ2VudF9UU3dycEotNUZwcWwwa05ZV3FvNjYiLCJhZ2VudF9uYW1lIjoiZGVtby1lbWFpbC1zZXJ2aWNlIiwiY2xpZW50X2lkIjoic2hhcmtfYWdlbnRfR29WNXZWRklDVU1ZekExeXpZMXlFIiwiZXhwIjoxNzc3MjMwMjcwLCJpYXQiOjE3NzcyMjkzNzAsImlzcyI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODA4MCIsImp0aSI6IlhKZ2NQY1FuTDN3ZUVEQUcxaEtydiIsInNjb3BlIjoiZW1haWw6KiIsInN1YiI6InNoYXJrX2FnZW50X2JmTnJueFprdnZmZG5DR1l1TlQ1RyJ9.a2x4LjsE6M_f0aVqOQFD46nwLpwRh-GwylB96pbFkADKE8cgfijtrYcuppZLy3hRa5MbQkDcsURBOWbs9rhMfA</span>
+          </div>
+        </div>
+      </div>
+      
+    </div>
+  </section>
+
+  
+  <section>
+    <div class="section-title">Vault Retrieval (the closed loop)</div>
+    <div class="vault-card card">
+      <div class="card-header">
+        followup-service called GET /api/v1/vault/google_gmail/token
+      </div>
+      <div class="card-body">
+        
+        <div class="check-row">
+          <span style="color:#999">Provider: google_gmail — vault connection not provisioned (run with a live server that has a vault entry)</span>
+        </div>
+        
+      </div>
+    </div>
+  </section>
+
+  
+  <section>
+    <div class="section-title">Audit Trail</div>
+    <table class="audit-table">
+      <thead>
+        <tr>
+          <th>time</th>
+          <th>actor</th>
+          <th>action</th>
+          <th>target</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td>2026-04-26T12:49:30-06:00</td>
+          <td>user-proxy</td>
+          <td>oauth.token.issued</td>
+          <td>-</td>
+        </tr>
+        
+        <tr>
+          <td>2026-04-26T12:49:30-06:00</td>
+          <td>email-service</td>
+          <td>oauth.token.exchanged</td>
+          <td>user-proxy</td>
+        </tr>
+        
+        <tr>
+          <td>2026-04-26T12:49:30-06:00</td>
+          <td>followup-service</td>
+          <td>oauth.token.exchanged</td>
+          <td>email-service</td>
+        </tr>
+        
+        <tr>
+          <td>2026-04-26T12:49:30-06:00</td>
+          <td>followup-service</td>
+          <td>vault.token.retrieved</td>
+          <td>gmail-conn</td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<script>// SharkAuth demo report — collapse + copy helpers (no deps)
+(function () {
+  document.querySelectorAll('.jwt-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var detail = btn.closest('.card').querySelector('.jwt-detail');
+      if (!detail) return;
+      var open = detail.classList.toggle('open');
+      btn.textContent = open ? 'hide JWT' : 'show JWT';
+    });
+  });
+
+  document.querySelectorAll('.copy-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var target = btn.closest('.jwt-detail');
+      if (!target) return;
+      var text = target.querySelector('.jwt-text');
+      var content = text ? text.textContent : target.textContent;
+      navigator.clipboard.writeText(content.trim()).then(function () {
+        var orig = btn.textContent;
+        btn.textContent = 'copied!';
+        setTimeout(function () { btn.textContent = orig; }, 1200);
+      });
+    });
+  });
+}());
+</script>
+</body>
+</html>

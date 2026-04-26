@@ -16,6 +16,7 @@ const SECTIONS = [
   { id: 'server',       label: 'Server',         desc: 'Base URL, CORS, port' },
   { id: 'tokens',       label: 'Sessions & Tokens', desc: 'Cookie + JWT lifetimes, signing key' },
   { id: 'auth_policy',  label: 'Auth Policy',    desc: 'Password rules, magic links, password reset' },
+  { id: 'oauth_sso',    label: 'OAuth & SSO',    desc: 'OAuth server, SSO connections, MFA enforcement' },
   { id: 'email',        label: 'Email Delivery', desc: 'Provider, sender, test send' },
   { id: 'oauth',        label: 'OAuth Providers', desc: 'Per-provider credentials' },
   { id: 'audit',        label: 'Audit & Data',   desc: 'Retention, purge, export' },
@@ -280,6 +281,54 @@ export function Settings() {
   const [drawer, setDrawer] = React.useState(null);
   const [rotating, setRotating] = React.useState(false);
 
+  // OAuth & SSO section state (moved from Identity Hub — source of truth here)
+  const adminKey = typeof localStorage !== 'undefined' ? localStorage.getItem('shark_admin_key') || '' : '';
+  const authHeaders = { Authorization: `Bearer ${adminKey}`, 'Content-Type': 'application/json' };
+
+  const [ssoConns, setSsoConns] = React.useState([]);
+  const [ssoLoading, setSsoLoading] = React.useState(false);
+  const [ssoTick, setSsoTick] = React.useState(0);
+  const [ssoDrawer, setSsoDrawer] = React.useState(null);
+  const [deletingSSO, setDeletingSSO] = React.useState(null);
+
+  const [deviceCodes, setDeviceCodes] = React.useState([]);
+  const [dcLoading, setDcLoading] = React.useState(false);
+  const [dcTick, setDcTick] = React.useState(0);
+  const [dcActing, setDcActing] = React.useState(null);
+
+  // SSO fetch
+  React.useEffect(() => {
+    setSsoLoading(true);
+    fetch('/api/v1/sso/connections', { headers: authHeaders })
+      .then(r => r.ok ? r.json() : { data: [] })
+      .then(j => { setSsoConns(j?.data || j?.connections || []); setSsoLoading(false); })
+      .catch(() => { setSsoConns([]); setSsoLoading(false); });
+  }, [ssoTick]);
+
+  // Device codes fetch
+  React.useEffect(() => {
+    setDcLoading(true);
+    fetch('/api/v1/admin/oauth/device-codes', { headers: authHeaders })
+      .then(r => r.ok ? r.json() : { data: [] })
+      .then(j => { setDeviceCodes(j?.data || j?.codes || []); setDcLoading(false); })
+      .catch(() => { setDeviceCodes([]); setDcLoading(false); });
+  }, [dcTick]);
+
+  const deleteSSOConn = async (id) => {
+    setDeletingSSO(id);
+    await fetch(`/api/v1/sso/connections/${id}`, { method: 'DELETE', headers: authHeaders }).catch(() => {});
+    setDeletingSSO(null);
+    setSsoDrawer(null);
+    setSsoTick(t => t + 1);
+  };
+
+  const deviceCodeAction = async (userCode, action) => {
+    setDcActing(userCode);
+    await fetch(`/api/v1/admin/oauth/device-codes/${userCode}/${action}`, { method: 'POST', headers: authHeaders }).catch(() => {});
+    setDcActing(null);
+    setDcTick(t => t + 1);
+  };
+
   // Initialize editable form from config payload. Sentinels:
   //  - email.api_key === '********' means "set, masked".
   React.useEffect(() => {
@@ -318,6 +367,18 @@ export function Settings() {
       audit: {
         retention:        config.audit?.retention || '30d',
         cleanup_interval: config.audit?.cleanup_interval || '1h',
+      },
+      oauth_server: {
+        enabled:                config.oauth_server?.enabled                ?? true,
+        issuer:                 config.oauth_server?.issuer                 ?? '',
+        access_token_lifetime:  config.oauth_server?.access_token_lifetime  ?? '15m',
+        refresh_token_lifetime: config.oauth_server?.refresh_token_lifetime ?? '30d',
+        require_dpop:           config.oauth_server?.require_dpop           ?? false,
+      },
+      mfa: {
+        enforcement:    config.mfa?.enforcement    ?? 'optional',
+        issuer:         config.mfa?.issuer         ?? '',
+        recovery_codes: config.mfa?.recovery_codes ?? 10,
       },
     });
   }, [config]);
@@ -361,6 +422,18 @@ export function Settings() {
         retention: config.audit?.retention || '30d',
         cleanup_interval: config.audit?.cleanup_interval || '1h',
       },
+      oauth_server: {
+        enabled:                config.oauth_server?.enabled                ?? true,
+        issuer:                 config.oauth_server?.issuer                 ?? '',
+        access_token_lifetime:  config.oauth_server?.access_token_lifetime  ?? '15m',
+        refresh_token_lifetime: config.oauth_server?.refresh_token_lifetime ?? '30d',
+        require_dpop:           config.oauth_server?.require_dpop           ?? false,
+      },
+      mfa: {
+        enforcement:    config.mfa?.enforcement    ?? 'optional',
+        issuer:         config.mfa?.issuer         ?? '',
+        recovery_codes: config.mfa?.recovery_codes ?? 10,
+      },
     };
     return JSON.stringify(baseline) !== JSON.stringify(form);
   }, [form, config]);
@@ -374,6 +447,8 @@ export function Settings() {
       if (payload.email?.api_key === '********') delete payload.email.api_key;
       // Remove empty social.redirect_url to avoid overwriting with blank.
       if (payload.social?.redirect_url === '') delete payload.social;
+      // Coerce numeric fields
+      if (payload.mfa?.recovery_codes) payload.mfa.recovery_codes = Number(payload.mfa.recovery_codes);
       await API.patch('/admin/config', payload);
       toast.success('Configuration saved');
       refresh();
@@ -574,6 +649,188 @@ export function Settings() {
             </div>
           </Section>
 
+          {/* OAuth & SSO — moved from Identity Hub. Source of truth for server-level OAuth config. */}
+          <Section id="oauth_sso" title="OAuth & SSO" desc="OAuth authorization server config, SSO connections, and MFA enforcement policy" onSection={setActive}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* OAuth Server sub-section */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em', marginBottom: 10, textTransform: 'uppercase' }}>
+                  OAuth Authorization Server
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <Field label="Enabled">
+                    <Select value={form.oauth_server.enabled ? 'true' : 'false'}
+                      onChange={v => set('oauth_server.enabled', v === 'true')}
+                      options={[{ v: 'true', l: 'On' }, { v: 'false', l: 'Off' }]}
+                      width={140}/>
+                  </Field>
+                  <Field label="Require DPoP" hint="Enforce Demonstrating Proof of Possession on all tokens">
+                    <Select value={form.oauth_server.require_dpop ? 'true' : 'false'}
+                      onChange={v => set('oauth_server.require_dpop', v === 'true')}
+                      options={[{ v: 'false', l: 'Off' }, { v: 'true', l: 'Required' }]}
+                      width={140}/>
+                  </Field>
+                  <Field label="Issuer URL" hint="Authorization server issuer (iss claim)" span={2}>
+                    <Input value={form.oauth_server.issuer} mono
+                      onChange={v => set('oauth_server.issuer', v)}
+                      placeholder="https://auth.example.com"/>
+                  </Field>
+                  <Field label="Access token lifetime">
+                    <Input value={form.oauth_server.access_token_lifetime} mono
+                      onChange={v => set('oauth_server.access_token_lifetime', v)}
+                      placeholder="15m" width={140}/>
+                  </Field>
+                  <Field label="Refresh token lifetime">
+                    <Input value={form.oauth_server.refresh_token_lifetime} mono
+                      onChange={v => set('oauth_server.refresh_token_lifetime', v)}
+                      placeholder="30d" width={140}/>
+                  </Field>
+                </div>
+
+                {/* Device code queue */}
+                <div style={{ marginTop: 14 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Device Code Queue</div>
+                    <div style={{ flex: 1 }}/>
+                    <button className="btn ghost sm" onClick={() => setDcTick(t => t + 1)}>
+                      <Icon.Refresh width={11} height={11}/>
+                    </button>
+                  </div>
+                  {dcLoading ? (
+                    <span className="faint" style={{ fontSize: 11 }}>Loading…</span>
+                  ) : deviceCodes.length === 0 ? (
+                    <span className="faint" style={{ fontSize: 11 }}>No pending device codes</span>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>User code</th>
+                          <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Client</th>
+                          <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Scopes</th>
+                          <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'right' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {deviceCodes.map(dc => (
+                          <tr key={dc.user_code}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="mono" style={{ fontSize: 11 }}>{dc.user_code}</span></td>
+                            <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="faint" style={{ fontSize: 11 }}>{dc.client_id ? dc.client_id.slice(0, 18) + (dc.client_id.length > 18 ? '…' : '') : '—'}</span></td>
+                            <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="faint" style={{ fontSize: 11 }}>{Array.isArray(dc.scopes) ? dc.scopes.join(' ') : (dc.scope || '—')}</span></td>
+                            <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)', textAlign: 'right' }}>
+                              <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                                <button className="btn ghost sm" disabled={dcActing === dc.user_code}
+                                  onClick={() => deviceCodeAction(dc.user_code, 'approve')}>Approve</button>
+                                <button className="btn ghost sm" style={{ color: 'var(--danger)' }}
+                                  disabled={dcActing === dc.user_code}
+                                  onClick={() => deviceCodeAction(dc.user_code, 'deny')}>Deny</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* MFA sub-section */}
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em', marginBottom: 10, textTransform: 'uppercase' }}>
+                  MFA Enforcement
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <Field label="Enforcement" hint="Whether MFA is required for admin users">
+                    <Select value={form.mfa.enforcement}
+                      onChange={v => set('mfa.enforcement', v)}
+                      options={[
+                        { v: 'off',      l: 'Off' },
+                        { v: 'optional', l: 'Optional' },
+                        { v: 'required', l: 'Required' },
+                      ]} width={160}/>
+                  </Field>
+                  <Field label="Recovery code count" hint="Backup codes per user">
+                    <Input value={form.mfa.recovery_codes} type="number" mono
+                      onChange={v => set('mfa.recovery_codes', v)} placeholder="10" width={80}/>
+                  </Field>
+                  <Field label="TOTP issuer" hint="Shown in authenticator apps" span={2}>
+                    <Input value={form.mfa.issuer}
+                      onChange={v => set('mfa.issuer', v)} placeholder="MyApp"/>
+                  </Field>
+                </div>
+              </div>
+
+              {/* SSO Connections sub-section */}
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>SSO Connections</div>
+                  <div style={{ flex: 1 }}/>
+                  <button className="btn ghost sm" onClick={() => setSsoTick(t => t + 1)}>
+                    <Icon.Refresh width={11} height={11}/>
+                    Refresh
+                  </button>
+                </div>
+                {ssoLoading ? (
+                  <span className="faint" style={{ fontSize: 11 }}>Loading…</span>
+                ) : ssoConns.length === 0 ? (
+                  <div>
+                    <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>No SSO connections configured.</div>
+                    <div className="faint" style={{ fontSize: 11 }}>
+                      Create via Admin API: <span className="mono" style={{ fontSize: 10.5 }}>POST /api/v1/admin/sso/connections</span>
+                    </div>
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Name / ID</th>
+                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Type</th>
+                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Domain</th>
+                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Status</th>
+                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'right' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ssoConns.map(conn => (
+                        <tr key={conn.id}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => setSsoDrawer(conn)}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}>
+                            <div>{conn.name || conn.id}</div>
+                            <div className="mono faint" style={{ fontSize: 10 }}>{conn.id ? conn.id.slice(0, 24) : ''}</div>
+                          </td>
+                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="mono faint" style={{ fontSize: 11 }}>{conn.type || conn.provider || '—'}</span></td>
+                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="faint" style={{ fontSize: 11 }}>{conn.domain || '—'}</span></td>
+                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}>
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center',
+                              height: 16, padding: '0 5px', borderRadius: 3,
+                              fontSize: 10, fontWeight: 500,
+                              background: 'var(--surface-2)',
+                              color: conn.enabled !== false ? 'var(--success)' : 'var(--fg-dim)',
+                              border: '1px solid var(--hairline)',
+                            }}>{conn.enabled !== false ? 'active' : 'disabled'}</span>
+                          </td>
+                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)', textAlign: 'right' }}>
+                            <button className="btn ghost sm" onClick={e => { e.stopPropagation(); setSsoDrawer(conn); }}>Inspect</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </Section>
+
           {/* Email Delivery */}
           <Section id="email" title="Email Delivery" desc="Outbound mail for verifications, magic links, and password resets" onSection={setActive}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -640,8 +897,8 @@ export function Settings() {
             </div>
           </Section>
 
-          {/* OAuth Providers — quick-link to Identity Hub + social redirect URL */}
-          <Section id="oauth" title="OAuth Providers" desc="Per-provider client credentials live in the Identity Hub" onSection={setActive}>
+          {/* OAuth Providers — quick-link to Identity Hub for social provider credentials */}
+          <Section id="oauth" title="OAuth Providers" desc="Social provider credentials (Google, GitHub, Apple, Discord) are configured in Identity Hub" onSection={setActive}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <Field label="OAuth redirect URL" hint="Where users land after completing OAuth — leave blank to use server default">
                 <Input value={form.social.redirect_url} mono
@@ -853,6 +1110,34 @@ export function Settings() {
       )}
       {drawer === 'rotate_key' && (
         <RotateKeyDrawer onClose={() => setDrawer(null)}/>
+      )}
+
+      {/* SSO inspect drawer — from OAuth & SSO section */}
+      {ssoDrawer && (
+        <Drawer
+          title={ssoDrawer.name || 'SSO Connection'}
+          subtitle={ssoDrawer.type || ssoDrawer.provider || ''}
+          onClose={() => setSsoDrawer(null)}
+          footer={(
+            <>
+              <button className="btn sm ghost" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                disabled={deletingSSO === ssoDrawer.id}
+                onClick={() => deleteSSOConn(ssoDrawer.id)}>
+                {deletingSSO === ssoDrawer.id ? 'Deleting…' : 'Delete connection'}
+              </button>
+              <button className="btn sm ghost" onClick={() => setSsoDrawer(null)}>Close</button>
+            </>
+          )}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {Object.entries(ssoDrawer).map(([k, v]) => (
+              <div key={k}>
+                <div style={{ fontSize: 10, color: 'var(--fg-muted)', fontWeight: 500, marginBottom: 2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{k}</div>
+                <span className="mono" style={{ fontSize: 11, wordBreak: 'break-all', color: 'var(--fg)' }}>{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        </Drawer>
       )}
     </div>
   );

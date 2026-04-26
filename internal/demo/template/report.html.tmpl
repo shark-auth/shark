@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SharkAuth · Delegation Trace · {{.GeneratedAt}}</title>
+<style>{{css}}</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>SharkAuth · Delegation Trace</h1>
+  <span class="ts">{{.GeneratedAt}}</span>
+</div>
+
+<div class="container">
+
+  <!-- Breadcrumb chain -->
+  <section>
+    <div class="section-title">Delegation Chain</div>
+    <div class="breadcrumb">
+      <div class="bc-node">
+        <span class="bc-label">[user]</span>
+        <span class="bc-jkt">demo-user@sharkauth.dev</span>
+      </div>
+      {{range $i, $a := .Agents}}
+      <div class="bc-arrow">→</div>
+      <div class="bc-node">
+        <span class="bc-label">[{{$a.Name}}]</span>
+        <span class="bc-jkt">jkt: {{shortJKT $a.JKT}}</span>
+      </div>
+      {{end}}
+    </div>
+  </section>
+
+  <!-- Token cards -->
+  <section>
+    <div class="section-title">Tokens</div>
+    <div class="token-grid">
+      {{range $i, $t := .Tokens}}
+      <div class="card">
+        <div class="card-header">
+          Token {{inc $i}}
+          <button class="jwt-toggle">show JWT</button>
+        </div>
+        <div class="card-body">
+          <div class="card-row">
+            <span class="label">sub</span>
+            <span class="value">{{if $t.Sub}}{{$t.Sub}}{{else}}—{{end}}</span>
+          </div>
+          <div class="card-row">
+            <span class="label">scope</span>
+            <span class="value">{{if $t.Scope}}{{$t.Scope}}{{else}}—{{end}}</span>
+          </div>
+          <div class="card-row">
+            <span class="label">cnf.jkt</span>
+            <span class="value">{{shortJKT $t.CNFJKT}}</span>
+          </div>
+          <div class="card-row">
+            <span class="label">act</span>
+            <span class="value">
+              {{if $t.ActChain}}
+              <span class="act-chain">
+                {{range $t.ActChain}}<span class="act-tag">{{.}}</span>{{end}}
+              </span>
+              {{else}}—{{end}}
+            </span>
+          </div>
+          <div class="jwt-detail">
+            <button class="copy-btn">copy</button>
+            <span class="jwt-text">{{$t.AccessToken}}</span>
+          </div>
+        </div>
+      </div>
+      {{end}}
+    </div>
+  </section>
+
+  <!-- Vault retrieval -->
+  <section>
+    <div class="section-title">Vault Retrieval (the closed loop)</div>
+    <div class="vault-card card">
+      <div class="card-header">
+        followup-service called GET /api/v1/vault/google_gmail/token
+      </div>
+      <div class="card-body">
+        {{if .Vault.AccessToken}}
+        <div class="check-row"><span class="check-mark">✓</span> DPoP proof valid (jkt: {{shortJKT (index .Agents 2).JKT}})</div>
+        <div class="check-row"><span class="check-mark">✓</span> Scope vault:read present</div>
+        <div class="check-row"><span class="check-mark">✓</span> User binding: demo-user@sharkauth.dev</div>
+        <div class="check-row"><span class="check-mark">✓</span> Audit event: vault.token.retrieved</div>
+        <div class="card-row" style="margin-top:12px">
+          <span class="label">provider</span>
+          <span class="value">{{.Vault.Provider}}</span>
+        </div>
+        <div class="card-row">
+          <span class="label">fetched_at</span>
+          <span class="value">{{.Vault.FetchedAt}}</span>
+        </div>
+        <div class="card-row">
+          <span class="label">access_token</span>
+          <span class="value">{{last4 .Vault.AccessToken}}</span>
+        </div>
+        {{else}}
+        <div class="check-row">
+          <span style="color:#999">Provider: {{.Vault.Provider}} — vault connection not provisioned (run with a live server that has a vault entry)</span>
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </section>
+
+  <!-- Audit table -->
+  <section>
+    <div class="section-title">Audit Trail</div>
+    <table class="audit-table">
+      <thead>
+        <tr>
+          <th>time</th>
+          <th>actor</th>
+          <th>action</th>
+          <th>target</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .AuditEvents}}
+        <tr>
+          <td>{{index . "ts"}}</td>
+          <td>{{index . "actor"}}</td>
+          <td>{{index . "action"}}</td>
+          <td>{{index . "target"}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<script>{{js}}</script>
+</body>
+</html>

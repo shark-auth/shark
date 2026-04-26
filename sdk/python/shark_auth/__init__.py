@@ -10,10 +10,18 @@ Public API
 - :class:`MagicLinkClient` — send magic-link sign-in emails
 - :class:`DPoPHTTPClient`  — DPoP-authenticated HTTP helpers (get/post/delete)
 - :func:`decode_agent_token` — verify Shark-issued agent access tokens
+- :class:`AgentTokenClaims` (claims.py) — pure JWT delegation-chain walker (W2 Method 4)
+- :class:`TokenInfo`       — active token record (W2 Method 5)
+- :class:`RevokeResult`    — revoke-all result (W2 Method 5)
+- :class:`AgentCredentials` — rotated secret (W2 Method 5)
+- :class:`AuditEvent`      — audit log entry (W2 Method 5)
+- :class:`CascadeRevokeResult` — cascade-revoke result (W2 Method 6)
+- :class:`AgentList`       — user-agent listing result (W2 Method 7)
 """
 
-from .agents import AgentsClient
+from .agents import AgentCredentials, AgentsClient, AuditEvent, RevokeResult, TokenInfo
 from .branding import BrandingClient
+from .claims import ActorClaim, AgentTokenClaims as DelegationTokenClaims
 from .client import Client
 from .device_flow import DeviceFlow, DeviceInit, TokenResponse
 from .dpop import DPoPProver
@@ -40,7 +48,7 @@ from .proxy_rules import (
 )
 from .session import AgentSession
 from .tokens import AgentTokenClaims, clear_jwks_cache, decode_agent_token, exchange_token
-from .users import UsersClient
+from .users import AgentList, CascadeRevokeResult, UsersClient
 from .vault import VaultClient, VaultToken
 
 __version__ = "0.1.0"
@@ -85,5 +93,17 @@ __all__ = [
     "DPoPHTTPClient",
     # W2 DPoP token request
     "Token",
+    # W2 Method 4 — delegation chain
+    "DelegationTokenClaims",
+    "ActorClaim",
+    # W2 Method 5 — AgentsClient extras
+    "TokenInfo",
+    "RevokeResult",
+    "AgentCredentials",
+    "AuditEvent",
+    # W2 Method 6 — cascade revoke
+    "CascadeRevokeResult",
+    # W2 Method 7 — user agent listing
+    "AgentList",
     "__version__",
 ]

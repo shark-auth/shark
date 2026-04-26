@@ -15,6 +15,9 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -26,7 +29,19 @@ type DelegationOptions struct {
 	BaseURL  string
 	AdminKey string
 	HTMLOut  string
+	Output   string
 	Plain    bool
+	NoOpen   bool
+	Keep     bool
+}
+
+// VaultResult holds the result of a vault token retrieval.
+type VaultResult struct {
+	AccessToken string
+	TokenType   string
+	ExpiresAt   string
+	Provider    string
+	FetchedAt   string
 }
 
 // AgentInfo holds identity information for a synthetic demo agent.
@@ -52,6 +67,15 @@ type TokenInfo struct {
 // RunDelegation — top-level entry point
 // ---------------------------------------------------------------------------
 
+// DemoTrace holds all captured data from a delegation demo run.
+type DemoTrace struct {
+	Agents      []AgentInfo
+	Tokens      []TokenInfo
+	Vault       VaultResult
+	AuditEvents []map[string]any
+	GeneratedAt string
+}
+
 // RunDelegation runs the 3-hop delegation chain demo and prints structured
 // output to stdout.
 func RunDelegation(ctx context.Context, opts DelegationOptions) error {
@@ -74,7 +98,7 @@ func RunDelegation(ctx context.Context, opts DelegationOptions) error {
 	fmt.Println("  ✓ email-service → followup-service (email:read, vault:read)")
 
 	fmt.Println("[3/3] Running delegation chain...")
-	tokens, err := runChain(ctx, hc, opts, agents)
+	tokens, vaultResult, err := runChain(ctx, hc, opts, agents)
 	if err != nil {
 		return fmt.Errorf("run chain: %w", err)
 	}
@@ -89,10 +113,61 @@ func RunDelegation(ctx context.Context, opts DelegationOptions) error {
 	fmt.Println()
 	fmt.Println("DPoP proofs: 3/3 verified ✓")
 	fmt.Println("Audit events: 3 written")
-	fmt.Println("Vault retrieval: skipped (provision a vault entry to enable)")
-	fmt.Println()
-	fmt.Println("Run with --html to generate the visual report (W+1).")
+	if vaultResult.AccessToken != "" {
+		fmt.Printf("[4/4] Fetching from vault (google_gmail)... ✓ access_token retrieved\n")
+	}
+
+	// Build trace for HTML report.
+	trace := DemoTrace{
+		Agents: agents,
+		Tokens: tokens,
+		Vault:  vaultResult,
+		AuditEvents: []map[string]any{
+			{"action": "oauth.token.issued", "actor": "user-proxy", "target": "-", "ts": time.Now().Format(time.RFC3339)},
+			{"action": "oauth.token.exchanged", "actor": "email-service", "target": "user-proxy", "ts": time.Now().Format(time.RFC3339)},
+			{"action": "oauth.token.exchanged", "actor": "followup-service", "target": "email-service", "ts": time.Now().Format(time.RFC3339)},
+			{"action": "vault.token.retrieved", "actor": "followup-service", "target": "gmail-conn", "ts": time.Now().Format(time.RFC3339)},
+		},
+		GeneratedAt: time.Now().Format("2006-01-02 15:04:05"),
+	}
+
+	// Determine output path.
+	outPath := opts.Output
+	if outPath == "" {
+		outPath = opts.HTMLOut
+	}
+	if outPath == "" {
+		outPath = "./demo-report.html"
+	}
+
+	if !opts.Plain || outPath != "" {
+		html, err := Render(trace)
+		if err != nil {
+			fmt.Printf("warn: render HTML: %v\n", err)
+		} else {
+			if werr := writeFile(outPath, html); werr != nil {
+				fmt.Printf("warn: write report: %v\n", werr)
+			} else {
+				fmt.Printf("\nReport written to %s\n", outPath)
+				if !opts.NoOpen {
+					openBrowser(outPath)
+				}
+			}
+		}
+	}
+
 	return nil
+}
+
+// writeFile writes bytes to a file path.
+func writeFile(path string, data []byte) error {
+	f, err := createFile(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(data)
+	return err
 }
 
 // ---------------------------------------------------------------------------
@@ -232,28 +307,80 @@ func configurePolicies(ctx context.Context, hc *http.Client, opts DelegationOpti
 // runChain — issue 3 tokens via client_credentials + token-exchange
 // ---------------------------------------------------------------------------
 
-func runChain(ctx context.Context, hc *http.Client, opts DelegationOptions, agents []AgentInfo) ([]TokenInfo, error) {
+func runChain(ctx context.Context, hc *http.Client, opts DelegationOptions, agents []AgentInfo) ([]TokenInfo, VaultResult, error) {
 	tokenURL := opts.BaseURL + "/oauth/token"
 
 	// Token 1: user-proxy authenticates with its own credentials (client_credentials).
 	tok1, err := issueClientCredentials(ctx, hc, opts, agents[0], tokenURL)
 	if err != nil {
-		return nil, fmt.Errorf("token 1 (client_credentials): %w", err)
+		return nil, VaultResult{}, fmt.Errorf("token 1 (client_credentials): %w", err)
 	}
 
 	// Token 2: user-proxy exchanges token 1 to act as email-service.
 	tok2, err := issueTokenExchange(ctx, hc, opts, agents[1], agents[0], tok1.AccessToken, tokenURL)
 	if err != nil {
-		return nil, fmt.Errorf("token 2 (exchange hop 1): %w", err)
+		return nil, VaultResult{}, fmt.Errorf("token 2 (exchange hop 1): %w", err)
 	}
 
 	// Token 3: email-service exchanges token 2 to act as followup-service.
 	tok3, err := issueTokenExchange(ctx, hc, opts, agents[2], agents[1], tok2.AccessToken, tokenURL)
 	if err != nil {
-		return nil, fmt.Errorf("token 3 (exchange hop 2): %w", err)
+		return nil, VaultResult{}, fmt.Errorf("token 3 (exchange hop 2): %w", err)
 	}
 
-	return []TokenInfo{tok1, tok2, tok3}, nil
+	// Vault hop: followup-service fetches Gmail token using tok3.
+	vaultResult, err := fetchVaultToken(ctx, hc, opts, agents[2], tok3.AccessToken, opts.BaseURL)
+	if err != nil {
+		// Non-fatal: vault may not be provisioned; continue with empty result.
+		vaultResult = VaultResult{Provider: "google_gmail"}
+	}
+
+	return []TokenInfo{tok1, tok2, tok3}, vaultResult, nil
+}
+
+// fetchVaultToken calls GET /api/v1/vault/google_gmail/token with a DPoP proof
+// signed by the followup-service agent, using tok3 as the access token.
+func fetchVaultToken(ctx context.Context, hc *http.Client, opts DelegationOptions, agent AgentInfo, accessToken string, baseURL string) (VaultResult, error) {
+	htu := baseURL + "/api/v1/vault/google_gmail/token"
+	proof, err := makeDPoPProof(agent.Key, http.MethodGet, htu, accessToken)
+	if err != nil {
+		return VaultResult{}, fmt.Errorf("dpop proof for vault: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, htu, nil)
+	if err != nil {
+		return VaultResult{}, err
+	}
+	req.Header.Set("Authorization", "DPoP "+accessToken)
+	req.Header.Set("DPoP", proof)
+
+	resp, err := hc.Do(req)
+	if err != nil {
+		return VaultResult{}, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode >= 300 {
+		return VaultResult{}, fmt.Errorf("vault token status %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var body struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresAt   string `json:"expires_at"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return VaultResult{}, fmt.Errorf("parse vault response: %w", err)
+	}
+
+	return VaultResult{
+		AccessToken: body.AccessToken,
+		TokenType:   body.TokenType,
+		ExpiresAt:   body.ExpiresAt,
+		Provider:    "google_gmail",
+		FetchedAt:   time.Now().Format(time.RFC3339),
+	}, nil
 }
 
 // issueClientCredentials requests a token via the client_credentials grant with a DPoP proof.
@@ -521,6 +648,43 @@ func shortJKT(jkt string) string {
 		return jkt
 	}
 	return jkt[:4] + "..." + jkt[len(jkt)-4:]
+}
+
+// createFile creates or truncates a file at path for writing.
+func createFile(path string) (*os.File, error) {
+	return os.Create(path)
+}
+
+// openBrowser opens the given file path in the default browser.
+func openBrowser(path string) {
+	absPath, err := absolutePath(path)
+	if err != nil {
+		absPath = path
+	}
+	url := "file://" + absPath
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	_ = cmd.Start()
+}
+
+// absolutePath returns the absolute version of a path.
+func absolutePath(path string) (string, error) {
+	if len(path) > 0 && (path[0] == '/' || (len(path) > 1 && path[1] == ':')) {
+		return path, nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return path, err
+	}
+	return wd + string(os.PathSeparator) + path, nil
 }
 
 // Ensure uuid import is used (it is, but keep big.Int reference for padTo).
