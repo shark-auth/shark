@@ -485,14 +485,22 @@ func (s *Server) handleAdminDisableUserMFA(w http.ResponseWriter, r *http.Reques
 	_ = s.Store.DeleteAllMFARecoveryCodesByUserID(r.Context(), userID)
 
 	if s.AuditLogger != nil {
+		mfaMeta, _ := json.Marshal(map[string]any{
+			"target_user_id": userID,
+			"mfa_method":     "totp",
+			"reason":         "admin_reset",
+			"request_id":     r.Header.Get("X-Request-Id"),
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "admin.mfa.disabled",
 			TargetType: "user",
 			TargetID:   userID,
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
 			Status:     "success",
+			Metadata:   string(mfaMeta),
 		})
 	}
 
@@ -735,12 +743,21 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	if s.AuditLogger != nil {
+		configMeta, _ := json.Marshal(map[string]any{
+			"target_id":    "system_config",
+			"changed_by":   "admin_key",
+			"email_provider": cfg.Email.Provider,
+			"jwt_enabled":  cfg.Auth.JWT.Enabled,
+			"request_id":   r.Header.Get("X-Request-Id"),
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
 			Action:     "admin.config.updated",
 			TargetType: "system",
+			TargetID:   "system_config",
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
+			Metadata:   string(configMeta),
 		})
 	}
 

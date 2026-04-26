@@ -9,6 +9,16 @@ import { TeachEmptyState } from './TeachEmptyState'
 
 // Audit log page — live-tail event stream w/ filters, event detail, CSV export
 
+// parseMeta safely parses the metadata field which the backend stores as a TEXT JSON string.
+function parseMeta(ev: any) {
+  if (!ev) return {};
+  if (typeof ev.metadata === 'string') {
+    try { return JSON.parse(ev.metadata) || {}; }
+    catch { return {}; }
+  }
+  return ev.metadata || {};
+}
+
 const thStyle = { textAlign: 'left', padding: '7px 16px', fontSize: 10.5, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-0)', position: 'sticky', top: 0, textTransform: 'uppercase', letterSpacing: '0.05em' };
 const tdStyle = { padding: '7px 16px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'top' };
 const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: '0 0 8px' };
@@ -479,36 +489,9 @@ function Seg({ value, onChange, opts, mono }) {
 }
 
 function EventDetail({ event, allEvents, onClose }) {
-  // Use raw API payload if available, otherwise synthesize
-  const payload = event._raw || {
-    id: event.id,
-    type: event.action,
-    timestamp: new Date(event.t).toISOString(),
-    severity: event.severity,
-    actor: {
-      type: event.actor_type,
-      id: event.actor,
-      ip: event.ip,
-      user_agent: event.actor_type === 'agent' ? 'shark-sdk/2.3 (node)' : 'Mozilla/5.0 … Chrome/124',
-    },
-    target: { id: event.target, type: event.target.split('_')[0] || 'unknown' },
-    resource: 'https://api.nimbus.sh',
-    request_id: 'req_' + Math.random().toString(36).slice(2, 14),
-    session_id: event.actor_type === 'user' ? 'sess_' + Math.random().toString(36).slice(2, 10).toUpperCase() : null,
-    jti: event.target.startsWith('jti_') ? event.target : null,
-    ...(event.action.startsWith('oauth.token') ? {
-      oauth: {
-        client_id: 'cli_01HNGZK8RXT4A2VPQW',
-        scope: 'openid profile email',
-        grant_type: 'authorization_code',
-        dpop: true,
-        act: event.actor_type === 'agent' ? { sub: 'usr_7fK2a8', email: 'amelia@nimbus.sh' } : null,
-      },
-    } : {}),
-    ...(event.action === 'agent.secret.rotated' ? {
-      diff: { old_kid: 'sec_2025_Q4', new_kid: 'sec_2026_Q1', reason: 'scheduled' },
-    } : {}),
-  };
+  // Use real API payload only — never fabricate fields.
+  const raw = event._raw || {};
+  const meta = parseMeta(raw);
   const relatedEvents = (allEvents || []).filter(e => e.actor === event.actor && e.id !== event.id).slice(0, 5);
 
   return (
@@ -541,6 +524,14 @@ function EventDetail({ event, allEvents, onClose }) {
             <span className="faint">IP</span>
             <span className="mono">{event.ip}</span>
           </>}
+          <span className="faint">Request ID</span>
+          {raw.request_id
+            ? <CopyField value={raw.request_id} truncate={0}/>
+            : <span className="faint">—</span>}
+          <span className="faint">Session ID</span>
+          {raw.session_id
+            ? <CopyField value={raw.session_id} truncate={0}/>
+            : <span className="faint">—</span>}
           <span className="faint">Severity</span>
           <span>
             <span className={"chip " + (event.severity === 'danger' ? 'danger' : event.severity === 'warn' ? 'warn' : '')} style={{height:16, fontSize:9.5}}>{event.severity}</span>
@@ -549,15 +540,14 @@ function EventDetail({ event, allEvents, onClose }) {
 
         {/* Delegation chain breadcrumb — only for agent-actor events with an act claim chain */}
         {event.actor_type === 'agent' && (() => {
-          // Build chain from JWT act claim. The raw event may carry:
-          //   _raw.act_chain: [{sub, jkt, label}, ...]  (preferred, server-serialised)
-          //   _raw.oauth.act: {sub, email}              (legacy single-hop)
-          const raw = event._raw || {};
+          // Build chain from JWT act claim. The raw event may carry act_chain in metadata:
+          //   metadata.act_chain: [{sub, jkt, label}, ...]  (preferred, server-serialised)
+          //   metadata.oauth.act: {sub, email}              (legacy single-hop)
           const actChain: Array<{sub: string; jkt?: string; label?: string}> =
-            Array.isArray(raw.act_chain) && raw.act_chain.length > 0
-              ? raw.act_chain
-              : raw.oauth?.act
-                ? [{ sub: raw.oauth.act.sub || '', label: raw.oauth.act.email || raw.oauth.act.sub || 'user' }]
+            Array.isArray(meta.act_chain) && meta.act_chain.length > 0
+              ? meta.act_chain
+              : meta.oauth?.act
+                ? [{ sub: meta.oauth.act.sub || '', label: meta.oauth.act.email || meta.oauth.act.sub || 'user' }]
                 : null;
 
           if (!actChain) return null;
@@ -568,13 +558,11 @@ function EventDetail({ event, allEvents, onClose }) {
             { sub: event.actor, label: event.actor },
           ];
 
-          // may_act rule — read from raw metadata
+          // may_act rule — read from parsed metadata only, no fabrication
           const mayActRule: string | null =
-            raw.may_act_rule ||
-            raw.policy_may_act ||
-            (actChain.length >= 1
-              ? `${actChain[actChain.length - 1].label || actChain[actChain.length - 1].sub} → ${event.actor}`
-              : null);
+            meta.may_act_rule ||
+            meta.policy_may_act ||
+            null;
 
           const chipStyle = {
             display: 'inline-flex', alignItems: 'center',
@@ -653,7 +641,7 @@ function EventDetail({ event, allEvents, onClose }) {
           fontSize: 10.5, lineHeight: 1.55, fontFamily: 'var(--font-mono)',
           overflowX: 'auto',
           color: 'var(--fg)',
-        }}>{JSON.stringify(payload, null, 2)}</pre>
+        }}>{JSON.stringify(raw, null, 2)}</pre>
 
         <h4 style={{...sectionLabelStyle, marginTop: 18}}>Related events</h4>
         <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>

@@ -18,6 +18,7 @@ import (
 	"github.com/ory/fosite/token/jwt"
 
 	authjwt "github.com/sharkauth/sharkauth/internal/auth/jwt"
+	"github.com/sharkauth/sharkauth/internal/audit"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
@@ -32,6 +33,7 @@ type Server struct {
 	SigningKeyID   string               // kid of the active ES256 signing key
 	signingPrivKey *ecdsa.PrivateKey    // ES256 private key; used by Sign() / token exchange
 	DPoPCache      *DPoPJTICache        // replay protection for DPoP JTIs
+	AuditLogger    *audit.Logger        // nil-safe; writes oauth.token.exchanged rows
 }
 
 // NewServer creates an OAuth 2.1 server. It manages its own ES256 signing key

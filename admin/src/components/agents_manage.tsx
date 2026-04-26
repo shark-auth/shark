@@ -1535,8 +1535,14 @@ function DelegationsTab({ agent, setPage }) {
 
         const outItems = outData?.data || outData?.items || [];
         const inItems = (inData?.data || inData?.items || []).filter(ev => {
-          const chain = ev.act_chain || ev?.metadata?.act_chain || ev?.meta?.act_chain || [];
-          return chain.some(n => n.sub === agent.id || n.agent_id === agent.id);
+          let parsedMeta: Record<string, any> = {};
+          if (typeof ev?.metadata === 'string') {
+            try { parsedMeta = JSON.parse(ev.metadata) || {}; } catch { parsedMeta = {}; }
+          } else if (ev?.metadata && typeof ev.metadata === 'object') {
+            parsedMeta = ev.metadata;
+          }
+          const chain = ev.act_chain || parsedMeta.act_chain || ev?.meta?.act_chain || [];
+          return chain.some((n: any) => n.sub === agent.id || n.agent_id === agent.id);
         });
 
         setOutbound(groupByCounterpart(outItems, agent.id, 'outbound'));

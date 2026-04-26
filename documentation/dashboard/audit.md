@@ -98,3 +98,34 @@ clickable (no `/agents/` route for human accounts).
 - Square corners (`border-radius: 3px`) throughout
 - Font: `var(--font-mono)` for all identifiers
 - Success tick uses `var(--success, #22c55e)` with graceful fallback
+
+---
+
+## Missing-field rendering (no fabrication)
+
+The Event Detail drawer renders only fields actually returned by the backend.
+Fields the backend has not populated are shown as an em-dash placeholder:
+
+```
+<span className="faint">—</span>
+```
+
+Specifically:
+
+| Field        | Source                                   | If absent |
+|--------------|------------------------------------------|-----------|
+| `request_id` | `event._raw.request_id` (DB column)      | `—`        |
+| `session_id` | `event._raw.session_id` (DB column)      | `—`        |
+| `act_chain`  | `parseMeta(event._raw).act_chain` (JSON) | section hidden |
+| `may_act_rule` | `parseMeta(event._raw).may_act_rule`   | row hidden |
+| `oauth.*`    | `parseMeta(event._raw).oauth.*`          | `—`        |
+
+`parseMeta()` safely parses the `metadata` TEXT column (stored as a JSON
+string by the backend). All sub-field access goes through this helper.
+
+**No `Math.random()` fallbacks exist in the drawer.** Previous fabricated
+values (random `req_*` / `sess_*` IDs that changed on every render) have been
+removed.
+
+For the canonical list of which `action` values populate which metadata fields
+see [documentation/api/audit.md](../api/audit.md).

@@ -210,6 +210,24 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		"scope", strings.Join(grantedScopes, " "),
 		"act_chain", string(actChainJSON),
 	)
+	if s.AuditLogger != nil {
+		metaMap := map[string]any{
+			"act_chain": actClaim,
+			"scope":     strings.Join(grantedScopes, " "),
+			"client_id": actingAgent.ClientID,
+			"subject":   subjectSub,
+		}
+		metaJSON, _ := json.Marshal(metaMap)
+		_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
+			Action:     "oauth.token.exchanged",
+			ActorID:    actingAgent.ID,
+			ActorType:  "agent",
+			TargetID:   subjectSub,
+			TargetType: "token",
+			Status:     "success",
+			Metadata:   string(metaJSON),
+		})
+	}
 
 	// RFC 8693 section 2.2.1 response.
 	w.Header().Set("Content-Type", "application/json")

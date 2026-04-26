@@ -14,19 +14,26 @@ import (
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
-// auditRBAC logs a global (non-org) RBAC event.
-func (s *Server) auditRBAC(ctx context.Context, action, targetType, targetID, ip, ua string) {
+// auditRBAC logs a global (non-org) RBAC event with metadata.
+func (s *Server) auditRBAC(ctx context.Context, action, targetType, targetID, ip, ua string, meta map[string]any) {
 	if s.AuditLogger == nil {
 		return
 	}
+	metaJSON := []byte("{}")
+	if meta != nil {
+		if b, err := json.Marshal(meta); err == nil {
+			metaJSON = b
+		}
+	}
 	_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
-		ActorType:  "service",
+		ActorType:  "admin",
 		Action:     action,
 		TargetType: targetType,
 		TargetID:   targetID,
 		IP:         ip,
 		UserAgent:  ua,
 		Status:     "success",
+		Metadata:   string(metaJSON),
 	})
 }
 
@@ -157,7 +164,11 @@ func (s *Server) handleCreateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditRBAC(r.Context(), "rbac.role.create", "role", role.ID, ipOf(r), uaOf(r))
+	s.auditRBAC(r.Context(), "rbac.role.create", "role", role.ID, ipOf(r), uaOf(r), map[string]any{
+		"role_id":     role.ID,
+		"role_name":   role.Name,
+		"description": role.Description,
+	})
 	writeJSON(w, http.StatusCreated, roleToResponse(role))
 }
 
@@ -453,7 +464,10 @@ func (s *Server) handleAttachPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	s.auditRBAC(r.Context(), "rbac.permission.attach", "role", roleID, ipOf(r), uaOf(r))
+	s.auditRBAC(r.Context(), "rbac.permission.attach", "role", roleID, ipOf(r), uaOf(r), map[string]any{
+		"role_id":       roleID,
+		"permission_id": req.PermissionID,
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -469,7 +483,10 @@ func (s *Server) handleDetachPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	s.auditRBAC(r.Context(), "rbac.permission.detach", "role", roleID, ipOf(r), uaOf(r))
+	s.auditRBAC(r.Context(), "rbac.permission.detach", "role", roleID, ipOf(r), uaOf(r), map[string]any{
+		"role_id":       roleID,
+		"permission_id": permID,
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -534,7 +551,10 @@ func (s *Server) handleAssignRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditRBAC(r.Context(), "rbac.role.assign", "user", userID, ipOf(r), uaOf(r))
+	s.auditRBAC(r.Context(), "rbac.role.assign", "user", userID, ipOf(r), uaOf(r), map[string]any{
+		"role_id":        req.RoleID,
+		"target_user_id": userID,
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -550,7 +570,10 @@ func (s *Server) handleRemoveRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditRBAC(r.Context(), "rbac.role.revoke", "user", userID, ipOf(r), uaOf(r))
+	s.auditRBAC(r.Context(), "rbac.role.revoke", "user", userID, ipOf(r), uaOf(r), map[string]any{
+		"role_id":        roleID,
+		"target_user_id": userID,
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

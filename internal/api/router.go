@@ -174,6 +174,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	if s.WebhookDispatcher != nil {
 		s.AuditLogger.SetDispatcher(s.WebhookDispatcher)
 	}
+	// Wire audit logger into the OAuth server so token-exchange events are persisted.
+	if s.OAuthServer != nil {
+		s.OAuthServer.AuditLogger = s.AuditLogger
+	}
 
 	// Initialize SSO manager + handlers
 	ssoManager := sso.NewSSOManager(store, sm, cfg)

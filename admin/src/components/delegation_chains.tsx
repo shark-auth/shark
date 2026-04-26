@@ -58,14 +58,26 @@ function jktShort(jkt?: string) {
   return jkt.slice(0, 4);
 }
 
+/** Parse a raw JSON metadata string (or object) into a plain object. */
+function parseMeta(ev: any): Record<string, any> {
+  if (!ev) return {};
+  if (typeof ev.metadata === 'string') {
+    try { return JSON.parse(ev.metadata) || {}; } catch { return {}; }
+  }
+  return ev.metadata || {};
+}
+
 /** Parse a raw audit-log entry into a normalised shape. */
 function normalizeEntry(e: any) {
+  const meta = parseMeta(e);
   const actChain: Array<{ sub: string; jkt?: string; label?: string }> =
     Array.isArray(e.act_chain) && e.act_chain.length > 0
       ? e.act_chain
-      : e.oauth?.act
-        ? [{ sub: e.oauth.act.sub || '', label: e.oauth.act.email || e.oauth.act.sub || 'user' }]
-        : [];
+      : Array.isArray(meta.act_chain) && meta.act_chain.length > 0
+        ? meta.act_chain
+        : e.oauth?.act
+          ? [{ sub: e.oauth.act.sub || '', label: e.oauth.act.email || e.oauth.act.sub || 'user' }]
+          : [];
 
   const rootSub = actChain.length > 0 ? (actChain[0].label || actChain[0].sub) : (e.actor_email || e.actor_id || 'unknown');
 
