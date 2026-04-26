@@ -5,12 +5,12 @@ POST /api/v1/agents/{id}/policies
 import pytest
 import requests
 
-BASE = "http://localhost:9002/api/v1"
+BASE = "http://localhost:8080/api/v1"
 
 
 @pytest.fixture(scope="module")
-def auth_headers(admin_token):
-    return {"Authorization": f"Bearer {admin_token}"}
+def auth_headers(admin_key):
+    return {"Authorization": f"Bearer {admin_key}"}
 
 
 @pytest.fixture(scope="module")

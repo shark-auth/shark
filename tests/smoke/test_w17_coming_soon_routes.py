@@ -15,7 +15,7 @@ def test_audit_endpoint_still_reachable(admin_key):
     """Compliance placeholder hints users to /audit; that page must still work."""
     r = requests.get(
         f"{BASE}/api/v1/admin/audit-logs?limit=1",
-        headers={"X-Admin-Key": admin_key},
+        headers={"Authorization": f"Bearer {admin_key}"},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -32,7 +32,7 @@ def test_agents_endpoint_still_reachable(admin_key):
     is the canonical 'something still works here' route."""
     r = requests.get(
         f"{BASE}/api/v1/agents",
-        headers={"X-Admin-Key": admin_key},
+        headers={"Authorization": f"Bearer {admin_key}"},
     )
     assert r.status_code == 200, r.text
 

@@ -54,9 +54,16 @@ def server():
     # W17: no yaml file, no --config flag. Server boots from defaults; first boot
     # auto-generates server.secret + JWT signing key + admin API key (printed to stdout).
     with open("server.log", "w") as log:
+        env = os.environ.copy()
+        # Pin DB path so the binary writes ./shark.db + ./admin.key.firstboot in
+        # the repo root, matching DB_PATH/KEY_PATH at top of this file. Without
+        # this, the binary uses the config default (data/sharkauth.db) and the
+        # admin_key fixture can't find the key file.
+        env["SHARK_DB_PATH"] = DB_PATH
         proc = subprocess.Popen(
             [BIN_PATH, "serve", "--no-prompt"],
-            stdout=log, stderr=log, text=True
+            stdout=log, stderr=log, text=True,
+            env=env,
         )
 
     start_time = time.time()
@@ -89,6 +96,16 @@ def admin_key(server):
                 return key
         time.sleep(1)
     pytest.fail(f"No admin key captured from {key_path}")
+
+# W1.5/W2 wave-test compatibility aliases — wave subagents invented these names
+# instead of reading conftest.py first. Aliases keep their tests collectable.
+@pytest.fixture(scope="session")
+def admin_token(admin_key):
+    return admin_key
+
+@pytest.fixture(scope="session")
+def shark_base_url():
+    return BASE_URL
 
 @pytest.fixture(scope="session")
 def api_session():
