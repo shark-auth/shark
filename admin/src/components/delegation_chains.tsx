@@ -9,6 +9,7 @@ import React from 'react'
 import { Icon, CopyField } from './shared'
 import { useAPI } from './api'
 import { usePageActions } from './useKeyboardShortcuts'
+import { DelegationCanvasWithProvider, toReactFlowNodes, toReactFlowEdges } from './delegation_canvas'
 
 // ─── styles reused from audit.tsx / users.tsx gold standard ───────────────────
 const thStyle: React.CSSProperties = {
@@ -252,21 +253,41 @@ function ChainDrawer({
       return next;
     });
 
-  // Real ASCII tree with box-drawing chars
-  const buildTreeLines = (segs: Chain['segments']): string[] => {
-    return segs.map((seg, i) => {
-      const label = seg.label || seg.sub;
-      const jkt = jktShort(seg.jkt);
-      const suffix = jkt ? ` (jkt:${jkt}…)` : '';
-      if (i === 0) return `${label}${suffix}`;
-      const isLast = i === segs.length - 1;
-      const indent = '│  '.repeat(i - 1);
-      const prefix = isLast ? `${indent}└─ ` : `${indent}├─ `;
-      return `${prefix}${label}${suffix}`;
-    });
-  };
+  // Build react-flow nodes/edges for the linear chain canvas
+  const chainRFNodes = React.useMemo(() => {
+    return chain.segments.map((seg, i) => ({
+      id: seg.sub || seg.label || String(i),
+      type: seg.isUser ? 'userNode' : 'agentNode',
+      position: { x: 0, y: i * 100 },
+      data: {
+        label: seg.label || seg.sub,
+        jkt: seg.jkt,
+        isUser: seg.isUser,
+      },
+    }));
+  }, [chain.segments]);
 
-  const treeLines = buildTreeLines(chain.segments);
+  const chainRFEdges = React.useMemo(() => {
+    return chain.segments.slice(1).map((seg, i) => {
+      const prev = chain.segments[i];
+      const fromId = prev.sub || prev.label || String(i);
+      const toId = seg.sub || seg.label || String(i + 1);
+      const ev = chain.events[i];
+      const ts = ev?.created_at ? new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      return {
+        id: `${fromId}->${toId}`,
+        source: fromId,
+        target: toId,
+        type: 'default',
+        markerEnd: { type: 'arrowclosed' as const, color: 'var(--fg-dim)' },
+        style: { stroke: 'var(--fg-dim)', strokeWidth: 1.5 },
+        label: ts || undefined,
+        labelStyle: { fontFamily: 'var(--font-mono)', fontSize: 9, fill: 'var(--fg-dim)' },
+        labelBgStyle: { fill: 'var(--surface-1)', fillOpacity: 1 },
+        data: { eventId: ev?.id },
+      };
+    });
+  }, [chain.segments, chain.events]);
 
   const jktChecks: Array<{ ok: boolean; reason: string }> = chain.segments.map((seg, i) => {
     if (i === 0) return { ok: true, reason: 'origin' };
@@ -315,65 +336,28 @@ function ChainDrawer({
           <CopyField value={chain.latestAt} truncate={0}/>
         </div>
 
-        {/* ASCII tree — real box-drawing chars, clickable nodes */}
+        {/* Chain canvas — React Flow linear hop layout */}
         <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Chain tree</p>
-          <pre style={{
-            margin: 0,
-            padding: '8px 10px',
-            background: 'var(--surface-1)',
+          <div style={{
             border: '1px solid var(--hairline)',
-            borderRadius: 3,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10.5,
-            lineHeight: 1.65,
-            color: 'var(--fg)',
-            overflowX: 'auto',
+            borderRadius: 0,
+            overflow: 'hidden',
+            height: Math.max(200, chain.segments.length * 100 + 40),
           }}>
-            {chain.segments.map((seg, i) => {
-              const label = seg.label || seg.sub;
-              const jkt = jktShort(seg.jkt);
-              const suffix = jkt ? ` (jkt:${jkt}…)` : '';
-              const isClickable = !seg.isUser && !!seg.sub;
-
-              let linePrefix = '';
-              if (i === 0) linePrefix = '';
-              else {
-                const indent = '│  '.repeat(i - 1);
-                const isLast = i === chain.segments.length - 1;
-                linePrefix = isLast ? `${indent}└─ ` : `${indent}├─ `;
-              }
-
-              return (
-                <React.Fragment key={i}>
-                  {linePrefix}
-                  {isClickable ? (
-                    <button
-                      onClick={() => onAgentClick(seg.sub)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        padding: 0,
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 10.5,
-                        color: 'var(--fg)',
-                        cursor: 'pointer',
-                        textDecoration: 'none',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                      onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                      title={seg.sub}
-                    >
-                      {label}{suffix}
-                    </button>
-                  ) : (
-                    <span>{label}{suffix}</span>
-                  )}
-                  {'\n'}
-                </React.Fragment>
-              );
-            })}
-          </pre>
+            <DelegationCanvasWithProvider
+              rfNodes={chainRFNodes}
+              rfEdges={chainRFEdges}
+              height={Math.max(200, chain.segments.length * 100 + 40)}
+              onNodeClick={(nodeId, nodeData) => {
+                if (!nodeData.isUser && nodeId) onAgentClick(nodeId);
+              }}
+              onEdgeClick={(edgeData) => {
+                if (edgeData?.eventId) onAuditClick(edgeData.eventId);
+              }}
+              fitView
+            />
+          </div>
         </div>
 
         {/* cnf.jkt verification per hop */}
@@ -668,20 +652,6 @@ function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] }
   return { nodes, edges: Array.from(edgeSet.values()) };
 }
 
-const NODE_W = 120;
-const NODE_H = 40;
-const LAYER_GAP = 200;
-const SLOT_GAP = 60;
-const PAD_X = 20;
-const PAD_Y = 20;
-
-function getNodePos(node: GraphNode) {
-  return {
-    x: PAD_X + node.layer * LAYER_GAP,
-    y: PAD_Y + node.slotInLayer * SLOT_GAP,
-  };
-}
-
 function ChainCanvas({
   chains,
   setPage,
@@ -691,133 +661,47 @@ function ChainCanvas({
   setPage?: (p: string, extra?: any) => void;
   onAuditClick: (id: string) => void;
 }) {
-  const { nodes, edges } = React.useMemo(() => buildGraph(chains), [chains]);
+  const { nodes: graphNodes, edges: graphEdges } = React.useMemo(() => buildGraph(chains), [chains]);
 
-  if (nodes.length === 0) {
+  const rfNodes = React.useMemo(() => toReactFlowNodes(graphNodes), [graphNodes]);
+  const rfEdges = React.useMemo(() => toReactFlowEdges(graphEdges), [graphEdges]);
+
+  if (graphNodes.length === 0) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40 }}>
-        <pre style={{
-          fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-dim)',
-          lineHeight: 1.7, textAlign: 'center' as const, margin: 0,
-          border: '1px solid var(--hairline)', borderRadius: 3,
-          padding: '20px 32px', background: 'var(--surface-1)',
-        }}>{`┌─────────────────────────────────────┐
-│   no delegation chains recorded     │
-│   in the selected time window       │
-│                                     │
-│   shark demo delegation-with-trace  │
-└─────────────────────────────────────┘`}</pre>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--fg-dim)',
+          lineHeight: 1.7,
+          textAlign: 'center' as const,
+          border: '1px solid var(--hairline)',
+          borderRadius: 3,
+          padding: '20px 32px',
+          background: 'var(--surface-1)',
+        }}>
+          No delegation chains in the selected window.<br/>
+          Run shark demo delegation-with-trace.
+        </div>
       </div>
     );
   }
 
-  // Compute viewBox dimensions
-  const maxLayer = Math.max(...nodes.map(n => n.layer));
-  const maxSlot = Math.max(...nodes.map(n => n.slotInLayer));
-  const vbW = PAD_X * 2 + (maxLayer + 1) * LAYER_GAP;
-  const vbH = PAD_Y * 2 + (maxSlot + 1) * SLOT_GAP + NODE_H;
-
-  // Build node position lookup
-  const posMap = new Map<string, { x: number; y: number }>();
-  for (const n of nodes) {
-    posMap.set(n.id, getNodePos(n));
-  }
-
   return (
-    <div style={{ overflow: 'auto', width: '100%', height: 600 }}>
-      <svg
-        viewBox={`0 0 ${vbW} ${vbH}`}
-        width={vbW}
-        height={vbH}
-        style={{ display: 'block', fontFamily: 'var(--font-mono)' }}
-      >
-        <defs>
-          <marker
-            id="arrow"
-            markerWidth="7" markerHeight="7"
-            refX="6" refY="2.5"
-            orient="auto"
-          >
-            <path d="M0,0 L0,5 L7,2.5 z" fill="var(--fg-dim)" />
-          </marker>
-        </defs>
-
-        {/* Edges */}
-        {edges.map((edge, i) => {
-          const from = posMap.get(edge.from);
-          const to = posMap.get(edge.to);
-          if (!from || !to) return null;
-          const x1 = from.x + NODE_W;
-          const y1 = from.y + NODE_H / 2;
-          const x2 = to.x;
-          const y2 = to.y + NODE_H / 2;
-          const label = `${edge.timestamp ? new Date(edge.timestamp).toLocaleTimeString() : ''} ${edge.action}`.trim();
-          return (
-            <g
-              key={`e${i}`}
-              style={{ cursor: edge.eventId ? 'pointer' : 'default' }}
-              onClick={() => edge.eventId && onAuditClick(edge.eventId)}
-            >
-              <line
-                x1={x1} y1={y1} x2={x2} y2={y2}
-                stroke="var(--hairline-strong)"
-                strokeWidth={1}
-                markerEnd="url(#arrow)"
-              />
-              <title>{label}</title>
-            </g>
-          );
-        })}
-
-        {/* Nodes */}
-        {nodes.map(node => {
-          const pos = posMap.get(node.id)!;
-          const displayLabel = node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label;
-          const isClickable = !!setPage;
-          return (
-            <g
-              key={node.id}
-              style={{ cursor: isClickable ? 'pointer' : 'default' }}
-              onClick={() => {
-                if (!setPage) return;
-                if (node.isUser) setPage('users', { userId: node.id });
-                else setPage('agents', { q: node.id });
-              }}
-            >
-              <rect
-                x={pos.x} y={pos.y}
-                width={NODE_W} height={NODE_H}
-                fill="var(--surface-1)"
-                stroke="var(--hairline-strong)"
-                strokeWidth={1}
-                rx={0}
-              />
-              <text
-                x={pos.x + NODE_W / 2}
-                y={pos.y + NODE_H / 2 - 5}
-                textAnchor="middle"
-                fontSize={9}
-                fill="var(--fg-dim)"
-                fontFamily="var(--font-mono)"
-              >
-                {node.isUser ? '[user]' : '[agent]'}
-              </text>
-              <text
-                x={pos.x + NODE_W / 2}
-                y={pos.y + NODE_H / 2 + 8}
-                textAnchor="middle"
-                fontSize={10}
-                fill="var(--fg)"
-                fontFamily="var(--font-mono)"
-              >
-                {displayLabel}
-              </text>
-              <title>{node.label}</title>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
+    <DelegationCanvasWithProvider
+      rfNodes={rfNodes}
+      rfEdges={rfEdges}
+      height={580}
+      onNodeClick={(nodeId, nodeData) => {
+        if (!setPage) return;
+        if (nodeData.isUser) setPage('users', { userId: nodeId });
+        else setPage('agents', { q: nodeId });
+      }}
+      onEdgeClick={(edgeData) => {
+        if (edgeData?.eventId) onAuditClick(edgeData.eventId);
+      }}
+      fitView
+    />
   );
 }
 
@@ -1023,23 +907,20 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
 
           {!loading && viewMode === 'list' && filteredChains.length === 0 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40 }}>
-              <pre style={{
+              <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
                 color: 'var(--fg-dim)',
                 lineHeight: 1.7,
                 textAlign: 'center' as const,
-                margin: 0,
                 border: '1px solid var(--hairline)',
                 borderRadius: 3,
                 padding: '20px 32px',
                 background: 'var(--surface-1)',
-              }}>{`┌─────────────────────────────────────┐
-│   no delegation chains recorded     │
-│   in the selected time window       │
-│                                     │
-│   shark demo delegation-with-trace  │
-└─────────────────────────────────────┘`}</pre>
+              }}>
+                No delegation chains in the selected window.<br/>
+                Run shark demo delegation-with-trace.
+              </div>
             </div>
           )}
 

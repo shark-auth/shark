@@ -849,6 +849,106 @@ func (s *Server) handleAdminListVaultConnections(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, map[string]any{"data": out, "total": len(out)})
 }
 
+// handleAdminSeedDemoVaultConnection handles POST /api/v1/admin/vault/connections/_seed_demo.
+// Admin-only. Creates a synthetic vault_connection for demo/test purposes — bypasses
+// the real OAuth browser flow. Tokens are FieldEncryptor-encrypted fake values.
+//
+// Body: {"user_id": "...", "provider_id": "...", "scopes": ["..."]}
+// Response: {"id": "vc_...", "user_id": "...", "provider_id": "...", "expires_at": "..."}
+//
+// Idempotent: if a connection already exists for (provider_id, user_id), returns it.
+func (s *Server) handleAdminSeedDemoVaultConnection(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UserID     string   `json:"user_id"`
+		ProviderID string   `json:"provider_id"`
+		Scopes     []string `json:"scopes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+	if body.UserID == "" || body.ProviderID == "" {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "user_id and provider_id required"))
+		return
+	}
+
+	// Idempotent: return existing connection if one already exists.
+	existing, _ := s.Store.GetVaultConnection(r.Context(), body.ProviderID, body.UserID)
+	if existing != nil {
+		writeJSON(w, http.StatusOK, existing)
+		return
+	}
+
+	// Generate a random suffix for the fake tokens so each seed is unique.
+	suffixBytes := make([]byte, 8)
+	if _, err := rand.Read(suffixBytes); err != nil {
+		internal(w, err)
+		return
+	}
+	suffix := hex.EncodeToString(suffixBytes)
+
+	accessTokenEnc, err := s.FieldEncryptor.Encrypt("demo_fake_access_" + suffix)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	refreshTokenEnc, err := s.FieldEncryptor.Encrypt("demo_fake_refresh_" + suffix)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	scopes := body.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
+
+	id, err := newVaultConnID()
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	now := time.Now().UTC()
+	expiresAt := now.Add(1 * time.Hour)
+	conn := &storage.VaultConnection{
+		ID:              id,
+		ProviderID:      body.ProviderID,
+		UserID:          body.UserID,
+		AccessTokenEnc:  accessTokenEnc,
+		RefreshTokenEnc: refreshTokenEnc,
+		TokenType:       "Bearer",
+		Scopes:          scopes,
+		ExpiresAt:       &expiresAt,
+		NeedsReauth:     false,
+		LastRefreshedAt: &now,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if err := s.Store.CreateVaultConnection(r.Context(), conn); err != nil {
+		internal(w, err)
+		return
+	}
+
+	s.auditVault(r, "admin", auditVaultConnectionCreated, "vault_connection", conn.ID, map[string]any{
+		"provider_id": body.ProviderID,
+		"user_id":     body.UserID,
+		"demo_seed":   true,
+	})
+
+	writeJSON(w, http.StatusCreated, conn)
+}
+
+// newVaultConnID generates a vc_<24 hex chars> connection ID using the same
+// scheme as vault.newID but without importing the internal vault package.
+func newVaultConnID() (string, error) {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "vc_" + hex.EncodeToString(b), nil
+}
+
 // handleAdminDeleteVaultConnection handles DELETE /api/v1/admin/vault/connections/{id}.
 // Cross-user revoke — admin can disconnect any vault connection without owning
 // the session. Audited as admin-actor for traceability.

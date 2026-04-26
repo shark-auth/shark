@@ -7,6 +7,7 @@ import { useToast } from './toast'
 import { usePageActions } from './useKeyboardShortcuts'
 import { TeachEmptyState } from './TeachEmptyState'
 import { useTabParam } from './useURLParams'
+import { DelegationCanvasWithProvider, toEgoLayout } from './delegation_canvas'
 
 // Agents page — OAuth 2.1 client registrations for autonomous/agent workloads
 // Table view → slide-over detail → create flow with one-time secret reveal
@@ -1548,52 +1549,6 @@ function DelegationsTab({ agent, setPage }) {
     return () => { cancelled = true; };
   }, [agent?.id]);
 
-  // ── Layout constants ──────────────────────────────────────────────────────
-  const VB_W = 800, VB_H = 400;
-  const NODE_W = 120, NODE_H = 40;
-  const CENTER_W = 140, CENTER_H = 44;
-  const CENTER_X = (VB_W - CENTER_W) / 2;  // 330
-  const CENTER_Y = 178;
-
-  const MAX_VISIBLE = 4;
-
-  const renderNode = (item, x, y, w, h, isCenter) => {
-    const name = (item.name || item.id || '').slice(0, 18);
-    const jktVal = (item.jkt || '????');
-    const jktDisplay = jktVal.length > 4 ? jktVal.slice(0, 4) : jktVal;
-    return (
-      <g key={item.id || 'center'}
-        onClick={isCenter ? undefined : () => setPage('agents', { agentId: item.id })}
-        style={{ cursor: isCenter ? 'default' : 'pointer' }}>
-        <rect x={x} y={y} width={w} height={h}
-          fill="none"
-          stroke={isCenter ? 'var(--fg)' : 'var(--fg-dim)'}
-          strokeWidth={isCenter ? 1.5 : 1}/>
-        <text x={x + w / 2} y={y + h * 0.44} textAnchor="middle"
-          fontSize={isCenter ? 12 : 11} fontFamily="monospace" fill="var(--fg)">{name}</text>
-        <text x={x + w / 2} y={y + h * 0.78} textAnchor="middle"
-          fontSize={9} fontFamily="monospace" fill="var(--fg-dim)">jkt:{jktDisplay}</text>
-      </g>
-    );
-  };
-
-  const renderEdge = (x1, y1, x2, y2, label) => {
-    const key = `${x1}-${y1}-${x2}-${y2}`;
-    const mx = (x1 + x2) / 2;
-    const my = (y1 + y2) / 2;
-    return (
-      <g key={key}>
-        <line x1={x1} y1={y1} x2={x2} y2={y2}
-          stroke="var(--fg-dim)" strokeWidth="1"
-          markerEnd="url(#arrow)"/>
-        {label && (
-          <text x={mx} y={my - 4} textAnchor="middle"
-            fontSize={8.5} fontFamily="monospace" fill="var(--fg-dim)">{label}</text>
-        )}
-      </g>
-    );
-  };
-
   // ── Loading / error ───────────────────────────────────────────────────────
   if (inbound === null || outbound === null) {
     return (
@@ -1613,94 +1568,73 @@ function DelegationsTab({ agent, setPage }) {
     );
   }
 
-  const visibleIn = inbound.slice(0, MAX_VISIBLE);
-  const moreIn = inbound.length - visibleIn.length;
-  const visibleOut = outbound.slice(0, MAX_VISIBLE);
-  const moreOut = outbound.length - visibleOut.length;
-
-  // Space nodes horizontally
-  const inSpacing = Math.min(180, (VB_W - 40) / Math.max(visibleIn.length, 1));
-  const outSpacing = Math.min(180, (VB_W - 40) / Math.max(visibleOut.length, 1));
-
-  const centerNodeItem = {
+  // ── Build react-flow ego graph ────────────────────────────────────────────
+  const centerNode = {
     id: agent.id,
-    name: agent.name || agent.client_id || agent.id,
-    jkt: agent.jkt || agent.client_id || agent.id,
+    label: agent.name || agent.client_id || agent.id,
+    isUser: false,
+    isCenter: true,
+    layer: 1,
+    slotInLayer: 0,
+    jkt: agent.jkt || agent.client_id,
   };
 
-  const centerBotX = CENTER_X + CENTER_W / 2;
-  const centerBotY = CENTER_Y + CENTER_H;
-  const centerTopX = CENTER_X + CENTER_W / 2;
-  const centerTopY = CENTER_Y;
+  const inboundNodes = inbound.map((item, i) => ({
+    id: item.id,
+    label: item.name || item.id,
+    isUser: false,
+    layer: 0,
+    slotInLayer: i,
+    jkt: item.jkt,
+  }));
+
+  const outboundNodes = outbound.map((item, i) => ({
+    id: item.id,
+    label: item.name || item.id,
+    isUser: false,
+    layer: 2,
+    slotInLayer: i,
+    jkt: item.jkt,
+  }));
+
+  const inboundEdges = inbound.map(item => ({
+    id: `in-${item.id}->${agent.id}`,
+    from: item.id,
+    to: agent.id,
+    label: [fmtTs(item.lastTs), fmtScope(item.lastScope)].filter(Boolean).join(' ') || undefined,
+    eventId: item.lastEventId,
+  }));
+
+  const outboundEdges = outbound.map(item => ({
+    id: `out-${agent.id}->${item.id}`,
+    from: agent.id,
+    to: item.id,
+    label: [fmtTs(item.lastTs), fmtScope(item.lastScope)].filter(Boolean).join(' ') || undefined,
+    eventId: item.lastEventId,
+  }));
+
+  const { rfNodes, rfEdges } = toEgoLayout(
+    centerNode,
+    inboundNodes,
+    outboundNodes,
+    inboundEdges,
+    outboundEdges,
+  );
 
   return (
-    <div style={{ padding: '12px 0', overflowX: 'auto' }}>
+    <div style={{ padding: '12px 0' }}>
       <div style={{ padding: '0 14px 6px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500 }}>
         Delegations
       </div>
-      <svg viewBox={`0 0 ${VB_W} ${VB_H}`}
-        style={{ width: '100%', height: 400, background: 'var(--surface-0)', display: 'block' }}>
-        <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
-            markerWidth="6" markerHeight="6" orient="auto">
-            <polygon points="0 0, 10 5, 0 10" fill="var(--fg-dim)"/>
-          </marker>
-        </defs>
-
-        {/* Section labels */}
-        <text x={10} y={16} fontSize={9} fontFamily="monospace" fill="var(--fg-dim)" textTransform="uppercase">
-          INBOUND
-        </text>
-        <text x={10} y={VB_H - 6} fontSize={9} fontFamily="monospace" fill="var(--fg-dim)">
-          OUTBOUND
-        </text>
-
-        {/* Inbound nodes + edges */}
-        {visibleIn.map((item, i) => {
-          const totalW = visibleIn.length * NODE_W + (visibleIn.length - 1) * (inSpacing - NODE_W);
-          const startX = (VB_W - (visibleIn.length * NODE_W + Math.max(0, visibleIn.length - 1) * 20)) / 2;
-          const nx = startX + i * (NODE_W + 20);
-          const ny = 24;
-          const nodeBotX = nx + NODE_W / 2;
-          const nodeBotY = ny + NODE_H;
-          const label = [fmtTs(item.lastTs), fmtScope(item.lastScope)].filter(Boolean).join(' ');
-          return (
-            <React.Fragment key={item.id}>
-              {renderNode(item, nx, ny, NODE_W, NODE_H, false)}
-              {renderEdge(nodeBotX, nodeBotY, centerTopX, centerTopY, label)}
-            </React.Fragment>
-          );
-        })}
-        {moreIn > 0 && (
-          <text x={VB_W - 10} y={44} textAnchor="end" fontSize={9} fontFamily="monospace" fill="var(--fg-dim)">
-            +{moreIn} more
-          </text>
-        )}
-
-        {/* Center node */}
-        {renderNode(centerNodeItem, CENTER_X, CENTER_Y, CENTER_W, CENTER_H, true)}
-
-        {/* Outbound nodes + edges */}
-        {visibleOut.map((item, i) => {
-          const startX = (VB_W - (visibleOut.length * NODE_W + Math.max(0, visibleOut.length - 1) * 20)) / 2;
-          const nx = startX + i * (NODE_W + 20);
-          const ny = VB_H - NODE_H - 28;
-          const nodeTopX = nx + NODE_W / 2;
-          const nodeTopY = ny;
-          const label = [fmtTs(item.lastTs), fmtScope(item.lastScope)].filter(Boolean).join(' ');
-          return (
-            <React.Fragment key={item.id}>
-              {renderEdge(centerBotX, centerBotY, nodeTopX, nodeTopY, label)}
-              {renderNode(item, nx, ny, NODE_W, NODE_H, false)}
-            </React.Fragment>
-          );
-        })}
-        {moreOut > 0 && (
-          <text x={VB_W - 10} y={VB_H - 30} textAnchor="end" fontSize={9} fontFamily="monospace" fill="var(--fg-dim)">
-            +{moreOut} more
-          </text>
-        )}
-      </svg>
+      <DelegationCanvasWithProvider
+        rfNodes={rfNodes}
+        rfEdges={rfEdges}
+        height={500}
+        onNodeClick={(nodeId, nodeData) => {
+          if (nodeId !== agent.id) setPage('agents', { agentId: nodeId });
+        }}
+        fitView
+      />
     </div>
   );
 }

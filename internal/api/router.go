@@ -617,6 +617,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// Accepts optional ?provider_id=<id> to filter by provider.
 			r.Get("/vault/connections", s.handleAdminListVaultConnections)
 			r.Delete("/vault/connections/{id}", s.handleAdminDeleteVaultConnection)
+			r.Post("/vault/connections/_seed_demo", s.handleAdminSeedDemoVaultConnection)
 
 			// Batch permission usage — replaces 2×N per-row API calls from
 			// the PermissionsTab with a single request. Kept in /admin group
