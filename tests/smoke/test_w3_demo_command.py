@@ -1,12 +1,6 @@
 import subprocess
 import pytest
 
-# W+1: demo command depends on /api/v1/agents/{id}/policies endpoint which is
-# not wired in router (Wave 1 Edit 3 shipped UI-only). Without the policies
-# step, the 3-hop chain can't run. Skip until the backend handler lands.
-pytestmark = pytest.mark.skip(reason="W+1: demo depends on /api/v1/agents/{id}/policies (not wired in router). Re-enable when W1 Edit 3 backend ships.")
-
-
 def test_demo_delegation_with_trace_runs(server, admin_key):
     """The demo command should run end-to-end against the running server in <30s."""
     res = subprocess.run(

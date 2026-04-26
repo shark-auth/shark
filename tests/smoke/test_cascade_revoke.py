@@ -9,17 +9,13 @@ import time
 import pytest
 import requests
 
-# W+1: backend ships the W1.5 cascade-revoke + listing endpoints
-# (commits 7f4c6d8, 7e293f0) but smoke surfaces real behavior gaps:
-#   - cascade revoke returns invalid_client error
-#   - session-token reject returns 401 not 403 (middleware order)
-#   - filter=created returns empty (admin-created agents don't link
-#     to user_id; test create_agent fixture uses admin POST not user signup)
-#   - filter=authorized returns 500 (oauth_consents JOIN edge case)
-#   - /me/agents returns empty (same created_by mismatch)
-# All real backend bugs requiring repair before this suite turns green.
-# Skipping pre-launch; repair tracked in playbook/POST_LAUNCH_BUGS.md.
-pytestmark = pytest.mark.skip(reason="W+1: 6 real backend bugs in cascade-revoke + listing — see playbook/POST_LAUNCH_BUGS.md")
+# W1.5 follow-up fixes (post triage):
+#   - filter=authorized 500 fixed: bad fromClause JOIN → IN-subquery in WHERE
+#   - filter=created empty fixed: handleCreateAgent now persists created_by from body
+#   - /me/agents + ?created_by_user_id= rely on the same created_by binding
+# Some tests may still surface tertiary issues (auth middleware order returns
+# 401 not 403 for session-cookie cascade-revoke; arguably correct HTTP semantics
+# but the test asserts 403). Run + triage remaining individually.
 
 BASE_URL = os.environ.get("BASE", "http://localhost:8080")
 

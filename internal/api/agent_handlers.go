@@ -93,6 +93,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		Metadata      map[string]any `json:"metadata"`
 		LogoURI       string         `json:"logo_uri"`
 		HomepageURI   string         `json:"homepage_uri"`
+		CreatedBy     string         `json:"created_by"` // W1.5: explicit creator-user binding for cascade-revoke
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -173,6 +174,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		Metadata:         metadata,
 		LogoURI:          req.LogoURI,
 		HomepageURI:      req.HomepageURI,
+		CreatedBy:        req.CreatedBy,
 		Active:           true,
 		CreatedAt:        now,
 		UpdatedAt:        now,

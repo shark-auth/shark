@@ -527,6 +527,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/{id}/tokens/revoke-all", s.handleRevokeAgentTokens)
 			r.Post("/{id}/rotate-secret", s.handleAgentRotateSecret)
 			r.Get("/{id}/audit", s.handleAgentAuditLogs)
+			r.Get("/{id}/policies", s.handleGetAgentPolicies)
+			r.Post("/{id}/policies", s.handlePostAgentPolicies)
 		})
 
 		// Applications (admin)

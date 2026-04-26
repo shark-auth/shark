@@ -50,17 +50,15 @@ func (s *SQLiteStore) GetAgentByClientID(ctx context.Context, clientID string) (
 
 // ListAgents returns agents with optional filtering and pagination.
 func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*Agent, int, error) {
-	// When filtering by AuthorizedByUser we need a JOIN against oauth_consents.
-	// We use a sub-select to keep the SELECT * from agents clean so scanAgentFromRows
-	// doesn't need to change.
+	// When filtering by AuthorizedByUser we add an IN-subquery against
+	// oauth_consents to the WHERE clause directly. The previous attempt
+	// embedded a WHERE inside the FROM clause and produced invalid SQL.
 	fromClause := "agents"
 	where := "1=1"
 	args := []interface{}{}
 
 	if opts.AuthorizedByUser != nil {
-		fromClause = "agents WHERE id IN (SELECT DISTINCT agent_id FROM oauth_consents WHERE user_id = ? AND revoked_at IS NULL)"
-		// Rewrite where to avoid double WHERE
-		where = "1=1"
+		where += " AND id IN (SELECT DISTINCT agent_id FROM oauth_consents WHERE user_id = ? AND revoked_at IS NULL)"
 		args = append(args, *opts.AuthorizedByUser)
 	}
 
@@ -82,16 +80,8 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 		args = append(args, *opts.CreatedByUserID)
 	}
 
-	// For the AuthorizedByUser sub-select path the fromClause already contains
-	// a WHERE clause, so we use AND to append additional filters.
-	var countQuery, selectQuery string
-	if opts.AuthorizedByUser != nil {
-		countQuery = "SELECT COUNT(*) FROM (" + fromClause + ") a WHERE " + where
-		selectQuery = "SELECT * FROM (" + fromClause + ") a WHERE " + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-	} else {
-		countQuery = "SELECT COUNT(*) FROM " + fromClause + " WHERE " + where
-		selectQuery = "SELECT * FROM " + fromClause + " WHERE " + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-	}
+	countQuery := "SELECT COUNT(*) FROM " + fromClause + " WHERE " + where
+	selectQuery := "SELECT * FROM " + fromClause + " WHERE " + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
 
 	// Count
 	var total int
