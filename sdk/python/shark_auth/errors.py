@@ -25,3 +25,21 @@ class VaultError(SharkAuthError):
 
 class TokenError(SharkAuthError):
     """Error decoding or verifying a Shark-issued agent token."""
+
+
+class OAuthError(SharkAuthError):
+    """Error returned by the OAuth token endpoint (4xx/5xx)."""
+
+    def __init__(
+        self,
+        error: str,
+        error_description: str | None = None,
+        status_code: int | None = None,
+    ) -> None:
+        msg = error
+        if error_description:
+            msg = f"{error}: {error_description}"
+        super().__init__(msg)
+        self.error = error
+        self.error_description = error_description
+        self.status_code = status_code

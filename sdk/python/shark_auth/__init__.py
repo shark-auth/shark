@@ -19,12 +19,13 @@ from .dpop import DPoPProver
 from .errors import (
     DeviceFlowError,
     DPoPError,
+    OAuthError,
     SharkAuthError,
     TokenError,
     VaultError,
 )
 from .magic_link import MagicLinkClient
-from .oauth import OAuthClient
+from .oauth import OAuthClient, Token
 from .paywall import PaywallClient
 from .proxy_lifecycle import ProxyLifecycleClient, ProxyStatus
 from .proxy_rules import (
@@ -75,7 +76,10 @@ __all__ = [
     "SharkAuthError",
     "DPoPError",
     "DeviceFlowError",
+    "OAuthError",
     "VaultError",
     "TokenError",
+    # W2 DPoP token request
+    "Token",
     "__version__",
 ]
