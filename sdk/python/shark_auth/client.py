@@ -7,6 +7,7 @@ from typing import Optional
 from . import _http
 from .agents import AgentsClient
 from .branding import BrandingClient
+from .http_client import DPoPHTTPClient
 from .paywall import PaywallClient
 from .proxy_lifecycle import ProxyLifecycleClient
 from .proxy_rules import ProxyRulesClient
@@ -25,6 +26,7 @@ class Client:
     - ``.paywall``         — paywall URL builder + HTML fetch
     - ``.users``           — user list / get / tier
     - ``.agents``          — agent register / list / revoke
+    - ``.http``            — DPoP-protected resource requests (get/post/delete)
 
     Parameters
     ----------
@@ -62,6 +64,12 @@ class Client:
         self.paywall = PaywallClient(base_url, token, session=_session)
         self.users = UsersClient(base_url, token, session=_session)
         self.agents = AgentsClient(base_url, token, session=_session)
+        # DPoP-authenticated resource client — shares the same session pool.
+        self.http = DPoPHTTPClient(base_url, session=_session)
+
+    def close(self) -> None:
+        """Close the underlying HTTP session."""
+        self.http.close()
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"Client(base_url={self.base_url!r})"

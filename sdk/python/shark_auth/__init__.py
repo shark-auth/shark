@@ -8,6 +8,7 @@ Public API
 - :class:`VaultClient`     — Shark Token Vault client
 - :class:`OAuthClient`     — RFC 7009 revoke + RFC 7662 introspect
 - :class:`MagicLinkClient` — send magic-link sign-in emails
+- :class:`DPoPHTTPClient`  — DPoP-authenticated HTTP helpers (get/post/delete)
 - :func:`decode_agent_token` — verify Shark-issued agent access tokens
 """
 
@@ -19,12 +20,14 @@ from .dpop import DPoPProver
 from .errors import (
     DeviceFlowError,
     DPoPError,
+    OAuthError,
     SharkAuthError,
     TokenError,
     VaultError,
 )
+from .http_client import DPoPHTTPClient
 from .magic_link import MagicLinkClient
-from .oauth import OAuthClient
+from .oauth import OAuthClient, Token
 from .paywall import PaywallClient
 from .proxy_lifecycle import ProxyLifecycleClient, ProxyStatus
 from .proxy_rules import (
@@ -75,7 +78,12 @@ __all__ = [
     "SharkAuthError",
     "DPoPError",
     "DeviceFlowError",
+    "OAuthError",
     "VaultError",
     "TokenError",
+    # W2 Method 3 — DPoP HTTP helpers
+    "DPoPHTTPClient",
+    # W2 DPoP token request
+    "Token",
     "__version__",
 ]
