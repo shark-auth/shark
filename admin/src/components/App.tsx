@@ -33,6 +33,7 @@ import { Walkthrough } from './Walkthrough'
 import { useKeyboardShortcuts, KeyboardCheatsheet } from './useKeyboardShortcuts'
 import { CommandPalette } from './CommandPalette'
 import { HelpButton } from './HelpButton'
+import { DelegationChains } from './delegation_chains'
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "sidebarCollapsed": false,
@@ -227,6 +228,7 @@ export function App() {
     migrations: Migrations,
     branding: Branding,
     'get-started': GetStarted,
+    'delegation-chains': DelegationChains,
   }[page] || Overview;
 
   return (

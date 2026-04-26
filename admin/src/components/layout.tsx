@@ -17,6 +17,7 @@ export const NAV = [
   ]},
   { group: 'AGENTS', items: [
     { id: 'agents', label: 'Agents', icon: 'Agent', badge: 'new' },
+    { id: 'delegation-chains', label: 'Delegation Chains', icon: 'Audit' },
     { id: 'consents', label: 'Consents', icon: 'Consent' },
     { id: 'tokens', label: 'Tokens', icon: 'Token' },
     { id: 'vault', label: 'Vault', icon: 'Vault' },
@@ -235,6 +236,7 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
     keys: 'API Keys',
     rbac: 'Roles & Permissions',
     'dev-email': 'Dev Email',
+    'delegation-chains': 'Delegation Chains',
     sso: 'SSO Connections',
     auth: 'Identity Hub',
     signing: 'Signing Keys',

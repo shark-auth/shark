@@ -147,7 +147,7 @@ def register_agent(c: Client, name: str, user_id: str) -> Agent:
     prover = DPoPProver.generate()
     body = {
         "name": name,
-        "scopes": ["email:*", "vault:read", "mcp:read", "mcp:write"],
+        "scopes": ["email:read", "email:write", "vault:read", "mcp:read", "mcp:write"],
         "grant_types": [
             "client_credentials",
             "urn:ietf:params:oauth:grant-type:token-exchange",
@@ -159,7 +159,7 @@ def register_agent(c: Client, name: str, user_id: str) -> Agent:
         fail(f"agent create failed: {r.status_code} {r.text}")
         sys.exit(1)
     a = r.json()
-    ok(f"agent {name}  (id={a['id']}  jkt={prover.thumbprint()[:12]}...)")
+    ok(f"agent {name}  (id={a['id']}  jkt={prover.jkt[:12]}...)")
     return Agent(
         id=a["id"],
         client_id=a["client_id"],
@@ -174,7 +174,7 @@ def issue_dpop_token(agent: Agent) -> str:
     proof = agent.prover.make_proof(htm="POST", htu=token_url)
     r = requests.post(
         token_url,
-        data={"grant_type": "client_credentials", "scope": "email:* vault:read"},
+        data={"grant_type": "client_credentials", "scope": "email:read email:write vault:read"},
         auth=(agent.client_id, agent.client_secret),
         headers={"DPoP": proof},
         timeout=10,
@@ -208,7 +208,7 @@ def token_exchange(c: Client, actor: Agent, subject_token: str) -> str:
             "actor_token": subject_token,
             "actor_token_type": "urn:ietf:params:oauth:token-type:access_token",
             "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
-            "scope": "email:read vault:read",
+            "scope": "email:read",
         },
         auth=(actor.client_id, actor.client_secret),
         headers={"DPoP": proof},
@@ -223,28 +223,38 @@ def token_exchange(c: Client, actor: Agent, subject_token: str) -> str:
 
 
 def vault_provision(c: Client, user_id: str) -> str | None:
-    # Best-effort — the admin vault create endpoint may differ across builds.
-    # Fall back gracefully if not present.
-    body = {
-        "user_id": user_id,
-        "provider_id": "google_gmail",
-        "refresh_token": "demo_fake_refresh_" + secrets.token_hex(8),
-        "access_token": "demo_fake_access_" + secrets.token_hex(8),
-        "expires_in": 3600,
+    # Step 1: ensure a 'google_gmail' provider exists. Connection creation
+    # requires a real OAuth flow (session-auth, browser redirect), so the
+    # tester only sets up the provider + tells the user how to finish in
+    # the dashboard. The vault hop is then exercisable on a re-run.
+    provider_body = {
+        "name": "google_gmail",
+        "display_name": "Google Gmail (demo)",
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "client_id": "demo-client-id",
+        "client_secret": "demo-client-secret",
+        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
     }
-    for path in ("/api/v1/admin/vault/connections", "/api/v1/vault/connections"):
-        r = c.post(path, json_body=body)
-        if r.status_code in (200, 201):
-            cid = r.json().get("id") or r.json().get("connection_id")
-            ok(f"vault connection provisioned  (id={cid}  provider=google_gmail)")
-            return cid
-    fail("vault provision endpoint not found — skipping vault hop")
+    r = c.post("/api/v1/vault/providers", json_body=provider_body)
+    if r.status_code in (200, 201):
+        ok("vault provider 'google_gmail' provisioned")
+    elif r.status_code == 409 or "exists" in r.text.lower():
+        ok("vault provider 'google_gmail' already exists (re-using)")
+    else:
+        fail(f"provider create failed: {r.status_code} {r.text}")
+        return None
+
+    # Connection creation requires real OAuth. Direct the operator.
+    info("Vault CONNECTION requires a real OAuth flow — auto-provisioning skipped.")
+    info(f"To finish step 7 manually, log into the dashboard as user_id={user_id}")
+    info(f"and connect the 'google_gmail' provider, then re-run this tester.")
     return None
 
 
 def vault_fetch(agent: Agent, token: str) -> bool:
     url = f"{BASE_URL}/api/v1/vault/google_gmail/token"
-    proof = agent.prover.make_proof(htm="GET", htu=url, ath=token)
+    proof = agent.prover.make_proof(htm="GET", htu=url, access_token=token)
     r = requests.get(
         url,
         headers={"Authorization": f"DPoP {token}", "DPoP": proof},
@@ -353,7 +363,7 @@ def main() -> None:
 
     # ------------------------------------------------------------------ 4
     step(4, "Configure may_act delegation policies")
-    configure_policies(c, a1, a2, ["email:*", "vault:read"])
+    configure_policies(c, a1, a2, ["email:read", "email:write", "vault:read"])
     configure_policies(c, a2, a3, ["email:read", "vault:read"])
     dashboard(f"/agents/{a1.id}", "agent drawer Delegation Policies tab shows configured policies")
     pause()
