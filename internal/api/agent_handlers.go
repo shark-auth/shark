@@ -219,6 +219,9 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 		b := v == "true" || v == "1"
 		opts.Active = &b
 	}
+	if v := q.Get("created_by_user_id"); v != "" {
+		opts.CreatedByUserID = &v
+	}
 
 	agents, total, err := s.Store.ListAgents(r.Context(), opts)
 	if err != nil {
