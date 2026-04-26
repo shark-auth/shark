@@ -115,6 +115,29 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
 
+  // First-boot: pending admin key banner
+  const [firstBootKey, setFirstBootKey] = React.useState<string>(() => {
+    try { return localStorage.getItem('shark_first_boot_pending_key') || ''; } catch { return ''; }
+  });
+  const [bannerCopied, setBannerCopied] = React.useState(false);
+
+  const dismissFirstBootBanner = () => {
+    try {
+      localStorage.removeItem('shark_first_boot_pending_key');
+      localStorage.setItem('shark_first_boot_done', '1');
+    } catch {}
+    setFirstBootKey('');
+    setPage('get-started');
+  };
+
+  const copyFirstBootKey = () => {
+    if (!firstBootKey) return;
+    navigator.clipboard.writeText(firstBootKey).then(() => {
+      setBannerCopied(true);
+      setTimeout(() => setBannerCopied(false), 2000);
+    }).catch(() => {});
+  };
+
   React.useEffect(() => {
     if (localStorage.getItem('shark_admin_onboarded') === '1' && !localStorage.getItem('shark_walkthrough_seen')) {
       setWalkthroughOpen(true);
@@ -214,6 +237,61 @@ export function App() {
         showPreview={tweaks.showPreview}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}
            data-screen-label={'01 ' + page}>
+        {firstBootKey && (
+          <div style={{
+            background: 'var(--surface-1)',
+            borderBottom: '1px solid var(--hairline-strong)',
+            padding: '12px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            flexShrink: 0,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--warn)' }}>
+              ⚠ ADMIN API KEY — YOU WILL ONLY SEE THIS ONCE
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{
+                fontFamily: 'var(--font-mono, monospace)',
+                fontSize: 13,
+                color: 'var(--fg)',
+                wordBreak: 'break-all',
+                flex: 1,
+                minWidth: 0,
+              }}>{firstBootKey}</span>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button
+                  onClick={copyFirstBootKey}
+                  style={{
+                    fontSize: 12,
+                    padding: '4px 10px',
+                    background: 'none',
+                    border: '1px solid var(--hairline-strong)',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    color: 'var(--fg)',
+                    fontFamily: 'inherit',
+                    whiteSpace: 'nowrap',
+                  }}
+                >{bannerCopied ? 'Copied!' : 'Copy'}</button>
+                <button
+                  onClick={dismissFirstBootBanner}
+                  style={{
+                    fontSize: 12,
+                    padding: '4px 10px',
+                    background: 'none',
+                    border: '1px solid var(--hairline-strong)',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    color: 'var(--fg)',
+                    fontFamily: 'inherit',
+                    whiteSpace: 'nowrap',
+                  }}
+                >Dismiss</button>
+              </div>
+            </div>
+          </div>
+        )}
         <TopBar page={page} setTweaksOpen={setTweaksOpen} onOpenPalette={() => setPaletteOpen(true)} setPage={setPage}/>
         <div style={{ flex: 1, overflow: 'hidden', animation: 'fadeIn 160ms ease-out' }}>
           <Page setPage={setPage}/>
