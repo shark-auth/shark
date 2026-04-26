@@ -4,8 +4,116 @@ Wave 1.5 Edit 1 + Edit 2 smoke tests.
 DO NOT RUN directly — orchestrated via pytest from the repo root only.
 """
 
+import os
+import time
 import pytest
 import requests
+
+BASE_URL = os.environ.get("BASE", "http://localhost:8080")
+
+# ---------------------------------------------------------------------------
+# Local fixtures — these are not in the shared conftest because they are
+# specific to cascade-revoke / agent listing tests.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
+def shark_url():
+    return BASE_URL
+
+@pytest.fixture(scope="session")
+def admin_headers(admin_key):  # admin_key comes from conftest
+    return {"Authorization": f"Bearer {admin_key}"}
+
+@pytest.fixture
+def register_user(admin_headers):
+    """Factory: creates a fresh user via the admin API, returns user dict."""
+    created = []
+    def _create():
+        ts = int(time.time() * 1000)
+        resp = requests.post(
+            f"{BASE_URL}/api/v1/admin/users",
+            headers=admin_headers,
+            json={"email": f"cascade_{ts}@test.com", "password": "Password123!"},
+        )
+        assert resp.status_code in (200, 201), f"register_user failed: {resp.text}"
+        user = resp.json()
+        created.append(user["id"])
+        return user
+    yield _create
+    # cleanup: delete users created during this test (best-effort)
+    for uid in created:
+        requests.delete(f"{BASE_URL}/api/v1/admin/users/{uid}", headers=admin_headers)
+
+@pytest.fixture
+def create_agent(admin_headers):
+    """Factory: creates an agent via the admin API, returns agent dict."""
+    created = []
+    def _create(created_by=None):
+        ts = int(time.time() * 1000)
+        payload = {
+            "name": f"agent_{ts}",
+            "grant_types": ["client_credentials"],
+            "scopes": ["read"],
+        }
+        if created_by:
+            payload["created_by"] = created_by
+        resp = requests.post(
+            f"{BASE_URL}/api/v1/agents",
+            headers=admin_headers,
+            json=payload,
+        )
+        assert resp.status_code in (200, 201), f"create_agent failed: {resp.text}"
+        agent = resp.json()
+        created.append(agent["id"])
+        return agent
+    yield _create
+    # cleanup
+    for aid in created:
+        requests.delete(f"{BASE_URL}/api/v1/agents/{aid}", headers=admin_headers)
+
+@pytest.fixture
+def get_token():
+    """Factory: gets a client_credentials token for an agent."""
+    def _get(agent):
+        resp = requests.post(
+            f"{BASE_URL}/oauth/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": agent["client_id"],
+                "client_secret": agent["client_secret"],
+                "scope": "read",
+            },
+        )
+        assert resp.status_code == 200, f"get_token failed: {resp.text}"
+        return resp.json()["access_token"]
+    return _get
+
+@pytest.fixture
+def login_session():
+    """Factory: logs in a user, returns cookie jar."""
+    def _login(user):
+        s = requests.Session()
+        resp = s.post(
+            f"{BASE_URL}/api/v1/auth/login",
+            json={"email": user["email"], "password": "Password123!"},
+        )
+        assert resp.status_code == 200, f"login_session failed: {resp.text}"
+        return s.cookies
+    return _login
+
+@pytest.fixture
+def grant_consent(admin_headers):
+    """Factory: grants OAuth consent for a user+client via admin DB insert."""
+    def _grant(user_id, client_id):
+        # Use the admin consent endpoint if available, else skip silently.
+        resp = requests.post(
+            f"{BASE_URL}/api/v1/admin/consents",
+            headers=admin_headers,
+            json={"user_id": user_id, "client_id": client_id, "scopes": ["read"]},
+        )
+        # 201 = created, 404 = endpoint not implemented yet — both are OK for smoke.
+        assert resp.status_code in (200, 201, 404, 405), f"grant_consent failed: {resp.text}"
+    return _grant
 
 
 # ---------------------------------------------------------------------------

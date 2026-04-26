@@ -9,8 +9,12 @@ import re
 
 # Configuration — W17: no yaml, no --config. Server boots from defaults.
 BASE_URL = os.environ.get("BASE", "http://localhost:8080")
-DB_PATH = "data/sharkauth.db"  # W17 default (per internal/config/config.go)
-KEY_PATH = "data/admin.key.firstboot"
+# bootstrap.go resolves DB path as: flag > SHARK_DB_PATH env > db_state > ./shark.db
+# config.go has "./data/sharkauth.db" but bootstrap takes priority. We honour the
+# env var so CI can override, and fall back to the bootstrap default ./shark.db.
+_shark_db_env = os.environ.get("SHARK_DB_PATH", "")
+DB_PATH = _shark_db_env if _shark_db_env else "shark.db"
+KEY_PATH = os.path.join(os.path.dirname(DB_PATH) or ".", "admin.key.firstboot")
 BIN_PATH = "./shark.exe" if os.name == 'nt' else "./shark"
 
 def kill_port(port):
@@ -32,8 +36,11 @@ def server():
     """Bootstrap fresh DB, config and start server for the entire session."""
     kill_port(8080)
     for f in [DB_PATH, f"{DB_PATH}-journal", f"{DB_PATH}-wal", f"{DB_PATH}-shm",
+              "shark.db", "shark.db-journal", "shark.db-wal", "shark.db-shm",
+              "data/sharkauth.db", "data/sharkauth.db-journal", "data/sharkauth.db-wal", "data/sharkauth.db-shm",
               "sharkauth.db", "sharkauth.db-journal", "sharkauth.db-wal", "sharkauth.db-shm",
               "dev.db", "dev.db-journal", "dev.db-wal", "dev.db-shm",
+              "admin.key.firstboot", "data/admin.key.firstboot",
               "server.log"]:
         if os.path.exists(f):
             try:
@@ -69,9 +76,9 @@ def server():
 
 @pytest.fixture(scope="session")
 def admin_key(server):
-    # W17: first boot writes full admin key to <db_dir>/admin.key.firstboot
-    # (terminal output is masked for security). DB lives at ./shark.db, so
-    # the key file is alongside it.
+    # W17: first boot writes full admin key to <db_dir>/admin.key.firstboot.
+    # KEY_PATH is computed from DB_PATH at module load so it always matches
+    # whichever DB the server actually opened (./shark.db by default).
     key_path = KEY_PATH
     start_time = time.time()
     while time.time() - start_time < 30:
