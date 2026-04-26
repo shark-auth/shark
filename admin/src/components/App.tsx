@@ -158,11 +158,9 @@ export function App() {
       .catch(err => { console.error('[admin] stats fetch failed:', err); });
   }, [apiKey, page]);
 
-  React.useEffect(() => {
-    if (adminConfig !== null && emailProvider !== '' && emailProvider !== 'dev' && page === 'dev-email') {
-      setPage('overview');
-    }
-  }, [adminConfig, emailProvider, page]);
+  // W18: dev-email tab is always reachable regardless of email.provider.
+  // Previous redirect kicked operators out when provider != 'dev'; the page
+  // now self-handles the empty/wrong-provider state with a banner.
 
   // Setup page: reachable without a login session (first-boot flow).
   // Check pathname (no query-string) so /admin/setup?token=... also matches.

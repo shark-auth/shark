@@ -396,10 +396,11 @@ export function DevEmail() {
       }}>
         <Icon.Mail width={30} height={30} style={{ opacity: 0.2 }}/>
         <p style={{ color: 'var(--fg-dim)', fontSize: 13, margin: 0 }}>
-          Dev Email is only available in <strong>dev mode</strong>.
+          Email provider is not <strong>dev</strong>. Outbound mail is being sent through your live provider.
         </p>
         <p style={{ color: 'var(--fg-faint)', fontSize: 12, margin: 0 }}>
-          Set <code>server.dev_mode = true</code> in your config, or use <code>shark serve --dev</code>.
+          To capture mail here instead, switch the provider to <code>dev</code> in
+          <strong> Settings → Email Delivery</strong> (or run <code>shark mode dev</code> from the CLI).
         </p>
       </div>
     );

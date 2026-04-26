@@ -734,9 +734,10 @@ export function Settings() {
               </div>
             </div>
           </Section>
-        </div>
 
         {/* ─── Danger Zone ─────────────────────────────────────────────── */}
+        {/* W18: moved INSIDE scroll container so it flows with the rest of */}
+        {/* settings instead of overlapping above as a fixed-height frame.  */}
         <div style={{ padding: '0 24px 24px' }}>
           <div style={{
             border: '1px solid color-mix(in oklch, var(--danger) 30%, var(--hairline))',
@@ -789,6 +790,7 @@ export function Settings() {
             />
           </div>
         </div>
+        </div>{/* end scroll container — Danger Zone now scrolls with sections */}
 
         <CLIFooter command="shark admin config dump"/>
 
