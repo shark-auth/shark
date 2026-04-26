@@ -99,6 +99,26 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 	return agents, total, rows.Err()
 }
 
+// ListAgentsByUserID returns all agents created by the given user.
+func (s *SQLiteStore) ListAgentsByUserID(ctx context.Context, userID string) ([]*Agent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT * FROM agents WHERE created_by = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var agents []*Agent
+	for rows.Next() {
+		a, err := s.scanAgentFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		agents = append(agents, a)
+	}
+	return agents, rows.Err()
+}
+
 // UpdateAgent updates an existing agent.
 func (s *SQLiteStore) UpdateAgent(ctx context.Context, agent *Agent) error {
 	redirectURIs, _ := json.Marshal(agent.RedirectURIs)

@@ -245,6 +245,7 @@ type Store interface {
 	GetAgentByID(ctx context.Context, id string) (*Agent, error)
 	GetAgentByClientID(ctx context.Context, clientID string) (*Agent, error)
 	ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*Agent, int, error)
+	ListAgentsByUserID(ctx context.Context, userID string) ([]*Agent, error)
 	UpdateAgent(ctx context.Context, agent *Agent) error
 	UpdateAgentSecret(ctx context.Context, id, secretHash string) error
 	DeactivateAgent(ctx context.Context, id string) error
