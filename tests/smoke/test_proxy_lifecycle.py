@@ -13,7 +13,6 @@ Handlers: internal/api/proxy_lifecycle_handlers.go
 import http.server
 import json
 import os
-import re
 import socket
 import subprocess
 import threading
@@ -21,7 +20,6 @@ import time
 
 import pytest
 import requests
-import yaml
 
 
 BIN_PATH = "./shark.exe" if os.name == "nt" else "./shark"
@@ -90,38 +88,19 @@ def lifecycle_env(tmp_path):
 
     port = find_free_port()
     base = f"http://127.0.0.1:{port}"
-    cfg_path = str(tmp_path / "lifecycle.yaml")
     log_path = str(tmp_path / "lifecycle.log")
-
-    cfg = {
-        "server": {
-            "port": port,
-            "base_url": base,
-            "secret": "lifecycle-smoke-secret-xxxxxxxxxxxxxxxxxxxxx",
-        },
-        "auth": {
-            "jwt": {
-                "enabled": True,
-                "mode": "session",
-                "issuer": base,
-                "audience": "shark-smoke",
-            }
-        },
-        "proxy": {
-            "enabled": True,
-            "upstream": f"http://127.0.0.1:{upstream.port}",
-        },
-    }
-    with open(cfg_path, "w") as f:
-        yaml.dump(cfg, f)
 
     bin_abs = os.path.abspath(BIN_PATH)
     log = open(log_path, "w")
+    env = os.environ.copy()
+    env["SHARK_PORT"] = str(port)
+    env["SHARK_DB_PATH"] = str(tmp_path / "shark.db")
     proc = subprocess.Popen(
-        [bin_abs, "serve", "--dev", "--config", cfg_path],
+        [bin_abs, "serve", "--no-prompt", "--proxy-upstream", f"http://127.0.0.1:{upstream.port}"],
         stdout=log,
         stderr=log,
         cwd=str(tmp_path),
+        env=env,
     )
 
     try:
@@ -132,17 +111,14 @@ def lifecycle_env(tmp_path):
             with open(log_path) as f:
                 pytest.fail(f"server failed to come up: {f.read()}")
 
-        admin_key = None
-        deadline = time.time() + 10
-        while time.time() < deadline and admin_key is None:
-            with open(log_path) as f:
-                m = re.findall(r"sk_live_[A-Za-z0-9_-]{30,}", f.read())
-            if m:
-                admin_key = m[-1]
+        key_file = tmp_path / "admin.key.firstboot"
+        for _ in range(50):
+            if key_file.exists():
                 break
-            time.sleep(0.2)
-        if not admin_key:
-            pytest.fail("admin key never surfaced in server log")
+            time.sleep(0.1)
+        if not key_file.exists():
+            pytest.fail(f"admin key file never appeared at {key_file}")
+        admin_key = key_file.read_text().strip()
 
         yield {"base": base, "admin_key": admin_key}
     finally:
