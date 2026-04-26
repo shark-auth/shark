@@ -96,4 +96,5 @@ func init() {
 	root.AddCommand(healthCmd)
 	root.AddCommand(versionCmd)
 	root.AddCommand(keysCmd)
+	root.AddCommand(doctorCmd)
 }
