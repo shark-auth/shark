@@ -9,7 +9,8 @@ import re
 
 # Configuration — W17: no yaml, no --config. Server boots from defaults.
 BASE_URL = os.environ.get("BASE", "http://localhost:8080")
-DB_PATH = "shark.db"  # W17 default
+DB_PATH = "data/sharkauth.db"  # W17 default (per internal/config/config.go)
+KEY_PATH = "data/admin.key.firstboot"
 BIN_PATH = "./shark.exe" if os.name == 'nt' else "./shark"
 
 def kill_port(port):
@@ -71,7 +72,7 @@ def admin_key(server):
     # W17: first boot writes full admin key to <db_dir>/admin.key.firstboot
     # (terminal output is masked for security). DB lives at ./shark.db, so
     # the key file is alongside it.
-    key_path = "admin.key.firstboot"
+    key_path = KEY_PATH
     start_time = time.time()
     while time.time() - start_time < 30:
         if os.path.exists(key_path):
