@@ -2,16 +2,14 @@ import os
 import subprocess
 import time
 import sqlite3
-import yaml
 import pytest
 import requests
 import socket
 import re
 
-# Configuration
+# Configuration — W17: no yaml, no --config. Server boots from defaults.
 BASE_URL = os.environ.get("BASE", "http://localhost:8080")
-DB_PATH = "dev.db"
-YAML_PATH = "smoke_test.yaml"
+DB_PATH = "shark.db"  # W17 default
 BIN_PATH = "./shark.exe" if os.name == 'nt' else "./shark"
 
 def kill_port(port):
@@ -32,10 +30,10 @@ def kill_port(port):
 def server():
     """Bootstrap fresh DB, config and start server for the entire session."""
     kill_port(8080)
-    for f in [DB_PATH, f"{DB_PATH}-journal", f"{DB_PATH}-wal", f"{DB_PATH}-shm", 
+    for f in [DB_PATH, f"{DB_PATH}-journal", f"{DB_PATH}-wal", f"{DB_PATH}-shm",
               "sharkauth.db", "sharkauth.db-journal", "sharkauth.db-wal", "sharkauth.db-shm",
               "dev.db", "dev.db-journal", "dev.db-wal", "dev.db-shm",
-              YAML_PATH, "server.log"]:
+              "server.log"]:
         if os.path.exists(f):
             try:
                 os.remove(f)
@@ -45,33 +43,11 @@ def server():
     if not os.path.exists(BIN_PATH):
         pytest.fail(f"Binary {BIN_PATH} not found. Build it first: go build -o {BIN_PATH} ./cmd/shark")
 
-    config = {
-        "server": {
-            "base_url": BASE_URL,
-            "secret": "change-me-this-secret-is-not-secure-at-all-abc123456789"
-        },
-        "auth": {
-            "jwt": {
-                "enabled": True,
-                "mode": "session",
-                "issuer": BASE_URL,
-                "audience": "shark-smoke"
-            }
-        },
-        "storage": {
-            "path": DB_PATH
-        },
-        "proxy": {
-            "enabled": True,
-            "upstream": "http://localhost:8080"
-        }
-    }
-    with open(YAML_PATH, 'w') as f:
-        yaml.dump(config, f)
-
+    # W17: no yaml file, no --config flag. Server boots from defaults; first boot
+    # auto-generates server.secret + JWT signing key + admin API key (printed to stdout).
     with open("server.log", "w") as log:
         proc = subprocess.Popen(
-            [BIN_PATH, "serve", "--dev", "--config", YAML_PATH],
+            [BIN_PATH, "serve", "--no-prompt"],
             stdout=log, stderr=log, text=True
         )
 
