@@ -12,7 +12,8 @@ import (
 
 // SQLiteStore implements the Store interface using SQLite.
 type SQLiteStore struct {
-	db *sql.DB
+	db   *sql.DB
+	path string // DSN / file path passed to NewSQLiteStore
 }
 
 // NewSQLiteStore opens a SQLite database at the given path and configures it
@@ -47,7 +48,7 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("enabling foreign keys: %w", err)
 	}
 
-	return &SQLiteStore{db: db}, nil
+	return &SQLiteStore{db: db, path: dsn}, nil
 }
 
 // DB returns the underlying *sql.DB.
@@ -55,9 +56,78 @@ func (s *SQLiteStore) DB() *sql.DB {
 	return s.db
 }
 
+// DBPath returns the filesystem path (or DSN) of the open SQLite database.
+func (s *SQLiteStore) DBPath() string {
+	return s.path
+}
+
 // Close closes the database connection.
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
+}
+
+// WipeAllData truncates all user-data tables while preserving goose migration
+// metadata. Used by POST /admin/system/reset to start fresh without
+// dropping and re-creating the schema.
+func (s *SQLiteStore) WipeAllData(ctx context.Context) error {
+	tables := []string{
+		"users",
+		"sessions",
+		"api_keys",
+		"oauth_accounts",
+		"passkey_credentials",
+		"magic_link_tokens",
+		"mfa_recovery_codes",
+		"roles",
+		"permissions",
+		"role_permissions",
+		"user_roles",
+		"audit_logs",
+		"organizations",
+		"organization_members",
+		"organization_invitations",
+		"webhooks",
+		"webhook_deliveries",
+		"branding",
+		"email_templates",
+		"signing_keys",
+		"revoked_jtis",
+		"applications",
+		"agents",
+		"oauth_authorization_codes",
+		"oauth_pkce_sessions",
+		"oauth_tokens",
+		"oauth_device_codes",
+		"oauth_refresh_tokens",
+		"sso_connections",
+		"sso_identities",
+		"vault_connections",
+		"proxy_rules",
+		"auth_flows",
+		"dev_emails",
+		"org_roles",
+		"org_role_permissions",
+		"user_org_roles",
+	}
+	for _, t := range tables {
+		if _, err := s.db.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+			// Ignore "no such table" — not all tables exist in all migrations.
+			if strings.Contains(err.Error(), "no such table") {
+				continue
+			}
+			return fmt.Errorf("wipe table %s: %w", t, err)
+		}
+	}
+	return nil
+}
+
+// RevokeAllAdminAPIKeys soft-deletes all API keys with "*" (admin) scope.
+func (s *SQLiteStore) RevokeAllAdminAPIKeys(ctx context.Context) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE api_keys SET revoked_at = ? WHERE scopes LIKE '%"*"%' AND revoked_at IS NULL`,
+		now)
+	return err
 }
 
 // --- Users ---

@@ -271,6 +271,7 @@ function Drawer({ title, subtitle, onClose, children, footer, width = 480 }) {
 export function Settings() {
   const { data: health } = useAPI('/admin/health');
   const { data: config, loading, refresh } = useAPI('/admin/config');
+  const { data: modeData } = useAPI('/admin/system/mode');
   const toast = useToast();
 
   const [form, setForm] = React.useState(null);
@@ -687,6 +688,60 @@ export function Settings() {
           </Section>
         </div>
 
+        {/* ─── Danger Zone ─────────────────────────────────────────────── */}
+        <div style={{ padding: '0 24px 24px' }}>
+          <div style={{
+            border: '1px solid color-mix(in oklch, var(--danger) 30%, var(--hairline))',
+            borderRadius: 5,
+            overflow: 'hidden',
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '10px 16px',
+              borderBottom: '1px solid color-mix(in oklch, var(--danger) 20%, var(--hairline))',
+              background: 'color-mix(in oklch, var(--danger) 5%, var(--surface-1))',
+              fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
+              color: 'var(--danger)', fontWeight: 600,
+            }}>
+              Danger Zone
+            </div>
+
+            {/* Mode row */}
+            <DangerRow
+              label="Mode"
+              desc={`Currently: ${modeData?.mode ?? '…'}`}
+              action={<button type="button" className="btn sm ghost" style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                onClick={() => setDrawer('swap_mode')}>Switch to {modeData?.mode === 'dev' ? 'prod' : 'dev'} mode</button>}
+            />
+
+            {/* Reset dev DB */}
+            <DangerRow
+              label="Reset dev DB"
+              desc="Wipes dev.db, regenerates secrets"
+              action={<button type="button" className="btn sm ghost" style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                onClick={() => setDrawer('reset_dev')}>Reset dev DB</button>}
+            />
+
+            {/* Reset prod DB */}
+            <DangerRow
+              label="Reset prod DB"
+              desc="Wipes shark.db, regenerates secrets"
+              action={<button type="button" className="btn sm danger"
+                onClick={() => setDrawer('reset_prod')}>Reset prod DB…</button>}
+              last={false}
+            />
+
+            {/* Rotate admin key */}
+            <DangerRow
+              label="Rotate admin key"
+              desc="Invalidates current admin key"
+              action={<button type="button" className="btn sm ghost" style={{ borderColor: 'var(--warn)', color: 'var(--warn)' }}
+                onClick={() => setDrawer('rotate_key')}>Rotate key</button>}
+              last
+            />
+          </div>
+        </div>
+
         <CLIFooter command="shark admin config dump"/>
 
         {/* Floating dirty bar — pinned to bottom of right pane */}
@@ -737,11 +792,304 @@ export function Settings() {
       {drawer === 'export_audit' && (
         <ExportAuditDrawer onClose={() => setDrawer(null)}/>
       )}
+      {drawer === 'swap_mode' && (
+        <SwapModeDrawer currentMode={modeData?.mode} onClose={() => setDrawer(null)} onDone={() => { setDrawer(null); refresh(); }}/>
+      )}
+      {drawer === 'reset_dev' && (
+        <ResetDBDrawer target="dev" onClose={() => setDrawer(null)}/>
+      )}
+      {drawer === 'reset_prod' && (
+        <ResetDBDrawer target="prod" onClose={() => setDrawer(null)}/>
+      )}
+      {drawer === 'rotate_key' && (
+        <RotateKeyDrawer onClose={() => setDrawer(null)}/>
+      )}
     </div>
   );
 }
 
 // SystemSettings alias is exported from system_settings.tsx (compat shim).
+
+// ─── DangerRow ───────────────────────────────────────────────────────────────
+function DangerRow({ label, desc, action, last = false }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 16,
+      padding: '12px 16px',
+      borderBottom: last ? 'none' : '1px solid color-mix(in oklch, var(--danger) 15%, var(--hairline))',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>{label}</div>
+        <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2, lineHeight: 1.5 }}>{desc}</div>
+      </div>
+      <div style={{ flexShrink: 0 }}>{action}</div>
+    </div>
+  );
+}
+
+// ─── SwapModeDrawer ───────────────────────────────────────────────────────────
+function SwapModeDrawer({ currentMode, onClose, onDone }) {
+  const toast = useToast();
+  const [busy, setBusy] = React.useState(false);
+  const newMode = currentMode === 'dev' ? 'prod' : 'dev';
+
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await API.post('/admin/system/swap-mode', { mode: newMode });
+      toast.success(`Mode set to ${newMode} — restart the server to activate`);
+      onDone && onDone();
+    } catch (e) {
+      toast.error(e?.message || 'Swap failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Drawer
+      title={`Switch to ${newMode} mode`}
+      subtitle={`Currently running in ${currentMode ?? '…'} mode. Takes effect on next server restart.`}
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn sm ghost" style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+            onClick={run} disabled={busy}>
+            {busy ? 'Switching…' : `Switch to ${newMode}`}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{
+          padding: 10, borderRadius: 4, fontSize: 12, lineHeight: 1.6,
+          border: '1px solid color-mix(in oklch, var(--warn) 35%, var(--hairline))',
+          background: 'color-mix(in oklch, var(--warn) 6%, var(--surface-1))',
+          color: 'var(--fg)',
+        }}>
+          The server will continue running in <strong>{currentMode}</strong> mode until restarted.
+          After restart it will open <span style={{ fontFamily: 'var(--font-mono)' }}>{newMode}.db</span>.
+        </div>
+        <div className="faint mono" style={{ fontSize: 11 }}>POST /admin/system/swap-mode</div>
+      </div>
+    </Drawer>
+  );
+}
+
+// ─── ResetDBDrawer ─────────────────────────────────────────────────────────────
+const RESET_PROD_PHRASE = 'RESET PROD';
+
+function ResetDBDrawer({ target, onClose }) {
+  const toast = useToast();
+  const [confirmText, setConfirmText] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [newKey, setNewKey] = React.useState(null);
+  const [copied, setCopied] = React.useState(false);
+  const isProd = target === 'prod';
+
+  const run = async () => {
+    if (busy) return;
+    if (isProd && confirmText !== RESET_PROD_PHRASE) return;
+    setBusy(true);
+    try {
+      const res = await API.post('/admin/system/reset', {
+        target,
+        ...(isProd ? { confirmation: confirmText } : {}),
+      });
+      if (res?.admin_key) setNewKey(res.admin_key);
+      toast.success(`${target} DB reset complete`);
+    } catch (e) {
+      toast.error(e?.message || 'Reset failed');
+      setBusy(false);
+    }
+  };
+
+  const copy = () => {
+    if (!newKey) return;
+    navigator.clipboard.writeText(newKey).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (newKey) {
+    return (
+      <Drawer
+        title="Reset complete"
+        subtitle="New admin key — shown once only"
+        onClose={onClose}
+        footer={<button className="btn sm primary" onClick={onClose}>Done</button>}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{
+            padding: 10, borderRadius: 4, fontSize: 12, lineHeight: 1.6,
+            border: '1px solid color-mix(in oklch, var(--danger) 35%, var(--hairline))',
+            background: 'color-mix(in oklch, var(--danger) 6%, var(--surface-1))',
+            color: 'var(--fg)',
+          }}>
+            Store this key now — it will never be shown again.
+          </div>
+          <div style={{
+            display: 'flex', gap: 6, alignItems: 'center',
+            padding: '8px 10px',
+            background: 'var(--surface-1)',
+            border: '1px solid var(--hairline-strong)',
+            borderRadius: 4,
+          }}>
+            <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all', color: 'var(--fg)' }}>
+              {newKey}
+            </span>
+            <button className="btn ghost sm" onClick={copy} style={{ flexShrink: 0 }}>
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      </Drawer>
+    );
+  }
+
+  return (
+    <Drawer
+      title={`Reset ${target} DB`}
+      subtitle={isProd ? 'Wipes shark.db and regenerates all secrets' : 'Wipes dev.db and regenerates all secrets'}
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn sm danger"
+            onClick={run}
+            disabled={busy || (isProd && confirmText !== RESET_PROD_PHRASE)}>
+            {busy ? 'Resetting…' : `Reset ${target} DB`}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{
+          padding: 10, borderRadius: 4, fontSize: 12, lineHeight: 1.6,
+          border: '1px solid color-mix(in oklch, var(--danger) 35%, var(--hairline))',
+          background: 'color-mix(in oklch, var(--danger) 6%, var(--surface-1))',
+          color: 'var(--fg)',
+        }}>
+          This will permanently delete all users, sessions, and secrets in the <strong>{target}</strong> database. This cannot be undone.
+        </div>
+        {isProd && (
+          <Field label={`Type "${RESET_PROD_PHRASE}" to confirm`}>
+            <input
+              autoFocus
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={RESET_PROD_PHRASE}
+              style={{
+                width: '100%', height: 28, padding: '0 8px',
+                background: 'var(--surface-1)',
+                border: '1px solid var(--hairline-strong)',
+                borderRadius: 4, fontSize: 13, color: 'var(--fg)',
+                fontFamily: 'var(--font-mono)',
+              }}/>
+          </Field>
+        )}
+        <div className="faint mono" style={{ fontSize: 11 }}>POST /admin/system/reset</div>
+      </div>
+    </Drawer>
+  );
+}
+
+// ─── RotateKeyDrawer ───────────────────────────────────────────────────────────
+function RotateKeyDrawer({ onClose }) {
+  const toast = useToast();
+  const [busy, setBusy] = React.useState(false);
+  const [newKey, setNewKey] = React.useState(null);
+  const [copied, setCopied] = React.useState(false);
+
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await API.post('/admin/system/reset', { target: 'key' });
+      if (res?.admin_key) setNewKey(res.admin_key);
+      toast.success('Admin key rotated');
+    } catch (e) {
+      toast.error(e?.message || 'Rotation failed');
+      setBusy(false);
+    }
+  };
+
+  const copy = () => {
+    if (!newKey) return;
+    navigator.clipboard.writeText(newKey).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (newKey) {
+    return (
+      <Drawer
+        title="Key rotated"
+        subtitle="New admin key — shown once only"
+        onClose={onClose}
+        footer={<button className="btn sm primary" onClick={onClose}>Done</button>}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{
+            padding: 10, borderRadius: 4, fontSize: 12, lineHeight: 1.6,
+            border: '1px solid color-mix(in oklch, var(--warn) 35%, var(--hairline))',
+            background: 'color-mix(in oklch, var(--warn) 6%, var(--surface-1))',
+            color: 'var(--fg)',
+          }}>
+            The old key is now invalid. Store the new key — it will not be shown again.
+          </div>
+          <div style={{
+            display: 'flex', gap: 6, alignItems: 'center',
+            padding: '8px 10px',
+            background: 'var(--surface-1)',
+            border: '1px solid var(--hairline-strong)',
+            borderRadius: 4,
+          }}>
+            <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all', color: 'var(--fg)' }}>
+              {newKey}
+            </span>
+            <button className="btn ghost sm" onClick={copy} style={{ flexShrink: 0 }}>
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      </Drawer>
+    );
+  }
+
+  return (
+    <Drawer
+      title="Rotate admin key"
+      subtitle="Generates a new admin API key and invalidates the current one"
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn sm ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn sm ghost" style={{ borderColor: 'var(--warn)', color: 'var(--warn)' }}
+            onClick={run} disabled={busy}>
+            {busy ? 'Rotating…' : 'Rotate key'}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{
+          padding: 10, borderRadius: 4, fontSize: 12, lineHeight: 1.6,
+          border: '1px solid color-mix(in oklch, var(--warn) 35%, var(--hairline))',
+          background: 'color-mix(in oklch, var(--warn) 6%, var(--surface-1))',
+          color: 'var(--fg)',
+        }}>
+          All existing admin sessions will be invalidated. You will need to log in again with the new key.
+        </div>
+        <div className="faint mono" style={{ fontSize: 11 }}>POST /admin/system/reset {"{"} target: "key" {"}"}</div>
+      </div>
+    </Drawer>
+  );
+}
 
 // ─── Audit CSV Export Drawer ─────────────────────────────────────────────────
 function ExportAuditDrawer({ onClose }) {

@@ -209,6 +209,7 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 	r.Use(mw.MaxBodySize(1 << 20)) // 1 MB request body limit
 	r.Use(mw.SecurityHeaders())
 	r.Use(mw.RateLimit(100, 100)) // 100 req/s burst, 100 tokens
+	r.Use(mw.Drain(globalDrain))  // Phase C: returns 503 during DB swap/reset
 
 	// CORS (must be before route handlers)
 	if len(cfg.Server.CORSOrigins) > 0 {
@@ -589,6 +590,11 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 			r.Post("/test-email", s.handleAdminTestEmail)
 			r.Get("/email-preview/{template}", s.handleAdminEmailPreview)
 			r.Post("/auth/rotate-signing-key", s.handleAdminRotateSigningKey)
+
+			// Phase C — mode + reset endpoints.
+			r.Get("/system/mode", s.handleGetMode)
+			r.Post("/system/swap-mode", s.handleSwapMode)
+			r.Post("/system/reset", s.handleReset)
 
 			// Cross-user vault connections (admin scope). The /vault/connections
 			// endpoint above is session-scoped to the calling user.
