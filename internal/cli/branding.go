@@ -12,18 +12,37 @@ import (
 	"golang.org/x/term"
 )
 
-// sharkGlyphASCII is a hand-crafted shark silhouette (~10 lines, ~50 chars wide).
-// Intentionally simple — the goal is "looks intentional", not photorealistic.
+// sharkGlyphASCII is the user-supplied shark silhouette built from musical
+// notes (♫). Source: playbook/ascii.txt (2026-04-26).
 const sharkGlyphASCII = `
-                       __
-                     _/  \________
-                   _/              \_____
-                  /        o             \>=---><>
-                 /                       /
-               _/                      _/
-              /                      _/
-         ____/_____________________/
-              \\          \\
+♫♫♫♫♫♫    ♫♫♫♫♫♫♫♫♫
+ ♫♫♫♫♫♫♫♫♫ ♫♫♫♫♫♫♫♫♫♫♫♫♫
+   ♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+     ♫♫♫♫♫♫♫♫♫♫ ♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+      ♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+        ♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+         ♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+          ♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+        ♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+      ♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+      ♫♫♫♫♫♫♫♫♫  ♫♫♫♫♫♫♫♫♫♫♫
+     ♫♫♫♫♫♫♫♫♫ ♫♫♫♫♫♫♫♫♫
+    ♫♫♫♫♫♫♫♫♫♫ ♫♫♫♫♫♫
+    ♫♫♫♫♫♫♫♫♫ ♫♫♫♫♫
+   ♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+      ♫♫♫♫♫♫ ♫♫
+      ♫♫♫♫♫♫♫
+       ♫♫♫♫♫♫               ♫♫♫♫♫
+        ♫♫♫♫♫♫♫         ♫♫♫♫♫♫♫
+         ♫♫♫♫♫♫♫♫     ♫♫♫♫♫♫♫♫
+           ♫♫♫♫♫♫♫♫  ♫♫♫♫♫♫♫♫
+             ♫♫♫♫♫♫♫♫♫♫♫♫♫♫
+                 ♫♫♫♫♫♫♫♫♫
+                    ♫♫♫♫♫♫
+                     ♫♫♫♫♫♫
+                      ♫♫♫♫♫♫
+                       ♫♫♫♫♫
+                         ♫♫♫♫
 `
 
 // PrintHeader writes the branded SharkAuth header to out.
