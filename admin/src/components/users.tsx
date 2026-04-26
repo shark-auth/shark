@@ -29,6 +29,8 @@ export function Users() {
   const [checked, setChecked] = React.useState(new Set());
   const [page, setPage] = React.useState(1);
   const [perPage] = React.useState(25);
+  // Agent counts per user — fetched in parallel on list mount, cached in map
+  const [agentCounts, setAgentCounts] = React.useState<Record<string, number>>({});
 
   // Debounce search input — 300ms
   React.useEffect(() => {
@@ -86,6 +88,29 @@ export function Users() {
     refresh();
     setSelected(newUser);
   };
+
+  // Fetch agent counts for all visible users in parallel on list change
+  React.useEffect(() => {
+    if (!rawUsers || rawUsers.length === 0) return;
+    const key = localStorage.getItem('shark_admin_key');
+    const headers: any = key ? { Authorization: `Bearer ${key}` } : {};
+    const missing = rawUsers.filter(u => !(u.id in agentCounts));
+    if (missing.length === 0) return;
+    Promise.all(
+      missing.map(u =>
+        fetch(`/api/v1/admin/agents?created_by_user_id=${encodeURIComponent(u.id)}&limit=1`, { headers })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => ({ id: u.id, count: d?.total ?? (Array.isArray(d?.data) ? d.data.length : 0) }))
+          .catch(() => ({ id: u.id, count: 0 }))
+      )
+    ).then(results => {
+      setAgentCounts(prev => {
+        const next = { ...prev };
+        for (const r of results) next[r.id] = r.count;
+        return next;
+      });
+    });
+  }, [rawUsers]);
 
   // Server now applies all filters. Pass-through.
   const users = rawUsers;
@@ -195,6 +220,7 @@ export function Users() {
                 <th style={{ width: 120, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Auth</th>
                 <th style={{ width: 140, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Orgs</th>
                 <th style={{ width: 180, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Roles</th>
+                <th style={{ width: 72, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Agents</th>
                 <th style={{ width: 100, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Created <Icon.ArrowDown width={9} height={9} style={{opacity:0.5, verticalAlign:'middle'}}/></th>
                 <th style={{ width: 110, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-muted)' }}>Last active</th>
                 <th style={{ width: 36, position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-0)' }}></th>
@@ -202,10 +228,10 @@ export function Users() {
             </thead>
             <tbody>
               {loading && users.length === 0 && (
-                <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>Loading…</td></tr>
+                <tr><td colSpan={11} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>Loading…</td></tr>
               )}
               {!loading && users.length === 0 && (
-                <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>No users found</td></tr>
+                <tr><td colSpan={11} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>No users found</td></tr>
               )}
               {users.map(u => {
                 const orgs = u.orgs || [];
@@ -272,6 +298,19 @@ export function Users() {
                         {roles.length > 2 && <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>+{roles.length - 2}</span>}
                       </div>
                     </td>
+                    <td>
+                      {u.id in agentCounts ? (
+                        <span className="mono" style={{
+                          fontSize: 10.5, padding: '1px 6px', height: 18, lineHeight: '18px',
+                          border: '1px solid var(--hairline-strong)', borderRadius: 3,
+                          display: 'inline-block', color: 'var(--fg-muted)',
+                        }}>
+                          {agentCounts[u.id]} agents
+                        </span>
+                      ) : (
+                        <span className="faint" style={{ fontSize: 11 }}>…</span>
+                      )}
+                    </td>
                     <td className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
                       {u.created_at ? MOCK.relativeTime(new Date(u.created_at).getTime()) : (u.created ? MOCK.relativeTime(u.created) : '—')}
                     </td>
@@ -326,6 +365,7 @@ export function Users() {
           }}
           onDelete={handleDelete}
           onRefreshList={refresh}
+          setPage={null}
         />
       )}
 
@@ -665,7 +705,7 @@ function MultiSelect({ items, selected, onToggle, empty }) {
   );
 }
 
-function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
+function UserSlideover({ user, onClose, onDelete, onRefreshList, setPage }) {
   // Initialize tab from URL sub-path /admin/users/<id>/<tab> when present.
   const initialTab = (() => {
     const m = window.location.pathname.match(/^\/admin\/users\/[^\/]+\/([^\/?]+)/);
@@ -693,6 +733,7 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
     { id: 'rbac', label: 'Roles' },
     { id: 'orgs', label: 'Orgs' },
     { id: 'agents', label: 'Agents' },
+    { id: 'consents', label: 'Consents' },
     { id: 'activity', label: 'Activity' },
   ];
 
@@ -767,7 +808,8 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList }) {
         {tab === 'security' && <SecurityTab user={user}/>}
         {tab === 'rbac' && <RolesTab user={user}/>}
         {tab === 'orgs' && <OrgsTab user={user}/>}
-        {tab === 'agents' && <AgentsConsentsTab user={user}/>}
+        {tab === 'agents' && <UserAgentsTab user={user} setPage={setPage}/>}
+        {tab === 'consents' && <AgentsConsentsTab user={user}/>}
         {tab === 'activity' && <ActivityTab user={user}/>}
       </div>
 
@@ -1203,6 +1245,67 @@ function OrgsTab({ user }) {
       })}
       {orgs.length === 0 && <span className="faint" style={{ fontSize: 13 }}>Not a member of any orgs</span>}
       <button className="btn sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}><Icon.Plus width={10} height={10}/>Invite to org</button>
+    </div>
+  );
+}
+
+// UserAgentsTab — shows agents created by this user (created_by_user_id filter)
+function UserAgentsTab({ user, setPage }) {
+  const { data, loading } = useAPI(
+    user ? `/agents?created_by_user_id=${encodeURIComponent(user.id)}&limit=200` : null
+  );
+  const agents = data?.data || [];
+
+  if (loading) {
+    return <div className="faint" style={{ fontSize: 13, padding: '16px 0' }}>Loading agents…</div>;
+  }
+
+  if (agents.length === 0) {
+    return (
+      <div className="faint" style={{ fontSize: 13, padding: '16px 0' }}
+        data-test="users-agents-tab">
+        This user has not created any agents yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="col" style={{ gap: 0 }} data-test="users-agents-tab">
+      {agents.map((a, i) => {
+        const jktPrefix = a.jkt ? a.jkt.slice(0, 8) + '…' : null;
+        return (
+          <div
+            key={a.id || a.client_id || i}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '7px 0',
+              borderBottom: '1px solid var(--hairline)',
+              cursor: setPage ? 'pointer' : 'default',
+            }}
+            onClick={() => {
+              if (setPage) setPage('agents', { agentId: a.id || a.client_id });
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>{a.name || a.client_id || a.id}</div>
+              <div className="row" style={{ gap: 6, marginTop: 2 }}>
+                <span className="mono faint" style={{ fontSize: 10.5 }}>{(a.client_id || a.id || '').slice(0, 24)}</span>
+                {jktPrefix && <span className="mono faint" style={{ fontSize: 10 }}>jkt:{jktPrefix}</span>}
+              </div>
+            </div>
+            {a.active !== undefined && (
+              <span className="mono" style={{
+                fontSize: 10, padding: '1px 5px', height: 16, lineHeight: '16px',
+                border: '1px solid var(--hairline-strong)', borderRadius: 3,
+                color: a.active ? 'var(--success)' : 'var(--fg-dim)',
+              }}>
+                {a.active ? 'active' : 'inactive'}
+              </span>
+            )}
+            {setPage && <Icon.ChevronDown width={10} height={10} style={{ opacity: 0.4, transform: 'rotate(-90deg)', flexShrink: 0 }}/>}
+          </div>
+        );
+      })}
     </div>
   );
 }

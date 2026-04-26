@@ -122,3 +122,18 @@ Follows `.impeccable.md` v3 strictly:
 
 The page appears in the left sidebar under **AGENTS** → **Delegation Chains**.
 URL path: `/admin/delegation-chains`.
+
+---
+
+## Per-agent Delegations tab
+
+Open any agent's drawer (Agents page → click an agent) → "Delegations" tab.
+
+Shows a mini-graph centered on the agent:
+- **Inbound** (top): agents that delegated TO this agent (their tokens were the subject_token of an exchange where this agent was the actor)
+- **Outbound** (bottom): agents this agent delegated TO
+
+Edges labeled with timestamp + scope at the time of the exchange.
+Click any node to jump to that agent's drawer.
+
+Pure inline SVG, no chart libraries, monochrome per .impeccable.md v3 lock.

@@ -268,6 +268,7 @@ export function Agents({ setPage }) {
         <AgentDetail
           agent={selected}
           tab={tab} setTab={setTab}
+          setPage={setPage}
           onClose={() => setSelected(null)}
           onDeactivate={() => setDeactivateModal(selected)}
           onUpdate={async (updates) => {
@@ -414,7 +415,7 @@ function shortGrant(g) {
   return g;
 }
 
-function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
+function AgentDetail({ agent, tab, setTab, setPage, onClose, onDeactivate, onUpdate }) {
   const toast = useToast();
   const [revoking, setRevoking] = React.useState(false);
   const [tokensVersion, setTokensVersion] = React.useState(0);
@@ -480,6 +481,7 @@ function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
           ['audit', 'Audit'],
           ['security', 'Security'],
           ['delegation', 'Delegation Policies'],
+          ['delegations', 'Delegations'],
         ].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             style={{
@@ -498,6 +500,7 @@ function AgentDetail({ agent, tab, setTab, onClose, onDeactivate, onUpdate }) {
         {tab === 'audit' && <AgentAudit agent={agent}/>}
         {tab === 'security' && <AgentSecurity agent={agent}/>}
         {tab === 'delegation' && <AgentDelegationPolicies agent={agent}/>}
+        {tab === 'delegations' && <DelegationsTab agent={agent} setPage={setPage || (() => {})}/>}
       </div>
       {rotateModalOpen && (
         <RotateSecretModal
@@ -1446,6 +1449,258 @@ function Section({ label, count, children }) {
         {count != null && <span className="faint mono" style={{fontSize:10}}>· {count}</span>}
       </div>
       {children}
+    </div>
+  );
+}
+
+// ── Delegations Tab ──────────────────────────────────────────────────────────
+
+function groupByCounterpart(items, agentId, direction) {
+  const map = {};
+  for (const ev of items) {
+    const meta = ev.metadata || ev.meta || {};
+    const chain = ev.act_chain || meta.act_chain || [];
+    let counterpartId = null;
+    let counterpartName = null;
+    if (direction === 'outbound') {
+      // actor is this agent; target is the subject
+      counterpartId = meta.target_agent_id || meta.subject_agent_id || meta.target_sub || ev.subject_id || null;
+      counterpartName = meta.target_agent_name || meta.subject_name || counterpartId;
+    } else {
+      // find this agent in act_chain; the issuer of the chain is the counterpart
+      const node = chain.find(n => n.sub === agentId || n.agent_id === agentId);
+      if (node) {
+        counterpartId = ev.actor_id || ev.actor?.id || ev.subject_id || null;
+        counterpartName = ev.actor?.name || counterpartId;
+      } else {
+        counterpartId = ev.actor_id || ev.actor?.id || null;
+        counterpartName = ev.actor?.name || counterpartId;
+      }
+    }
+    if (!counterpartId) continue;
+    if (!map[counterpartId]) {
+      map[counterpartId] = {
+        id: counterpartId,
+        name: counterpartName || counterpartId,
+        jkt: (ev.jkt || meta.jkt || counterpartId || '????'),
+        lastScope: meta.scope || meta.scopes || ev.scope || '',
+        lastTs: ev.created_at || ev.timestamp || '',
+        count: 0,
+      };
+    }
+    map[counterpartId].count++;
+    // keep latest timestamp
+    const ts = ev.created_at || ev.timestamp || '';
+    if (ts > map[counterpartId].lastTs) {
+      map[counterpartId].lastTs = ts;
+      map[counterpartId].lastScope = meta.scope || meta.scopes || ev.scope || '';
+    }
+  }
+  return Object.values(map).slice(0, 8);
+}
+
+function fmtTs(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return ts.slice(11, 16) || ''; }
+}
+
+function fmtScope(s) {
+  if (!s) return '';
+  const str = Array.isArray(s) ? s.join(' ') : String(s);
+  return str.length > 18 ? str.slice(0, 16) + '…' : str;
+}
+
+function DelegationsTab({ agent, setPage }) {
+  const [inbound, setInbound] = React.useState(null);   // null = loading
+  const [outbound, setOutbound] = React.useState(null);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!agent?.id) return;
+    let cancelled = false;
+    const headers = { Authorization: `Bearer ${localStorage.getItem('shark_admin_key')}` };
+
+    const load = async () => {
+      try {
+        const [outRes, inRes] = await Promise.all([
+          fetch(`/api/v1/audit-logs?action=oauth.token.exchanged&actor_id=${agent.id}&limit=100`, { headers }),
+          fetch(`/api/v1/audit-logs?action=oauth.token.exchanged&limit=200`, { headers }),
+        ]);
+        const [outData, inData] = await Promise.all([outRes.json(), inRes.json()]);
+        if (cancelled) return;
+
+        const outItems = outData?.data || outData?.items || [];
+        const inItems = (inData?.data || inData?.items || []).filter(ev => {
+          const chain = ev.act_chain || ev?.metadata?.act_chain || ev?.meta?.act_chain || [];
+          return chain.some(n => n.sub === agent.id || n.agent_id === agent.id);
+        });
+
+        setOutbound(groupByCounterpart(outItems, agent.id, 'outbound'));
+        setInbound(groupByCounterpart(inItems, agent.id, 'inbound'));
+      } catch (e) {
+        if (!cancelled) setError(String(e));
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [agent?.id]);
+
+  // ── Layout constants ──────────────────────────────────────────────────────
+  const VB_W = 800, VB_H = 400;
+  const NODE_W = 120, NODE_H = 40;
+  const CENTER_W = 140, CENTER_H = 44;
+  const CENTER_X = (VB_W - CENTER_W) / 2;  // 330
+  const CENTER_Y = 178;
+
+  const MAX_VISIBLE = 4;
+
+  const renderNode = (item, x, y, w, h, isCenter) => {
+    const name = (item.name || item.id || '').slice(0, 18);
+    const jktVal = (item.jkt || '????');
+    const jktDisplay = jktVal.length > 4 ? jktVal.slice(0, 4) : jktVal;
+    return (
+      <g key={item.id || 'center'}
+        onClick={isCenter ? undefined : () => setPage('agents', { agentId: item.id })}
+        style={{ cursor: isCenter ? 'default' : 'pointer' }}>
+        <rect x={x} y={y} width={w} height={h}
+          fill="none"
+          stroke={isCenter ? 'var(--fg)' : 'var(--fg-dim)'}
+          strokeWidth={isCenter ? 1.5 : 1}/>
+        <text x={x + w / 2} y={y + h * 0.44} textAnchor="middle"
+          fontSize={isCenter ? 12 : 11} fontFamily="monospace" fill="var(--fg)">{name}</text>
+        <text x={x + w / 2} y={y + h * 0.78} textAnchor="middle"
+          fontSize={9} fontFamily="monospace" fill="var(--fg-dim)">jkt:{jktDisplay}</text>
+      </g>
+    );
+  };
+
+  const renderEdge = (x1, y1, x2, y2, label) => {
+    const key = `${x1}-${y1}-${x2}-${y2}`;
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2;
+    return (
+      <g key={key}>
+        <line x1={x1} y1={y1} x2={x2} y2={y2}
+          stroke="var(--fg-dim)" strokeWidth="1"
+          markerEnd="url(#arrow)"/>
+        {label && (
+          <text x={mx} y={my - 4} textAnchor="middle"
+            fontSize={8.5} fontFamily="monospace" fill="var(--fg-dim)">{label}</text>
+        )}
+      </g>
+    );
+  };
+
+  // ── Loading / error ───────────────────────────────────────────────────────
+  if (inbound === null || outbound === null) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center', fontFamily: 'monospace', fontSize: 12, color: 'var(--fg-dim)' }}>
+        {error ? `Error: ${error}` : 'Loading…'}
+      </div>
+    );
+  }
+
+  if (inbound.length === 0 && outbound.length === 0) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center', fontFamily: 'monospace', fontSize: 12, color: 'var(--fg-dim)', lineHeight: 1.7 }}>
+        No delegations recorded.<br/>
+        Run the demo or use tools/agent_demo_tester.py<br/>
+        to populate the chain.
+      </div>
+    );
+  }
+
+  const visibleIn = inbound.slice(0, MAX_VISIBLE);
+  const moreIn = inbound.length - visibleIn.length;
+  const visibleOut = outbound.slice(0, MAX_VISIBLE);
+  const moreOut = outbound.length - visibleOut.length;
+
+  // Space nodes horizontally
+  const inSpacing = Math.min(180, (VB_W - 40) / Math.max(visibleIn.length, 1));
+  const outSpacing = Math.min(180, (VB_W - 40) / Math.max(visibleOut.length, 1));
+
+  const centerNodeItem = {
+    id: agent.id,
+    name: agent.name || agent.client_id || agent.id,
+    jkt: agent.jkt || agent.client_id || agent.id,
+  };
+
+  const centerBotX = CENTER_X + CENTER_W / 2;
+  const centerBotY = CENTER_Y + CENTER_H;
+  const centerTopX = CENTER_X + CENTER_W / 2;
+  const centerTopY = CENTER_Y;
+
+  return (
+    <div style={{ padding: '12px 0', overflowX: 'auto' }}>
+      <div style={{ padding: '0 14px 6px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500 }}>
+        Delegations
+      </div>
+      <svg viewBox={`0 0 ${VB_W} ${VB_H}`}
+        style={{ width: '100%', height: 400, background: 'var(--surface-0)', display: 'block' }}>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto">
+            <polygon points="0 0, 10 5, 0 10" fill="var(--fg-dim)"/>
+          </marker>
+        </defs>
+
+        {/* Section labels */}
+        <text x={10} y={16} fontSize={9} fontFamily="monospace" fill="var(--fg-dim)" textTransform="uppercase">
+          INBOUND
+        </text>
+        <text x={10} y={VB_H - 6} fontSize={9} fontFamily="monospace" fill="var(--fg-dim)">
+          OUTBOUND
+        </text>
+
+        {/* Inbound nodes + edges */}
+        {visibleIn.map((item, i) => {
+          const totalW = visibleIn.length * NODE_W + (visibleIn.length - 1) * (inSpacing - NODE_W);
+          const startX = (VB_W - (visibleIn.length * NODE_W + Math.max(0, visibleIn.length - 1) * 20)) / 2;
+          const nx = startX + i * (NODE_W + 20);
+          const ny = 24;
+          const nodeBotX = nx + NODE_W / 2;
+          const nodeBotY = ny + NODE_H;
+          const label = [fmtTs(item.lastTs), fmtScope(item.lastScope)].filter(Boolean).join(' ');
+          return (
+            <React.Fragment key={item.id}>
+              {renderNode(item, nx, ny, NODE_W, NODE_H, false)}
+              {renderEdge(nodeBotX, nodeBotY, centerTopX, centerTopY, label)}
+            </React.Fragment>
+          );
+        })}
+        {moreIn > 0 && (
+          <text x={VB_W - 10} y={44} textAnchor="end" fontSize={9} fontFamily="monospace" fill="var(--fg-dim)">
+            +{moreIn} more
+          </text>
+        )}
+
+        {/* Center node */}
+        {renderNode(centerNodeItem, CENTER_X, CENTER_Y, CENTER_W, CENTER_H, true)}
+
+        {/* Outbound nodes + edges */}
+        {visibleOut.map((item, i) => {
+          const startX = (VB_W - (visibleOut.length * NODE_W + Math.max(0, visibleOut.length - 1) * 20)) / 2;
+          const nx = startX + i * (NODE_W + 20);
+          const ny = VB_H - NODE_H - 28;
+          const nodeTopX = nx + NODE_W / 2;
+          const nodeTopY = ny;
+          const label = [fmtTs(item.lastTs), fmtScope(item.lastScope)].filter(Boolean).join(' ');
+          return (
+            <React.Fragment key={item.id}>
+              {renderEdge(centerBotX, centerBotY, nodeTopX, nodeTopY, label)}
+              {renderNode(item, nx, ny, NODE_W, NODE_H, false)}
+            </React.Fragment>
+          );
+        })}
+        {moreOut > 0 && (
+          <text x={VB_W - 10} y={VB_H - 30} textAnchor="end" fontSize={9} fontFamily="monospace" fill="var(--fg-dim)">
+            +{moreOut} more
+          </text>
+        )}
+      </svg>
     </div>
   );
 }

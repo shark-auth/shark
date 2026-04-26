@@ -25,10 +25,10 @@ const thStyle: React.CSSProperties = {
   letterSpacing: '0.05em',
 };
 const tdStyle: React.CSSProperties = {
-  padding: '7px 14px',
+  padding: '6px 14px',
   borderBottom: '1px solid var(--hairline)',
-  verticalAlign: 'top',
-  fontSize: 12,
+  verticalAlign: 'middle',
+  fontSize: 11,
 };
 const sectionLabel: React.CSSProperties = {
   fontSize: 10,
@@ -103,20 +103,17 @@ function buildChains(entries: NormEntry[]): Chain[] {
 
   const chains: Chain[] = [];
   map.forEach((evts, rootSub) => {
-    // Sort events newest-first for display
     const sorted = [...evts].sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
     const newest = sorted[0];
 
-    // Build unique ordered segment list from all events' act_chains
     const segMap = new Map<string, { sub: string; jkt?: string; label?: string; isUser: boolean }>();
     for (const ev of evts) {
       ev.actChain.forEach((seg, i) => {
         const k = seg.sub || seg.label || String(i);
         if (!segMap.has(k)) segMap.set(k, { ...seg, isUser: i === 0 });
       });
-      // Terminal actor (the agent that fired the event)
       if (ev.actor && !segMap.has(ev.actor)) {
         segMap.set(ev.actor, { sub: ev.actor, label: ev.actor, isUser: false });
       }
@@ -132,13 +129,12 @@ function buildChains(entries: NormEntry[]): Chain[] {
     });
   });
 
-  // Sort chains newest-first
   return chains.sort((a, b) =>
     new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime()
   );
 }
 
-// ─── breadcrumb renderer ──────────────────────────────────────────────────────
+// ─── breadcrumb renderer (with collapse >3 hops) ─────────────────────────────
 
 function ChainBreadcrumb({
   segments,
@@ -147,62 +143,90 @@ function ChainBreadcrumb({
   segments: Chain['segments'];
   onAgentClick: (sub: string) => void;
 }) {
+  const [expanded, setExpanded] = React.useState(false);
+
   const chipBase: React.CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 4,
-    padding: '2px 7px',
-    height: 20,
-    fontSize: 11,
+    gap: 3,
+    padding: '1px 6px',
+    height: 18,
+    fontSize: 10.5,
     border: '1px solid var(--hairline-strong)',
     borderRadius: 3,
     background: 'var(--surface-2)',
     color: 'var(--fg)',
     fontFamily: 'var(--font-mono)',
     whiteSpace: 'nowrap' as const,
+    cursor: 'default',
   };
 
+  const arrow = (
+    <span style={{ color: 'var(--fg-dim)', fontSize: 10, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>→</span>
+  );
+
+  const renderSegment = (seg: Chain['segments'][0], i: number) => {
+    const label = seg.label || seg.sub;
+    const jkt = jktShort(seg.jkt);
+    const isClickable = !seg.isUser && !!seg.sub;
+    const display = jkt ? `${label} (${jkt}…)` : label;
+
+    if (isClickable) {
+      return (
+        <button
+          key={i}
+          onClick={(e) => { e.stopPropagation(); onAgentClick(seg.sub); }}
+          style={{ ...chipBase, background: 'var(--surface-1)', cursor: 'pointer' }}
+          title={seg.sub}
+        >
+          {display}
+        </button>
+      );
+    }
+    return (
+      <span key={i} style={chipBase} title={seg.sub}>
+        {display}
+      </span>
+    );
+  };
+
+  const COLLAPSE_THRESHOLD = 3;
+  const shouldCollapse = segments.length > COLLAPSE_THRESHOLD && !expanded;
+
+  let rendered: React.ReactNode[];
+  if (shouldCollapse) {
+    const hidden = segments.length - 2;
+    rendered = [
+      renderSegment(segments[0], 0),
+      arrow,
+      <button
+        key="collapse"
+        onClick={e => { e.stopPropagation(); setExpanded(true); }}
+        style={{
+          ...chipBase,
+          background: 'transparent',
+          border: '1px dashed var(--hairline-strong)',
+          cursor: 'pointer',
+          color: 'var(--fg-dim)',
+          fontSize: 10,
+        }}
+      >
+        … ({hidden} more) …
+      </button>,
+      arrow,
+      renderSegment(segments[segments.length - 1], segments.length - 1),
+    ];
+  } else {
+    rendered = [];
+    segments.forEach((seg, i) => {
+      if (i > 0) rendered.push(<React.Fragment key={`a${i}`}>{arrow}</React.Fragment>);
+      rendered.push(renderSegment(seg, i));
+    });
+  }
+
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5 }}>
-      {segments.map((seg, i) => {
-        const label = seg.label || seg.sub;
-        const jkt = jktShort(seg.jkt);
-        const isClickable = !seg.isUser && !!seg.sub;
-        return (
-          <React.Fragment key={i}>
-            {i > 0 && (
-              <span style={{ color: 'var(--fg-dim)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>→</span>
-            )}
-            {isClickable ? (
-              <button
-                onClick={() => onAgentClick(seg.sub)}
-                style={{
-                  ...chipBase,
-                  cursor: 'pointer',
-                  background: 'var(--surface-1)',
-                }}
-                title={seg.sub}
-              >
-                {label}
-                {jkt && (
-                  <span style={{ color: 'var(--fg-dim)', fontSize: 9.5 }}>
-                    {' '}jkt:{jkt}
-                  </span>
-                )}
-              </button>
-            ) : (
-              <span style={chipBase} title={seg.sub}>
-                {label}
-                {jkt && (
-                  <span style={{ color: 'var(--fg-dim)', fontSize: 9.5 }}>
-                    {' '}jkt:{jkt}
-                  </span>
-                )}
-              </span>
-            )}
-          </React.Fragment>
-        );
-      })}
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+      {rendered}
     </div>
   );
 }
@@ -228,17 +252,22 @@ function ChainDrawer({
       return next;
     });
 
-  // ASCII-art tree
-  const treeLines: string[] = chain.segments.map((seg, i) => {
-    const indent = '  '.repeat(i);
-    const prefix = i === 0 ? '' : i === chain.segments.length - 1 ? indent + '└─ ' : indent + '├─ ';
-    const label = seg.label || seg.sub;
-    const jkt = jktShort(seg.jkt);
-    return `${prefix}${label}${jkt ? ` (jkt:${jkt}…)` : ''}`;
-  });
+  // Real ASCII tree with box-drawing chars
+  const buildTreeLines = (segs: Chain['segments']): string[] => {
+    return segs.map((seg, i) => {
+      const label = seg.label || seg.sub;
+      const jkt = jktShort(seg.jkt);
+      const suffix = jkt ? ` (jkt:${jkt}…)` : '';
+      if (i === 0) return `${label}${suffix}`;
+      const isLast = i === segs.length - 1;
+      const indent = '│  '.repeat(i - 1);
+      const prefix = isLast ? `${indent}└─ ` : `${indent}├─ `;
+      return `${prefix}${label}${suffix}`;
+    });
+  };
 
-  // jkt continuity check: each hop's jkt should match the previous sub's jkt
-  // (simplified check: flag any hop where jkt is present but differs from prior)
+  const treeLines = buildTreeLines(chain.segments);
+
   const jktChecks: Array<{ ok: boolean; reason: string }> = chain.segments.map((seg, i) => {
     if (i === 0) return { ok: true, reason: 'origin' };
     const prev = chain.segments[i - 1];
@@ -262,7 +291,7 @@ function ChainDrawer({
     }}>
       {/* Header */}
       <div style={{
-        padding: '12px 16px',
+        padding: '10px 14px',
         borderBottom: '1px solid var(--hairline)',
         display: 'flex',
         alignItems: 'center',
@@ -276,32 +305,79 @@ function ChainDrawer({
         </button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
         {/* Timestamp */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Latest event</p>
-          <span className="mono" style={{ fontSize: 11.5 }}>{fmtTime(chain.latestAt)}</span>
+          <span className="mono" style={{ fontSize: 11 }}>
+            {fmtTime(chain.latestAt)}
+          </span>
+          <CopyField value={chain.latestAt} truncate={0}/>
         </div>
 
-        {/* ASCII tree */}
-        <div style={{ marginBottom: 16 }}>
+        {/* ASCII tree — real box-drawing chars, clickable nodes */}
+        <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Chain tree</p>
           <pre style={{
             margin: 0,
-            padding: '10px 12px',
+            padding: '8px 10px',
             background: 'var(--surface-1)',
             border: '1px solid var(--hairline)',
             borderRadius: 3,
             fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            lineHeight: 1.6,
+            fontSize: 10.5,
+            lineHeight: 1.65,
             color: 'var(--fg)',
             overflowX: 'auto',
-          }}>{treeLines.join('\n')}</pre>
+          }}>
+            {chain.segments.map((seg, i) => {
+              const label = seg.label || seg.sub;
+              const jkt = jktShort(seg.jkt);
+              const suffix = jkt ? ` (jkt:${jkt}…)` : '';
+              const isClickable = !seg.isUser && !!seg.sub;
+
+              let linePrefix = '';
+              if (i === 0) linePrefix = '';
+              else {
+                const indent = '│  '.repeat(i - 1);
+                const isLast = i === chain.segments.length - 1;
+                linePrefix = isLast ? `${indent}└─ ` : `${indent}├─ `;
+              }
+
+              return (
+                <React.Fragment key={i}>
+                  {linePrefix}
+                  {isClickable ? (
+                    <button
+                      onClick={() => onAgentClick(seg.sub)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10.5,
+                        color: 'var(--fg)',
+                        cursor: 'pointer',
+                        textDecoration: 'none',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                      onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                      title={seg.sub}
+                    >
+                      {label}{suffix}
+                    </button>
+                  ) : (
+                    <span>{label}{suffix}</span>
+                  )}
+                  {'\n'}
+                </React.Fragment>
+              );
+            })}
+          </pre>
         </div>
 
-        {/* jkt verification per hop */}
-        <div style={{ marginBottom: 16 }}>
+        {/* cnf.jkt verification per hop */}
+        <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Cnf.jkt verification</p>
           <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>
             {chain.segments.map((seg, i) => {
@@ -311,21 +387,23 @@ function ChainDrawer({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  padding: '6px 10px',
+                  padding: '5px 10px',
                   borderBottom: i < chain.segments.length - 1 ? '1px solid var(--hairline)' : 'none',
                   fontSize: 11,
                 }}>
                   <span style={{
-                    color: check.ok ? 'var(--success, #22c55e)' : 'var(--danger)',
-                    fontWeight: 600,
-                    fontSize: 12,
-                    width: 14,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10.5,
+                    color: check.ok ? 'var(--fg-dim)' : 'var(--danger)',
+                    border: `1px solid ${check.ok ? 'var(--hairline-strong)' : 'var(--danger)'}`,
+                    borderRadius: 2,
+                    padding: '0px 4px',
                     flexShrink: 0,
                   }}>
-                    {check.ok ? '✓' : '✗'}
+                    {check.ok ? '[ok]' : '[mismatch]'}
                   </span>
-                  <span className="mono" style={{ flex: 1 }}>{seg.label || seg.sub}</span>
-                  <span style={{ color: 'var(--fg-dim)', fontSize: 10 }}>{check.reason}</span>
+                  <span className="mono" style={{ flex: 1, fontSize: 10.5 }}>{seg.label || seg.sub}</span>
+                  <span style={{ color: 'var(--fg-dim)', fontSize: 9.5 }}>{check.reason}</span>
                 </div>
               );
             })}
@@ -333,7 +411,7 @@ function ChainDrawer({
         </div>
 
         {/* JWT claims per token (collapsible) */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>JWT claims per hop</p>
           {chain.segments.map((seg, i) => {
             const claims = {
@@ -343,7 +421,7 @@ function ChainDrawer({
             };
             const open = expandedTokens.has(i);
             return (
-              <div key={i} style={{ marginBottom: 4, border: '1px solid var(--hairline)', borderRadius: 3 }}>
+              <div key={i} style={{ marginBottom: 3, border: '1px solid var(--hairline)', borderRadius: 3 }}>
                 <button
                   onClick={() => toggleToken(i)}
                   style={{
@@ -351,11 +429,11 @@ function ChainDrawer({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    padding: '7px 10px',
+                    padding: '6px 10px',
                     background: open ? 'var(--surface-2)' : 'var(--surface-1)',
                     fontSize: 11,
                     cursor: 'pointer',
-                    borderRadius: 3,
+                    borderRadius: open ? '3px 3px 0 0' : 3,
                     textAlign: 'left' as const,
                   }}
                 >
@@ -363,10 +441,11 @@ function ChainDrawer({
                     transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
                     transition: 'transform 120ms',
                     opacity: 0.5,
+                    flexShrink: 0,
                   }}/>
-                  <span className="mono" style={{ flex: 1 }}>{seg.label || seg.sub}</span>
+                  <span className="mono" style={{ flex: 1, fontSize: 10.5 }}>{seg.label || seg.sub}</span>
                   {seg.jkt && (
-                    <span style={{ color: 'var(--fg-dim)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ color: 'var(--fg-dim)', fontSize: 9.5, fontFamily: 'var(--font-mono)' }}>
                       jkt:{seg.jkt.slice(0, 8)}…
                     </span>
                   )}
@@ -374,7 +453,7 @@ function ChainDrawer({
                 {open && (
                   <pre style={{
                     margin: 0,
-                    padding: '8px 10px',
+                    padding: '7px 10px',
                     background: 'var(--surface-0)',
                     fontFamily: 'var(--font-mono)',
                     fontSize: 10.5,
@@ -391,7 +470,7 @@ function ChainDrawer({
         </div>
 
         {/* All audit events */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Audit events ({chain.events.length})</p>
           <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)', overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
@@ -429,7 +508,7 @@ function ChainDrawer({
         </div>
       </div>
 
-      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--hairline)' }}>
+      <div style={{ padding: '8px 14px', borderTop: '1px solid var(--hairline)' }}>
         <button className="btn ghost" style={{ width: '100%', fontSize: 11 }}
           onClick={() => {
             const json = JSON.stringify(chain.events.map(e => e._raw), null, 2);
@@ -464,7 +543,7 @@ function Seg({ value, onChange, opts }: {
       border: '1px solid var(--hairline-strong)',
       borderRadius: 3,
       overflow: 'hidden',
-      height: 24,
+      height: 28,
     }}>
       {opts.map(([v, label]) => (
         <button
@@ -472,15 +551,272 @@ function Seg({ value, onChange, opts }: {
           onClick={() => onChange(v)}
           style={{
             padding: '0 9px',
-            height: 24,
+            height: 28,
             fontSize: 11,
+            fontFamily: 'var(--font-mono)',
             background: value === v ? 'var(--surface-3)' : 'var(--surface-2)',
             color: value === v ? 'var(--fg)' : 'var(--fg-muted)',
             borderRight: '1px solid var(--hairline)',
             cursor: 'pointer',
+            fontWeight: value === v ? 500 : 400,
           }}
         >{label}</button>
       ))}
+    </div>
+  );
+}
+
+// ─── canvas graph view ────────────────────────────────────────────────────────
+
+type ViewMode = 'list' | 'canvas';
+
+interface GraphNode {
+  id: string;
+  label: string;
+  isUser: boolean;
+  layer: number;
+  slotInLayer: number;
+}
+interface GraphEdge {
+  from: string;
+  to: string;
+  timestamp: string;
+  action: string;
+  eventId: string;
+}
+
+function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  // Collect unique nodes and edges from all chains
+  const nodeMap = new Map<string, { label: string; isUser: boolean }>();
+  const edgeSet = new Map<string, GraphEdge>();
+
+  for (const chain of chains) {
+    const segs = chain.segments;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      const id = seg.sub || seg.label || String(i);
+      if (!nodeMap.has(id)) {
+        nodeMap.set(id, { label: seg.label || seg.sub, isUser: seg.isUser });
+      }
+      // Edge from previous segment
+      if (i > 0) {
+        const prev = segs[i - 1];
+        const fromId = prev.sub || prev.label || String(i - 1);
+        const edgeKey = `${fromId}→${id}`;
+        if (!edgeSet.has(edgeKey)) {
+          const ev = chain.events[0];
+          edgeSet.set(edgeKey, {
+            from: fromId, to: id,
+            timestamp: ev?.created_at || '',
+            action: ev?.action || '',
+            eventId: ev?.id || '',
+          });
+        }
+      }
+    }
+  }
+
+  // Topological layering: count inbound edges per node
+  const inbound = new Map<string, number>();
+  for (const [, edge] of edgeSet) {
+    inbound.set(edge.to, (inbound.get(edge.to) || 0) + 1);
+  }
+
+  // BFS layer assignment
+  const layerMap = new Map<string, number>();
+  const queue: string[] = [];
+  for (const [id] of nodeMap) {
+    if (!inbound.has(id) || inbound.get(id) === 0) {
+      layerMap.set(id, 0);
+      queue.push(id);
+    }
+  }
+  // Process queue
+  let qi = 0;
+  while (qi < queue.length) {
+    const cur = queue[qi++];
+    const curLayer = layerMap.get(cur) || 0;
+    for (const [, edge] of edgeSet) {
+      if (edge.from === cur && !layerMap.has(edge.to)) {
+        layerMap.set(edge.to, Math.min(curLayer + 1, 4)); // cap at layer 4
+        queue.push(edge.to);
+      }
+    }
+  }
+  // Assign remaining nodes to layer 0
+  for (const [id] of nodeMap) {
+    if (!layerMap.has(id)) layerMap.set(id, 0);
+  }
+
+  // Assign slot within each layer
+  const layerSlots = new Map<number, number>();
+  const nodes: GraphNode[] = [];
+  // Sort for determinism
+  const sortedIds = Array.from(nodeMap.keys()).sort((a, b) => {
+    const la = layerMap.get(a) || 0;
+    const lb = layerMap.get(b) || 0;
+    return la !== lb ? la - lb : a.localeCompare(b);
+  });
+  for (const id of sortedIds) {
+    const layer = layerMap.get(id) || 0;
+    const slot = layerSlots.get(layer) || 0;
+    layerSlots.set(layer, slot + 1);
+    const info = nodeMap.get(id)!;
+    nodes.push({ id, label: info.label, isUser: info.isUser, layer, slotInLayer: slot });
+  }
+
+  return { nodes, edges: Array.from(edgeSet.values()) };
+}
+
+const NODE_W = 120;
+const NODE_H = 40;
+const LAYER_GAP = 200;
+const SLOT_GAP = 60;
+const PAD_X = 20;
+const PAD_Y = 20;
+
+function getNodePos(node: GraphNode) {
+  return {
+    x: PAD_X + node.layer * LAYER_GAP,
+    y: PAD_Y + node.slotInLayer * SLOT_GAP,
+  };
+}
+
+function ChainCanvas({
+  chains,
+  setPage,
+  onAuditClick,
+}: {
+  chains: Chain[];
+  setPage?: (p: string, extra?: any) => void;
+  onAuditClick: (id: string) => void;
+}) {
+  const { nodes, edges } = React.useMemo(() => buildGraph(chains), [chains]);
+
+  if (nodes.length === 0) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40 }}>
+        <pre style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-dim)',
+          lineHeight: 1.7, textAlign: 'center' as const, margin: 0,
+          border: '1px solid var(--hairline)', borderRadius: 3,
+          padding: '20px 32px', background: 'var(--surface-1)',
+        }}>{`┌─────────────────────────────────────┐
+│   no delegation chains recorded     │
+│   in the selected time window       │
+│                                     │
+│   shark demo delegation-with-trace  │
+└─────────────────────────────────────┘`}</pre>
+      </div>
+    );
+  }
+
+  // Compute viewBox dimensions
+  const maxLayer = Math.max(...nodes.map(n => n.layer));
+  const maxSlot = Math.max(...nodes.map(n => n.slotInLayer));
+  const vbW = PAD_X * 2 + (maxLayer + 1) * LAYER_GAP;
+  const vbH = PAD_Y * 2 + (maxSlot + 1) * SLOT_GAP + NODE_H;
+
+  // Build node position lookup
+  const posMap = new Map<string, { x: number; y: number }>();
+  for (const n of nodes) {
+    posMap.set(n.id, getNodePos(n));
+  }
+
+  return (
+    <div style={{ overflow: 'auto', width: '100%', height: 600 }}>
+      <svg
+        viewBox={`0 0 ${vbW} ${vbH}`}
+        width={vbW}
+        height={vbH}
+        style={{ display: 'block', fontFamily: 'var(--font-mono)' }}
+      >
+        <defs>
+          <marker
+            id="arrow"
+            markerWidth="7" markerHeight="7"
+            refX="6" refY="2.5"
+            orient="auto"
+          >
+            <path d="M0,0 L0,5 L7,2.5 z" fill="var(--fg-dim)" />
+          </marker>
+        </defs>
+
+        {/* Edges */}
+        {edges.map((edge, i) => {
+          const from = posMap.get(edge.from);
+          const to = posMap.get(edge.to);
+          if (!from || !to) return null;
+          const x1 = from.x + NODE_W;
+          const y1 = from.y + NODE_H / 2;
+          const x2 = to.x;
+          const y2 = to.y + NODE_H / 2;
+          const label = `${edge.timestamp ? new Date(edge.timestamp).toLocaleTimeString() : ''} ${edge.action}`.trim();
+          return (
+            <g
+              key={`e${i}`}
+              style={{ cursor: edge.eventId ? 'pointer' : 'default' }}
+              onClick={() => edge.eventId && onAuditClick(edge.eventId)}
+            >
+              <line
+                x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="var(--hairline-strong)"
+                strokeWidth={1}
+                markerEnd="url(#arrow)"
+              />
+              <title>{label}</title>
+            </g>
+          );
+        })}
+
+        {/* Nodes */}
+        {nodes.map(node => {
+          const pos = posMap.get(node.id)!;
+          const displayLabel = node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label;
+          const isClickable = !!setPage;
+          return (
+            <g
+              key={node.id}
+              style={{ cursor: isClickable ? 'pointer' : 'default' }}
+              onClick={() => {
+                if (!setPage) return;
+                if (node.isUser) setPage('users', { userId: node.id });
+                else setPage('agents', { q: node.id });
+              }}
+            >
+              <rect
+                x={pos.x} y={pos.y}
+                width={NODE_W} height={NODE_H}
+                fill="var(--surface-1)"
+                stroke="var(--hairline-strong)"
+                strokeWidth={1}
+                rx={0}
+              />
+              <text
+                x={pos.x + NODE_W / 2}
+                y={pos.y + NODE_H / 2 - 5}
+                textAnchor="middle"
+                fontSize={9}
+                fill="var(--fg-dim)"
+                fontFamily="var(--font-mono)"
+              >
+                {node.isUser ? '[user]' : '[agent]'}
+              </text>
+              <text
+                x={pos.x + NODE_W / 2}
+                y={pos.y + NODE_H / 2 + 8}
+                textAnchor="middle"
+                fontSize={10}
+                fill="var(--fg)"
+                fontFamily="var(--font-mono)"
+              >
+                {displayLabel}
+              </text>
+              <title>{node.label}</title>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }
@@ -495,6 +831,12 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [selected, setSelected] = React.useState<Chain | null>(null);
   const [page, setPageNum] = React.useState(0);
+  const rowRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  const [focusedIdx, setFocusedIdx] = React.useState<number>(-1);
+  // View-mode toggle — persisted to localStorage
+  const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
+    try { return (localStorage.getItem('shark_chains_view') as ViewMode) || 'list'; } catch { return 'list'; }
+  });
 
   // Build query params for token-exchange events
   const exchangeParams = React.useMemo(() => {
@@ -527,6 +869,11 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const refresh = () => { refreshExchange(); refreshRetrieve(); };
   usePageActions({ onRefresh: refresh });
 
+  // Persist view-mode to localStorage on change
+  React.useEffect(() => {
+    try { localStorage.setItem('shark_chains_view', viewMode); } catch {}
+  }, [viewMode]);
+
   // Reset page on filter change
   React.useEffect(() => { setPageNum(0); }, [timeRange, actorFilter, statusFilter]);
 
@@ -551,6 +898,32 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const totalPages = Math.ceil(filteredChains.length / PAGE_SIZE);
   const pageChains = filteredChains.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
+  // Keyboard navigation (arrow up/down through rows)
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (selected) {
+        if (e.key === 'Escape') { setSelected(null); setFocusedIdx(-1); return; }
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedIdx(prev => {
+          const next = Math.min(prev + 1, pageChains.length - 1);
+          if (pageChains[next]) { setSelected(pageChains[next]); }
+          return next;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIdx(prev => {
+          const next = Math.max(prev - 1, 0);
+          if (pageChains[next]) { setSelected(pageChains[next]); }
+          return next;
+        });
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [pageChains, selected]);
+
   const navigateToAudit = (id: string) => {
     if (setPage) setPage('audit', { q: id });
     else window.location.hash = '/audit?q=' + encodeURIComponent(id);
@@ -567,195 +940,193 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
         {/* Header */}
-        <div style={{ padding: '14px 20px 0', borderBottom: '1px solid var(--hairline)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+        <div style={{ padding: '12px 20px 0', borderBottom: '1px solid var(--hairline)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
             <div style={{ flex: 1 }}>
-              <h1 style={{ fontSize: 18, margin: 0, fontWeight: 600 }}>Delegation Chains</h1>
-              <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--fg-dim)' }}>
+              <h1 style={{ fontSize: 16, margin: 0, fontWeight: 600 }}>Delegation Chains</h1>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--fg-dim)' }}>
                 Token-exchange delegation graph · grouped by originating subject · sources:{' '}
                 <span className="mono">oauth.token.exchanged</span>,{' '}
                 <span className="mono">vault.token.retrieved</span>
               </p>
             </div>
-            <button className="btn ghost" onClick={refresh} disabled={loading} style={{ flexShrink: 0 }}>
+            <button className="btn ghost" onClick={refresh} disabled={loading} style={{ flexShrink: 0, fontSize: 11 }}>
               <Icon.Refresh width={11} height={11}/>
               {loading ? 'Loading…' : 'Refresh'}
             </button>
           </div>
 
-          {/* Filters */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10, flexWrap: 'wrap' }}>
+          {/* Filters bar — monospace inputs, 28px height, tight */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 8, flexWrap: 'wrap' }}>
             <Seg
               value={timeRange}
               onChange={setTimeRange}
               opts={[['1h','1h'], ['24h','24h'], ['7d','7d'], ['all','all']]}
             />
+            {/* View-mode toggle: List / Canvas */}
+            <Seg
+              value={viewMode}
+              onChange={(v: ViewMode) => setViewMode(v)}
+              opts={[['list','List'], ['canvas','Canvas']]}
+            />
 
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 5,
               padding: '0 8px',
-              height: 24,
+              height: 28,
               background: 'var(--surface-1)',
               border: '1px solid var(--hairline-strong)',
               borderRadius: 3,
-              minWidth: 160,
+              minWidth: 180,
             }}>
-              <Icon.Search width={11} height={11} style={{ opacity: 0.5 }}/>
+              <Icon.Search width={10} height={10} style={{ opacity: 0.45, flexShrink: 0 }}/>
               <input
                 placeholder="Filter by actor…"
                 value={actorFilter}
                 onChange={e => setActorFilter(e.target.value)}
+                title="Tip: press / to focus (global shortcut)"
                 style={{
                   flex: 1,
                   background: 'transparent',
                   border: 0,
                   outline: 'none',
                   color: 'var(--fg)',
-                  fontSize: 11.5,
+                  fontSize: 11,
                   fontFamily: 'var(--font-mono)',
                 }}
               />
             </div>
 
             <div style={{ flex: 1 }}/>
-            <span style={{ fontSize: 11, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>
-              {filteredChains.length} chains
+            <span style={{ fontSize: 10.5, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>
+              {filteredChains.length} / {allChains.length}
             </span>
           </div>
         </div>
 
-        {/* Chain list */}
+        {/* Chain table / canvas */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading && (
-            <div style={{ padding: '12px 20px', fontSize: 11, color: 'var(--fg-dim)' }}>Loading…</div>
+            <div style={{ padding: '10px 20px', fontSize: 11, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>Loading…</div>
           )}
 
-          {!loading && filteredChains.length === 0 && (
-            <div style={{ padding: '60px 20px', textAlign: 'center' }}>
-              <div style={{
-                display: 'inline-block',
-                padding: '32px 40px',
+          {/* Canvas mode */}
+          {!loading && viewMode === 'canvas' && (
+            <ChainCanvas
+              chains={filteredChains}
+              setPage={setPage}
+              onAuditClick={navigateToAudit}
+            />
+          )}
+
+          {!loading && viewMode === 'list' && filteredChains.length === 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40 }}>
+              <pre style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--fg-dim)',
+                lineHeight: 1.7,
+                textAlign: 'center' as const,
+                margin: 0,
                 border: '1px solid var(--hairline)',
-                borderRadius: 4,
+                borderRadius: 3,
+                padding: '20px 32px',
                 background: 'var(--surface-1)',
-                maxWidth: 500,
-              }}>
-                <p style={{ fontWeight: 600, margin: '0 0 8px', fontSize: 14 }}>No delegation chains in the selected window</p>
-                <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--fg-dim)', lineHeight: 1.6 }}>
-                  Chains appear when agents exchange tokens on behalf of users. Generate sample data with:
-                </p>
-                <pre style={{
-                  margin: '0 0 12px',
-                  padding: '8px 12px',
-                  background: 'var(--surface-0)',
-                  border: '1px solid var(--hairline)',
-                  borderRadius: 3,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  textAlign: 'left' as const,
-                  color: 'var(--fg)',
-                }}>{'shark demo delegation-with-trace'}</pre>
-                <p style={{ margin: 0, fontSize: 11, color: 'var(--fg-dim)' }}>
-                  or use the agent demo tester at{' '}
-                  <span className="mono">tools/agent_demo_tester.py</span>
-                </p>
-              </div>
+              }}>{`┌─────────────────────────────────────┐
+│   no delegation chains recorded     │
+│   in the selected time window       │
+│                                     │
+│   shark demo delegation-with-trace  │
+└─────────────────────────────────────┘`}</pre>
             </div>
           )}
 
-          {pageChains.map((chain, idx) => (
-            <div
-              key={chain.rootSub + idx}
-              onClick={() => setSelected(chain)}
-              style={{
-                padding: '12px 20px',
-                borderBottom: '1px solid var(--hairline)',
-                cursor: 'pointer',
-                background: selected?.rootSub === chain.rootSub ? 'var(--surface-1)' : 'transparent',
-                transition: 'background 60ms',
-              }}
-              onMouseEnter={e => {
-                if (selected?.rootSub !== chain.rootSub)
-                  (e.currentTarget as HTMLElement).style.background = 'var(--surface-1)';
-              }}
-              onMouseLeave={e => {
-                if (selected?.rootSub !== chain.rootSub)
-                  (e.currentTarget as HTMLElement).style.background = 'transparent';
-              }}
-            >
-              {/* Row header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase' as const,
-                  color: 'var(--fg-dim)',
-                  fontFamily: 'var(--font-mono)',
-                }}>CHAIN</span>
-                <span className="faint mono" style={{ fontSize: 10.5 }}>
-                  {fmtTime(chain.latestAt)}
-                </span>
-                <div style={{ flex: 1 }}/>
-                <span style={{ fontSize: 10, color: 'var(--fg-dim)' }}>
-                  {chain.events.length} event{chain.events.length !== 1 ? 's' : ''}
-                </span>
-              </div>
+          {/* Table header row */}
+          {!loading && viewMode === 'list' && pageChains.length > 0 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Root subject</th>
+                  <th style={thStyle}>Chain</th>
+                  <th style={thStyle}>Last action</th>
+                  <th style={thStyle}>Latest</th>
+                  <th style={thStyle}>Events</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageChains.map((chain, idx) => {
+                  const isSelected = selected?.rootSub === chain.rootSub;
+                  return (
+                    <tr
+                      key={chain.rootSub + idx}
+                      ref={el => { rowRefs.current[idx] = el as any; }}
+                      onClick={() => { setSelected(chain); setFocusedIdx(idx); }}
+                      style={{
+                        cursor: 'pointer',
+                        background: isSelected ? 'var(--surface-1)' : (focusedIdx === idx ? 'var(--surface-1)' : 'transparent'),
+                        outline: focusedIdx === idx ? '1px solid var(--hairline-strong)' : 'none',
+                        outlineOffset: -1,
+                      }}
+                      onMouseEnter={e => {
+                        if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'var(--surface-1)';
+                      }}
+                      onMouseLeave={e => {
+                        if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent';
+                      }}
+                    >
+                      {/* Root subject */}
+                      <td style={{ ...tdStyle, maxWidth: 140 }}>
+                        <span className="mono" style={{ fontSize: 10.5, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {chain.rootSub.length > 20 ? chain.rootSub.slice(0, 18) + '…' : chain.rootSub}
+                        </span>
+                      </td>
 
-              {/* Breadcrumb */}
-              <div style={{ marginBottom: 8 }}>
-                <ChainBreadcrumb
-                  segments={chain.segments}
-                  onAgentClick={sub => {
-                    navigateToAgent(sub);
-                  }}
-                />
-              </div>
+                      {/* Breadcrumb */}
+                      <td style={{ ...tdStyle, minWidth: 200 }}>
+                        <ChainBreadcrumb
+                          segments={chain.segments}
+                          onAgentClick={sub => navigateToAgent(sub)}
+                        />
+                      </td>
 
-              {/* Last action */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>Last action:</span>
-                <span className="mono" style={{ fontSize: 11 }}>{chain.lastAction}</span>
-                {chain.lastTarget && (
-                  <>
-                    <span style={{ color: 'var(--fg-dim)', fontSize: 11 }}>·</span>
-                    <span className="mono faint" style={{ fontSize: 10.5 }}>target={chain.lastTarget}</span>
-                  </>
-                )}
-              </div>
+                      {/* Last action */}
+                      <td style={{ ...tdStyle, maxWidth: 160 }}>
+                        <span className="mono" style={{ fontSize: 10, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--fg-dim)' }}>
+                          {chain.lastAction}
+                        </span>
+                      </td>
 
-              {/* Audit ID chips */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {chain.events.slice(0, 5).map(ev => (
-                  <button
-                    key={ev.id}
-                    onClick={e => { e.stopPropagation(); navigateToAudit(ev.id); }}
-                    style={{
-                      fontSize: 10,
-                      fontFamily: 'var(--font-mono)',
-                      padding: '1px 6px',
-                      height: 18,
-                      border: '1px solid var(--hairline)',
-                      borderRadius: 3,
-                      background: 'var(--surface-2)',
-                      color: 'var(--fg-dim)',
-                      cursor: 'pointer',
-                    }}
-                    title="Jump to audit event"
-                  >
-                    {ev.id.slice(0, 16)}…
-                  </button>
-                ))}
-                {chain.events.length > 5 && (
-                  <span style={{ fontSize: 10, color: 'var(--fg-dim)', lineHeight: '18px' }}>
-                    +{chain.events.length - 5} more
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+                      {/* Timestamp */}
+                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
+                        <span className="mono faint" style={{ fontSize: 10 }}>
+                          {fmtTime(chain.latestAt)}
+                        </span>
+                      </td>
+
+                      {/* Event count chip */}
+                      <td style={tdStyle}>
+                        <span style={{
+                          display: 'inline-block',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 10,
+                          padding: '0 5px',
+                          height: 16,
+                          lineHeight: '16px',
+                          border: '1px solid var(--hairline-strong)',
+                          borderRadius: 3,
+                          color: 'var(--fg-dim)',
+                        }}>
+                          {chain.events.length}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -763,7 +1134,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              padding: '12px 20px',
+              padding: '10px 20px',
               borderTop: '1px solid var(--hairline)',
             }}>
               <button
@@ -774,7 +1145,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
               >
                 ← Prev
               </button>
-              <span style={{ fontSize: 11, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>
+              <span style={{ fontSize: 10.5, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>
                 {page + 1} / {totalPages}
               </span>
               <button
@@ -791,18 +1162,19 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
 
         {/* Footer */}
         <div style={{
-          padding: '8px 20px',
+          padding: '6px 20px',
           borderTop: '1px solid var(--hairline)',
-          fontSize: 11,
+          fontSize: 10.5,
           display: 'flex',
           gap: 10,
           color: 'var(--fg-dim)',
+          fontFamily: 'var(--font-mono)',
         }}>
-          <span className="mono">{filteredChains.length} chains</span>
+          <span>{filteredChains.length} chains</span>
           <span>·</span>
-          <span className="mono">{allChains.reduce((s, c) => s + c.events.length, 0)} total events</span>
+          <span>{allChains.reduce((s, c) => s + c.events.length, 0)} events</span>
           <div style={{ flex: 1 }}/>
-          <span className="mono faint" style={{ fontSize: 10 }}>
+          <span style={{ fontSize: 9.5, opacity: 0.6 }}>
             shark audit tail --filter "oauth.token.exchanged"
           </span>
         </div>
@@ -812,7 +1184,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
       {selected && (
         <ChainDrawer
           chain={selected}
-          onClose={() => setSelected(null)}
+          onClose={() => { setSelected(null); setFocusedIdx(-1); }}
           onAuditClick={navigateToAudit}
           onAgentClick={navigateToAgent}
         />
