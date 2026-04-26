@@ -8,6 +8,7 @@ import { Users } from './users'
 import { Sessions } from './sessions'
 import { Organizations } from './organizations'
 import { Agents } from './agents_manage'
+import { MyAgents } from './me_agents'
 import { DeviceFlow } from './device_flow'
 import { Audit } from './audit'
 import { Applications } from './applications'
@@ -201,6 +202,7 @@ export function App() {
     sessions: Sessions,
     orgs: Organizations,
     agents: Agents,
+    'me-agents': MyAgents,
     'device-flow': DeviceFlow,
     audit: Audit,
     apps: Applications,
