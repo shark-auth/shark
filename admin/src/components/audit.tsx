@@ -547,27 +547,104 @@ function EventDetail({ event, allEvents, onClose }) {
           </span>
         </div>
 
-        {/* Delegation chain for agent events */}
-        {event.actor_type === 'agent' && (
-          <div style={{ marginBottom: 18 }}>
-            <h4 style={sectionLabelStyle}>Delegation chain</h4>
-            <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, padding: 10, background: 'var(--surface-1)' }}>
-              <div className="row" style={{ gap: 8, fontSize: 11 }}>
-                <Avatar name="Amelia Chen" email="amelia@nimbus.sh" size={18}/>
-                <span>amelia@nimbus.sh</span>
-                <span className="faint mono">→</span>
-                <span className="chip" style={{height:16, fontSize:9.5}}>act</span>
-                <span className="mono">{event.actor}</span>
-                <span className="faint mono">→</span>
-                <span className="faint">resource</span>
-                <span className="mono">api.nimbus.sh</span>
-              </div>
-              <div className="faint" style={{ fontSize: 10.5, marginTop: 6 }}>
-                User delegated via authorization_code · DPoP-bound · exp in 18m
+        {/* Delegation chain breadcrumb — only for agent-actor events with an act claim chain */}
+        {event.actor_type === 'agent' && (() => {
+          // Build chain from JWT act claim. The raw event may carry:
+          //   _raw.act_chain: [{sub, jkt, label}, ...]  (preferred, server-serialised)
+          //   _raw.oauth.act: {sub, email}              (legacy single-hop)
+          const raw = event._raw || {};
+          const actChain: Array<{sub: string; jkt?: string; label?: string}> =
+            Array.isArray(raw.act_chain) && raw.act_chain.length > 0
+              ? raw.act_chain
+              : raw.oauth?.act
+                ? [{ sub: raw.oauth.act.sub || '', label: raw.oauth.act.email || raw.oauth.act.sub || 'user' }]
+                : null;
+
+          if (!actChain) return null;
+
+          // Append the terminal acting agent as the last segment
+          const segments = [
+            ...actChain,
+            { sub: event.actor, label: event.actor },
+          ];
+
+          // may_act rule — read from raw metadata
+          const mayActRule: string | null =
+            raw.may_act_rule ||
+            raw.policy_may_act ||
+            (actChain.length >= 1
+              ? `${actChain[actChain.length - 1].label || actChain[actChain.length - 1].sub} → ${event.actor}`
+              : null);
+
+          const chipStyle = {
+            display: 'inline-flex', alignItems: 'center',
+            padding: '2px 8px', height: 22, fontSize: 11,
+            border: '1px solid var(--hairline-strong)',
+            borderRadius: 3,
+            background: 'var(--surface-2)',
+            color: 'var(--fg)',
+            cursor: 'pointer',
+            textDecoration: 'none',
+            fontFamily: 'var(--font-mono)',
+            gap: 4,
+          } as React.CSSProperties;
+
+          const jktLabel = (jkt?: string) =>
+            jkt ? `jkt:${jkt.slice(0, 4)}…` : null;
+
+          return (
+            <div style={{ marginBottom: 18 }}>
+              <h4 style={sectionLabelStyle}>Delegation chain</h4>
+              <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, padding: '10px 12px', background: 'var(--surface-1)' }}>
+                {/* Horizontal breadcrumb */}
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {segments.map((seg, i) => {
+                    const displayLabel = seg.label || seg.sub;
+                    const jkt = jktLabel((seg as any).jkt);
+                    const isAgent = i > 0; // first segment is the originating user
+                    const href = isAgent ? `#/agents/${encodeURIComponent(seg.sub)}` : null;
+                    return (
+                      <React.Fragment key={i}>
+                        {i > 0 && <span className="faint mono" style={{ fontSize: 11 }}>→</span>}
+                        {href
+                          ? (
+                            <a
+                              href={href}
+                              style={chipStyle}
+                              title={seg.sub}
+                              onClick={e => {
+                                e.preventDefault();
+                                window.location.hash = `/agents/${encodeURIComponent(seg.sub)}`;
+                              }}
+                            >
+                              {displayLabel}
+                              {jkt && <span className="faint" style={{ fontSize: 9.5 }}>({jkt})</span>}
+                            </a>
+                          )
+                          : (
+                            <span style={{ ...chipStyle, cursor: 'default' }}>
+                              {displayLabel}
+                              {jkt && <span className="faint" style={{ fontSize: 9.5 }}>({jkt})</span>}
+                            </span>
+                          )
+                        }
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+
+                {/* Policy applied row */}
+                {mayActRule && (
+                  <div style={{ marginTop: 8, fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: 'var(--success, #22c55e)', fontWeight: 600 }}>✓</span>
+                    <span className="faint">permitted by policy:</span>
+                    <span className="mono" style={{ fontSize: 10.5 }}>{mayActRule}</span>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         <h4 style={sectionLabelStyle}>Payload</h4>
         <pre style={{
