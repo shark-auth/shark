@@ -15,7 +15,7 @@ Builds the real `shark proxy ...` command tree backed by the admin HTTP API: lif
 - `proxyRulesCmd` (var, line 149) — parent for rules subcommands.
 - `proxyRulesListCmd` (line 154) — tabwriter table output.
 - `proxyRulesAddCmd` (line 195) — full payload assembly with idempotent `--id` (409 → exit 2).
-- `proxyRulesShowCmd` (line 276), `proxyRulesDeleteCmd` (line 297), `proxyRulesImportCmd` (line 319 — POSTs YAML file payload).
+- `proxyRulesShowCmd` (line 276), `proxyRulesDeleteCmd` (line 297).
 - `extractData` (func, line 367), `extractDataArray` (func, line 375).
 - `openBrowser` (func, line 394) — `xdg-open`/`open`/`cmd /c start` per OS.
 

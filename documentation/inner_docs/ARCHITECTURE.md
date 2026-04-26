@@ -33,7 +33,7 @@ shark/
 │   ├── webhook/               — outbound event dispatcher (HMAC + retry + dead-letter)
 │   ├── audit/                 — audit log emitter + query + cleanup
 │   ├── server/                — top-level Server struct, first-boot bootstrap
-│   ├── config/                — koanf YAML + env-var schema
+│   ├── config/                — koanf env-var + DB-backed config (YAML removed Phase H)
 │   ├── email/                 — Sender interface, SMTP, Resend, dev inbox, templates
 │   ├── vault/                 — third-party OAuth credential store + provider templates
 │   ├── authflow/              — visual flow engine (login/signup/MFA/paywall page templates)
@@ -150,7 +150,7 @@ Strict layer rule: handlers may not touch SQLite directly. They go through the `
 | Webhook fanout | `internal/webhook/*` |
 | Email delivery | `internal/email/*` |
 | Configuration | `internal/config/*` |
-| First-boot bootstrap | `internal/server/*` + `cmd/shark/cmd/init.go` |
+| First-boot bootstrap | `internal/server/*` (init command removed Phase H) |
 | CLI surface | `cmd/shark/cmd/*` |
 | Admin SPA | `admin/src/*` (built to `admin/dist/`, served by `internal/admin`) |
 | Hosted pages | `admin/src/hosted/*` (separately bundled) + `internal/api/hosted_handlers.go` |
@@ -367,7 +367,7 @@ DPoP nonce/replay cache is also process-local (`oauth/dpop.go:48-78`). Same scal
 
 ### Configuration
 
-`internal/config/config.go` uses koanf. Loads from `sharkauth.yaml` then overrides with env vars (`${SHARK_*}` interpolation). Secret fields (server.secret, smtp.password, signing keys) are loaded once at startup and never re-read.
+`internal/config/config.go` uses koanf. Binds env vars (`${SHARK_*}` interpolation) onto a typed Config struct; runtime config is stored in SQLite `system_config` table and mutated via the admin API or Settings dashboard. YAML file loading was removed in Phase H. Secret fields (server.secret, smtp.password, signing keys) are loaded once at startup and never re-read.
 
 ---
 
@@ -423,14 +423,12 @@ Produces a single binary that contains:
 - Embedded email templates (with overrides via DB)
 - Embedded consent screen HTML
 
-`shark serve --dev` launches with:
-- Ephemeral SQLite DB (file or in-memory)
-- Random server secret
-- SMTP captured to dev inbox (`internal/email/devinbox.go`)
-- Admin key printed to stdout
-- Auto-opens browser to admin dashboard
+`./shark serve` launches with:
+- SQLite DB at `./data/shark.db` (or `SHARK_STORAGE_PATH`)
+- Interactive first-boot prompt on first run (opens browser, prints magic-link)
+- Admin key auto-generated and printed to stdout once
 
-`shark serve --no-prompt` is the production launch mode used in containers. Reads `sharkauth.yaml` + env vars; no first-boot prompt; emits one-time bootstrap token to stdout for first admin creation.
+`./shark serve --no-prompt` is the production launch mode used in containers. Skips first-boot browser prompt; emits one-time bootstrap token to stdout for first admin creation. No config file required — all runtime config lives in SQLite.
 
 ---
 
@@ -480,11 +478,11 @@ For single-replica deployments (the supported model), none of these matter. For 
 # Build (Go 1.25+)
 make build               # produces ./shark
 
-# Run with dev defaults
-./shark serve --dev      # in-memory DB, dev inbox, opens browser
+# Run (interactive first-boot on first run; all config in SQLite)
+./shark serve
 
-# Run with production config
-./shark serve --config /etc/sharkauth.yaml
+# Run headless (CI / containers — skip browser prompt)
+./shark serve --no-prompt
 
 # Run tests
 make test                # unit + integration
@@ -504,7 +502,7 @@ npx @redocly/cli bundle documentation/api_reference/openapi.yaml --ext yaml --ou
 - **No interface-driven OOP**. Storage and email/sender are interfaces because they have multiple implementations or need test mocks. Most code is plain functions and structs.
 - **Errors flow up unchanged**. Handlers translate to the appropriate envelope at the boundary (RFC 6749 §5.2 for /oauth/*, extended for everything else). Internal error wrapping uses standard `fmt.Errorf("...: %w", err)`.
 - **slog is the logger**. `slog.Info`, `slog.Error`. Default JSON handler. No third-party logger.
-- **No reflection-based config**. koanf parses YAML into a typed struct; env-var overrides via `${VAR}` interpolation.
+- **No reflection-based config**. koanf binds env vars onto a typed struct; runtime config lives in SQLite `system_config`. No YAML files.
 - **Migrations are append-only**. New schema changes get a new file under `migrations/`. Never edit a shipped migration.
 - **SQL written by hand**. No ORM. `database/sql` + `modernc.org/sqlite` driver (CGO-free).
 - **Tests prefer real SQLite**. Most tests run against a fresh SQLite instance, not a mock store. Slower but catches contract drift.

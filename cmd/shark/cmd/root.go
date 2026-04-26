@@ -93,7 +93,6 @@ func addJSONFlag(cmd *cobra.Command) {
 func init() {
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable debug-level logging to stderr")
 	root.AddCommand(serveCmd)
-	root.AddCommand(initCmd)
 	root.AddCommand(healthCmd)
 	root.AddCommand(versionCmd)
 	root.AddCommand(keysCmd)

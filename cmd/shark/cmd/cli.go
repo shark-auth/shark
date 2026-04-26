@@ -23,7 +23,6 @@ var cliCmd = &cobra.Command{
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "ADMIN")
 		fmt.Fprintln(out, "  shark admin config dump        Print live config as JSON")
-		fmt.Fprintln(out, "  shark admin import-rules <f>   One-shot import legacy proxy YAML rules")
 		fmt.Fprintln(out, "  shark whoami                   Identify current admin token")
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "RESOURCES")

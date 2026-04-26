@@ -31,7 +31,6 @@ import (
 type Server struct {
 	Store             storage.Store
 	Config            *config.Config
-	ConfigPath        string // path to sharkauth.yaml for updates
 	Router            chi.Router
 	SessionManager    *auth.SessionManager
 	PasskeyManager    *auth.PasskeyManager
@@ -123,7 +122,7 @@ func WithOAuthServer(os *oauth.Server) ServerOption {
 }
 
 // NewServer creates a new API server with all routes mounted.
-func NewServer(store storage.Store, cfg *config.Config, configPath string, opts ...ServerOption) *Server {
+func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *Server {
 	sessionLifetime := cfg.Auth.SessionLifetimeDuration()
 	sm := auth.NewSessionManager(store, cfg.Server.Secret, sessionLifetime, cfg.Server.BaseURL)
 
@@ -137,7 +136,6 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 	s := &Server{
 		Store:          store,
 		Config:         cfg,
-		ConfigPath:     configPath,
 		SessionManager: sm,
 		magicLinkRL:    newMagicLinkRateLimiter(60 * time.Second),
 		RateLimiter:    auth.NewTokenBucket(),
@@ -694,7 +692,6 @@ func NewServer(store storage.Store, cfg *config.Config, configPath string, opts 
 			r.Get("/proxy/rules/db/{id}", s.handleGetProxyRule)
 			r.Patch("/proxy/rules/db/{id}", s.handleUpdateProxyRule)
 			r.Delete("/proxy/rules/db/{id}", s.handleDeleteProxyRule)
-			r.Post("/proxy/rules/import", s.handleImportYAMLRules)
 
 			// PROXYV1_5 §4.9 — lifecycle control. Separate /lifecycle/*
 			// namespace so the legacy /proxy/status (breaker stats) route

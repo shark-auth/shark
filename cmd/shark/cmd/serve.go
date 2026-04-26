@@ -11,7 +11,6 @@ import (
 )
 
 var (
-	serveConfigPath    string
 	serveProxyUpstream string
 	serveNoPrompt      bool
 )
@@ -25,7 +24,6 @@ var serveCmd = &cobra.Command{
 		defer stop()
 
 		opts := server.Options{
-			ConfigPath:    serveConfigPath,
 			MigrationsFS:  migrationsFS,
 			MigrationsDir: "migrations",
 			NoPrompt:      serveNoPrompt,
@@ -39,7 +37,6 @@ var serveCmd = &cobra.Command{
 }
 
 func init() {
-	serveCmd.Flags().StringVar(&serveConfigPath, "config", "sharkauth.yaml", "path to config file")
 	serveCmd.Flags().StringVar(&serveProxyUpstream, "proxy-upstream", "", "mount reverse proxy to this upstream URL (e.g. http://localhost:3000)")
 	serveCmd.Flags().BoolVar(&serveNoPrompt, "no-prompt", false, "skip first-boot browser-open prompt (for CI / headless environments)")
 }

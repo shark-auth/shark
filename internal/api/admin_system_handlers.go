@@ -733,12 +733,6 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusInternalServerError, errPayload("save_failed", "Failed to persist"))
 		return
 	}
-	if s.ConfigPath != "" {
-		if err := cfg.Save(s.ConfigPath); err != nil {
-			// Non-fatal: DB write succeeded; yaml is best-effort until Phase H.
-			slog.Warn("config: failed to sync yaml (non-fatal)", "path", s.ConfigPath, "error", err)
-		}
-	}
 
 	if s.AuditLogger != nil {
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{

@@ -128,7 +128,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	seedTestDefaultApp(t, store, cfg)
 	emailSender := NewMemoryEmailSender()
 	jm := newTestJWTManager(t, store, cfg)
-	srv := api.NewServer(store, cfg, "", api.WithEmailSender(emailSender), api.WithJWTManager(jm))
+	srv := api.NewServer(store, cfg, api.WithEmailSender(emailSender), api.WithJWTManager(jm))
 
 	ts := httptest.NewServer(srv.Router)
 
@@ -197,7 +197,7 @@ func NewTestServerWithConfig(t *testing.T, mutate func(*config.Config)) *TestSer
 	seedTestDefaultApp(t, store, cfg)
 	emailSender := NewMemoryEmailSender()
 	jm := newTestJWTManager(t, store, cfg)
-	srv := api.NewServer(store, cfg, "", api.WithEmailSender(emailSender), api.WithJWTManager(jm))
+	srv := api.NewServer(store, cfg, api.WithEmailSender(emailSender), api.WithJWTManager(jm))
 
 	ts := httptest.NewServer(srv.Router)
 
@@ -410,7 +410,7 @@ func NewTestServerDev(t *testing.T) *TestServer {
 
 	dev := email.NewDevInboxSender(store)
 	jm := newTestJWTManager(t, store, cfg)
-	srv := api.NewServer(store, cfg, "", api.WithEmailSender(dev), api.WithJWTManager(jm))
+	srv := api.NewServer(store, cfg, api.WithEmailSender(dev), api.WithJWTManager(jm))
 
 	ts := httptest.NewServer(srv.Router)
 	jar, _ := cookiejar.New(nil)

@@ -2,28 +2,29 @@
 
 **Path:** `cmd/shark/cmd/serve.go`
 **Package:** `cmd`
-**LOC:** 64
+**LOC:** 43 (W17 Phase H)
 **Tests:** none direct (covered by E2E harness `internal/testutil/cli`)
 
 ## Purpose
-Implements `shark serve` — boots the SharkAuth HTTP server using the embedded migrations FS and the loaded YAML config.
+Implements `shark serve` — boots the SharkAuth HTTP server using the embedded migrations FS. No config file needed: all runtime config lives in SQLite and is mutated via the admin API or Settings dashboard.
 
 ## Key types / functions
-- `serveCmd` (var, line 22) — cobra command with `RunE`.
+- `serveCmd` (var, line 18) — cobra command with `RunE`.
   - Sets up SIGINT/SIGTERM signal context.
-  - In `--dev`, tolerates a missing config file by clearing `ConfigPath`.
-  - Builds `server.Options{ConfigPath, MigrationsFS, MigrationsDir, NoPrompt}` and calls `server.Serve`.
-- Flags (line 58): `--config`, `--dev`, `--reset`, `--proxy-upstream`, `--no-prompt`.
+  - Builds `server.Options{MigrationsFS, MigrationsDir, NoPrompt}` and calls `server.Serve`.
+- Flags (line 39): `--proxy-upstream`, `--no-prompt`.
 
 ## Imports of note
 - `os/signal`, `syscall`
 - `github.com/sharkauth/sharkauth/internal/server`
 
 ## Wired by / used by
-- Registered in `cmd/shark/cmd/root.go:92`.
-- `--dev` delegates to `applyDevMode` (dev.go).
-- `--no-prompt` is forwarded to `server.Options.NoPrompt` (H7 first-boot prompt).
-- `--proxy-upstream` is the legacy direct upstream URL (proxy v1.5 prefers DB-backed rules).
+- Registered in `cmd/shark/cmd/root.go`.
+- `--no-prompt` forwarded to `server.Options.NoPrompt` — skips first-boot browser-open prompt for CI/headless.
+- `--proxy-upstream` mounts reverse proxy to the given upstream URL at bootstrap.
 
 ## Notes
-- Default config path is `sharkauth.yaml`.
+- **`--config` flag REMOVED in Phase H.** Source of truth = SQLite.
+- **`--dev` and `--reset` flags REMOVED in Phase D/H.**
+- First boot detected automatically by `server.Build`; interactive prompt opens browser and prints magic-link admin sign-in URL.
+- `--no-prompt` is the production/container mode (equivalent to old `--dev` for headless, but without ephemeral DB).

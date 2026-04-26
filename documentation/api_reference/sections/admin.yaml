@@ -1114,21 +1114,6 @@ paths:
       x-source: "internal/api/router.go:688"
       responses: { "204": { description: Deleted } }
 
-  /api/v1/admin/proxy/rules/import:
-    post:
-      tags: [admin-proxy]
-      operationId: adminImportYAMLRules
-      summary: Bulk-import proxy rules from a YAML payload
-      x-source: "internal/api/router.go:689"
-      requestBody:
-        required: true
-        content:
-          application/x-yaml:
-            schema: { type: string }
-          application/json:
-            schema: { type: object, properties: { yaml: { type: string } } }
-      responses: { "200": { description: "Imported count returned" } }
-
   /api/v1/admin/proxy/lifecycle:
     get:
       tags: [admin-proxy]

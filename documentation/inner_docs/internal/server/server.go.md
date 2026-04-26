@@ -6,20 +6,19 @@
 **Tests:** `server_test.go`
 
 ## Purpose
-Main server lifecycle: wires config, storage, migrations, HTTP, OAuth, webhook, telemetry into a runnable Bootstrap struct. Entry point for cobra subcommands (serve, dev-mode, tests).
+Main server lifecycle: wires config, storage, migrations, HTTP, OAuth, webhook, telemetry into a runnable Bootstrap struct. Entry point for cobra subcommands (serve, tests).
 
 ## Key types / functions
-- `Options` (struct, line 38) — configuration for server assembly
-- `Bootstrap` (struct, line 74) — result of Build(); holds Config, Store, API, Dispatcher, AdminKey
-- `Build(ctx, opts)` (func, line 101) — loads config, opens DB, runs migrations, wires API, persists admin key
-- `yamlHasLegacyProxyRules(path)` (func) — v1.5 deprecation warning scanner
+- `Options` (struct) — configuration for server assembly: MigrationsFS, MigrationsDir, NoPrompt, ProxyUpstream. **ConfigPath removed Phase H.**
+- `Bootstrap` (struct) — result of Build(); holds Config, Store, API, Dispatcher, AdminKey
+- `Build(ctx, opts)` (func) — loads config (env vars only), opens DB, runs migrations, wires API, persists admin key
 - `Run(ctx, opts)` (func) — starts HTTP listener; handles first-boot prompt and telemetry setup
 
 ## Imports of note
 - `embed` — migrations loaded from filesystem
 - `os/exec` — opens browser on first boot
-- `internal/api` — wires API server
-- `internal/config` — Config.Load()
+- `internal/api` — wires API server (NewServer takes 2 args — ConfigPath removed)
+- `internal/config` — Config.Load() (env vars only, no YAML)
 - `internal/email` — email Sender selection
 - `internal/oauth` — OAuth AS wiring
 - `internal/proxy` — reverse proxy mount
@@ -27,14 +26,15 @@ Main server lifecycle: wires config, storage, migrations, HTTP, OAuth, webhook, 
 - `internal/webhook` — Dispatcher startup
 
 ## Wired by
-- `cmd/serve.go`, `cmd/dev.go` — cobra commands call Build/Run
+- `cmd/serve.go` — cobra command calls Build/Run
 - Integration tests call Build directly to set up test fixtures
 
 ## Notes
-- DevMode enables in-db email capture (DevInboxSender), relaxed CORS, auto-secret, /admin/dev/* routes
-- --proxy-upstream flag overrides cfg.Proxy at bootstrap time
-- Admin key auto-generated on first boot if missing; printed to stdout once
-- ProxyListeners holds W15 multi-listener set; legacy mode uses catch-all in api.Server
-- Minimum YAML config (phase 2): server.base_url + (email.provider OR smtp.*)
-- First-boot prompt suppressed with --no-prompt for CI/headless environments
+- **ConfigPath field REMOVED in Phase H.** No YAML config file loaded at any point.
+- **yamlHasLegacyProxyRules() DELETED in Phase H.** No YAML scan on startup.
+- First boot detected by absence of admin key in DB; interactive prompt opens browser, prints magic-link sign-in URL.
+- `--no-prompt` suppresses browser-open for CI/headless.
+- Admin key auto-generated on first boot if missing; printed to stdout once.
+- ProxyUpstream overrides cfg.Proxy.Upstream at bootstrap time.
+- ProxyListeners holds W15 multi-listener set; legacy mode uses catch-all in api.Server.
 

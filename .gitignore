@@ -12,7 +12,9 @@ data/
 *.db-shm
 *.db-wal
 
-# Local config (contains secrets)
+# Config files (REMOVED in Phase H — source of truth is SQLite)
+sharkauth.yaml
+sharky.yaml
 sharkauth.local.yaml
 
 # Planning / workflow artifacts

@@ -7,53 +7,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
-	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
-	yamlv3 "gopkg.in/yaml.v3"
 )
 
 // Config holds all SharkAuth configuration.
 type Config struct {
-	Server        ServerConfig        `koanf:"server" yaml:"server"`
-	Storage       StorageConfig       `koanf:"storage" yaml:"storage"`
-	Auth          AuthConfig          `koanf:"auth" yaml:"auth"`
-	Passkeys      PasskeyConfig       `koanf:"passkeys" yaml:"passkeys"`
-	MagicLink     MagicLinkConfig     `koanf:"magic_link" yaml:"magic_link"`
-	PasswordReset PasswordResetConfig `koanf:"password_reset" yaml:"password_reset"`
-	SMTP          SMTPConfig          `koanf:"smtp" yaml:"smtp"`
-	Email         EmailConfig         `koanf:"email" yaml:"email"`
-	MFA           MFAConfig           `koanf:"mfa" yaml:"mfa"`
-	Social        SocialConfig        `koanf:"social" yaml:"social"`
-	SSO           SSOConfig           `koanf:"sso" yaml:"sso"`
-	APIKeys       APIKeysConfig       `koanf:"api_keys" yaml:"api_keys"`
-	Audit         AuditConfig         `koanf:"audit" yaml:"audit"`
-	OAuthServer   OAuthServerConfig   `koanf:"oauth_server" yaml:"oauth_server"`
-	Proxy         ProxyConfig         `koanf:"proxy" yaml:"proxy"`
-	Telemetry     TelemetryConfig     `koanf:"telemetry" yaml:"telemetry"`
+	Server        ServerConfig        `koanf:"server"`
+	Storage       StorageConfig       `koanf:"storage"`
+	Auth          AuthConfig          `koanf:"auth"`
+	Passkeys      PasskeyConfig       `koanf:"passkeys"`
+	MagicLink     MagicLinkConfig     `koanf:"magic_link"`
+	PasswordReset PasswordResetConfig `koanf:"password_reset"`
+	SMTP          SMTPConfig          `koanf:"smtp"`
+	Email         EmailConfig         `koanf:"email"`
+	MFA           MFAConfig           `koanf:"mfa"`
+	Social        SocialConfig        `koanf:"social"`
+	SSO           SSOConfig           `koanf:"sso"`
+	APIKeys       APIKeysConfig       `koanf:"api_keys"`
+	Audit         AuditConfig         `koanf:"audit"`
+	OAuthServer   OAuthServerConfig   `koanf:"oauth_server"`
+	Proxy         ProxyConfig         `koanf:"proxy"`
+	Telemetry     TelemetryConfig     `koanf:"telemetry"`
 }
 
-// Save persists the current configuration to the specified YAML file path.
-func (c *Config) Save(path string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("config: create file: %w", err)
-	}
-	defer f.Close()
-
-	enc := yamlv3.NewEncoder(f)
-	enc.SetIndent(2)
-	if err := enc.Encode(c); err != nil {
-		return fmt.Errorf("config: encode yaml: %w", err)
-	}
-	return nil
-}
 
 // TelemetryConfig holds anonymous install-ping settings.
 type TelemetryConfig struct {
-	Enabled  bool   `koanf:"enabled" yaml:"enabled"`
-	Endpoint string `koanf:"endpoint" yaml:"endpoint"`
+	Enabled  bool   `koanf:"enabled"`
+	Endpoint string `koanf:"endpoint"`
 }
 
 // ProxyConfig holds reverse-proxy settings consumed by internal/proxy.
@@ -63,12 +45,12 @@ type TelemetryConfig struct {
 // when a legacy `proxy.rules:` block is still present on disk. See
 // docs/proxy_v1_5/migration/yaml_deprecation.md.
 type ProxyConfig struct {
-	Enabled        bool                  `koanf:"enabled" yaml:"enabled"`
-	Upstream       string                `koanf:"upstream" yaml:"upstream"`
-	Timeout        int                   `koanf:"timeout_seconds" yaml:"timeout_seconds"`
-	TrustedHeaders []string              `koanf:"trusted_headers" yaml:"trusted_headers"`
-	StripIncoming  *bool                 `koanf:"strip_incoming" yaml:"strip_incoming"`
-	Listeners      []ProxyListenerConfig `koanf:"listeners" yaml:"listeners"`
+	Enabled        bool                  `koanf:"enabled"`
+	Upstream       string                `koanf:"upstream"`
+	Timeout        int                   `koanf:"timeout_seconds"`
+	TrustedHeaders []string              `koanf:"trusted_headers"`
+	StripIncoming  *bool                 `koanf:"strip_incoming"`
+	Listeners      []ProxyListenerConfig `koanf:"listeners"`
 }
 
 // ProxyListenerConfig is one reverse-proxy listener in the W15 multi-listener design.
@@ -76,12 +58,12 @@ type ProxyConfig struct {
 // The legacy `rules:` sub-field was removed in v1.5; per-listener rules
 // are now sourced from the DB via the shared proxy engine.
 type ProxyListenerConfig struct {
-	Bind                string   `koanf:"bind" yaml:"bind"`
-	Upstream            string   `koanf:"upstream" yaml:"upstream"`
-	SessionCookieDomain string   `koanf:"session_cookie_domain" yaml:"session_cookie_domain"`
-	TrustedHeaders      []string `koanf:"trusted_headers" yaml:"trusted_headers"`
-	StripIncoming       *bool    `koanf:"strip_incoming" yaml:"strip_incoming"`
-	Timeout             int      `koanf:"timeout_seconds" yaml:"timeout_seconds"`
+	Bind                string   `koanf:"bind"`
+	Upstream            string   `koanf:"upstream"`
+	SessionCookieDomain string   `koanf:"session_cookie_domain"`
+	TrustedHeaders      []string `koanf:"trusted_headers"`
+	StripIncoming       *bool    `koanf:"strip_incoming"`
+	Timeout             int      `koanf:"timeout_seconds"`
 }
 
 func (l *ProxyListenerConfig) TimeoutDuration() time.Duration {
@@ -124,11 +106,11 @@ func (p *ProxyConfig) Resolve() {
 // config.Load. Any new code should use `storage.ProxyRule` or
 // `proxy.RuleSpec` directly.
 type ProxyRule struct {
-	Path    string   `koanf:"path" yaml:"path"`
-	Methods []string `koanf:"methods" yaml:"methods"`
-	Require string   `koanf:"require" yaml:"require"`
-	Allow   string   `koanf:"allow" yaml:"allow"`
-	Scopes  []string `koanf:"scopes" yaml:"scopes"`
+	Path    string   `koanf:"path"`
+	Methods []string `koanf:"methods"`
+	Require string   `koanf:"require"`
+	Allow   string   `koanf:"allow"`
+	Scopes  []string `koanf:"scopes"`
 }
 
 func (p *ProxyConfig) TimeoutDuration() time.Duration {
@@ -146,47 +128,47 @@ func (p *ProxyConfig) StripIncomingOrDefault() bool {
 }
 
 type EmailConfig struct {
-	Provider         string `koanf:"provider" yaml:"provider"`
-	APIKey           string `koanf:"api_key" yaml:"api_key"`
-	From             string `koanf:"from" yaml:"from"`
-	FromName         string `koanf:"from_name" yaml:"from_name"`
-	Host             string `koanf:"host" yaml:"host"`
-	Port             int    `koanf:"port" yaml:"port"`
-	Username         string `koanf:"username" yaml:"username"`
-	Password         string `koanf:"password" yaml:"password"`
+	Provider         string `koanf:"provider"`
+	APIKey           string `koanf:"api_key"`
+	From             string `koanf:"from"`
+	FromName         string `koanf:"from_name"`
+	Host             string `koanf:"host"`
+	Port             int    `koanf:"port"`
+	Username         string `koanf:"username"`
+	Password         string `koanf:"password"`
 	// PreviousProvider stores the last non-dev provider so the dev-inbox
 	// toggle is reversible without losing the original provider setting.
-	PreviousProvider string `koanf:"previous_provider" yaml:"previous_provider"`
+	PreviousProvider string `koanf:"previous_provider"`
 }
 
 type ServerConfig struct {
-	Port         int      `koanf:"port" yaml:"port"`
-	Secret       string   `koanf:"secret" yaml:"secret"`
-	BaseURL      string   `koanf:"base_url" yaml:"base_url"`
-	CORSOrigins  []string `koanf:"cors_origins" yaml:"cors_origins"`
+	Port         int      `koanf:"port"`
+	Secret       string   `koanf:"secret"`
+	BaseURL      string   `koanf:"base_url"`
+	CORSOrigins  []string `koanf:"cors_origins"`
 	// CORSRelaxed, when true, makes the CORS middleware accept any Origin.
 	// Intended for local development only — toggle via Settings → Server.
-	CORSRelaxed  bool     `koanf:"cors_relaxed" yaml:"cors_relaxed"`
-	DevMode      bool     `koanf:"-" yaml:"-"`
+	CORSRelaxed  bool     `koanf:"cors_relaxed"`
+	DevMode      bool     `koanf:"-"`
 }
 
 type StorageConfig struct {
-	Path string `koanf:"path" yaml:"path"`
+	Path string `koanf:"path"`
 }
 
 type JWTRevocationConfig struct {
-	CheckPerRequest bool `koanf:"check_per_request" yaml:"check_per_request"`
+	CheckPerRequest bool `koanf:"check_per_request"`
 }
 
 type JWTConfig struct {
-	Enabled         bool                `koanf:"enabled" yaml:"enabled"`
-	Mode            string              `koanf:"mode" yaml:"mode"`
-	Issuer          string              `koanf:"issuer" yaml:"issuer"`
-	Audience        string              `koanf:"audience" yaml:"audience"`
-	AccessTokenTTL  string              `koanf:"access_token_ttl" yaml:"access_token_ttl"`
-	RefreshTokenTTL string              `koanf:"refresh_token_ttl" yaml:"refresh_token_ttl"`
-	ClockSkew       string              `koanf:"clock_skew" yaml:"clock_skew"`
-	Revocation      JWTRevocationConfig `koanf:"revocation" yaml:"revocation"`
+	Enabled         bool                `koanf:"enabled"`
+	Mode            string              `koanf:"mode"`
+	Issuer          string              `koanf:"issuer"`
+	Audience        string              `koanf:"audience"`
+	AccessTokenTTL  string              `koanf:"access_token_ttl"`
+	RefreshTokenTTL string              `koanf:"refresh_token_ttl"`
+	ClockSkew       string              `koanf:"clock_skew"`
+	Revocation      JWTRevocationConfig `koanf:"revocation"`
 }
 
 func (j *JWTConfig) AccessTokenTTLDuration() time.Duration {
@@ -202,18 +184,18 @@ func (j *JWTConfig) ClockSkewDuration() time.Duration {
 }
 
 type AuthConfig struct {
-	SessionLifetime   string         `koanf:"session_lifetime" yaml:"session_lifetime"`
-	PasswordMinLength int            `koanf:"password_min_length" yaml:"password_min_length"`
-	Argon2id          Argon2idConfig `koanf:"argon2id" yaml:"argon2id"`
-	JWT               JWTConfig      `koanf:"jwt" yaml:"jwt"`
+	SessionLifetime   string         `koanf:"session_lifetime"`
+	PasswordMinLength int            `koanf:"password_min_length"`
+	Argon2id          Argon2idConfig `koanf:"argon2id"`
+	JWT               JWTConfig      `koanf:"jwt"`
 }
 
 type Argon2idConfig struct {
-	Memory      uint32 `koanf:"memory" yaml:"memory"`
-	Iterations  uint32 `koanf:"iterations" yaml:"iterations"`
-	Parallelism uint8  `koanf:"parallelism" yaml:"parallelism"`
-	SaltLength  uint32 `koanf:"salt_length" yaml:"salt_length"`
-	KeyLength   uint32 `koanf:"key_length" yaml:"key_length"`
+	Memory      uint32 `koanf:"memory"`
+	Iterations  uint32 `koanf:"iterations"`
+	Parallelism uint8  `koanf:"parallelism"`
+	SaltLength  uint32 `koanf:"salt_length"`
+	KeyLength   uint32 `koanf:"key_length"`
 }
 
 func (a *AuthConfig) SessionLifetimeDuration() time.Duration {
@@ -221,17 +203,17 @@ func (a *AuthConfig) SessionLifetimeDuration() time.Duration {
 }
 
 type PasskeyConfig struct {
-	RPName           string `koanf:"rp_name" yaml:"rp_name"`
-	RPID             string `koanf:"rp_id" yaml:"rp_id"`
-	Origin           string `koanf:"origin" yaml:"origin"`
-	Attestation      string `koanf:"attestation" yaml:"attestation"`
-	ResidentKey      string `koanf:"resident_key" yaml:"resident_key"`
-	UserVerification string `koanf:"user_verification" yaml:"user_verification"`
+	RPName           string `koanf:"rp_name"`
+	RPID             string `koanf:"rp_id"`
+	Origin           string `koanf:"origin"`
+	Attestation      string `koanf:"attestation"`
+	ResidentKey      string `koanf:"resident_key"`
+	UserVerification string `koanf:"user_verification"`
 }
 
 type MagicLinkConfig struct {
-	TokenLifetime string `koanf:"token_lifetime" yaml:"token_lifetime"`
-	RedirectURL   string `koanf:"redirect_url" yaml:"redirect_url"`
+	TokenLifetime string `koanf:"token_lifetime"`
+	RedirectURL   string `koanf:"redirect_url"`
 }
 
 func (m *MagicLinkConfig) TokenLifetimeDuration() time.Duration {
@@ -239,76 +221,76 @@ func (m *MagicLinkConfig) TokenLifetimeDuration() time.Duration {
 }
 
 type PasswordResetConfig struct {
-	RedirectURL   string `koanf:"redirect_url" yaml:"redirect_url"`
-	TokenLifetime string `koanf:"token_lifetime" yaml:"token_lifetime"`
+	RedirectURL   string `koanf:"redirect_url"`
+	TokenLifetime string `koanf:"token_lifetime"`
 }
 
 type SMTPConfig struct {
-	Host     string `koanf:"host" yaml:"host"`
-	Port     int    `koanf:"port" yaml:"port"`
-	Username string `koanf:"username" yaml:"username"`
-	Password string `koanf:"password" yaml:"password"`
-	From     string `koanf:"from" yaml:"from"`
-	FromName string `koanf:"from_name" yaml:"from_name"`
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
+	From     string `koanf:"from"`
+	FromName string `koanf:"from_name"`
 }
 
 type MFAConfig struct {
-	Issuer        string `koanf:"issuer" yaml:"issuer"`
-	RecoveryCodes int    `koanf:"recovery_codes" yaml:"recovery_codes"`
+	Issuer        string `koanf:"issuer"`
+	RecoveryCodes int    `koanf:"recovery_codes"`
 }
 
 type SocialConfig struct {
-	RedirectURL string        `koanf:"redirect_url" yaml:"redirect_url"`
-	Google      GoogleConfig  `koanf:"google" yaml:"google"`
-	GitHub      GitHubConfig  `koanf:"github" yaml:"github"`
-	Apple       AppleConfig   `koanf:"apple" yaml:"apple"`
-	Discord     DiscordConfig `koanf:"discord" yaml:"discord"`
+	RedirectURL string        `koanf:"redirect_url"`
+	Google      GoogleConfig  `koanf:"google"`
+	GitHub      GitHubConfig  `koanf:"github"`
+	Apple       AppleConfig   `koanf:"apple"`
+	Discord     DiscordConfig `koanf:"discord"`
 }
 
 type GoogleConfig struct {
-	ClientID     string   `koanf:"client_id" yaml:"client_id"`
-	ClientSecret string   `koanf:"client_secret" yaml:"client_secret"`
-	Scopes       []string `koanf:"scopes" yaml:"scopes"`
+	ClientID     string   `koanf:"client_id"`
+	ClientSecret string   `koanf:"client_secret"`
+	Scopes       []string `koanf:"scopes"`
 }
 
 type GitHubConfig struct {
-	ClientID     string   `koanf:"client_id" yaml:"client_id"`
-	ClientSecret string   `koanf:"client_secret" yaml:"client_secret"`
-	Scopes       []string `koanf:"scopes" yaml:"scopes"`
+	ClientID     string   `koanf:"client_id"`
+	ClientSecret string   `koanf:"client_secret"`
+	Scopes       []string `koanf:"scopes"`
 }
 
 type AppleConfig struct {
-	ClientID       string `koanf:"client_id" yaml:"client_id"`
-	TeamID         string `koanf:"team_id" yaml:"team_id"`
-	KeyID          string `koanf:"key_id" yaml:"key_id"`
-	PrivateKeyPath string `koanf:"private_key_path" yaml:"private_key_path"`
+	ClientID       string `koanf:"client_id"`
+	TeamID         string `koanf:"team_id"`
+	KeyID          string `koanf:"key_id"`
+	PrivateKeyPath string `koanf:"private_key_path"`
 }
 
 type DiscordConfig struct {
-	ClientID     string   `koanf:"client_id" yaml:"client_id"`
-	ClientSecret string   `koanf:"client_secret" yaml:"client_secret"`
-	Scopes       []string `koanf:"scopes" yaml:"scopes"`
+	ClientID     string   `koanf:"client_id"`
+	ClientSecret string   `koanf:"client_secret"`
+	Scopes       []string `koanf:"scopes"`
 }
 
 type SSOConfig struct {
-	SAML SAMLConfig `koanf:"saml" yaml:"saml"`
-	OIDC OIDCConfig `koanf:"oidc" yaml:"oidc"`
+	SAML SAMLConfig `koanf:"saml"`
+	OIDC OIDCConfig `koanf:"oidc"`
 }
 
 type SAMLConfig struct {
-	SPEntityID string `koanf:"sp_entity_id" yaml:"sp_entity_id"`
+	SPEntityID string `koanf:"sp_entity_id"`
 }
 
 type OIDCConfig struct{}
 
 type APIKeysConfig struct {
-	DefaultRateLimit int    `koanf:"default_rate_limit" yaml:"default_rate_limit"`
-	KeyMaxLifetime   string `koanf:"key_max_lifetime" yaml:"key_max_lifetime"`
+	DefaultRateLimit int    `koanf:"default_rate_limit"`
+	KeyMaxLifetime   string `koanf:"key_max_lifetime"`
 }
 
 type AuditConfig struct {
-	Retention       string `koanf:"retention" yaml:"retention"`
-	CleanupInterval string `koanf:"cleanup_interval" yaml:"cleanup_interval"`
+	Retention       string `koanf:"retention"`
+	CleanupInterval string `koanf:"cleanup_interval"`
 }
 
 func (a *AuditConfig) CleanupIntervalDuration() time.Duration {
@@ -316,15 +298,15 @@ func (a *AuditConfig) CleanupIntervalDuration() time.Duration {
 }
 
 type OAuthServerConfig struct {
-	Enabled              bool   `koanf:"enabled" yaml:"enabled"`
-	Issuer               string `koanf:"issuer" yaml:"issuer"`
-	SigningAlgorithm     string `koanf:"signing_algorithm" yaml:"signing_algorithm"`
-	AccessTokenLifetime  string `koanf:"access_token_lifetime" yaml:"access_token_lifetime"`
-	RefreshTokenLifetime string `koanf:"refresh_token_lifetime" yaml:"refresh_token_lifetime"`
-	AuthCodeLifetime     string `koanf:"auth_code_lifetime" yaml:"auth_code_lifetime"`
-	DeviceCodeLifetime   string `koanf:"device_code_lifetime" yaml:"device_code_lifetime"`
-	ConsentTemplate      string `koanf:"consent_template" yaml:"consent_template"`
-	RequireDPoP          bool   `koanf:"require_dpop" yaml:"require_dpop"`
+	Enabled              bool   `koanf:"enabled"`
+	Issuer               string `koanf:"issuer"`
+	SigningAlgorithm     string `koanf:"signing_algorithm"`
+	AccessTokenLifetime  string `koanf:"access_token_lifetime"`
+	RefreshTokenLifetime string `koanf:"refresh_token_lifetime"`
+	AuthCodeLifetime     string `koanf:"auth_code_lifetime"`
+	DeviceCodeLifetime   string `koanf:"device_code_lifetime"`
+	ConsentTemplate      string `koanf:"consent_template"`
+	RequireDPoP          bool   `koanf:"require_dpop"`
 }
 
 func (o *OAuthServerConfig) AccessTokenLifetimeDuration() time.Duration {
@@ -415,11 +397,7 @@ func Load(path string) (*Config, error) {
 			return nil, fmt.Errorf("setting default %s: %w", key, err)
 		}
 	}
-	if path != "" {
-		if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
-			return nil, fmt.Errorf("loading config file %s: %w", path, err)
-		}
-	}
+	_ = path // yaml file loading removed in W17 Phase H; arg kept for caller compat
 	interpolateEnvVars(k)
 	if err := k.Load(env.Provider("SHARKAUTH_", ".", func(s string) string {
 		key := strings.TrimPrefix(s, "SHARKAUTH_")
