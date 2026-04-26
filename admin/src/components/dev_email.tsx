@@ -372,6 +372,17 @@ export function DevEmail() {
     }
   }, [allEmails, selected]);
 
+  // Derive delivery state from latest backend poll — never stale local state
+  const lastDelivered = React.useMemo(() => {
+    if (!allEmails.length) return null;
+    // Sort descending by received timestamp and return the most recent
+    return [...allEmails].sort((a, b) => {
+      const ta = new Date(a.created_at || a.received_at || a.timestamp || 0).getTime();
+      const tb = new Date(b.created_at || b.received_at || b.timestamp || 0).getTime();
+      return tb - ta;
+    })[0];
+  }, [allEmails]);
+
   const handleClear = async () => {
     setClearing(true);
     try {
@@ -408,7 +419,7 @@ export function DevEmail() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Dev-mode banner */}
+      {/* Dev-mode banner — state derived from latest backend poll */}
       <div style={{
         padding: '7px 20px',
         fontSize: 11.5,
@@ -421,7 +432,19 @@ export function DevEmail() {
         flexShrink: 0,
       }}>
         <Icon.Warn width={12} height={12} style={{ flexShrink: 0 }}/>
-        <span>Dev email capture active. Switch provider before production.</span>
+        {lastDelivered ? (
+          <span>
+            Dev capture active —{' '}
+            <strong>last received</strong>{' '}
+            <span className="mono" style={{ fontSize: 11 }}>
+              {lastDelivered.to || lastDelivered.to_addr || lastDelivered.recipient || '?'}
+            </span>{' '}
+            {relativeTime(lastDelivered.created_at || lastDelivered.received_at || lastDelivered.timestamp)}.{' '}
+            Switch provider before production.
+          </span>
+        ) : (
+          <span>Dev email capture active. Switch provider before production.</span>
+        )}
       </div>
 
       {/* Inline confirm strip (replaces modal) */}
