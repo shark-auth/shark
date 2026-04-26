@@ -1,7 +1,6 @@
 import pytest
 import requests
 import time
-import yaml
 
 import os
 BASE_URL = os.environ.get("BASE", "http://localhost:8080")
