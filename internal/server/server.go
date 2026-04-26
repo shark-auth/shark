@@ -481,6 +481,19 @@ func Serve(ctx context.Context, opts Options) error {
 		}
 	}
 
+	// W1.8 Surface 1: print the dashboard banner once, synchronously, BEFORE the
+	// goroutine starts the listener. Operators see the banner immediately even on
+	// slow first boots; subsequent slog lines below are debug-style and safe to
+	// keep for CI log analysis.
+	{
+		setupKeyPath := ""
+		firstBoot := b.AdminKey != ""
+		if firstBoot {
+			setupKeyPath = filepath.Join(filepath.Dir(b.Config.Storage.Path), "admin.key.firstboot")
+		}
+		PrintDashboardURL(b.Config.Server.Port, setupKeyPath, firstBoot)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("SharkAuth starting", "addr", addr, "dev_mode", opts.DevMode)
