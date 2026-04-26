@@ -413,14 +413,25 @@ func (e *Engine) emitAuditLog(ctx context.Context, fc *Context, action string, m
 		actorID = fc.User.ID
 	}
 
+	// TargetID anchors the audit row to a specific subject so dashboard
+	// filters can drill in. For authflow steps the user is the only stable
+	// scope plumbed through Context (flow_id and run_id sit on the engine
+	// loop, not the StepContext) — fall back to "" if no user is bound.
+	targetID := ""
+	if fc.User != nil {
+		targetID = fc.User.ID
+	}
+
 	entry := &storage.AuditLog{
-		ID:        id,
-		ActorID:   actorID,
-		ActorType: "user",
-		Action:    action,
-		Metadata:  string(metaJSON),
-		Status:    "success",
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		ID:         id,
+		ActorID:    actorID,
+		ActorType:  "user",
+		Action:     action,
+		TargetType: "user",
+		TargetID:   targetID,
+		Metadata:   string(metaJSON),
+		Status:     "success",
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := e.store.CreateAuditLog(ctx, entry); err != nil {
 		e.logger.Warn("authflow: audit log write failed",

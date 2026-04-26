@@ -121,6 +121,7 @@ func (s *Server) adminDecideDeviceCode(w http.ResponseWriter, r *http.Request, d
 		})
 		_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "oauth.device." + decision,
 			TargetType: "device_code",
 			TargetID:   userCode,

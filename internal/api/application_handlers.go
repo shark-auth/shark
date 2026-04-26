@@ -329,7 +329,24 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditApp(r, "app.create", app.ID)
+	if s.AuditLogger != nil {
+		metaBytes, _ := json.Marshal(map[string]any{
+			"app_name":            app.Name,
+			"client_id":           app.ClientID,
+			"redirect_uris_count": len(app.AllowedCallbackURLs),
+		})
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			ActorID:    "admin_key",
+			Action:     "app.create",
+			TargetType: "application",
+			TargetID:   app.ID,
+			Metadata:   string(metaBytes),
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Status:     "success",
+		})
+	}
 
 	writeJSON(w, http.StatusCreated, applicationResponseWithSecret{
 		applicationResponse: appToResponse(app),
@@ -410,8 +427,10 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
 		return
 	}
+	changedFields := []string{}
 	if req.Name != nil {
 		app.Name = *req.Name
+		changedFields = append(changedFields, "name")
 	}
 	if req.Slug != nil {
 		if err := validateSlug(*req.Slug); err != nil {
@@ -419,6 +438,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.Slug = *req.Slug
+		changedFields = append(changedFields, "slug")
 	}
 	if req.Callbacks != nil {
 		if err := validateAppURLs(*req.Callbacks); err != nil {
@@ -426,6 +446,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.AllowedCallbackURLs = *req.Callbacks
+		changedFields = append(changedFields, "allowed_callback_urls")
 	}
 	if req.Logouts != nil {
 		if err := validateAppURLs(*req.Logouts); err != nil {
@@ -433,6 +454,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.AllowedLogoutURLs = *req.Logouts
+		changedFields = append(changedFields, "allowed_logout_urls")
 	}
 	if req.Origins != nil {
 		if err := validateAppURLs(*req.Origins); err != nil {
@@ -440,6 +462,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.AllowedOrigins = *req.Origins
+		changedFields = append(changedFields, "allowed_origins")
 	}
 	if req.IntegrationMode != nil {
 		if !validIntegrationMode(*req.IntegrationMode) {
@@ -448,6 +471,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.IntegrationMode = *req.IntegrationMode
+		changedFields = append(changedFields, "integration_mode")
 	}
 	if req.BrandingOverride != nil {
 		// Normalise: null or "" clears the override. Otherwise must be a JSON object.
@@ -464,6 +488,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			}
 			app.BrandingOverride = raw
 		}
+		changedFields = append(changedFields, "branding_override")
 	}
 	if req.ProxyLoginFallback != nil {
 		if !validProxyLoginFallback(*req.ProxyLoginFallback) {
@@ -472,6 +497,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.ProxyLoginFallback = *req.ProxyLoginFallback
+		changedFields = append(changedFields, "proxy_login_fallback")
 	}
 	if req.ProxyLoginFallbackURL != nil {
 		if *req.ProxyLoginFallbackURL != "" {
@@ -481,9 +507,11 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		app.ProxyLoginFallbackURL = *req.ProxyLoginFallbackURL
+		changedFields = append(changedFields, "proxy_login_fallback_url")
 	}
 	if req.ProxyPublicDomain != nil {
 		app.ProxyPublicDomain = *req.ProxyPublicDomain
+		changedFields = append(changedFields, "proxy_public_domain")
 	}
 	if req.ProxyProtectedURL != nil {
 		if *req.ProxyProtectedURL != "" {
@@ -493,6 +521,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		app.ProxyProtectedURL = *req.ProxyProtectedURL
+		changedFields = append(changedFields, "proxy_protected_url")
 	}
 
 	if err := s.Store.UpdateApplication(r.Context(), app); err != nil {
@@ -504,7 +533,23 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditApp(r, "app.update", app.ID)
+	if s.AuditLogger != nil {
+		metaBytes, _ := json.Marshal(map[string]any{
+			"app_id":         app.ID,
+			"changed_fields": changedFields,
+		})
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			ActorID:    "admin_key",
+			Action:     "app.update",
+			TargetType: "application",
+			TargetID:   app.ID,
+			Metadata:   string(metaBytes),
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Status:     "success",
+		})
+	}
 
 	// Re-fetch to pick up updated_at set by the DB.
 	updated, err := s.Store.GetApplicationByID(r.Context(), app.ID)
@@ -537,7 +582,23 @@ func (s *Server) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditApp(r, "app.delete", app.ID)
+	if s.AuditLogger != nil {
+		metaBytes, _ := json.Marshal(map[string]any{
+			"app_id":   app.ID,
+			"app_name": app.Name,
+		})
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			ActorID:    "admin_key",
+			Action:     "app.delete",
+			TargetType: "application",
+			TargetID:   app.ID,
+			Metadata:   string(metaBytes),
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Status:     "success",
+		})
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -560,12 +621,39 @@ func (s *Server) handleRotateAppSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	oldHash := app.ClientSecretHash
+
 	if err := s.Store.RotateApplicationSecret(r.Context(), app.ID, secretHash, secretPrefix); err != nil {
 		internal(w, err)
 		return
 	}
 
-	s.auditApp(r, "app.secret.rotate", app.ID)
+	if s.AuditLogger != nil {
+		oldKid := oldHash
+		if len(oldKid) > 12 {
+			oldKid = oldKid[:12]
+		}
+		newKid := secretHash
+		if len(newKid) > 12 {
+			newKid = newKid[:12]
+		}
+		metaBytes, _ := json.Marshal(map[string]any{
+			"app_id":  app.ID,
+			"old_kid": oldKid,
+			"new_kid": newKid,
+		})
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			ActorID:    "admin_key",
+			Action:     "app.secret.rotate",
+			TargetType: "application",
+			TargetID:   app.ID,
+			Metadata:   string(metaBytes),
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Status:     "success",
+		})
+	}
 
 	// Re-fetch to get fresh timestamps.
 	updated, err := s.Store.GetApplicationByID(r.Context(), app.ID)

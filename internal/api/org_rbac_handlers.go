@@ -67,8 +67,21 @@ type orgRoleWithPermsResponse struct {
 
 // auditOrgRBAC logs an org RBAC event.
 func (s *Server) auditOrgRBAC(ctx context.Context, actor, action, orgID, targetID, ip, ua string) {
+	s.auditOrgRBACWithMeta(ctx, actor, action, orgID, targetID, ip, ua, nil)
+}
+
+// auditOrgRBACWithMeta is the structured variant — accepts a metadata map
+// JSON-encoded into AuditLog.Metadata. nil/empty meta yields "{}" so the
+// column never lands as literal NULL.
+func (s *Server) auditOrgRBACWithMeta(ctx context.Context, actor, action, orgID, targetID, ip, ua string, meta map[string]any) {
 	if s.AuditLogger == nil {
 		return
+	}
+	metaJSON := []byte("{}")
+	if meta != nil {
+		if b, err := json.Marshal(meta); err == nil {
+			metaJSON = b
+		}
 	}
 	_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
 		ActorID:    actor,
@@ -79,6 +92,7 @@ func (s *Server) auditOrgRBAC(ctx context.Context, actor, action, orgID, targetI
 		IP:         ip,
 		UserAgent:  ua,
 		Status:     "success",
+		Metadata:   string(metaJSON),
 	})
 }
 
@@ -120,7 +134,10 @@ func (s *Server) handleCreateOrgRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditOrgRBAC(r.Context(), actor, "org.role.create", orgID, role.ID, ipOf(r), uaOf(r))
+	s.auditOrgRBACWithMeta(r.Context(), actor, "org.role.create", orgID, role.ID, ipOf(r), uaOf(r), map[string]any{
+		"role_name": role.Name,
+		"org_id":    orgID,
+	})
 	writeJSON(w, http.StatusCreated, orgRoleToResponse(role))
 }
 
@@ -184,13 +201,22 @@ func (s *Server) handleUpdateOrgRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.auditOrgRBACWithMeta(r.Context(), actor, "org.role.update", orgID, roleID, ipOf(r), uaOf(r), map[string]any{
+		"role_name": name,
+		"org_id":    orgID,
+	})
+
 	// Attach permissions
 	for _, p := range req.AttachPermissions {
 		if err := s.RBAC.AttachOrgPermission(r.Context(), roleID, p.Action, p.Resource); err != nil {
 			internal(w, err)
 			return
 		}
-		s.auditOrgRBAC(r.Context(), actor, "org.permission.attach", orgID, roleID, ipOf(r), uaOf(r))
+		s.auditOrgRBACWithMeta(r.Context(), actor, "org.permission.attach", orgID, roleID, ipOf(r), uaOf(r), map[string]any{
+			"role_name":       name,
+			"permission_name": p.Action + ":" + p.Resource,
+			"org_id":          orgID,
+		})
 	}
 
 	// Detach permissions
@@ -199,7 +225,11 @@ func (s *Server) handleUpdateOrgRole(w http.ResponseWriter, r *http.Request) {
 			internal(w, err)
 			return
 		}
-		s.auditOrgRBAC(r.Context(), actor, "org.permission.detach", orgID, roleID, ipOf(r), uaOf(r))
+		s.auditOrgRBACWithMeta(r.Context(), actor, "org.permission.detach", orgID, roleID, ipOf(r), uaOf(r), map[string]any{
+			"role_name":       name,
+			"permission_name": p.Action + ":" + p.Resource,
+			"org_id":          orgID,
+		})
 	}
 
 	updated, err := s.Store.GetOrgRoleByID(r.Context(), roleID)
@@ -216,6 +246,14 @@ func (s *Server) handleDeleteOrgRole(w http.ResponseWriter, r *http.Request) {
 	roleID := chi.URLParam(r, "role_id")
 	actor := mw.GetUserID(r.Context())
 
+	// Capture role name before deletion so the audit row carries it
+	// (post-delete name lookup is impossible). Best-effort: a missing row
+	// just leaves roleNameForAudit empty.
+	var roleNameForAudit string
+	if existing, err := s.Store.GetOrgRoleByID(r.Context(), roleID); err == nil && existing != nil {
+		roleNameForAudit = existing.Name
+	}
+
 	err := s.RBAC.DeleteOrgRole(r.Context(), orgID, roleID)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Role not found"))
@@ -230,7 +268,10 @@ func (s *Server) handleDeleteOrgRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditOrgRBAC(r.Context(), actor, "org.role.delete", orgID, roleID, ipOf(r), uaOf(r))
+	s.auditOrgRBACWithMeta(r.Context(), actor, "org.role.delete", orgID, roleID, ipOf(r), uaOf(r), map[string]any{
+		"role_name": roleNameForAudit,
+		"org_id":    orgID,
+	})
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Role deleted"})
 }
 

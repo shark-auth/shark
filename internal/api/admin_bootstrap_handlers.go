@@ -186,18 +186,30 @@ func (s *Server) handleBootstrapConsume(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Audit trail: future `shark serve` runs will see this admin.* event and
-	// skip the token print.
+	// skip the token print. Metadata records the visible key prefix and the
+	// exact consumed-at timestamp so operators can correlate the audit row to
+	// the API key that was minted without exposing the secret.
 	if s.AuditLogger != nil {
+		prefix := ak.KeyPrefix
+		if prefix == "" && len(ak.ID) >= 12 {
+			prefix = ak.ID[:12]
+		}
+		metaBytes, _ := json.Marshal(map[string]any{
+			"key_prefix":  prefix,
+			"consumed_at": time.Now().UTC().Format(time.RFC3339),
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
-			ID:        "audit_" + id,
-			ActorID:   ak.ID,
-			ActorType: "admin",
-			Action:    "admin.bootstrap.consumed",
-			TargetID:  ak.ID,
-			IP:        ipOf(r),
-			UserAgent: uaOf(r),
-			Status:    "success",
-			CreatedAt: now,
+			ID:         "audit_" + id,
+			ActorID:    ak.ID,
+			ActorType:  "admin",
+			Action:     "admin.bootstrap.consumed",
+			TargetType: "api_key",
+			TargetID:   ak.ID,
+			IP:         ipOf(r),
+			UserAgent:  uaOf(r),
+			Metadata:   string(metaBytes),
+			Status:     "success",
+			CreatedAt:  now,
 		})
 	}
 

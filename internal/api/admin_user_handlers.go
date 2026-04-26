@@ -99,9 +99,13 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 	// shape but targets the new user. Metadata carries the email for
 	// operator-friendly review without needing a user-table join.
 	if s.AuditLogger != nil {
-		metaBytes, _ := json.Marshal(map[string]string{"email": user.Email})
+		metaBytes, _ := json.Marshal(map[string]any{
+			"email":          user.Email,
+			"email_verified": user.EmailVerified,
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "admin.user.create",
 			TargetType: "user",
 			TargetID:   user.ID,

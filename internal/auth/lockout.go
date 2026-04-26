@@ -90,6 +90,19 @@ func (lm *LockoutManager) RecordSuccess(email string) {
 	delete(lm.attempts, email)
 }
 
+// FailureCount returns the current cumulative failure count for an email.
+// Used for audit metadata so admins see how many attempts preceded a lockout.
+// Returns 0 when no entry exists.
+func (lm *LockoutManager) FailureCount(email string) int {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	entry, ok := lm.attempts[email]
+	if !ok {
+		return 0
+	}
+	return entry.failures
+}
+
 func (lm *LockoutManager) cleanup() {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()

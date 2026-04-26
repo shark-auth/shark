@@ -48,6 +48,21 @@ func (s *Server) handleSetUserTier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture old tier before the update so the audit log carries
+	// the before/after pair. Best-effort: if the read fails, fall
+	// back to an empty old_tier rather than blocking the write.
+	oldTier := ""
+	if before, err := s.Store.GetUserByID(r.Context(), userID); err == nil && before != nil {
+		if before.Metadata != "" {
+			var probe map[string]any
+			if jerr := json.Unmarshal([]byte(before.Metadata), &probe); jerr == nil {
+				if v, ok := probe["tier"].(string); ok {
+					oldTier = v
+				}
+			}
+		}
+	}
+
 	if err := s.Store.SetUserTier(r.Context(), userID, tier); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, http.StatusNotFound, errPayload("not_found", "User not found"))
@@ -64,14 +79,21 @@ func (s *Server) handleSetUserTier(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.AuditLogger != nil {
+		metaBytes, _ := json.Marshal(map[string]any{
+			"tier":     tier,
+			"old_tier": oldTier,
+			"user_id":  userID,
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "user.tier.set",
 			TargetType: "user",
 			TargetID:   userID,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
-			Metadata:   `{"tier":"` + tier + `"}`,
+			Status:     "success",
 		})
 	}
 
@@ -112,13 +134,25 @@ func (s *Server) handleSetDesignTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.AuditLogger != nil {
+		tokenKeys := make([]string, 0, len(req.DesignTokens))
+		for k := range req.DesignTokens {
+			tokenKeys = append(tokenKeys, k)
+		}
+		actorID := "admin_key"
+		metaBytes, _ := json.Marshal(map[string]any{
+			"token_keys_changed": tokenKeys,
+			"by_admin_key":       actorID,
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    actorID,
 			Action:     "branding.design_tokens.set",
 			TargetType: "branding",
 			TargetID:   "global",
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
+			Status:     "success",
 		})
 	}
 

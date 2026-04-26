@@ -586,11 +586,31 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 // recordLoginFailure emits a `user.login` audit row with status=failure so the
 // admin stats counter (failed_logins_24h) and the audit page reflect real
 // activity. actorID may be empty when the email doesn't match a user.
+// failureReason is a short tag (e.g. "user_not_found", "no_password",
+// "bad_password") that helps operators triage spikes without needing to
+// correlate against application logs.
 func (s *Server) recordLoginFailure(r *http.Request, actorID, email string) {
+	s.recordLoginFailureWithReason(r, actorID, email, "")
+}
+
+// recordLoginFailureWithReason is the structured variant of recordLoginFailure.
+// Kept as a sibling (rather than changing the existing call sites' signature)
+// so all four current invocations continue to compile while still emitting
+// {email, failure_reason, attempt_count}. attempt_count comes from the
+// in-memory LockoutManager — best-effort, drops to 0 if unwired.
+func (s *Server) recordLoginFailureWithReason(r *http.Request, actorID, email, failureReason string) {
 	if s == nil || s.AuditLogger == nil {
 		return
 	}
-	meta, _ := json.Marshal(map[string]string{"email": email})
+	attemptCount := 0
+	if s.LockoutManager != nil {
+		attemptCount = s.LockoutManager.FailureCount(email)
+	}
+	meta, _ := json.Marshal(map[string]any{
+		"email":          email,
+		"failure_reason": failureReason,
+		"attempt_count":  attemptCount,
+	})
 	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 		ActorID:    actorID,
 		ActorType:  "user",

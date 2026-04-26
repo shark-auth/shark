@@ -190,13 +190,24 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.AuditLogger != nil {
+		// target_upstream is captured from rule.Allow as the closest
+		// available analog — ProxyRule has no dedicated upstream URL
+		// field. Spec doc lists this name for cross-system parity.
+		metaBytes, _ := json.Marshal(map[string]any{
+			"rule_name":       rule.Name,
+			"path_pattern":    rule.Pattern,
+			"target_upstream": rule.Allow,
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "proxy.rule.created",
 			TargetType: "proxy_rule",
 			TargetID:   rule.ID,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
+			Status:     "success",
 		})
 	}
 
@@ -279,8 +290,10 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	changedFields := []string{}
 	if req.AppID != nil {
 		rule.AppID = *req.AppID
+		changedFields = append(changedFields, "app_id")
 	}
 	if req.Name != nil {
 		if strings.TrimSpace(*req.Name) == "" {
@@ -288,33 +301,43 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rule.Name = *req.Name
+		changedFields = append(changedFields, "name")
 	}
 	if req.Pattern != nil {
 		rule.Pattern = *req.Pattern
+		changedFields = append(changedFields, "pattern")
 	}
 	if req.Methods != nil {
 		rule.Methods = normalizeMethods(*req.Methods)
+		changedFields = append(changedFields, "methods")
 	}
 	if req.Require != nil {
 		rule.Require = *req.Require
+		changedFields = append(changedFields, "require")
 	}
 	if req.Allow != nil {
 		rule.Allow = *req.Allow
+		changedFields = append(changedFields, "allow")
 	}
 	if req.Scopes != nil {
 		rule.Scopes = *req.Scopes
+		changedFields = append(changedFields, "scopes")
 	}
 	if req.Enabled != nil {
 		rule.Enabled = *req.Enabled
+		changedFields = append(changedFields, "enabled")
 	}
 	if req.Priority != nil {
 		rule.Priority = *req.Priority
+		changedFields = append(changedFields, "priority")
 	}
 	if req.TierMatch != nil {
 		rule.TierMatch = *req.TierMatch
+		changedFields = append(changedFields, "tier_match")
 	}
 	if req.M2M != nil {
 		rule.M2M = *req.M2M
+		changedFields = append(changedFields, "m2m")
 	}
 
 	// Re-validate the full row before persisting — partial PATCH could land
@@ -331,13 +354,20 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.AuditLogger != nil {
+		metaBytes, _ := json.Marshal(map[string]any{
+			"rule_id":        id,
+			"changed_fields": changedFields,
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "proxy.rule.updated",
 			TargetType: "proxy_rule",
 			TargetID:   id,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
+			Status:     "success",
 		})
 	}
 
@@ -362,7 +392,8 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteProxyRule(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if _, err := s.Store.GetProxyRuleByID(r.Context(), id); err != nil {
+	existing, err := s.Store.GetProxyRuleByID(r.Context(), id)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, http.StatusNotFound, errPayload("not_found", "Proxy rule not found"))
 			return
@@ -377,13 +408,24 @@ func (s *Server) handleDeleteProxyRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.AuditLogger != nil {
+		ruleName := ""
+		if existing != nil {
+			ruleName = existing.Name
+		}
+		metaBytes, _ := json.Marshal(map[string]any{
+			"rule_id":   id,
+			"rule_name": ruleName,
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "proxy.rule.deleted",
 			TargetType: "proxy_rule",
 			TargetID:   id,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
+			Status:     "success",
 		})
 	}
 

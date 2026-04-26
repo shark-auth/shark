@@ -165,6 +165,7 @@ func (s *Server) handleCascadeRevokeAgents(w http.ResponseWriter, r *http.Reques
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ID:         auditEventID,
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     auditEventCascadeRevokedAgents,
 			TargetType: "user",
 			TargetID:   targetUserID,

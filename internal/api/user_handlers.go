@@ -181,6 +181,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "user.deleted_with_token_revocation",
 			TargetType: "user",
 			TargetID:   id,

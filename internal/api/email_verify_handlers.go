@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -205,11 +206,18 @@ func (s *Server) handleAdminEmailVerifySend(w http.ResponseWriter, r *http.Reque
 	}
 
 	if s.AuditLogger != nil {
+		metaBytes, _ := json.Marshal(map[string]any{
+			"email":       user.Email,
+			"user_id":     id,
+			"template_id": "verify-email",
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "admin.user.verification_sent",
 			TargetType: "user",
 			TargetID:   id,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
 			Status:     "success",

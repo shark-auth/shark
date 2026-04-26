@@ -157,6 +157,24 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleResetKey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Capture the current admin key prefix (best-effort) before revoke so
+	// the audit log can record the rotation pair. We pick the first active
+	// wildcard-scope key — there's typically exactly one.
+	oldKeyPrefix := ""
+	if existing, err := s.Store.ListAPIKeys(ctx); err == nil {
+		for _, k := range existing {
+			if k.RevokedAt != nil {
+				continue
+			}
+			var scopes []string
+			_ = json.Unmarshal([]byte(k.Scopes), &scopes)
+			if auth.CheckScope(scopes, "*") {
+				oldKeyPrefix = k.KeyPrefix
+				break
+			}
+		}
+	}
+
 	// Generate new key.
 	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
 	if err != nil {
@@ -190,10 +208,24 @@ func (s *Server) handleResetKey(w http.ResponseWriter, r *http.Request) {
 
 	// Log the rotation.
 	if s.AuditLogger != nil {
+		oldPrefix := oldKeyPrefix
+		if len(oldPrefix) > 8 {
+			oldPrefix = oldPrefix[:8]
+		}
+		newPrefix := keyPrefix
+		if len(newPrefix) > 8 {
+			newPrefix = newPrefix[:8]
+		}
+		metaBytes, _ := json.Marshal(map[string]any{
+			"key_prefix_old": oldPrefix,
+			"key_prefix_new": newPrefix,
+		})
 		_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "admin.key.rotated",
 			TargetType: "system",
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
 			Status:     "success",
@@ -275,11 +307,29 @@ func (s *Server) handleResetDB(w http.ResponseWriter, r *http.Request, mode stri
 
 	// Log reset event.
 	if s.AuditLogger != nil {
+		actorID := "admin_key"
+		// tables_affected captures whether the wipe ran in-place
+		// (active store, all user tables truncated) or removed the
+		// inactive DB file. We don't enumerate table names because
+		// WipeAllData is the canonical scope and lives behind the
+		// store interface — encoding the high-level scope keeps the
+		// metadata stable across schema changes.
+		tablesAffected := "all"
+		if !isActive {
+			tablesAffected = "db_file_removed"
+		}
+		metaBytes, _ := json.Marshal(map[string]any{
+			"mode":             mode,
+			"tables_affected":  tablesAffected,
+			"triggered_by":     actorID,
+		})
 		_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    actorID,
 			Action:     "admin.db.reset",
 			TargetType: "system",
 			TargetID:   mode,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
 			Status:     "success",

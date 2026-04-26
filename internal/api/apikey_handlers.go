@@ -148,13 +148,24 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.AuditLogger != nil {
+		meta := map[string]any{
+			"key_name": apiKey.Name,
+			"scopes":   req.Scopes,
+		}
+		if req.ExpiresAt != nil && *req.ExpiresAt != "" {
+			meta["expires_at"] = *req.ExpiresAt
+		}
+		metaBytes, _ := json.Marshal(meta)
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "api_key.created",
 			TargetType: "api_key",
 			TargetID:   apiKey.ID,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
+			Status:     "success",
 		})
 	}
 
@@ -345,13 +356,21 @@ func (s *Server) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.AuditLogger != nil {
+		actorID := "admin_key"
+		metaBytes, _ := json.Marshal(map[string]any{
+			"key_name":       key.Name,
+			"revoked_by_kid": actorID,
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    actorID,
 			Action:     "api_key.revoked",
 			TargetType: "api_key",
 			TargetID:   id,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
+			Status:     "success",
 		})
 	}
 
@@ -430,19 +449,27 @@ func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var scopes []string
+	_ = json.Unmarshal([]byte(newKey.Scopes), &scopes)
+
 	if s.AuditLogger != nil {
+		metaBytes, _ := json.Marshal(map[string]any{
+			"old_key_id": oldKey.ID,
+			"new_key_id": newKey.ID,
+			"scopes":     scopes,
+		})
 		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "api_key.rotated",
 			TargetType: "api_key",
 			TargetID:   newKey.ID,
+			Metadata:   string(metaBytes),
 			IP:         r.RemoteAddr,
 			UserAgent:  r.UserAgent(),
+			Status:     "success",
 		})
 	}
-
-	var scopes []string
-	_ = json.Unmarshal([]byte(newKey.Scopes), &scopes)
 
 	writeJSON(w, http.StatusCreated, createAPIKeyResponse{
 		ID:        newKey.ID,

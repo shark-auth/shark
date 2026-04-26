@@ -112,7 +112,10 @@ func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	s.auditOrg(r.Context(), userID, "organization.create", org.ID, ipOf(r), uaOf(r))
+	s.auditOrgWithMeta(r.Context(), userID, "organization.create", org.ID, ipOf(r), uaOf(r), map[string]any{
+		"org_name": org.Name,
+		"org_slug": org.Slug,
+	})
 	s.emit(r.Context(), storage.WebhookEventOrgCreated, map[string]any{
 		"id": org.ID, "name": org.Name, "slug": org.Slug, "created_by": userID,
 	})
@@ -198,11 +201,19 @@ func (s *Server) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
 	userID := mw.GetUserID(r.Context())
+	// Capture name before deletion so the audit row carries it (post-delete
+	// joins are impossible). Best-effort: a missing row falls back to "".
+	var orgName string
+	if existing, err := s.Store.GetOrganizationByID(r.Context(), orgID); err == nil && existing != nil {
+		orgName = existing.Name
+	}
 	if err := s.Store.DeleteOrganization(r.Context(), orgID); err != nil {
 		internal(w, err)
 		return
 	}
-	s.auditOrg(r.Context(), userID, "organization.delete", orgID, ipOf(r), uaOf(r))
+	s.auditOrgWithMeta(r.Context(), userID, "organization.delete", orgID, ipOf(r), uaOf(r), map[string]any{
+		"org_name": orgName,
+	})
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Organization deleted"})
 }
 
@@ -294,7 +305,11 @@ func (s *Server) handleUpdateOrganizationMemberRole(w http.ResponseWriter, r *ht
 	}
 
 	// Audit: role change within organization member.
-	s.auditOrg(r.Context(), actor, "org.member.role_update", orgID, ipOf(r), uaOf(r))
+	s.auditOrgWithMeta(r.Context(), actor, "org.member.role_update", orgID, ipOf(r), uaOf(r), map[string]any{
+		"member_id": targetUserID,
+		"old_role":  oldRole,
+		"new_role":  req.Role,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Role updated"})
 }
@@ -400,7 +415,10 @@ func (s *Server) handleCreateOrgInvitation(w http.ResponseWriter, r *http.Reques
 		go s.sendOrgInvitationEmail(inv, org, actor, rawToken) //#nosec G118 -- fire-and-forget invitation email; bounded via WithTimeout inside the callee
 	}
 
-	s.auditOrg(r.Context(), actor, "organization.invitation.create", orgID, ipOf(r), uaOf(r))
+	s.auditOrgWithMeta(r.Context(), actor, "organization.invitation.create", orgID, ipOf(r), uaOf(r), map[string]any{
+		"email": inv.Email,
+		"role":  inv.Role,
+	})
 
 	writeJSON(w, http.StatusCreated, inviteResponse{
 		ID: inv.ID, Email: inv.Email, Role: inv.Role,
@@ -463,7 +481,9 @@ func (s *Server) handleAcceptOrgInvitation(w http.ResponseWriter, r *http.Reques
 		internal(w, err)
 		return
 	}
-	s.auditOrg(r.Context(), userID, "organization.invitation.accept", inv.OrganizationID, ipOf(r), uaOf(r))
+	s.auditOrgWithMeta(r.Context(), userID, "organization.invitation.accept", inv.OrganizationID, ipOf(r), uaOf(r), map[string]any{
+		"org_id": inv.OrganizationID,
+	})
 	s.emit(r.Context(), storage.WebhookEventOrgMemberAdded, map[string]any{
 		"organization_id": inv.OrganizationID,
 		"user_id":         userID,
@@ -538,13 +558,28 @@ func inviterEmailOrEmpty(u *storage.User) string {
 }
 
 func (s *Server) auditOrg(ctx context.Context, actor, action, orgID, ip, ua string) {
+	s.auditOrgWithMeta(ctx, actor, action, orgID, ip, ua, nil)
+}
+
+// auditOrgWithMeta is the structured variant — accepts a metadata map that
+// gets JSON-encoded into AuditLog.Metadata. nil/empty meta yields "{}" so
+// the column is never literal NULL (mirrors other audit helpers in this
+// package).
+func (s *Server) auditOrgWithMeta(ctx context.Context, actor, action, orgID, ip, ua string, meta map[string]any) {
 	if s.AuditLogger == nil {
 		return
+	}
+	metaJSON := []byte("{}")
+	if meta != nil {
+		if b, err := json.Marshal(meta); err == nil {
+			metaJSON = b
+		}
 	}
 	_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
 		ActorID: actor, ActorType: "user",
 		Action: action, TargetType: "organization", TargetID: orgID,
 		IP: ip, UserAgent: ua, Status: "success",
+		Metadata: string(metaJSON),
 	})
 }
 

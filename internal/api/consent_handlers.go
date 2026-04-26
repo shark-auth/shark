@@ -209,6 +209,7 @@ func (s *Server) handleAdminRevokeConsent(w http.ResponseWriter, r *http.Request
 		})
 		_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
 			ActorType:  "admin",
+			ActorID:    "admin_key",
 			Action:     "consent.revoked",
 			TargetType: "consent",
 			TargetID:   consentID,
