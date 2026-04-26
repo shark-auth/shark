@@ -10,7 +10,8 @@ DO NOT RUN via pytest directly — orchestrator-only (see MEMORY).
 import pytest
 import requests
 
-BASE = "http://localhost:9000"
+import os
+BASE = os.environ.get("SHARK_BASE_URL", "http://localhost:8080")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ import os
 import pytest
 import requests
 
-BASE = os.environ.get("SHARK_BASE_URL", "http://localhost:9999")
+BASE = os.environ.get("SHARK_BASE_URL", "http://localhost:8080")
 ADMIN_KEY = os.environ.get("SHARK_ADMIN_KEY", "")
 
 HEADERS = {"Authorization": f"Bearer {ADMIN_KEY}"}

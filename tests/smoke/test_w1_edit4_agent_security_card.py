@@ -19,16 +19,18 @@ import pytest
 import requests
 
 BASE = os.environ.get("SHARK_BASE_URL", "http://localhost:8080")
-ADMIN_KEY = os.environ.get("SHARK_ADMIN_KEY", "")
 
-AUTH = {"Authorization": f"Bearer {ADMIN_KEY}"}
+# AUTH is built lazily per-test from the admin_key fixture so module import
+# doesn't bake an empty Bearer at collect time.
+def _auth(admin_key: str):
+    return {"Authorization": f"Bearer {admin_key}"}
 
 
 # ---------------------------------------------------------------------------
 # Happy-path
 # ---------------------------------------------------------------------------
 
-def test_audit_logs_token_exchange_fields():
+def test_audit_logs_token_exchange_fields(admin_key):
     """Audit-log endpoint filtered to token.exchange returns expected envelope."""
     since = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
@@ -36,7 +38,7 @@ def test_audit_logs_token_exchange_fields():
     resp = requests.get(
         f"{BASE}/api/v1/admin/audit-logs",
         params={"action": "token.exchange", "from": since, "limit": "200"},
-        headers=AUTH,
+        headers=_auth(admin_key),
         timeout=10,
     )
     assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
@@ -53,12 +55,12 @@ def test_audit_logs_token_exchange_fields():
         )
 
 
-def test_agents_list_fields():
+def test_agents_list_fields(admin_key):
     """Agents list returns total + data array consumed for DPoP / delegation metrics."""
     resp = requests.get(
         f"{BASE}/api/v1/agents",
         params={"limit": "200"},
-        headers=AUTH,
+        headers=_auth(admin_key),
         timeout=10,
     )
     assert resp.status_code == 200, f"expected 200, got {resp.status_code}: {resp.text}"
@@ -72,7 +74,7 @@ def test_agents_list_fields():
         agent_id = agents[0]["id"]
         tok_resp = requests.get(
             f"{BASE}/api/v1/agents/{agent_id}/tokens",
-            headers=AUTH,
+            headers=_auth(admin_key),
             timeout=10,
         )
         assert tok_resp.status_code == 200, (
