@@ -11,6 +11,7 @@ The agent detail drawer slides in from the right when you click any row in the A
 | Consents | Users who have authorized this agent via OAuth consent. |
 | Audit | Time-ordered audit log of events for this agent. |
 | Security | DPoP keypair details and key-rotation history (added W1-Edit1). |
+| Delegation Policies | Configure which other agents this agent may delegate to, with optional scope downscoping (added W1-Edit3). |
 
 ---
 
@@ -60,9 +61,64 @@ Rotation history comes from `GET /api/v1/agents/:id/audit?limit=50` (existing en
 
 ---
 
+---
+
+## Delegation Policies Tab
+
+The Delegation Policies tab controls agent-to-agent delegation: which other registered agents the current agent is permitted to delegate work to, and any scope restrictions applied to those delegations.
+
+### Read-only summary
+
+When at least one policy is configured the tab displays:
+
+```
+This agent can delegate to: [agent-a] [agent-b]  (edit)
+```
+
+Each target agent is shown as a chip. Clicking **edit** enters edit mode.
+
+### Empty state
+
+If no delegation policies have been set:
+
+```
+No delegation policies set. This agent cannot delegate to any other agent.
+[Configure]
+```
+
+Clicking **Configure** enters edit mode.
+
+### Edit mode
+
+A checkbox grid lists every other agent in the workspace. Each row contains:
+
+| Control | Description |
+|---------|-------------|
+| Checkbox | Enable/disable delegation to this agent |
+| Agent name + description | Identity of the target agent |
+| Scope input | Optional scope string to downscope delegated tokens (disabled when checkbox is unchecked) |
+
+**Save policies** calls `POST /api/v1/agents/{id}/policies` with the full policies array. Saving an empty list removes all delegations. The backend fires an audit event automatically via existing audit middleware.
+
+### Data contract
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `GET /api/v1/agents/{id}/policies` | GET | Fetch existing delegation policies for display |
+| `POST /api/v1/agents/{id}/policies` | POST | Replace the full policy set; body: `{ "policies": [{ "delegate_to_id": "<uuid>", "scope": "<optional>" }] }` |
+
+Both endpoints are pre-existing (per audit findings); no new backend changes are needed.
+
+---
+
 ## Smoke tests
 
 `tests/smoke/test_w1_edit1_dpop_security_tab.py` covers:
 
 1. **Happy path** — agent detail returns 200 with DPoP fields present (may be `null` for a newly-created agent); audit endpoint is reachable and returns a `data` list.
 2. **Negative path** — unknown agent ID returns 404 on both the detail and audit endpoints.
+
+`tests/smoke/test_w1_edit3_delegation_policies.py` covers:
+
+1. **Happy path** — `POST /api/v1/agents/{id}/policies` with a valid policy returns 2xx; subsequent GET reflects saved policies; empty-list POST clears all.
+2. **Negative paths** — POST without auth returns 401; POST with malformed body returns 4xx; GET/POST on an unknown agent ID returns 404.
