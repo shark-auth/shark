@@ -20,16 +20,31 @@ const sectionLabelStyle = { fontSize: 10, textTransform: 'uppercase', letterSpac
 
 const ALL_GRANTS = ['authorization_code', 'client_credentials', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code', 'urn:ietf:params:oauth:grant-type:token-exchange'];
 
-export function Agents() {
+export function Agents({ setPage }) {
   const [selected, setSelected] = React.useState(null);
   const [tab, setTab] = useTabParam('config');
   const [filter, setFilter] = React.useState('all'); // all | active | inactive
   const [query, setQuery] = React.useState('');
+  const [creatorFilter, setCreatorFilter] = React.useState(''); // '' = all, or user ID
   const [createOpen, setCreateOpen] = React.useState(false);
   const [deactivateModal, setDeactivateModal] = React.useState(null);
 
-  const { data: listRaw, loading, refresh } = useAPI('/agents?limit=200');
+  // Fetch users for creator filter dropdown
+  const { data: usersRaw } = useAPI('/users?limit=200');
+  const allUsers = usersRaw?.data || usersRaw?.users || [];
+
+  const agentsPath = creatorFilter
+    ? `/agents?limit=200&created_by_user_id=${encodeURIComponent(creatorFilter)}`
+    : '/agents?limit=200';
+  const { data: listRaw, loading, refresh } = useAPI(agentsPath, [creatorFilter]);
   const agents = listRaw?.data || [];
+
+  // Build user lookup map for "Created by" column
+  const userMap = React.useMemo(() => {
+    const m = {};
+    for (const u of allUsers) { m[u.id] = u; }
+    return m;
+  }, [allUsers]);
 
   // Auto-open create modal when arriving with ?new=1, then strip the param.
   React.useEffect(() => {
@@ -108,6 +123,23 @@ export function Agents() {
               }}>{l}</button>
             ))}
           </div>
+          {/* Creator filter */}
+          <select
+            value={creatorFilter}
+            onChange={e => setCreatorFilter(e.target.value)}
+            style={{
+              fontSize: 11, padding: '0 6px', height: 28, borderRadius: 4,
+              border: '1px solid var(--hairline-strong)', background: 'var(--surface-1)',
+              color: 'var(--fg)', outline: 'none', cursor: 'pointer',
+            }}
+          >
+            <option value="">All creators</option>
+            {allUsers.map(u => (
+              <option key={u.id} value={u.id}>
+                {u.email || u.username || u.name || u.id}
+              </option>
+            ))}
+          </select>
           <div style={{flex:1}}/>
           <span className="faint mono" style={{fontSize:11}}>{filtered.length} / {agents.length}</span>
         </div>
@@ -139,6 +171,7 @@ export function Agents() {
                   <th style={appThStyle}>Grants</th>
                   <th style={appThStyle}>Scopes</th>
                   <th style={appThStyle}>Created</th>
+                  <th style={appThStyle}>Created by</th>
                   <th style={appThStyle}>Status</th>
                 </tr>
               </thead>
@@ -182,6 +215,24 @@ export function Agents() {
                     </td>
                     <td style={appTdStyle}>
                       <span className="mono faint" style={{fontSize: 10.5}}>{relativeTime(a.created_at)}</span>
+                    </td>
+                    <td style={appTdStyle}>
+                      {(() => {
+                        const uid = a.created_by_user_id || a.created_by;
+                        if (!uid) return <span className="faint mono" style={{fontSize:10.5}}>—</span>;
+                        const u = userMap[uid];
+                        const label = u ? (u.email || u.username || u.name || uid) : uid;
+                        return (
+                          <button
+                            className="btn ghost sm"
+                            onClick={e => { e.stopPropagation(); setPage && setPage('users', { search: uid }); }}
+                            style={{ fontSize: 10.5, padding: '2px 4px', fontFamily: 'var(--font-mono)' }}
+                            title={uid}
+                          >
+                            {label.length > 22 ? label.slice(0, 20) + '…' : label}
+                          </button>
+                        );
+                      })()}
                     </td>
                     <td style={appTdStyle}>
                       {a.active

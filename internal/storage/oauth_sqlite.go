@@ -408,6 +408,17 @@ func (s *SQLiteStore) RevokeOAuthConsent(ctx context.Context, id string) error {
 	return err
 }
 
+// RevokeConsentsByUserID bulk-revokes all active consents for a user.
+func (s *SQLiteStore) RevokeConsentsByUserID(ctx context.Context, userID string) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE oauth_consents SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`,
+		time.Now().UTC().Format(time.RFC3339), userID)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // ListAllConsents returns every active (non-revoked) OAuth consent across all
 // users — admin scope. Mirrors ListConsentsByUserID's row contract so handlers
 // can convert via the same path.

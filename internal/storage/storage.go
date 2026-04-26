@@ -245,6 +245,7 @@ type Store interface {
 	GetAgentByID(ctx context.Context, id string) (*Agent, error)
 	GetAgentByClientID(ctx context.Context, clientID string) (*Agent, error)
 	ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*Agent, int, error)
+	ListAgentsByUserID(ctx context.Context, userID string) ([]*Agent, error)
 	UpdateAgent(ctx context.Context, agent *Agent) error
 	UpdateAgentSecret(ctx context.Context, id, secretHash string) error
 	DeactivateAgent(ctx context.Context, id string) error
@@ -283,6 +284,9 @@ type Store interface {
 	ListConsentsByUserID(ctx context.Context, userID string) ([]*OAuthConsent, error)
 	ListAllConsents(ctx context.Context) ([]*OAuthConsent, error)
 	RevokeOAuthConsent(ctx context.Context, id string) error
+	// RevokeConsentsByUserID bulk-revokes all active consents for a user.
+	// Returns the number of rows updated.
+	RevokeConsentsByUserID(ctx context.Context, userID string) (int64, error)
 
 	// Device Codes (RFC 8628)
 	CreateDeviceCode(ctx context.Context, dc *OAuthDeviceCode) error

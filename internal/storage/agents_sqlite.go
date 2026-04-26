@@ -50,8 +50,19 @@ func (s *SQLiteStore) GetAgentByClientID(ctx context.Context, clientID string) (
 
 // ListAgents returns agents with optional filtering and pagination.
 func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*Agent, int, error) {
+	// When filtering by AuthorizedByUser we need a JOIN against oauth_consents.
+	// We use a sub-select to keep the SELECT * from agents clean so scanAgentFromRows
+	// doesn't need to change.
+	fromClause := "agents"
 	where := "1=1"
 	args := []interface{}{}
+
+	if opts.AuthorizedByUser != nil {
+		fromClause = "agents WHERE id IN (SELECT DISTINCT agent_id FROM oauth_consents WHERE user_id = ? AND revoked_at IS NULL)"
+		// Rewrite where to avoid double WHERE
+		where = "1=1"
+		args = append(args, *opts.AuthorizedByUser)
+	}
 
 	if opts.Search != "" {
 		where += " AND (name LIKE ? OR description LIKE ?)"
@@ -66,10 +77,25 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 			args = append(args, 0)
 		}
 	}
+	if opts.CreatedByUserID != nil {
+		where += " AND created_by = ?"
+		args = append(args, *opts.CreatedByUserID)
+	}
+
+	// For the AuthorizedByUser sub-select path the fromClause already contains
+	// a WHERE clause, so we use AND to append additional filters.
+	var countQuery, selectQuery string
+	if opts.AuthorizedByUser != nil {
+		countQuery = "SELECT COUNT(*) FROM (" + fromClause + ") a WHERE " + where
+		selectQuery = "SELECT * FROM (" + fromClause + ") a WHERE " + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	} else {
+		countQuery = "SELECT COUNT(*) FROM " + fromClause + " WHERE " + where
+		selectQuery = "SELECT * FROM " + fromClause + " WHERE " + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	}
 
 	// Count
 	var total int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM agents WHERE "+where, args...).Scan(&total)
+	err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -79,10 +105,8 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 	if limit <= 0 {
 		limit = 50
 	}
-	query := "SELECT * FROM agents WHERE " + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-	args = append(args, limit, opts.Offset)
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	queryArgs := append(args, limit, opts.Offset)
+	rows, err := s.db.QueryContext(ctx, selectQuery, queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -97,6 +121,26 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 		agents = append(agents, a)
 	}
 	return agents, total, rows.Err()
+}
+
+// ListAgentsByUserID returns all agents created by the given user.
+func (s *SQLiteStore) ListAgentsByUserID(ctx context.Context, userID string) ([]*Agent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT * FROM agents WHERE created_by = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var agents []*Agent
+	for rows.Next() {
+		a, err := s.scanAgentFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		agents = append(agents, a)
+	}
+	return agents, rows.Err()
 }
 
 // UpdateAgent updates an existing agent.

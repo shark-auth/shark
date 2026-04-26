@@ -51,6 +51,24 @@ func (s *Server) auditAgent(r *http.Request, action, targetID string) {
 	})
 }
 
+// auditAgentWithMeta logs an agent audit event with additional metadata fields.
+func (s *Server) auditAgentWithMeta(r *http.Request, action, targetID string, meta map[string]any) {
+	if s.AuditLogger == nil {
+		return
+	}
+	metaJSON, _ := json.Marshal(meta)
+	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+		ActorType:  "admin",
+		Action:     action,
+		TargetType: "agent",
+		TargetID:   targetID,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		Status:     "success",
+		Metadata:   string(metaJSON),
+	})
+}
+
 // emitAgentEvent emits a webhook event if the dispatcher is wired.
 func (s *Server) emitAgentEvent(r *http.Request, event string, payload any) {
 	if s.WebhookDispatcher == nil {
@@ -201,6 +219,9 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 		b := v == "true" || v == "1"
 		opts.Active = &b
 	}
+	if v := q.Get("created_by_user_id"); v != "" {
+		opts.CreatedByUserID = &v
+	}
 
 	agents, total, err := s.Store.ListAgents(r.Context(), opts)
 	if err != nil {
@@ -294,6 +315,7 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	if req.HomepageURI != nil {
 		agent.HomepageURI = *req.HomepageURI
 	}
+	deactivating := req.Active != nil && !*req.Active && agent.Active
 	if req.Active != nil {
 		agent.Active = *req.Active
 	}
@@ -303,7 +325,17 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auditAgent(r, "agent.updated", agent.ID)
+	if deactivating {
+		// Revoke all existing tokens so the UI promise is kept:
+		// "Deactivating will prevent new tokens and revoke all active tokens."
+		revokedCount, revokeErr := s.Store.RevokeOAuthTokensByClientID(r.Context(), agent.ClientID)
+		_ = revokeErr // non-fatal; agent already deactivated
+		s.auditAgentWithMeta(r, "agent.deactivated_with_revocation", agent.ID, map[string]any{
+			"revoked_token_count": revokedCount,
+		})
+	} else {
+		s.auditAgent(r, "agent.updated", agent.ID)
+	}
 	s.emitAgentEvent(r, "agent.updated", agent)
 
 	// Re-fetch to pick up updated_at set by the DB.

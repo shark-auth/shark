@@ -32,8 +32,10 @@ type Agent struct {
 
 // ListAgentsOpts configures agent list queries.
 type ListAgentsOpts struct {
-	Limit  int
-	Offset int
-	Search string // search name/description
-	Active *bool  // filter by active status
+	Limit           int
+	Offset          int
+	Search          string  // search name/description
+	Active          *bool   // filter by active status
+	CreatedByUserID *string // filter agents where created_by = user_id
+	AuthorizedByUser *string // filter agents authorized by user via oauth_consents (revoked_at IS NULL)
 }

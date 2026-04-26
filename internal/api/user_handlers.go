@@ -150,6 +150,20 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Revoke all agent tokens before deletion so orphan tokens don't pass introspection.
+	var revokedTokenCount int64
+	agents, agentErr := s.Store.ListAgentsByUserID(r.Context(), id)
+	if agentErr == nil {
+		for _, a := range agents {
+			n, _ := s.Store.RevokeOAuthTokensByClientID(r.Context(), a.ClientID)
+			revokedTokenCount += n
+		}
+	}
+
+	// Revoke all session tokens for the user.
+	revokedSessionIDs, _ := s.Store.DeleteSessionsByUserID(r.Context(), id)
+	revokedSessionCount := len(revokedSessionIDs)
+
 	// DeleteUser cascades via ON DELETE CASCADE in the schema
 	if err := s.Store.DeleteUser(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
@@ -157,6 +171,24 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 			"message": "Internal server error",
 		})
 		return
+	}
+
+	// Audit the deletion with revocation counts.
+	if s.AuditLogger != nil {
+		metaJSON, _ := json.Marshal(map[string]any{
+			"revoked_token_count":   revokedTokenCount,
+			"revoked_session_count": revokedSessionCount,
+		})
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			Action:     "user.deleted_with_token_revocation",
+			TargetType: "user",
+			TargetID:   id,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Status:     "success",
+			Metadata:   string(metaJSON),
+		})
 	}
 
 	s.emit(r.Context(), storage.WebhookEventUserDeleted, map[string]string{"id": id})

@@ -449,6 +449,16 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// user-facing /auth/mfa endpoint still requires a current code.
 			r.Delete("/{id}/mfa", s.handleAdminDisableUserMFA)
 			r.Post("/{id}/verify/send", s.handleAdminEmailVerifySend)
+			// W1.5 Edit 1: list agents belonging to or authorized by a user.
+			r.Get("/{id}/agents", s.handleUserAgents)
+			// W1.5 Edit 2: cascade revoke — admin key only.
+			r.Post("/{id}/revoke-agents", s.handleCascadeRevokeAgents)
+		})
+
+		// /me/agents — session-cookie auth, returns agents for the calling user.
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+			r.Get("/me/agents", s.handleMeAgents)
 		})
 
 		// SSO connections (admin + public endpoints)
