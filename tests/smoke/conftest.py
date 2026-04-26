@@ -68,18 +68,19 @@ def server():
 
 @pytest.fixture(scope="session")
 def admin_key(server):
+    # W17: first boot writes full admin key to <db_dir>/admin.key.firstboot
+    # (terminal output is masked for security). DB lives at ./shark.db, so
+    # the key file is alongside it.
+    key_path = "admin.key.firstboot"
     start_time = time.time()
     while time.time() - start_time < 30:
-        if os.path.exists("server.log"):
-            content = open("server.log").read()
-            # Find ALL keys and take the last one to avoid using keys from previous runs
-            matches = re.findall(r'sk_live_[A-Za-z0-9_-]{30,}', content)
-            if matches: 
-                key = matches[-1].strip()
+        if os.path.exists(key_path):
+            key = open(key_path).read().strip()
+            if key.startswith("sk_live_"):
                 print(f"DEBUG: Captured Admin Key: {key[:15]}...")
                 return key
         time.sleep(1)
-    pytest.fail("No admin key captured from server.log")
+    pytest.fail(f"No admin key captured from {key_path}")
 
 @pytest.fixture(scope="session")
 def api_session():

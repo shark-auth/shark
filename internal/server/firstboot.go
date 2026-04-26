@@ -73,6 +73,13 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 		return nil, err
 	}
 	if !first {
+		// Non-first-boot: load existing server.secret from DB into cfg so the
+		// caller's secret-length validation (server.go) passes.
+		existingSecret, err := store.GetSecret(ctx, "server.secret")
+		if err != nil {
+			return nil, fmt.Errorf("firstboot: load server.secret on subsequent boot: %w", err)
+		}
+		cfg.Server.Secret = existingSecret
 		return nil, nil
 	}
 

@@ -130,9 +130,9 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	if opts.SecretOverride != "" {
 		cfg.Server.Secret = opts.SecretOverride
 	}
-	if len(cfg.Server.Secret) < 32 {
-		return nil, fmt.Errorf("server.secret must be at least 32 characters (got %d)", len(cfg.Server.Secret))
-	}
+	// W17: secret length validation moved AFTER store open + RunFirstBoot —
+	// first boot generates the secret if absent, so validating here would
+	// always fail on a fresh install.
 
 	// --proxy-upstream override. Flips Enabled on and pins the upstream
 	// URL so a single CLI flag is all an operator needs to demo embedded
@@ -151,16 +151,10 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	cfg.Server.DevMode = opts.DevMode
 
-	// Phase 2: enforce minimum required vars. DevMode bypasses for
-	// first-boot ergonomics (uses dev.db, dev inbox auto-selected by config).
-	if !opts.DevMode {
-		if cfg.Server.BaseURL == "" {
-			return nil, fmt.Errorf("server.base_url is required (phase 2 minimum config)")
-		}
-		if cfg.Email.Provider == "" && cfg.SMTP.Host == "" {
-			return nil, fmt.Errorf("email is not configured: set email.provider + email.api_key, or legacy smtp.*")
-		}
-	}
+	// W17: legacy "phase 2 minimum config" check removed. First boot now
+	// generates server.secret + admin key + defaults email.provider=dev
+	// after store opens (RunFirstBoot below). Operators can switch email
+	// provider from Settings → Email Delivery any time post-boot.
 
 	if opts.StoragePathOverride != "" {
 		cfg.Storage.Path = opts.StoragePathOverride
@@ -187,6 +181,38 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 	slog.Info("migrations complete")
+
+	// W17 Phase B: first-boot bootstrap — detects empty system_config + secrets
+	// tables, generates server.secret + JWT signing key + admin API key,
+	// prints setup URL + admin key once. Non-fatal if not first boot
+	// (just loads existing secret from DB into cfg.Server.Secret).
+	fbResult, err := RunFirstBoot(ctx, store, cfg, opts)
+	if err != nil {
+		store.Close() //#nosec G104
+		return nil, fmt.Errorf("first-boot bootstrap: %w", err)
+	}
+	// W17: write full admin key to a one-time file alongside the DB so
+	// scripted setups (CI / pytest smoke / docker entrypoint) can grab it.
+	// File deleted by orchestrator after first read; perms 0600.
+	if fbResult != nil && fbResult.AdminKey != "" {
+		keyPath := filepath.Join(filepath.Dir(cfg.Storage.Path), "admin.key.firstboot")
+		if err := os.WriteFile(keyPath, []byte(fbResult.AdminKey+"\n"), 0o600); err != nil {
+			slog.Warn("first-boot: failed to write admin.key.firstboot", "path", keyPath, "error", err)
+		} else {
+			slog.Info("first-boot: full admin key written for one-time pickup", "path", keyPath)
+		}
+	}
+
+	// W17: default email provider to dev inbox if unconfigured. Operators
+	// flip it to resend/smtp from Settings → Email Delivery once ready.
+	if cfg.Email.Provider == "" {
+		cfg.Email.Provider = config.EmailProviderDev
+	}
+
+	if len(cfg.Server.Secret) < 32 {
+		store.Close() //#nosec G104
+		return nil, fmt.Errorf("server.secret must be at least 32 characters (got %d)", len(cfg.Server.Secret))
+	}
 
 	// Seed global default roles (admin + member with wildcard perm). Idempotent.
 	seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)
