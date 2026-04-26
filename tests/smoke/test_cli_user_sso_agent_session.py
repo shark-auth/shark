@@ -21,7 +21,6 @@ import re
 
 BIN_PATH = "./shark.exe" if os.name == 'nt' else "./shark"
 BASE_URL = os.environ.get("BASE", "http://localhost:8080")
-YAML_PATH = "smoke_test.yaml"
 
 
 # ---------------------------------------------------------------------------
