@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -218,4 +219,47 @@ func (s *Server) handleAdminRevokeConsent(w http.ResponseWriter, r *http.Request
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Consent revoked"})
+}
+
+// handleAdminGrantConsent handles POST /api/v1/admin/consents.
+// Admin-key auth. Inserts (or returns existing) oauth_consents row.
+// Body: {"user_id":"...","client_id":"...","scopes":["..."]}
+func (s *Server) handleAdminGrantConsent(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UserID   string   `json:"user_id"`
+		ClientID string   `json:"client_id"`
+		Scopes   []string `json:"scopes"`
+		Scope    string   `json:"scope"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+	if body.UserID == "" || body.ClientID == "" {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "user_id and client_id are required"))
+		return
+	}
+	scopeStr := body.Scope
+	if scopeStr == "" {
+		scopeStr = strings.Join(body.Scopes, " ")
+	}
+
+	ctx := r.Context()
+	if existing, err := s.Store.GetActiveConsent(ctx, body.UserID, body.ClientID); err == nil && existing != nil {
+		writeJSON(w, http.StatusOK, existing)
+		return
+	}
+
+	consent := &storage.OAuthConsent{
+		ID:        "consent_" + body.ClientID + "_" + body.UserID,
+		UserID:    body.UserID,
+		ClientID:  body.ClientID,
+		Scope:     scopeStr,
+		GrantedAt: time.Now().UTC(),
+	}
+	if err := s.Store.CreateOAuthConsent(ctx, consent); err != nil {
+		internal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, consent)
 }

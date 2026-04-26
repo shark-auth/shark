@@ -627,6 +627,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/oauth/consents", s.handleAdminListConsents)
 			r.Delete("/oauth/consents/{id}", s.handleAdminRevokeConsent)
 
+			// Admin grant of an oauth_consents row (used by smoke tests +
+			// dashboard "authorize agent on behalf of user" flow).
+			r.Post("/consents", s.handleAdminGrantConsent)
+
 			// Admin device-code queue + override decision endpoints. Used by
 			// the dashboard to triage pending device flows when the user
 			// can't reach the verify URL themselves.

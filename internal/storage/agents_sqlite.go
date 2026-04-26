@@ -58,7 +58,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 	args := []interface{}{}
 
 	if opts.AuthorizedByUser != nil {
-		where += " AND id IN (SELECT DISTINCT agent_id FROM oauth_consents WHERE user_id = ? AND revoked_at IS NULL)"
+		where += " AND client_id IN (SELECT DISTINCT client_id FROM oauth_consents WHERE user_id = ? AND revoked_at IS NULL)"
 		args = append(args, *opts.AuthorizedByUser)
 	}
 

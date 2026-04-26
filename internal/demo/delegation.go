@@ -130,8 +130,9 @@ func registerAgents(ctx context.Context, hc *http.Client, opts DelegationOptions
 // createAgent calls POST /api/v1/agents and returns the populated AgentInfo.
 func createAgent(ctx context.Context, hc *http.Client, opts DelegationOptions, name string, scopes []string) (AgentInfo, error) {
 	body := map[string]any{
-		"name":   name,
-		"scopes": scopes,
+		"name":        name,
+		"scopes":      scopes,
+		"grant_types": []string{"client_credentials", "urn:ietf:params:oauth:grant-type:token-exchange"},
 	}
 	bodyBytes, _ := json.Marshal(body)
 
@@ -264,8 +265,6 @@ func issueClientCredentials(ctx context.Context, hc *http.Client, opts Delegatio
 
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
-	form.Set("client_id", agent.ClientID)
-	form.Set("client_secret", agent.ClientSecret)
 	form.Set("scope", "email:*")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL,
@@ -275,6 +274,7 @@ func issueClientCredentials(ctx context.Context, hc *http.Client, opts Delegatio
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("DPoP", proof)
+	req.SetBasicAuth(agent.ClientID, agent.ClientSecret)
 
 	resp, err := hc.Do(req)
 	if err != nil {
@@ -306,8 +306,6 @@ func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOpt
 
 	form := url.Values{}
 	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
-	form.Set("client_id", actorAgent.ClientID)
-	form.Set("client_secret", actorAgent.ClientSecret)
 	form.Set("subject_token", subjectToken)
 	form.Set("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
 	form.Set("actor_token", subjectToken)
@@ -321,6 +319,7 @@ func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOpt
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("DPoP", proof)
+	req.SetBasicAuth(actorAgent.ClientID, actorAgent.ClientSecret)
 
 	resp, err := hc.Do(req)
 	if err != nil {
