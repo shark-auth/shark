@@ -175,9 +175,10 @@ def test_admin_user_crud(admin_client):
     assert resp.status_code in [200, 204]
 
 def test_dev_inbox_access(admin_client):
-    """Section 22: Dev Inbox access (only in --dev)."""
+    """Section 22: Dev Inbox access (W17: available when email.provider=dev runtime config)."""
     resp = admin_client.get(f"{BASE_URL}/api/v1/admin/dev/emails")
-    # In smoke test, the server is started with --dev, so this should be 200.
+    # W17: --dev flag removed. Dev email capture is enabled via email.provider=dev
+    # runtime config (DB-backed). Smoke server boots with default dev email provider.
     assert resp.status_code == 200
     assert "data" in resp.json()
 
