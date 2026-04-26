@@ -22,6 +22,9 @@ export const NAV = [
     { id: 'vault', label: 'Vault', icon: 'Vault' },
     { id: 'device-flow', label: 'Device Flow', icon: 'Device', live: true },
   ]},
+  { group: 'IDENTITY', items: [
+    { id: 'auth', label: 'Identity', icon: 'Lock' },
+  ]},
   { group: 'ACCESS', items: [
     { id: 'apps', label: 'Applications', icon: 'App' },
     { id: 'proxy', label: 'Proxy', icon: 'Proxy' },
@@ -233,7 +236,7 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
     rbac: 'Roles & Permissions',
     'dev-email': 'Dev Email',
     sso: 'SSO Connections',
-    auth: 'Identity',
+    auth: 'Identity Hub',
     signing: 'Signing Keys',
     settings: 'System',
     consents: 'Consents',

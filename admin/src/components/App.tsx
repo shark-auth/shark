@@ -15,6 +15,7 @@ import { ApiKeys } from './api_keys'
 import { Webhooks } from './webhooks'
 import { RBAC } from './rbac'
 import { DevEmail } from './dev_email'
+import { IdentityHub } from './identity_hub'
 import { SSO } from './sso'
 import { SigningKeys } from './signing_keys'
 import { Settings } from './settings'
@@ -186,6 +187,7 @@ export function App() {
     webhooks: Webhooks,
     rbac: RBAC,
     'dev-email': DevEmail,
+    auth: IdentityHub,
     sso: SSO,
     signing: SigningKeys,
     settings: Settings,
