@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	"github.com/sharkauth/sharkauth/internal/auth"
 	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
+	"github.com/sharkauth/sharkauth/internal/cli"
 	"github.com/sharkauth/sharkauth/internal/config"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
@@ -210,6 +212,51 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 		SetupToken: "", // filled in by server.go after API server is wired
 		JWTKid:     "bootstrap-" + kidShort,
 	}, nil
+}
+
+// RunRerunBanner prints an operator-oriented status banner on second+ boots.
+// It is called AFTER RunFirstBoot (which handles true first-boot) and AFTER
+// the HTTP server reports "listening", so the operator always knows the state
+// of their installation without reading log lines.
+//
+// Three states:
+//  1. Active admin API key exists → "✓ admin configured" + dashboard URL
+//  2. No admin key + bootstrap key file present → "⚠ setup pending" + key file path
+//  3. No admin key + no key file → nothing (first-boot flow already ran above)
+func RunRerunBanner(ctx context.Context, store *storage.SQLiteStore, cfg *config.Config) {
+	// Determine dashboard URL from configured base_url, falling back to port.
+	dashURL := cfg.Server.BaseURL
+	if dashURL == "" {
+		port := cfg.Server.Port
+		if port == 0 {
+			port = 8080
+		}
+		dashURL = fmt.Sprintf("http://localhost:%d", port)
+	}
+	dashURL = strings.TrimRight(dashURL, "/") + "/admin"
+
+	// Check whether any active admin-scoped API key exists.
+	count, err := store.CountActiveAPIKeysByScope(ctx, "*")
+	if err != nil {
+		slog.Warn("rerun-banner: could not query api_keys", "err", err)
+		return
+	}
+
+	if count > 0 {
+		// State 1 — admin already configured.
+		cli.PrintAdminConfigured(dashURL)
+		return
+	}
+
+	// State 2 — no admin key yet, check for bootstrap key file.
+	keyPath := filepath.Join(filepath.Dir(cfg.Storage.Path), "admin.key.firstboot")
+	if _, statErr := os.Stat(keyPath); statErr == nil {
+		cli.PrintSetupPending(dashURL, keyPath)
+		return
+	}
+
+	// State 3 — no key, no file: first-boot flow already handled this boot.
+	// Nothing to print here; the first-boot banner already ran.
 }
 
 // prompt prints a prompt with a default and reads a line from r.

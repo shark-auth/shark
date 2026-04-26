@@ -171,3 +171,21 @@ func colorize(w io.Writer, c, s string) string {
 	}
 	return s
 }
+
+// PrintAdminConfigured prints the "admin configured" re-run banner.
+// Shown on second+ shark serve when at least one active admin API key exists.
+//
+//	✓ admin configured · Dashboard: <dashURL> · Sign in with your admin key
+func PrintAdminConfigured(dashURL string) {
+	fmt.Printf("  ✓ admin configured · Dashboard: %s · Sign in with your admin key\n", dashURL)
+	fmt.Println()
+}
+
+// PrintSetupPending prints the "setup pending" re-run banner.
+// Shown when no admin key exists yet but the bootstrap key file is present.
+//
+//	⚠ setup pending · Dashboard: <dashURL> · Key in: <keyPath>
+func PrintSetupPending(dashURL, keyPath string) {
+	fmt.Printf("  ⚠ setup pending · Dashboard: %s · Key in: %s\n", dashURL, keyPath)
+	fmt.Println()
+}
