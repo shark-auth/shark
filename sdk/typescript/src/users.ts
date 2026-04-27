@@ -76,6 +76,36 @@ export interface UserListResult {
   total: number;
 }
 
+/** Result of listing agents tied to a user. */
+export interface UserAgentListResult {
+  data: Record<string, unknown>[];
+  total: number;
+  filter?: string;
+}
+
+/** Result of a cascade revoke of user agents. */
+export interface CascadeRevokeResult {
+  revoked_agent_ids: string[];
+  revoked_consent_count: number;
+  audit_event_id?: string;
+}
+
+/** Options for `getUserAuditLogs`. */
+export interface UserAuditLogsOptions {
+  limit?: number;
+  since?: string;
+}
+
+/** A single audit-log entry. */
+export interface AuditEvent {
+  id: string;
+  event: string;
+  actor_id?: string;
+  target_id?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Client options
 // ---------------------------------------------------------------------------
@@ -230,5 +260,70 @@ export class UsersClient {
     const resp = await httpRequest(url, { headers: this._auth() });
     if (resp.status !== 200) await this._throw(resp.status, resp.text);
     return resp.json<UserListResult>();
+  }
+
+  // ------------------------------------------------------------------
+  // User-agent ops
+  // ------------------------------------------------------------------
+
+  /** List agents tied to a user. GET /api/v1/users/{id}/agents */
+  async listUserAgents(userId: string): Promise<UserAgentListResult> {
+    const url = `${this._base}/api/v1/users/${encodeURIComponent(userId)}/agents`;
+    const resp = await httpRequest(url, { headers: this._auth() });
+    if (resp.status !== 200) await this._throw(resp.status, resp.text);
+    const raw = resp.json<UserAgentListResult | Record<string, unknown>[]>();
+    if (Array.isArray(raw)) return { data: raw, total: raw.length };
+    return raw as UserAgentListResult;
+  }
+
+  /** Cascade-revoke all agents belonging to a user. POST /api/v1/users/{id}/revoke-agents */
+  async revokeUserAgents(userId: string): Promise<CascadeRevokeResult> {
+    const url = `${this._base}/api/v1/users/${encodeURIComponent(userId)}/revoke-agents`;
+    const resp = await httpRequest(url, {
+      method: "POST",
+      headers: { ...this._auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (resp.status !== 200 && resp.status !== 204) await this._throw(resp.status, resp.text);
+    if (resp.status === 204 || !resp.text) {
+      return { revoked_agent_ids: [], revoked_consent_count: 0 };
+    }
+    const raw = resp.json<{ data?: CascadeRevokeResult } & CascadeRevokeResult>();
+    const data = raw.data ?? raw;
+    return {
+      revoked_agent_ids: data.revoked_agent_ids ?? [],
+      revoked_consent_count: data.revoked_consent_count ?? 0,
+      audit_event_id: data.audit_event_id,
+    };
+  }
+
+  /** Fetch audit log entries for a user. GET /api/v1/users/{id}/audit-logs */
+  async getUserAuditLogs(userId: string, params?: UserAuditLogsOptions): Promise<AuditEvent[]> {
+    const qs = new URLSearchParams();
+    if (params?.limit != null) qs.set("limit", String(params.limit));
+    if (params?.since) qs.set("since", params.since);
+    const query = qs.toString();
+    const url = `${this._base}/api/v1/users/${encodeURIComponent(userId)}/audit-logs${query ? `?${query}` : ""}`;
+    const resp = await httpRequest(url, { headers: this._auth() });
+    if (resp.status !== 200) await this._throw(resp.status, resp.text);
+    const raw = resp.json<{ data?: AuditEvent[] } | AuditEvent[]>();
+    if (Array.isArray(raw)) return raw;
+    return (raw as { data?: AuditEvent[] }).data ?? [];
+  }
+
+  // ------------------------------------------------------------------
+  // Admin MFA disable
+  // ------------------------------------------------------------------
+
+  /**
+   * Admin-force clear a user's TOTP MFA without requiring their current code.
+   *
+   * Wraps `DELETE /api/v1/users/{id}/mfa`. Use when a user has lost their MFA device.
+   * Returns void on 204.
+   */
+  async resetUserMfa(userId: string): Promise<void> {
+    const url = `${this._base}/api/v1/users/${encodeURIComponent(userId)}/mfa`;
+    const resp = await httpRequest(url, { method: "DELETE", headers: this._auth() });
+    if (resp.status !== 200 && resp.status !== 204) await this._throw(resp.status, resp.text);
   }
 }

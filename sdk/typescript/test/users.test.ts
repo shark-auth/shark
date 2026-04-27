@@ -129,3 +129,50 @@ describe("UsersClient.listUsers()", () => {
     expect((err as SharkAPIError).status).toBe(403);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P1 smoke tests — listUserAgents, revokeUserAgents, getUserAuditLogs
+// P2 smoke test  — resetUserMfa
+// ---------------------------------------------------------------------------
+
+describe("UsersClient.listUserAgents()", () => {
+  it("GET /api/v1/users/{id}/agents returns agent list", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(makeResp(200, { data: [{ id: "agent_x" }], total: 1 })));
+    const result = await c().listUserAgents("usr_abc");
+    const [url] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(url).toContain("/api/v1/users/usr_abc/agents");
+    expect(result.total).toBe(1);
+  });
+});
+
+describe("UsersClient.revokeUserAgents()", () => {
+  it("POST /api/v1/users/{id}/revoke-agents returns cascade result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(makeResp(200, { revoked_agent_ids: ["agent_x"], revoked_consent_count: 1 })));
+    const result = await c().revokeUserAgents("usr_abc");
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/users/usr_abc/revoke-agents");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(result.revoked_consent_count).toBe(1);
+  });
+});
+
+describe("UsersClient.getUserAuditLogs()", () => {
+  it("GET /api/v1/users/{id}/audit-logs returns events", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(makeResp(200, { data: [{ id: "ev_1", event: "login" }] })));
+    const events = await c().getUserAuditLogs("usr_abc", { limit: 10 });
+    const [url] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(url).toContain("/api/v1/users/usr_abc/audit-logs");
+    expect(url).toContain("limit=10");
+    expect(events[0].id).toBe("ev_1");
+  });
+});
+
+describe("UsersClient.resetUserMfa()", () => {
+  it("DELETE /api/v1/users/{id}/mfa returns void on 200", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(makeResp(200, {})));
+    await expect(c().resetUserMfa("usr_abc")).resolves.toBeUndefined();
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/users/usr_abc/mfa");
+    expect((init as RequestInit).method).toBe("DELETE");
+  });
+});

@@ -171,3 +171,46 @@ describe("VaultClient.exchange()", () => {
     expect(refreshCalls).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P1 smoke tests — disconnect, listConnections, fetchToken
+// ---------------------------------------------------------------------------
+
+describe("VaultClient.disconnect()", () => {
+  afterEach(restoreFetch);
+
+  it("DELETE /api/v1/vault/connections/{id} returns disconnect result", async () => {
+    installFetch(vi.fn().mockResolvedValueOnce(makeFetchResponse(200, { connection_id: "conn_abc", revoked_agent_ids: [], revoked_token_count: 0 })));
+    const vault = new VaultClient({ authUrl: "https://auth.example", accessToken: "sk_live_x", adminKey: "sk_live_x" });
+    const result = await vault.disconnect("conn_abc");
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/vault/connections/conn_abc");
+    expect((init as RequestInit).method).toBe("DELETE");
+    expect(result.connection_id).toBe("conn_abc");
+  });
+});
+
+describe("VaultClient.listConnections()", () => {
+  afterEach(restoreFetch);
+
+  it("GET /api/v1/vault/connections returns connection list", async () => {
+    installFetch(vi.fn().mockResolvedValueOnce(makeFetchResponse(200, { data: [{ id: "conn_1" }], total: 1 })));
+    const vault = new VaultClient({ authUrl: "https://auth.example", accessToken: "sk_live_x" });
+    const result = await vault.listConnections();
+    const [url] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(url).toContain("/api/v1/vault/connections");
+    expect(result.total).toBe(1);
+  });
+});
+
+describe("VaultClient.fetchToken()", () => {
+  afterEach(restoreFetch);
+
+  it("delegates to _exchangeWithRetry (no dpop) and returns token", async () => {
+    installFetch(vi.fn().mockResolvedValueOnce(makeFetchResponse(200, { access_token: "t123", scopes: ["read"] })));
+    const vault = new VaultClient({ authUrl: "https://auth.example", accessToken: "at" });
+    const tok = await vault.fetchToken("conn_abc");
+    expect(tok.accessToken).toBe("t123");
+    expect(tok.scopes).toEqual(["read"]);
+  });
+});

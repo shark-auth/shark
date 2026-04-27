@@ -149,3 +149,51 @@ describe("AgentsClient.revokeAgent()", () => {
     expect(err).toBeInstanceOf(SharkAPIError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P1 smoke tests — listTokens, revokeAllTokens, rotateSecret, rotateDpopKey
+// ---------------------------------------------------------------------------
+
+describe("AgentsClient.listTokens()", () => {
+  it("GET /api/v1/agents/{id}/tokens returns token list", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(makeResp(200, { data: [{ id: "tok_1", agent_id: "agent_abc" }] })));
+    const tokens = await c().listTokens("agent_abc");
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/agents/agent_abc/tokens");
+    expect((init as RequestInit).method).toBe("GET");
+    expect(tokens[0].token_id).toBe("tok_1");
+  });
+});
+
+describe("AgentsClient.revokeAllTokens()", () => {
+  it("POST /api/v1/agents/{id}/tokens/revoke-all returns count", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(makeResp(200, { revoked_count: 5 })));
+    const result = await c().revokeAllTokens("agent_abc");
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/agents/agent_abc/tokens/revoke-all");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(result.revoked_count).toBe(5);
+  });
+});
+
+describe("AgentsClient.rotateSecret()", () => {
+  it("POST /api/v1/agents/{id}/rotate-secret returns credentials", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(makeResp(200, { agent_id: "agent_abc", client_id: "cid", client_secret: "s3cr3t" })));
+    const creds = await c().rotateSecret("agent_abc");
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/agents/agent_abc/rotate-secret");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(creds.client_secret).toBe("s3cr3t");
+  });
+});
+
+describe("AgentsClient.rotateDpopKey()", () => {
+  it("POST /api/v1/agents/{id}/rotate-dpop-key returns rotation result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(makeResp(200, { old_jkt: "old", new_jkt: "new", revoked_token_count: 2, audit_event_id: "ev_1" })));
+    const result = await c().rotateDpopKey("agent_abc", { kty: "EC" });
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/agents/agent_abc/rotate-dpop-key");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(result.new_jkt).toBe("new");
+  });
+});
