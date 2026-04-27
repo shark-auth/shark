@@ -1137,19 +1137,46 @@ function RolesTab({ user }) {
   );
   const roles = rolesData?.roles || rolesData || user.roles || [];
 
+  // All roles in the system — for the assign-picker.
+  const { data: allRolesData } = useAPI('/roles');
+  const allRoles = allRolesData?.roles || allRolesData?.data || allRolesData || [];
+
   // Fetch effective permissions — flat deduped list from all assigned roles.
   const { data: permsData } = useAPI(user ? `/users/${user.id}/permissions` : null);
   const perms = Array.isArray(permsData) ? permsData : (permsData?.data || permsData?.permissions || []);
+
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [assigning, setAssigning] = React.useState(null);
+
+  const assignedIds = new Set((Array.isArray(roles) ? roles : []).map(r => typeof r === 'string' ? r : r.id));
+  const availableRoles = (Array.isArray(allRoles) ? allRoles : []).filter(r => {
+    const id = typeof r === 'string' ? r : r.id;
+    return !assignedIds.has(id);
+  });
 
   const handleRemoveRole = async (roleId) => {
     await API.del('/users/' + user.id + '/roles/' + roleId);
     refreshRoles();
   };
 
+  const handleAssignRole = async (roleId) => {
+    setAssigning(roleId);
+    try {
+      await API.post(`/users/${user.id}/roles`, { role_id: roleId });
+      refreshRoles();
+      setPickerOpen(false);
+    } catch (e) {
+      // surface failure inline; don't block UI
+      console.error('assign role failed', e);
+    } finally {
+      setAssigning(null);
+    }
+  };
+
   return (
     <>
       <Field label="Global roles">
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4, position: 'relative' }}>
           {(Array.isArray(roles) ? roles : []).map((r, i) => {
             const name = typeof r === 'string' ? r : (r.name || r.id);
             const id = typeof r === 'string' ? r : r.id;
@@ -1160,7 +1187,50 @@ function RolesTab({ user }) {
               </span>
             );
           })}
-          <button className="btn sm"><Icon.Plus width={10} height={10}/>Assign role</button>
+          <button
+            className="btn sm"
+            onClick={() => setPickerOpen(o => !o)}
+            disabled={availableRoles.length === 0}
+            title={availableRoles.length === 0 ? 'All roles assigned' : 'Assign a role'}
+          >
+            <Icon.Plus width={10} height={10}/>Assign role
+          </button>
+          {pickerOpen && availableRoles.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: 0,
+              minWidth: 200,
+              background: 'var(--surface-0)',
+              border: '1px solid var(--hairline)',
+              borderRadius: 3,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+              zIndex: 30,
+              padding: 4,
+            }}>
+              {availableRoles.map((r, i) => {
+                const id = typeof r === 'string' ? r : r.id;
+                const name = typeof r === 'string' ? r : (r.name || r.id);
+                return (
+                  <div
+                    key={id || i}
+                    onClick={() => handleAssignRole(id)}
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      opacity: assigning === id ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    {name}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </Field>
       <div style={{ marginTop: 24 }}>

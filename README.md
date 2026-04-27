@@ -1,119 +1,63 @@
-# sharkauth
+<p align="center">
+  <img src="admin/src/assets/sharky-full.png" alt="SharkAuth" width="200">
+</p>
 
-```
- ███████╗██╗  ██╗ █████╗ ██████╗ ██╗  ██╗
- ██╔════╝██║  ██║██╔══██╗██╔══██╗██║ ██╔╝
- ███████╗███████║███████║██████╔╝█████╔╝
- ╚════██║██╔══██║██╔══██║██╔══██╗██╔═██╗
- ███████║██║  ██║██║  ██║██║  ██║██║  ██╗
- ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
-```
+<h3 align="center">Auth for apps that ship agents to customers.</h3>
+<p align="center">Self-hosted · Single binary · SQLite · OAuth 2.1 · DPoP · Delegation chains</p>
 
-### SharkAuth · auth for products that give customers their own agents
-
-`Self-hosted, single-binary, OAuth 2.1 + RFC 8693 + DPoP. Five-layer revocation built in.`
-
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
-[![Build](https://img.shields.io/github/actions/workflow/status/sharkauth/sharkauth/ci.yml?style=flat-square)](https://github.com/sharkauth/sharkauth/actions)
-[![Release](https://img.shields.io/github/v/release/sharkauth/sharkauth?style=flat-square)](https://github.com/sharkauth/sharkauth/releases/latest)
-
-**demo: 8-second cold-start to first agent token**
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
+  <a href="https://github.com/sharkauth/sharkauth/actions"><img src="https://img.shields.io/github/actions/workflow/status/sharkauth/sharkauth/ci.yml?style=flat-square" alt="Build"></a>
+  <a href="https://github.com/sharkauth/sharkauth/releases/latest"><img src="https://img.shields.io/github/v/release/sharkauth/sharkauth?style=flat-square" alt="Release"></a>
+</p>
 
 ---
 
-## Why SharkAuth
+## What is this
 
-You are building a product where each customer gets their own agent — a research assistant, a coding tool, a customer-support bot. Your product issues tokens on behalf of those agents, delegates across agent hops, and needs to revoke everything for a customer in one call when they cancel.
+SharkAuth is an open-source auth server for products where **each customer gets their own AI agents**  and those agents need scoped credentials, delegation chains, and revocation that actually works.
 
-No managed auth provider handles this today.
+One ~30MB binary. No config files. No external database. `shark serve` and you're running.
 
-**Without SharkAuth:**
 
-- **Vendor lock-in on token issuance.** Auth0/Clerk own your token format, rotation schedule, and revocation API. You cannot add DPoP binding or act-chain logging without their blessing.
-- **No agent-native primitives.** RFC 8693 token exchange (act-on-behalf-of), DPoP key binding, and per-agent delegation policies are not in any SaaS auth product. You build it yourself or your agents run on bearer tokens with no proof of possession.
-- **No act-on-behalf-of audit chain.** When agent A delegates to agent B delegates to agent C, who acted? Which token is live? Which hop caused the data exfil? Without structured delegation records you are answering these questions from logs, not from a purpose-built chain.
-
-SharkAuth is the auth layer built for this exact problem. Single binary. Self-hosted. Ships agents as first-class identities.
-
----
 
 ## Quickstart
 
 ```bash
-# Download the binary from GitHub Releases
-# https://github.com/sharkauth/sharkauth/releases/latest
+# Download from GitHub Releases (macOS, Linux, Windows)
+curl -fsSL https://github.com/sharkauth/sharkauth/releases/latest/download/shark-$(uname -s)-$(uname -m) -o shark
+chmod +x shark
 ./shark serve
 
 # Open http://localhost:8080/admin
-# Paste the admin key printed to your terminal
-# (also written to data/admin.key.firstboot)
+# Paste the admin key printed in your terminal
 ```
 
-That's it. No config file. No database setup. No environment variables required for first boot.
-
-**demo: dashboard first-boot walkthrough — create user, register agent, mint first DPoP token**
-
----
-
-## The Five Layers
-
-Five-layer revocation is the moat. Each layer is independently callable.
-
-| Layer | Name | Ships |
-|-------|------|-------|
-| L1 | Individual token revoke — kill one specific access or refresh token | v0.1 |
-| L2 | Agent-wide revoke — kill all tokens for one agent identity | v0.1 |
-| L3 | User-cascade revoke — kill all tokens for all agents owned by a user | v0.1 |
-| L4 | Bulk pattern revoke — kill all tokens matching a scope/audience/tag pattern | v0.2 (W18-W19) |
-| L5 | Vault disconnect cascade — revoke third-party provider tokens stored in vault + all derived agent tokens | v0.2 (W18-W19) |
-
-When a customer cancels: one `bulk_revoke_by_pattern` call (L4) drops every agent token in their tenant. When a vault credential is compromised: L5 cascades from the vault credential outward to every token derived from it. Layers 1-3 ship now; 4-5 land W18-W19.
-
----
-
-## Architecture
-
-**diagram: human → app → agent → resource with shark at every boundary**
-
-SharkAuth sits at every token boundary in your stack:
-
-- Human authenticates to your app via OAuth 2.1 + PKCE
-- Your app provisions an agent identity in SharkAuth via DCR (RFC 7591)
-- Agent requests a DPoP-bound token (RFC 9449) — proof of key possession, not just bearer
-- Agent acts on behalf of human via RFC 8693 token exchange — auditable `act` chain recorded
-- Shark validates proof at every hop, logs every delegation, and holds all revocation authority
-
-All config lives in SQLite. No YAML, no external dependencies, no runtime services beyond the binary.
-
----
-
-## Use Cases
-
-### AI SaaS shipping agents per customer
-
-Your product gives each paying customer one or more agents. Each agent needs scoped credentials, key-bound tokens, and a revocation path that works at cancellation time. SharkAuth provisions agent identities on signup, issues DPoP-bound tokens on each agent invocation, and cascade-revokes on churn. Python SDK ships now; TS SDK in v0.2.
-
-### Internal AI platform team (compliance + audit trails)
-
-Your platform team runs LLM infrastructure for internal product teams. Security wants an audit record of every act-on-behalf-of hop: which agent accessed which resource, via which delegation chain, at which timestamp. SharkAuth's delegation chain canvas gives you that record. Every token exchange writes a structured audit event with the full `act` chain flattened for query.
-
-### MCP server developers
-
-If you are building an MCP server and need to gate tool calls behind scoped tokens with DPoP binding, SharkAuth is a drop-in OAuth 2.1 + DPoP authorization server. Register your MCP server as an application, issue client credentials per consumer, enforce scope per tool. This is a tertiary use case — the primary wedge is agent platforms — but MCP developers get the full protocol stack.
-
-### Self-hosters wanting an Auth0 replacement with agent support
-
-SharkAuth is a complete OAuth 2.1 authorization server: auth code + PKCE, client credentials, refresh rotation, DCR, device flow, introspection, revocation, JWKS. Passkeys, MFA/TOTP, magic links, SSO (SAML 2.0 + OIDC), RBAC, webhooks, and a full audit log ship in the same binary. The difference: it also handles agents.
-
----
-
-## SDK
-
+Or with Docker:
 ```bash
-# Python SDK — dogfood mode (PyPI release after internal validation)
-pip install git+https://github.com/sharkauth/sharkauth#subdirectory=sdk/python
-# PyPI release coming W+1 after dogfood validation
+docker run -p 8080:8080 -v shark_data:/app/data ghcr.io/sharkauth/sharkauth
 ```
+
+**That's it.** No YAML. No Postgres. No env vars. First boot creates everything.
+
+---
+
+## Why this exists
+
+You're building a product where each customer gets agents — a coding assistant, a support bot, a research tool. Those agents hold your customer's credentials, call APIs on their behalf, and delegate to sub-agents.
+
+Today, you hand-roll all of this:
+
+- Per-tenant token scoping
+- Agent credential rotation
+- A vault for customer OAuth tokens (Gmail, Slack, GitHub)
+- Revocation when something goes wrong
+
+And your hand-rolled stack is probably missing layers. SharkAuth handles the full chain — from human login to the agent's third-hop delegated sub-token — in one server, one audit log, one revocation model.
+
+---
+
+## Agent auth in 10 lines
 
 ```python
 from shark_auth import Client, DPoPProver
@@ -121,78 +65,221 @@ from shark_auth import Client, DPoPProver
 client = Client(base_url="http://localhost:8080", token="sk_live_...")
 prover = DPoPProver.generate()
 
-# Mint a DPoP-bound agent token
+# DPoP-bound token — theft alone is useless without the private key
 token = client.oauth.get_token_with_dpop(
     grant_type="client_credentials",
     dpop_prover=prover,
     client_id="agent-123",
     client_secret="secret",
-    scope="resource:read",
+    scope="mcp:write",
 )
 
-# Token exchange — act on behalf of a user (RFC 8693)
-delegated = client.oauth.token_exchange(
+# Delegate to a sub-agent with narrower scope (RFC 8693)
+sub_token = client.oauth.token_exchange(
     subject_token=token.access_token,
-    scope="resource:read",
+    scope="mcp:read",
     dpop_prover=prover,
+)
+
+# Every request carries cryptographic proof of possession
+resp = client.http.get_with_dpop("/resource", token=sub_token.access_token, prover=prover)
+```
+
+Every line above is something Auth0, Clerk, and WorkOS cannot do today. Not because they're slow — because their token model wasn't built for agents.
+
+---
+
+## What ships
+
+### Human auth (complete)
+- Password + MFA/TOTP + recovery codes
+- Magic link (passwordless)
+- Passkeys / WebAuthn
+- SSO: SAML 2.0 + OIDC federation
+- OAuth 2.1: auth code + PKCE, client credentials, device flow, refresh rotation
+- Dynamic Client Registration (RFC 7591)
+- Organizations + RBAC
+- Session management + admin dashboard
+
+### Agent auth (the part that's new)
+- **DPoP (RFC 9449)** — every token is cryptographically bound to the agent's keypair. Steal the token, it's useless without the key.
+- **Token exchange (RFC 8693)** — agents delegate to sub-agents with `act` claim chains. Every hop is audited.
+- **Agent identities** — agents are first-class entities, not hacked-on machine clients.
+- **Delegation policies** — `may_act` rules control which agents can delegate to which.
+- **Token vault** — encrypted storage for customer OAuth tokens (Google, Slack, GitHub, Microsoft, Notion, Linear, Jira). Agents retrieve them via DPoP-bound requests scoped to the delegation chain.
+
+### Revocation (depth-of-defense)
+
+When something goes wrong, you need the right blast radius:
+
+| Layer | Threat | Response |
+|:------|:-------|:---------|
+| **Token** | Agent's token leaks via prompt injection | Revoke that specific token + its refresh family |
+| **Agent** | One agent is compromised | Kill all tokens for that agent |
+| **Customer** | Customer goes rogue or cancels | Cascade-revoke every agent they spawned — one call |
+| **Pattern** | Buggy agent template v3.2 across all customers | Bulk-revoke by `client_id` pattern |
+| **Vault** | Customer's external OAuth credential compromised | Vault disconnect cascades to every derived agent token |
+
+Five layers. Each independently callable. Layers 1–3 ship today. Layers 4–5 ship within two weeks.
+
+### Audit
+- Every token issuance, exchange, and revocation is logged
+- Delegation chain canvas: visual trace of `[user] → [agent-A] → [agent-B]`
+- Full `act` claim chain flattened for query
+
+---
+
+## Architecture
+
+```
+Human ─── OAuth 2.1 + PKCE ──→ Your App
+                                   │
+                              DCR (RFC 7591)
+                                   │
+                                   ▼
+                               SharkAuth ◄── admin dashboard
+                                   │          SQLite (embedded)
+                              DPoP-bound      audit log
+                              token issued    delegation policies
+                                   │
+                                   ▼
+                            Agent (your code)
+                                   │
+                         token exchange (RFC 8693)
+                         scope downscoped
+                         act chain recorded
+                                   │
+                                   ▼
+                          Sub-agent / Resource
+```
+
+- **Single binary** — Go, ~30MB, cross-compiles to macOS/Linux/Windows (arm64 + amd64)
+- **SQLite** — embedded, WAL mode, zero ops. All state in `./data/`
+- **No external dependencies** — no Redis, no Postgres, no message queue
+- **Admin dashboard** — built-in React admin UI, embedded in the binary
+
+---
+
+## SDK
+
+### Python
+
+```bash
+pip install shark-auth
+```
+
+```python
+from shark_auth import Client, DPoPProver, decode_agent_token
+
+client = Client(base_url="http://localhost:8080", token="sk_live_...")
+
+# Register an agent
+agent = client.agents.register_agent(
+    app_id="my-app",
+    name="research-bot",
+    scopes=["mcp:read", "mcp:write"],
+)
+
+# Verify tokens locally (3 lines)
+claims = decode_agent_token(
+    token,
+    jwks_url="http://localhost:8080/.well-known/jwks.json",
+    expected_issuer="http://localhost:8080",
+    expected_audience=agent["client_id"],
 )
 ```
 
-TypeScript SDK ships v0.2 (W18-W19).
+See [`examples/`](examples/) for runnable scripts.
+
+### TypeScript
+Coming in v0.2.
+
+---
+
+## Comparison
+
+| | SharkAuth | Auth0 | Clerk | WorkOS |
+|:--|:--|:--|:--|:--|
+| Self-hosted, single binary | ✅ | ❌ | ❌ | ❌ |
+| Agent as first-class identity | ✅ | ❌ | ❌ | ❌ |
+| DPoP (RFC 9449) | ✅ | ❌ | ❌ | ❌ |
+| Token exchange with `act` chain (RFC 8693) | ✅ | ❌ | ❌ | ❌ |
+| Delegation chain audit | ✅ | ❌ | ❌ | ❌ |
+| Cascade revocation (user → agents → tokens) | ✅ | ❌ | ❌ | ❌ |
+| Token vault for customer OAuth credentials | ✅ | ❌ | ❌ | ❌ |
+| Human auth (SSO, MFA, passkeys, magic link) | ✅ | ✅ | ✅ | ✅ |
+| Per-MAU pricing | Free | $$$  | $$$  | $$$  |
+
+SharkAuth is not trying to replace Auth0 for a standard SaaS login page. It's built for the products that also need **agent auth on top of human auth** — and need both in the same trust chain.
+
+---
+
+## Who is this for
+
+**AI SaaS shipping agents per customer.** You give each paying customer one or more agents. Agents need scoped credentials, key-bound tokens, and a revocation path that works at cancellation time.
+
+**Platform teams running LLM infrastructure.** Security wants an audit record of every delegation hop: which agent accessed which resource, via which chain, at which timestamp.
+
+**MCP server developers.** You need to gate tool calls behind scoped tokens with DPoP binding. SharkAuth is a drop-in OAuth 2.1 + DPoP authorization server. Register your server as an application, issue client credentials per consumer, enforce scope per tool.
+
+**Self-hosters who want auth they own.** Complete OAuth 2.1 authorization server with SSO, passkeys, MFA, RBAC, organizations, webhooks, audit log, in a binary you control. No per-MAU rent.
 
 ---
 
 ## Roadmap
 
-Transparent roadmap — YC reviewers and OSS contributors can see what's committed.
-
 **v0.1 (now):**
-- Identity hub (users, agents, applications, organizations)
-- Token vault — managed third-party OAuth for agents (Google, Slack, GitHub, Microsoft, Notion, Linear, Jira)
-- Full audit log with delegation chain canvas
-- Auth flow builder (Auth0 Actions-style post-auth pipelines)
-- Delegation chains + RFC 8693 act-chain flattening
-- Python SDK (10 methods, dogfood mode)
-- DCR (RFC 7591) + DPoP (RFC 9449)
-- Five-layer revocation: L1-L3 fully live
+- Full human + agent auth stack
+- DPoP + token exchange + delegation chains
+- Token vault (7 providers)
+- Revocation layers 1–3
+- Python SDK
+- Admin dashboard + audit log
 
-**v0.2 (W18-W19):**
+**v0.2:**
+- Revocation layers 4–5 (pattern + vault cascade)
 - Reverse proxy with identity header injection
-- Bulk-pattern revoke (L4)
-- Vault disconnect cascade (L5)
-- TypeScript SDK (agent-native methods, mirrors Python surface)
-- Auth flow builder UI editor
+- TypeScript SDK
+- Auth flow builder UI
 
-**v0.3 (W20+):**
-- Hosted tier (managed SharkAuth, no infra)
-- Claude Code skill — install SharkAuth and scaffold agent auth in one command
-- MCP wrapper — expose SharkAuth as an MCP server for agent-native tooling
+**v0.3:**
+- Hosted/cloud tier
+- Claude Code skill + MCP server wrapper
+
+Full roadmap: [STRATEGY.md](STRATEGY.md)
 
 ---
 
-## Community + License
-
-**License:** Apache-2.0. See [LICENSE](LICENSE).
-
-**Discord:** [Join the SharkAuth Discord](https://discord.gg/sharkauth) — placeholder, link live at launch
-
-**GitHub Discussions:** [Ask questions, share integrations](https://github.com/sharkauth/sharkauth/discussions)
-
-**Contributing:** See [CONTRIBUTING.md](CONTRIBUTING.md) if it exists, else open a Discussion with your proposal first.
-
-Build from source:
+## Build from source
 
 ```bash
 git clone https://github.com/sharkauth/sharkauth
 cd sharkauth
+
+# Build frontend + backend
+cd admin && npm install && npm run build && cd ..
 go build -o shark ./cmd/shark
+
 ./shark serve
 ```
 
-Requires Go 1.22+.
+Requires Go 1.22+ and Node 20+.
 
 ---
 
-## Why Now
+## Contributing
 
-Every product is becoming an agent platform. Auth was already a differentiator — the teams that owned their auth stack moved faster, migrated without begging vendors, and didn't pay per-MAU rent on their own users. Agent auth is a moat: the team that ships RFC-correct DPoP binding, delegation chain auditing, and five-layer revocation as open infrastructure before Auth0 retrofits agent semantics owns the category for the next 18 months. That window is open now.
+SharkAuth is open source under the [MIT License](LICENSE).
+
+- **Issues:** [GitHub Issues](https://github.com/sharkauth/sharkauth/issues) — bug reports and feature requests
+- **Discussions:** [GitHub Discussions](https://github.com/sharkauth/sharkauth/discussions) — questions, integrations, proposals
+- **Discord:** [Join](https://discord.gg/sharkauth)
+
+If you want to be an early integrator, open an issue or DM. I'll help wire it up.
+
+---
+
+<p align="center">
+Built by <a href="https://github.com/raulgooo">Raúl</a> in Monterrey, Mexico.<br>
+If your product ships agents to customers, their auth stack starts here.
+</p>

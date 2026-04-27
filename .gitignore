@@ -91,6 +91,23 @@ shark-stripped
 # Smoke test scratch
 scratch/
 
+# Smoke fixtures + artifacts (rebuilt on demand, never commit)
+tests/smoke/shark.exe
+tests/smoke/admin.key.firstboot
+tests/smoke/demo-report.html
+tests/smoke/data/
+tests/smoke/shark.db*
+tests/smoke/cookies.txt
+
+# First-boot admin secrets — NEVER commit credentials
+admin.key.firstboot
+*.firstboot
+
+# Demo / scratch outputs at repo root
+/demo-report.html
+/fuckup.md
+/cj.txt
+
 # Docker
 .docker/
 
