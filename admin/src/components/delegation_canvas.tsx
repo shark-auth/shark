@@ -126,6 +126,25 @@ const CANVAS_OVERRIDES = `
 
   .react-flow__attribution { display: none !important; }
 
+  /* Edge label pill — always visible (static badge) */
+  .edge-label-pill {
+    background: var(--surface-2);
+    border: 1px solid var(--hairline-strong);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: ui-monospace, monospace;
+    font-size: 8.5px;
+    color: var(--fg-dim);
+    pointer-events: none;
+    white-space: nowrap;
+    line-height: 1.5;
+    display: inline-block;
+  }
+  .edge-label-pill.active {
+    color: var(--fg);
+    border-color: var(--fg-dim);
+  }
+
   /* Edge hover tooltip — invisible by default, slides in on hover */
   .edge-tooltip {
     background: var(--surface-1) !important;
@@ -204,8 +223,20 @@ function AnimatedBezierEdge({
   });
 
   const isActive = data?.isActive;
-  // label always contains "via token_exchange · HH:MM" text (for test assertions + tooltip)
+  // Full label contains "via token_exchange · HH:MM" — used for hover tooltip
   const label = data?.label;
+  // Static pill shows "acts-as · HH:MM" (user-friendly, no RFC jargon)
+  const pillLabel = React.useMemo(() => {
+    if (!label) return 'acts-as';
+    // Extract time portion after last " · "
+    const parts = label.split(' · ');
+    const ts = parts.length > 1 ? parts[parts.length - 1] : '';
+    return ts ? `acts-as · ${ts}` : 'acts-as';
+  }, [label]);
+  // Hover tooltip shows full technical detail
+  const tooltipLabel = label
+    ? label.replace('via token_exchange', `RFC 8693 token_exchange`)
+    : '';
 
   return (
     <>
@@ -225,22 +256,33 @@ function AnimatedBezierEdge({
         markerEnd={markerEnd}
         style={style}
       />
-      {label && (
-        <EdgeLabelRenderer>
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: 'none',
-            }}
-            className="nodrag nopan"
-          >
-            <div className={`edge-tooltip${hovered ? ' visible' : ''}${isActive ? ' active' : ''}`}>
-              {label}
-            </div>
+      <EdgeLabelRenderer>
+        <div
+          style={{
+            position: 'absolute',
+            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+            pointerEvents: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+          className="nodrag nopan"
+        >
+          {/* Static always-visible pill */}
+          <div className={`edge-label-pill${isActive ? ' active' : ''}`}>
+            {pillLabel}
           </div>
-        </EdgeLabelRenderer>
-      )}
+          {/* Hover tooltip with full RFC detail */}
+          {tooltipLabel && (
+            <div className={`edge-tooltip${hovered ? ' visible' : ''}${isActive ? ' active' : ''}`}
+              style={{ position: 'static', transform: 'none', marginTop: 2 }}
+            >
+              {tooltipLabel}
+            </div>
+          )}
+        </div>
+      </EdgeLabelRenderer>
     </>
   );
 }
