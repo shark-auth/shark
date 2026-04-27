@@ -202,6 +202,19 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute dropped scopes: subject_scope - granted_scope.
+	requestedScopes := splitScopes(requestedScopeStr)
+	droppedScopes := make([]string, 0)
+	grantedSet := make(map[string]bool, len(grantedScopes))
+	for _, sc := range grantedScopes {
+		grantedSet[sc] = true
+	}
+	for _, sc := range subjectScopes {
+		if !grantedSet[sc] {
+			droppedScopes = append(droppedScopes, sc)
+		}
+	}
+
 	// Audit.
 	actChainJSON, _ := json.Marshal(actClaim)
 	slog.Info("oauth.token.exchanged",
@@ -211,11 +224,31 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		"act_chain", string(actChainJSON),
 	)
 	if s.AuditLogger != nil {
+		// Ensure nil slices serialize as [] not null.
+		subjectScopeOut := subjectScopes
+		if subjectScopeOut == nil {
+			subjectScopeOut = []string{}
+		}
+		grantedScopeOut := grantedScopes
+		if grantedScopeOut == nil {
+			grantedScopeOut = []string{}
+		}
+		if droppedScopes == nil {
+			droppedScopes = []string{}
+		}
+		requestedScopeOut := requestedScopes
+		if requestedScopeOut == nil {
+			requestedScopeOut = []string{}
+		}
 		metaMap := map[string]any{
-			"act_chain": actClaim,
-			"scope":     strings.Join(grantedScopes, " "),
-			"client_id": actingAgent.ClientID,
-			"subject":   subjectSub,
+			"act_chain":        actClaim,
+			"scope":            strings.Join(grantedScopes, " "),
+			"client_id":        actingAgent.ClientID,
+			"subject":          subjectSub,
+			"subject_scope":    subjectScopeOut,
+			"granted_scope":    grantedScopeOut,
+			"dropped_scope":    droppedScopes,
+			"requested_scope":  requestedScopeOut,
 		}
 		metaJSON, _ := json.Marshal(metaMap)
 		_ = s.AuditLogger.Log(ctx, &storage.AuditLog{

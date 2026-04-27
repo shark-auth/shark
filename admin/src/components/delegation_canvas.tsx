@@ -243,15 +243,17 @@ function AnimatedBezierEdge({
     return label.replace(/^via token_exchange/, 'RFC 8693 token_exchange');
   }, [label]);
 
-  // Scope delta chip — TODO(v0.2): remove ? placeholder once backend populates scope
+  // Scope delta chip — uses granted_scope/subject_scope from audit metadata.
   const scopeChip = React.useMemo(() => {
-    if (scopeFrom && scopeTo) {
+    if (scopeFrom && scopeFrom.length > 0 && scopeTo) {
       const diff = scopeFrom.length - scopeTo.length;
       if (diff > 0) return { text: `${scopeFrom.length}→${scopeTo.length} scopes`, color: 'var(--danger, #ef4444)', dropped: scopeFrom.filter(s => !scopeTo.includes(s)) };
       return { text: `=${scopeTo.length} scopes`, color: 'var(--fg-dim)', dropped: [] };
     }
-    // TODO(v0.2): backend doesn't yet emit per-hop scope in audit_log metadata
-    return { text: '? scope', color: 'var(--fg-dim)', dropped: [] };
+    if (scopeTo && scopeTo.length > 0) {
+      return { text: `=${scopeTo.length} scopes`, color: 'var(--fg-dim)', dropped: [] };
+    }
+    return null;
   }, [scopeFrom, scopeTo]);
 
   return (
@@ -289,24 +291,25 @@ function AnimatedBezierEdge({
           <div className={`edge-label-pill${isActive ? ' active' : ''}`}>
             {pillLabel}
           </div>
-          {/* Scope delta chip — always visible */}
-          <div style={{
-            fontFamily: 'ui-monospace, monospace',
-            fontSize: 7.5,
-            color: scopeChip.color,
-            opacity: 0.8,
-            lineHeight: 1,
-            title: scopeChip.dropped.length > 0 ? `Dropped: ${scopeChip.dropped.join(', ')}` : undefined,
-          }}>
-            {scopeChip.text}
-          </div>
+          {/* Scope delta chip — visible when scope data is available */}
+          {scopeChip && (
+            <div style={{
+              fontFamily: 'ui-monospace, monospace',
+              fontSize: 7.5,
+              color: scopeChip.color,
+              opacity: 0.8,
+              lineHeight: 1,
+            }} title={scopeChip.dropped.length > 0 ? `Dropped: ${scopeChip.dropped.join(', ')}` : undefined}>
+              {scopeChip.text}
+            </div>
+          )}
           {/* Hover tooltip with full RFC detail + dropped scopes */}
           {tooltipLabel && (
             <div className={`edge-tooltip${hovered ? ' visible' : ''}${isActive ? ' active' : ''}`}
               style={{ position: 'static', transform: 'none', marginTop: 2 }}
             >
               {tooltipLabel}
-              {scopeChip.dropped.length > 0 && (
+              {scopeChip && scopeChip.dropped.length > 0 && (
                 <div style={{ marginTop: 2, color: 'var(--danger, #ef4444)', fontSize: 8 }}>
                   dropped: {scopeChip.dropped.map(s => <span key={s} style={{ textDecoration: 'line-through', marginRight: 3 }}>{s}</span>)}
                 </div>
@@ -655,9 +658,8 @@ export interface DCanvasEdge {
   eventId?: string
   label?: string
   isActivHop?: boolean
-  // TODO(v0.2): populate from backend once per-hop scope is in audit_log metadata
-  scopeFrom?: string[]   // scope count at source hop
-  scopeTo?: string[]     // scope count at target hop (grantedScope)
+  scopeFrom?: string[]   // scope at source hop (subject_scope from audit metadata)
+  scopeTo?: string[]     // scope at target hop (granted_scope from audit metadata)
 }
 
 // ─── layout helper ────────────────────────────────────────────────────────────
@@ -793,7 +795,6 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
     // Active hop: strokeWidth 1.5 (bolder than hairline 1px)
     const strokeWidth = isActive ? 1.5 : 1
 
-    // Scope delta — TODO(v0.2): remove placeholder once backend populates per-hop scope
     const scopeFrom = e.scopeFrom
     const scopeTo = e.scopeTo
 
@@ -1229,8 +1230,7 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
   const status = d.status || d.active === false ? 'inactive' : 'active'
   const statusColor = status === 'active' ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'
 
-  // Scope delta derived from edge data
-  // TODO(v0.2): use real grantedScope from backend once per-hop scope is in audit_log metadata
+  // Scope delta from inbound edge data (subject_scope / granted_scope in audit metadata).
   const inherited = scopeFrom || (d.scopes ? (Array.isArray(d.scopes) ? d.scopes : d.scopes.split(' ').filter(Boolean)) : null)
   const granted = scopeTo || null
   const dropped = inherited && granted ? inherited.filter((s: string) => !granted.includes(s)) : []
@@ -1284,7 +1284,6 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
       {/* Scope section */}
       <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
         <div style={{ ...drawerLabelStyle, marginBottom: 8 }}>Scope</div>
-        {/* TODO(v0.2): show real per-hop scope diff once backend returns grantedScope in token_exchange events */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {inherited ? (
             <>
@@ -1301,8 +1300,7 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
             </>
           ) : (
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', opacity: 0.55 }}>
-              {/* TODO(v0.2): scope data not available — backend audit_log metadata missing per-hop scope */}
-              ? (scope data pending backend v0.2)
+              No scope data for this hop.
             </span>
           )}
         </div>

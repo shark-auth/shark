@@ -106,13 +106,24 @@ function normalizeEntry(e: any) {
 
   const rootSub = actChain.length > 0 ? (actChain[0].label || actChain[0].sub) : (e.actor_email || e.actor_id || 'unknown');
 
-  // TODO(v0.2): pull per-hop grantedScope from meta.scope / meta.scopes once
-  // backend token_exchange events reliably include scope in audit_log metadata.
-  const grantedScope: string[] | undefined =
+  // Read structured scope fields emitted by backend (v0.2+).
+  // Fall back to the legacy flat "scope" string for older events.
+  const grantedScope: string[] =
+    Array.isArray(meta.granted_scope) ? meta.granted_scope :
     Array.isArray(meta.scope) ? meta.scope :
     typeof meta.scope === 'string' ? meta.scope.split(' ').filter(Boolean) :
     Array.isArray(meta.scopes) ? meta.scopes :
-    undefined;
+    [];
+
+  const subjectScope: string[] =
+    Array.isArray(meta.subject_scope) ? meta.subject_scope : grantedScope;
+
+  const droppedScope: string[] =
+    Array.isArray(meta.dropped_scope) ? meta.dropped_scope :
+    subjectScope.filter((s: string) => !grantedScope.includes(s));
+
+  const requestedScope: string[] =
+    Array.isArray(meta.requested_scope) ? meta.requested_scope : grantedScope;
 
   return {
     id: e.id || '',
@@ -124,6 +135,9 @@ function normalizeEntry(e: any) {
     actChain,
     rootSub,
     grantedScope,
+    subjectScope,
+    droppedScope,
+    requestedScope,
     _raw: e,
   };
 }
@@ -139,9 +153,9 @@ interface Chain {
     jkt?: string;
     label?: string;
     isUser: boolean;
-    // TODO(v0.2): populate from backend audit_log metadata once /api/v1/audit-logs
-    // returns per-hop scope arrays in token_exchange events.
-    grantedScope?: string[];
+    grantedScope: string[];
+    subjectScope: string[];
+    droppedScope: string[];
   }>;
   lastAction: string;
   lastTarget: string;
@@ -162,14 +176,33 @@ function buildChains(entries: NormEntry[]): Chain[] {
     );
     const newest = sorted[0];
 
-    const segMap = new Map<string, { sub: string; jkt?: string; label?: string; isUser: boolean }>();
-    for (const ev of evts) {
+    // Build a map of segment key → segment metadata with scope info from the
+    // most-recent event that mentions each hop.
+    const segMap = new Map<string, {
+      sub: string; jkt?: string; label?: string; isUser: boolean;
+      grantedScope: string[]; subjectScope: string[]; droppedScope: string[];
+    }>();
+
+    for (const ev of sorted) {
       ev.actChain.forEach((seg, i) => {
         const k = seg.sub || seg.label || String(i);
-        if (!segMap.has(k)) segMap.set(k, { ...seg, isUser: i === 0 });
+        if (!segMap.has(k)) {
+          segMap.set(k, {
+            ...seg,
+            isUser: i === 0,
+            grantedScope: ev.grantedScope,
+            subjectScope: ev.subjectScope,
+            droppedScope: ev.droppedScope,
+          });
+        }
       });
       if (ev.actor && !segMap.has(ev.actor)) {
-        segMap.set(ev.actor, { sub: ev.actor, label: ev.actor, isUser: false });
+        segMap.set(ev.actor, {
+          sub: ev.actor, label: ev.actor, isUser: false,
+          grantedScope: ev.grantedScope,
+          subjectScope: ev.subjectScope,
+          droppedScope: ev.droppedScope,
+        });
       }
     }
 
@@ -339,6 +372,8 @@ function ChainDrawer({
         timestamp: ev?.created_at,
         isActivHop: isActive,
         eventId: ev?.id,
+        scopeFrom: seg.subjectScope.length > 0 ? seg.subjectScope : prev.grantedScope,
+        scopeTo: seg.grantedScope,
       };
     });
     return toReactFlowEdges(rawEdges);

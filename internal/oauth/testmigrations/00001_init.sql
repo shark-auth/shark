@@ -154,17 +154,21 @@ CREATE INDEX idx_oauth_device_codes_user_code ON oauth_device_codes(user_code);
 CREATE INDEX idx_oauth_device_codes_expires_at ON oauth_device_codes(expires_at);
 
 CREATE TABLE audit_logs (
-    id          TEXT PRIMARY KEY,
-    actor_id    TEXT,
-    actor_type  TEXT DEFAULT 'user',
-    action      TEXT NOT NULL,
-    target_type TEXT,
-    target_id   TEXT,
-    ip          TEXT,
-    user_agent  TEXT,
-    metadata    TEXT DEFAULT '{}',
-    status      TEXT DEFAULT 'success',
-    created_at  TEXT NOT NULL
+    id            TEXT PRIMARY KEY,
+    actor_id      TEXT,
+    actor_type    TEXT DEFAULT 'user',
+    action        TEXT NOT NULL,
+    target_type   TEXT,
+    target_id     TEXT,
+    org_id        TEXT,
+    session_id    TEXT,
+    resource_type TEXT,
+    resource_id   TEXT,
+    ip            TEXT,
+    user_agent    TEXT,
+    metadata      TEXT DEFAULT '{}',
+    status        TEXT DEFAULT 'success',
+    created_at    TEXT NOT NULL
 );
 
 CREATE TABLE api_keys (

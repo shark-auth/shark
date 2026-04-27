@@ -15,6 +15,7 @@ import (
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 
+	"github.com/sharkauth/sharkauth/internal/audit"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
@@ -509,6 +510,165 @@ func TestScopesSubset_Logic(t *testing.T) {
 				t.Errorf("scopesSubset(%v, %v) = %v, want %v", tc.requested, tc.available, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestExchange_AuditMetadata_ScopeFields verifies that a successful token-exchange
+// writes an audit row with subject_scope, granted_scope, dropped_scope, and
+// requested_scope fields populated, and that empty arrays serialize as [] not null.
+func TestExchange_AuditMetadata_ScopeFields(t *testing.T) {
+	_, srv, store := mountExchangeServer(t)
+	// Wire a real audit logger so the emission path is exercised.
+	srv.AuditLogger = audit.NewLogger(store)
+
+	seedAgentWithScopes(t, store, "audit-actor", []string{"openid", "read", "write"})
+	_ = seedUser(t, store, "audit-user@example.com")
+
+	// Subject has "openid read write"; request only "read" → should drop "openid" + "write".
+	subjectToken := mintSubjectJWT(t, srv, "audit-user@example.com", "openid read write", nil)
+
+	form := url.Values{
+		"subject_token":      {subjectToken},
+		"subject_token_type": {tokenTypeAccessToken},
+		"scope":              {"read"},
+	}
+	form.Set("grant_type", grantTypeTokenExchange)
+	req, err := http.NewRequest("POST", "http://localhost", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("audit-actor", "test-secret")
+	rr := httptest.NewRecorder()
+	srv.HandleToken(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Query the audit log for the emitted row.
+	ctx := context.Background()
+	logs, err := store.QueryAuditLogs(ctx, storage.AuditLogQuery{
+		Action: "oauth.token.exchanged",
+		Limit:  10,
+	})
+	if err != nil {
+		t.Fatalf("querying audit logs: %v", err)
+	}
+	if len(logs) == 0 {
+		t.Fatal("expected at least one audit log entry for oauth.token.exchanged")
+	}
+
+	row := logs[0]
+	var meta map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(row.Metadata), &meta); err != nil {
+		t.Fatalf("parsing audit metadata JSON: %v\nraw: %s", err, row.Metadata)
+	}
+
+	for _, field := range []string{"subject_scope", "granted_scope", "dropped_scope", "requested_scope"} {
+		raw, ok := meta[field]
+		if !ok {
+			t.Errorf("audit metadata missing field %q; metadata: %s", field, row.Metadata)
+			continue
+		}
+		// Must be a JSON array, never null.
+		var arr []string
+		if err := json.Unmarshal(raw, &arr); err != nil {
+			t.Errorf("field %q is not a JSON array: %s (error: %v)", field, raw, err)
+		}
+	}
+
+	// Specific values: subject had "openid read write", requested "read".
+	checkArray := func(field string, want []string) {
+		raw, ok := meta[field]
+		if !ok {
+			return // already reported above
+		}
+		var got []string
+		_ = json.Unmarshal(raw, &got)
+		if len(got) != len(want) {
+			t.Errorf("field %q: want %v, got %v", field, want, got)
+			return
+		}
+		wantSet := map[string]bool{}
+		for _, s := range want {
+			wantSet[s] = true
+		}
+		for _, s := range got {
+			if !wantSet[s] {
+				t.Errorf("field %q: unexpected value %q; got %v", field, s, got)
+			}
+		}
+	}
+	checkArray("granted_scope", []string{"read"})
+	checkArray("requested_scope", []string{"read"})
+	// dropped = subject - granted = openid + write
+	checkArray("dropped_scope", []string{"openid", "write"})
+}
+
+// TestExchange_AuditMetadata_EmptyArrays verifies that when no scope is requested
+// (full pass-through) dropped_scope and requested_scope serialize as [] not null.
+func TestExchange_AuditMetadata_EmptyArrays(t *testing.T) {
+	_, srv, store := mountExchangeServer(t)
+	srv.AuditLogger = audit.NewLogger(store)
+
+	seedAgentWithScopes(t, store, "empty-arr-actor", []string{"openid", "read"})
+	_ = seedUser(t, store, "empty-arr-user@example.com")
+
+	// No "scope" param → full pass-through; dropped_scope and requested_scope should be [].
+	subjectToken := mintSubjectJWT(t, srv, "empty-arr-user@example.com", "openid read", nil)
+
+	form := url.Values{
+		"subject_token":      {subjectToken},
+		"subject_token_type": {tokenTypeAccessToken},
+		// scope intentionally omitted
+	}
+	form.Set("grant_type", grantTypeTokenExchange)
+	req, err := http.NewRequest("POST", "http://localhost", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("empty-arr-actor", "test-secret")
+	rr := httptest.NewRecorder()
+	srv.HandleToken(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	ctx := context.Background()
+	logs, err := store.QueryAuditLogs(ctx, storage.AuditLogQuery{
+		Action: "oauth.token.exchanged",
+		Limit:  10,
+	})
+	if err != nil {
+		t.Fatalf("querying audit logs: %v", err)
+	}
+	if len(logs) == 0 {
+		t.Fatal("expected audit log entry")
+	}
+
+	var meta map[string]json.RawMessage
+	_ = json.Unmarshal([]byte(logs[0].Metadata), &meta)
+
+	for _, field := range []string{"dropped_scope", "requested_scope"} {
+		raw, ok := meta[field]
+		if !ok {
+			t.Errorf("missing field %q", field)
+			continue
+		}
+		// Must decode as [] not null.
+		if string(raw) == "null" {
+			t.Errorf("field %q serialized as null, want []", field)
+		}
+		var arr []string
+		if err := json.Unmarshal(raw, &arr); err != nil {
+			t.Errorf("field %q not valid JSON array: %v", field, err)
+		}
+		if len(arr) != 0 {
+			t.Errorf("field %q: want empty array, got %v", field, arr)
+		}
 	}
 }
 
