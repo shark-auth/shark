@@ -27,6 +27,129 @@ import React from 'react'
 import { API } from '../api'
 import { useToast } from '../toast'
 
+// ── Redirect URL config ──────────────────────────────────────────────────────
+// Lets developers point post-action flows at their own hosted pages without
+// needing to ship shark's built-in hosted/* pages first.
+function EmailRedirectConfig() {
+  const [cfg, setCfg] = React.useState({
+    verify_redirect_url: '',
+    reset_redirect_url: '',
+    magic_link_redirect_url: '',
+  })
+  const [saving, setSaving] = React.useState(false)
+  const toast = useToast()
+
+  React.useEffect(() => {
+    API.get('/admin/email-config')
+      .then((r) => {
+        setCfg({
+          verify_redirect_url: r.verify_redirect_url || '',
+          reset_redirect_url: r.reset_redirect_url || '',
+          magic_link_redirect_url: r.magic_link_redirect_url || '',
+        })
+      })
+      .catch(() => {}) // 404 on fresh install is fine — defaults to empty
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await API.patch('/admin/email-config', cfg)
+      toast.success('Redirect URLs saved')
+    } catch (e: any) {
+      toast.error(e?.message || 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const redirectInputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '6px 10px',
+    fontSize: 12,
+    fontFamily: 'var(--font-mono)',
+    background: 'var(--surface-1)',
+    border: '1px solid var(--hairline-strong)',
+    borderRadius: 2,
+    color: 'var(--fg)',
+    boxSizing: 'border-box' as const,
+    outline: 'none',
+    height: 34,
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>Redirect URLs</h2>
+        <p style={{ fontSize: 11.5, color: 'var(--fg-dim)', margin: 0 }}>
+          Where shark sends users after consuming email tokens. Leave blank to use the default hosted page (when live) or the token-embedded URL.
+        </p>
+      </div>
+
+      <div>
+        <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 5, fontWeight: 500 }}>
+          Verify-email redirect
+        </label>
+        <input
+          type="url"
+          value={cfg.verify_redirect_url}
+          onChange={(e) => setCfg(c => ({ ...c, verify_redirect_url: e.target.value }))}
+          placeholder="https://yourapp.com/email-verified"
+          style={redirectInputStyle}
+          spellCheck={false}
+        />
+        <div style={{ fontSize: 10, color: 'var(--fg-faint)', marginTop: 3 }}>
+          Called after the verify-email token is consumed. Token appended as <code style={{ fontSize: 10 }}>?token=...</code>
+        </div>
+      </div>
+
+      <div>
+        <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 5, fontWeight: 500 }}>
+          Password-reset redirect
+        </label>
+        <input
+          type="url"
+          value={cfg.reset_redirect_url}
+          onChange={(e) => setCfg(c => ({ ...c, reset_redirect_url: e.target.value }))}
+          placeholder="https://yourapp.com/reset-password"
+          style={redirectInputStyle}
+          spellCheck={false}
+        />
+        <div style={{ fontSize: 10, color: 'var(--fg-faint)', marginTop: 3 }}>
+          Your page collects the new password and POSTs to <code style={{ fontSize: 10 }}>POST /auth/reset-password</code>
+        </div>
+      </div>
+
+      <div>
+        <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 5, fontWeight: 500 }}>
+          Magic-link redirect (default)
+        </label>
+        <input
+          type="url"
+          value={cfg.magic_link_redirect_url}
+          onChange={(e) => setCfg(c => ({ ...c, magic_link_redirect_url: e.target.value }))}
+          placeholder="https://yourapp.com/dashboard"
+          style={redirectInputStyle}
+          spellCheck={false}
+        />
+        <div style={{ fontSize: 10, color: 'var(--fg-faint)', marginTop: 3 }}>
+          Where to redirect after magic-link login. Per-request override via <code style={{ fontSize: 10 }}>redirect_uri</code> param.
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="btn primary sm"
+        style={{ alignSelf: 'flex-start', height: 32, padding: '0 20px', fontSize: 12, fontWeight: 600 }}
+        onClick={save}
+        disabled={saving}
+      >
+        {saving ? 'Saving…' : 'Save redirect URLs'}
+      </button>
+    </div>
+  )
+}
+
 const TEMPLATE_LABELS: Record<string, string> = {
   magic_link: 'Magic link',
   password_reset: 'Password reset',
@@ -185,6 +308,7 @@ export function BrandingEmailTab() {
   const paragraphs: string[] = draft.body_paragraphs || []
 
   return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32, padding: 0 }}>
     <div style={{ display: 'flex', gap: 24, padding: 0, alignItems: 'flex-start' }}>
       {/* ── Left: template list ────────────────────────────────────── */}
       <div
@@ -435,6 +559,11 @@ export function BrandingEmailTab() {
           </div>
         </div>
       </div>
+    </div>
+    {/* ── Redirect URL config ─────────────────────────────────────── */}
+    <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 24 }}>
+      <EmailRedirectConfig />
+    </div>
     </div>
   )
 }

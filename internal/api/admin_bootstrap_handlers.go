@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -214,4 +216,65 @@ func (s *Server) handleBootstrapConsume(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, bootstrapConsumeResponse{APIKey: fullKey})
+}
+
+// handleFirstbootKey serves the contents of data/admin.key.firstboot ONCE —
+// only while the file exists AND no admin-scoped API key has been bootstrapped
+// via the audit trail. Once either condition is gone it returns 404 so the
+// credential is never surfaced again.
+//
+// GET /api/v1/admin/firstboot/key  (public — this IS the pre-auth setup UX)
+func (s *Server) handleFirstbootKey(w http.ResponseWriter, r *http.Request) {
+	keyPath := s.firstbootKeyPath()
+	if keyPath == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "No firstboot key file configured.",
+		})
+		return
+	}
+
+	// Security gate: once any admin.* audit event exists the operator has
+	// already consumed the key — stop serving it.
+	logs, err := s.Store.QueryAuditLogs(r.Context(), storage.AuditLogQuery{Limit: 1})
+	if err == nil {
+		for _, l := range logs {
+			if strings.HasPrefix(l.Action, "admin.") {
+				writeJSON(w, http.StatusNotFound, map[string]string{
+					"error":   "not_found",
+					"message": "Admin already bootstrapped.",
+				})
+				return
+			}
+		}
+	}
+
+	data, err := os.ReadFile(keyPath)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "First-boot key file not found or already consumed.",
+		})
+		return
+	}
+
+	key := strings.TrimSpace(string(data))
+	writeJSON(w, http.StatusOK, map[string]string{
+		"key":  key,
+		"path": keyPath,
+	})
+}
+
+// firstbootKeyPath returns the expected path of the first-boot key file based
+// on the server's configured storage path. Returns "" when config is missing.
+func (s *Server) firstbootKeyPath() string {
+	if s.Config == nil {
+		return ""
+	}
+	p := s.Config.Storage.Path
+	if p == "" {
+		p = "./shark.db"
+	}
+	dir := filepath.Dir(p)
+	return filepath.Join(dir, "admin.key.firstboot")
 }

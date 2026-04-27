@@ -557,11 +557,44 @@ function AgentSecurityCard({ setPage }) {
   );
 }
 
+function AgentSelfRegisterCard({ setPage }) {
+  const navigate = () => {
+    if (typeof setPage === 'function') setPage('agents');
+  };
+  return (
+    <div
+      onClick={navigate}
+      style={{
+        borderBottom: '1px solid var(--hairline)',
+        padding: '12px 14px',
+        cursor: 'pointer',
+        transition: 'background 0.1s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+      onMouseLeave={e => e.currentTarget.style.background = ''}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-muted)', fontWeight: 600 }}>
+          Agent Self-Registration
+        </span>
+        <span className="chip agent sm">moat</span>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.55 }}>
+        Agents can verify and register themselves autonomously via <span className="mono" style={{ fontSize: 11 }}>POST /oauth/register</span> (RFC 7591 DCR). No human in the loop — your product provisions agent identities at scale.
+      </div>
+      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>
+        View agents →
+      </div>
+    </div>
+  );
+}
+
 function AttentionPanel({ healthRaw, stats, onRefresh, setPage }) {
   return (
     <div className="card" style={{ alignSelf: 'start', position: 'sticky', top: 0 }}>
       <div className="card-header">Attention <button className="btn ghost sm" onClick={onRefresh}><Icon.Refresh width={11}/></button></div>
       <AgentSecurityCard setPage={setPage}/>
+      <AgentSelfRegisterCard setPage={setPage}/>
       <div style={{ padding: 12, fontSize: 13, color: 'var(--fg-muted)' }}>All systems healthy.</div>
     </div>
   );

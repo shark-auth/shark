@@ -102,15 +102,6 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode, email
                 style={{ display: 'block', height: 18, width: 'auto', flexShrink: 0 }}
               />
             </div>
-            {version && (
-              <span style={{
-                height: 18, fontSize: 10, padding: '0 6px',
-                display: 'inline-flex', alignItems: 'center',
-                border: '1px solid rgba(255,255,255,0.25)', borderRadius: 3,
-                color: 'rgba(255,255,255,0.7)', fontVariantNumeric: 'tabular-nums',
-                flexShrink: 0,
-              }}>{version.startsWith('v') ? version : 'v' + version}</span>
-            )}
           </>
         )}
       </div>

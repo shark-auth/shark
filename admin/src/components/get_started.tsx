@@ -33,18 +33,9 @@ const WHY_BULLETS = [
 // ─── 60-second setup tasks (Section 2) ──────────────────────────────────────
 const SETUP_TASKS = [
   {
-    id: 'setup.serve',
-    title: 'Run shark serve',
-    summary: 'Starts the auth server on port 8080. First boot prints a one-time admin key.',
-    cli: 'shark serve',
-    extraSnippets: [
-      { label: 'Dev mode (local email capture)', code: 'shark serve --dev' },
-    ],
-  },
-  {
     id: 'setup.adminkey',
     title: 'Copy the admin key',
-    summary: 'The one-time key appears in stdout on first boot. Paste it in the banner at the top of this dashboard. Shown once — store it.',
+    summary: 'The one-time key was printed on first boot and saved to data/admin.key.firstboot. Paste it into the login screen. Shown once — store it securely.',
     page: 'overview',
     pageLabel: 'Overview → Admin key banner',
     autoCheck: 'hasAdminKey',

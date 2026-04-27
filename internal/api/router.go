@@ -594,6 +594,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		// in-memory single-use hash minted at startup. Mounted before the
 		// /admin group below so AdminAPIKeyFromStore doesn't gate it.
 		r.Post("/admin/bootstrap/consume", s.handleBootstrapConsume)
+		// First-boot key display — public, returns 404 once admin is bootstrapped.
+		r.Get("/admin/firstboot/key", s.handleFirstbootKey)
 
 		// Admin (stats + sessions + dev-mode inbox)
 		r.Route("/admin", func(r chi.Router) {
@@ -669,8 +671,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/organizations/{id}/roles", s.handleAdminListOrgRoles)
 			r.Post("/organizations/{id}/roles", s.handleAdminCreateOrgRole)
 			r.Get("/organizations/{id}/invitations", s.handleAdminListOrgInvitations)
+			r.Post("/organizations/{id}/invitations", s.handleAdminCreateOrgInvitation)
 			r.Delete("/organizations/{id}/invitations/{invitationId}", s.handleAdminDeleteOrgInvitation)
 			r.Post("/organizations/{id}/invitations/{invitationId}/resend", s.handleAdminResendOrgInvitation)
+			r.Patch("/organizations/{id}/members/{uid}", s.handleAdminUpdateOrgMemberRole)
 
 			// Branding admin CRUD + logo upload/delete (Phase A, task A5).
 			// Inherits the AdminAPIKeyFromStore middleware from the parent
@@ -693,6 +697,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Post("/{id}/send-test", s.handleSendTestEmail)
 				r.Post("/{id}/reset", s.handleResetEmailTemplate)
 			})
+
+			// Email redirect URL config — GET/PATCH /admin/email-config
+			r.Get("/email-config", s.handleGetEmailConfig)
+			r.Patch("/email-config", s.handlePatchEmailConfig)
 
 			// Dev inbox routes are always mounted; handler-level guard checks
 			// email.provider == "dev" (DB-backed runtime config, W17) so the
