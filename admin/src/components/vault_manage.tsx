@@ -340,6 +340,9 @@ function ProviderConfig({ provider, onUpdate }) {
   const [saving, setSaving] = React.useState(false);
   const [displayName, setDisplayName] = React.useState(provider.display_name || '');
   const [iconURL, setIconURL] = React.useState(provider.icon_url || '');
+  const [authURL, setAuthURL] = React.useState(provider.auth_url || '');
+  const [tokenURL, setTokenURL] = React.useState(provider.token_url || '');
+  const [clientID, setClientID] = React.useState(provider.client_id || '');
   const [scopeInput, setScopeInput] = React.useState('');
   const [rotateOpen, setRotateOpen] = React.useState(false);
 
@@ -348,6 +351,9 @@ function ProviderConfig({ provider, onUpdate }) {
   React.useEffect(() => {
     setDisplayName(provider.display_name || '');
     setIconURL(provider.icon_url || '');
+    setAuthURL(provider.auth_url || '');
+    setTokenURL(provider.token_url || '');
+    setClientID(provider.client_id || '');
   }, [provider.id]);
 
   const save = async (updates, successMsg) => {
@@ -367,6 +373,15 @@ function ProviderConfig({ provider, onUpdate }) {
   };
   const saveIconURL = () => {
     if (iconURL !== (provider.icon_url || '')) save({ icon_url: iconURL }, 'Icon updated');
+  };
+  const saveAuthURL = () => {
+    if (authURL.trim() && authURL !== provider.auth_url) save({ auth_url: authURL.trim() }, 'Auth URL updated');
+  };
+  const saveTokenURL = () => {
+    if (tokenURL.trim() && tokenURL !== provider.token_url) save({ token_url: tokenURL.trim() }, 'Token URL updated');
+  };
+  const saveClientID = () => {
+    if (clientID.trim() && clientID !== provider.client_id) save({ client_id: clientID.trim() }, 'Client ID updated');
   };
   const toggleActive = () => save({ active: !provider.active }, provider.active ? 'Provider deactivated' : 'Provider activated');
 
@@ -403,9 +418,15 @@ function ProviderConfig({ provider, onUpdate }) {
 
       <Section label="Client ID">
         <div className="row" style={{ gap: 6 }}>
-          <span className="mono" style={{ fontSize: 11.5, padding: '6px 9px', background: 'var(--surface-1)', border: '1px solid var(--hairline)', borderRadius: 3, flex: 1, wordBreak: 'break-all' }}>
-            {provider.client_id}
-          </span>
+          <input
+            value={clientID}
+            onChange={e => setClientID(e.target.value)}
+            onBlur={saveClientID}
+            onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+            disabled={saving}
+            className="mono"
+            style={{...inputStyle, fontSize: 11.5, flex: 1}}
+          />
           <CopyField value={provider.client_id} truncate={0}/>
         </div>
       </Section>
@@ -422,15 +443,29 @@ function ProviderConfig({ provider, onUpdate }) {
       </Section>
 
       <Section label="Auth URL">
-        <div style={{ fontSize: 11.5, padding: '6px 9px', background: 'var(--surface-1)', border: '1px solid var(--hairline)', borderRadius: 3, wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
-          {provider.auth_url}
-        </div>
+        <input
+          value={authURL}
+          onChange={e => setAuthURL(e.target.value)}
+          onBlur={saveAuthURL}
+          onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+          disabled={saving}
+          placeholder="https://provider.example.com/oauth/authorize"
+          className="mono"
+          style={{...inputStyle, fontSize: 11}}
+        />
       </Section>
 
       <Section label="Token URL">
-        <div style={{ fontSize: 11.5, padding: '6px 9px', background: 'var(--surface-1)', border: '1px solid var(--hairline)', borderRadius: 3, wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
-          {provider.token_url}
-        </div>
+        <input
+          value={tokenURL}
+          onChange={e => setTokenURL(e.target.value)}
+          onBlur={saveTokenURL}
+          onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+          disabled={saving}
+          placeholder="https://provider.example.com/oauth/token"
+          className="mono"
+          style={{...inputStyle, fontSize: 11}}
+        />
       </Section>
 
       <Section label="Scopes" count={scopes.length}>

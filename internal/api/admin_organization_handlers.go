@@ -495,6 +495,118 @@ func (s *Server) handleAdminRemoveOrgMember(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Member removed"})
 }
 
+// handleAdminCreateOrgInvitation handles
+// POST /api/v1/admin/organizations/{id}/invitations.
+// Admin override — no RBAC session required; admin key is full-access.
+func (s *Server) handleAdminCreateOrgInvitation(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+
+	var req struct {
+		Email string `json:"email"`
+		Role  string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if req.Email == "" {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "email is required"))
+		return
+	}
+	if req.Role == "" {
+		req.Role = storage.OrgRoleMember
+	}
+	if !isValidOrgRole(req.Role) {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_role", "Role must be owner, admin, or member"))
+		return
+	}
+
+	org, err := s.Store.GetOrganizationByID(r.Context(), orgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Organization not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	rawToken, tokenHash, err := newInvitationToken()
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	id, _ := gonanoid.New()
+	now := time.Now().UTC()
+	expires := now.Add(72 * time.Hour)
+	inv := &storage.OrganizationInvitation{
+		ID: "inv_" + id, OrganizationID: orgID,
+		Email: req.Email, Role: req.Role, TokenHash: tokenHash,
+		ExpiresAt: expires.Format(time.RFC3339),
+		CreatedAt: now.Format(time.RFC3339),
+	}
+	if err := s.Store.CreateOrganizationInvitation(r.Context(), inv); err != nil {
+		internal(w, err)
+		return
+	}
+	if s.MagicLinkManager != nil {
+		go s.sendOrgInvitationEmail(inv, org, "admin_key", rawToken) //#nosec G118 -- fire-and-forget
+	}
+	s.auditAdminOrg(r, "admin.organization.invitation.create", orgID, map[string]any{
+		"email": inv.Email,
+		"role":  inv.Role,
+	})
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id": inv.ID, "email": inv.Email, "role": inv.Role,
+		"expires_at": inv.ExpiresAt, "created_at": inv.CreatedAt,
+	})
+}
+
+// handleAdminUpdateOrgMemberRole handles
+// PATCH /api/v1/admin/organizations/{id}/members/{uid}.
+// Admin override of the user-facing member role update — no RBAC required.
+func (s *Server) handleAdminUpdateOrgMemberRole(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+	targetUserID := chi.URLParam(r, "uid")
+
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
+		return
+	}
+	if !isValidOrgRole(req.Role) {
+		writeJSON(w, http.StatusBadRequest, errPayload("invalid_role", "Role must be owner, admin, or member"))
+		return
+	}
+
+	target, err := s.Store.GetOrganizationMember(r.Context(), orgID, targetUserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Member not found"))
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	target.Role = req.Role
+	if err := s.Store.UpdateOrganizationMemberRole(r.Context(), orgID, targetUserID, req.Role); err != nil {
+		internal(w, err)
+		return
+	}
+	s.auditAdminOrg(r, "admin.organization.member.role_update", orgID, map[string]any{
+		"member_id": targetUserID,
+		"new_role":  req.Role,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user_id": targetUserID, "role": req.Role,
+	})
+}
+
 // auditAdminOrg writes an admin-actor audit log row with structured metadata.
 // ActorID is hardcoded to "admin_key" — admin-key auth doesn't carry a per-user
 // identity, but tagging it explicitly lets dashboard filters distinguish

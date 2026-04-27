@@ -303,6 +303,9 @@ func (s *Server) handleUpdateVaultProvider(w http.ResponseWriter, r *http.Reques
 		IconURL      *string  `json:"icon_url,omitempty"`
 		Active       *bool    `json:"active,omitempty"`
 		ClientSecret *string  `json:"client_secret,omitempty"`
+		AuthURL      *string  `json:"auth_url,omitempty"`
+		TokenURL     *string  `json:"token_url,omitempty"`
+		ClientID     *string  `json:"client_id,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -342,6 +345,30 @@ func (s *Server) handleUpdateVaultProvider(w http.ResponseWriter, r *http.Reques
 	}
 	if req.Active != nil {
 		p.Active = *req.Active
+		changed = true
+	}
+	if req.AuthURL != nil {
+		if *req.AuthURL == "" {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "auth_url cannot be empty"))
+			return
+		}
+		p.AuthURL = *req.AuthURL
+		changed = true
+	}
+	if req.TokenURL != nil {
+		if *req.TokenURL == "" {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "token_url cannot be empty"))
+			return
+		}
+		p.TokenURL = *req.TokenURL
+		changed = true
+	}
+	if req.ClientID != nil {
+		if *req.ClientID == "" {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "client_id cannot be empty"))
+			return
+		}
+		p.ClientID = *req.ClientID
 		changed = true
 	}
 	if changed {

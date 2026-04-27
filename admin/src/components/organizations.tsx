@@ -210,7 +210,7 @@ function OrgDetail({ org, onRefresh }) {
             )}
           </div>
           <div className="row" style={{ gap: 6 }}>
-            <button className="btn sm"><Icon.Plus width={10} height={10}/>Invite</button>
+            <button className="btn sm" onClick={() => setTab('members')}><Icon.Plus width={10} height={10}/>Invite</button>
             <OrgActions org={org} onRefresh={onRefresh}/>
           </div>
         </div>
@@ -395,10 +395,36 @@ function MembershipBreakdown({ members }) {
 /* --- Members tab --- */
 
 function OrgMembersTab({ org, members, loading, onRefresh }) {
+  const toast = useToast();
   const [roleFilter, setRoleFilter] = React.useState('all');
+  const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [menuOpen, setMenuOpen] = React.useState(null); // user_id of open menu
+  const [changingRole, setChangingRole] = React.useState(null); // {userId, current} | null
 
   const roles = ['all', ...Array.from(new Set(members.map(m => m.role).filter(Boolean)))];
   const filtered = roleFilter === 'all' ? members : members.filter(m => m.role === roleFilter);
+
+  const handleRemoveMember = async (userId, name) => {
+    if (!confirm(`Remove ${name} from this organization?`)) return;
+    try {
+      await API.del('/admin/organizations/' + org.id + '/members/' + userId);
+      toast.success('Member removed');
+      onRefresh();
+    } catch (e) {
+      toast.error('Remove failed: ' + e.message);
+    }
+  };
+
+  const handleChangeRole = async (userId, newRole) => {
+    try {
+      await API.patch('/admin/organizations/' + org.id + '/members/' + userId, { role: newRole });
+      toast.success('Role updated');
+      setChangingRole(null);
+      onRefresh();
+    } catch (e) {
+      toast.error('Role update failed: ' + e.message);
+    }
+  };
 
   if (loading) return <div style={{ fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.5, padding: 20 }}>Loading members…</div>;
 
@@ -416,8 +442,20 @@ function OrgMembersTab({ org, members, loading, onRefresh }) {
           ))}
         </div>
         <div style={{ flex: 1 }}/>
-        <button className="btn primary sm"><Icon.Plus width={11} height={11}/>Invite member</button>
+        <button className="btn primary sm" onClick={() => setInviteOpen(true)}><Icon.Plus width={11} height={11}/>Invite member</button>
       </div>
+
+      {inviteOpen && (
+        <InviteMemberForm org={org} onClose={() => setInviteOpen(false)} onDone={() => { setInviteOpen(false); onRefresh(); }}/>
+      )}
+
+      {changingRole && (
+        <ChangeRoleModal
+          member={members.find(m => m.user_id === changingRole.userId)}
+          onClose={() => setChangingRole(null)}
+          onSave={(newRole) => handleChangeRole(changingRole.userId, newRole)}
+        />
+      )}
 
       <div className="card" style={{ overflow: 'hidden' }}>
         <table className="tbl">
@@ -460,7 +498,28 @@ function OrgMembersTab({ org, members, loading, onRefresh }) {
                   <span className={'chip' + (m.role === 'owner' ? ' solid' : '')} style={{ textTransform: 'capitalize', fontSize: 11, fontFamily: 'var(--font-mono)' }}>{m.role || '—'}</span>
                 </td>
                 <td style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--fg-dim)', lineHeight: 1.5 }}>{m.joined_at ? relTime(m.joined_at) : '—'}</td>
-                <td><button className="btn ghost icon sm"><Icon.More width={12} height={12}/></button></td>
+                <td style={{ position: 'relative' }}>
+                  <button className="btn ghost icon sm" onClick={() => setMenuOpen(menuOpen === m.user_id ? null : m.user_id)}>
+                    <Icon.More width={12} height={12}/>
+                  </button>
+                  {menuOpen === m.user_id && (
+                    <div style={{
+                      position: 'absolute', right: 0, top: '100%', marginTop: 2,
+                      background: 'var(--surface-1)', border: '1px solid var(--hairline-strong)',
+                      borderRadius: 5, padding: 4, zIndex: 20, minWidth: 150,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    }} onMouseLeave={() => setMenuOpen(null)}>
+                      <button className="btn ghost sm" style={{ width: '100%', justifyContent: 'flex-start', fontSize: 12 }}
+                        onClick={() => { setMenuOpen(null); setChangingRole({ userId: m.user_id, current: m.role }); }}>
+                        Change role
+                      </button>
+                      <button className="btn ghost sm danger" style={{ width: '100%', justifyContent: 'flex-start', fontSize: 12 }}
+                        onClick={() => { setMenuOpen(null); handleRemoveMember(m.user_id, m.user_name || m.user_email || m.user_id); }}>
+                        Remove member
+                      </button>
+                    </div>
+                  )}
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
@@ -470,6 +529,89 @@ function OrgMembersTab({ org, members, loading, onRefresh }) {
         </table>
       </div>
     </>
+  );
+}
+
+function InviteMemberForm({ org, onClose, onDone }) {
+  const toast = useToast();
+  const [email, setEmail] = React.useState('');
+  const [role, setRole] = React.useState('member');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) { setError('Email is required.'); return; }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await API.post('/admin/organizations/' + org.id + '/invitations', { email: email.trim(), role });
+      toast.success(`Invitation sent to ${email.trim()}`);
+      onDone();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const fieldStyle = { width: '100%', fontSize: 12, padding: '6px 9px', border: '1px solid var(--hairline-strong)', borderRadius: 4, background: 'var(--surface-1)', color: 'var(--fg)', outline: 'none', boxSizing: 'border-box' };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ marginBottom: 12, padding: 12, border: '1px solid var(--hairline-strong)', borderRadius: 5, background: 'var(--surface-1)' }}>
+      <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 10 }}>Invite member to {org.name}</div>
+      <div className="col" style={{ gap: 8 }}>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'block', marginBottom: 3 }}>Email</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@example.com" style={fieldStyle} autoFocus/>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'block', marginBottom: 3 }}>Role</label>
+          <select value={role} onChange={e => setRole(e.target.value)} style={fieldStyle}>
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+            <option value="owner">Owner</option>
+          </select>
+        </div>
+        {error && <div style={{ color: 'var(--danger)', fontSize: 11 }}>{error}</div>}
+        <div className="row" style={{ gap: 6, justifyContent: 'flex-end' }}>
+          <button type="button" className="btn ghost sm" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn primary sm" disabled={submitting || !email.trim()}>
+            {submitting ? 'Sending…' : 'Send invite'}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function ChangeRoleModal({ member, onClose, onSave }) {
+  const [role, setRole] = React.useState(member?.role || 'member');
+  const [saving, setSaving] = React.useState(false);
+
+  const handle = async () => {
+    setSaving(true);
+    try { await onSave(role); } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }} onClick={onClose}>
+      <div style={{ background: 'var(--surface-1)', border: '1px solid var(--hairline-bright)', borderRadius: 6, padding: 20, width: 360 }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Change role for {member?.user_name || member?.user_email || member?.user_id}</div>
+        <select value={role} onChange={e => setRole(e.target.value)}
+          style={{ width: '100%', fontSize: 12, padding: '6px 9px', border: '1px solid var(--hairline-strong)', borderRadius: 4, background: 'var(--surface-1)', color: 'var(--fg)', outline: 'none', marginBottom: 14 }}>
+          <option value="member">Member</option>
+          <option value="admin">Admin</option>
+          <option value="owner">Owner</option>
+        </select>
+        <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn ghost sm" onClick={onClose}>Cancel</button>
+          <button className="btn primary sm" onClick={handle} disabled={saving || role === member?.role}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

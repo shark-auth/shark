@@ -317,13 +317,22 @@ function AppConfig({ app, onUpdate }) {
   const [saveError, setSaveError] = React.useState(null);
   const [saveOk, setSaveOk] = React.useState(false);
   const [redirectInput, setRedirectInput] = React.useState('');
-  
+
+  // Name editing
+  const [nameValue, setNameValue] = React.useState(app.name || '');
+  const [nameError, setNameError] = React.useState(null);
+  React.useEffect(() => { setNameValue(app.name || ''); }, [app.id]);
+
+  // CORS origins editing
+  const [corsInput, setCorsInput] = React.useState('');
+
   // Internal state for the form
   const [mode, setMode] = React.useState(app.integration_mode === 'proxy' ? 'proxy' : 'sdk');
   const [proxyPublicDomain, setProxyPublicDomain] = React.useState(app.proxy_public_domain || '');
   const [proxyProtectedUrl, setProxyProtectedUrl] = React.useState(app.proxy_protected_url || '');
 
   const redirectUris = app.allowed_callback_urls || [];
+  const corsOrigins = app.allowed_origins || [];
 
   const save = async (updates) => {
     setSaving(true);
@@ -338,6 +347,25 @@ function AppConfig({ app, onUpdate }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveName = () => {
+    const val = nameValue.trim();
+    if (!val) { setNameError('Name cannot be empty.'); return; }
+    if (val.length > 100) { setNameError('Name must be 100 characters or fewer.'); return; }
+    setNameError(null);
+    save({ name: val });
+  };
+
+  const removeCors = (origin) => {
+    save({ allowed_origins: corsOrigins.filter(o => o !== origin) });
+  };
+
+  const addCors = () => {
+    const val = corsInput.trim();
+    if (!val) return;
+    save({ allowed_origins: [...corsOrigins, val] });
+    setCorsInput('');
   };
 
   const removeRedirect = (uri) => {
@@ -370,7 +398,26 @@ function AppConfig({ app, onUpdate }) {
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 24 }}>
       {saveError && <div style={{color:'var(--danger)', fontSize: 11, padding: '6px 8px', background:'var(--surface-1)', borderRadius: 3, border: '1px solid var(--danger)'}}>{saveError}</div>}
-      
+
+      <Section label="Application Name">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="row" style={{ gap: 6 }}>
+            <input
+              value={nameValue}
+              onChange={e => { setNameValue(e.target.value); setNameError(null); }}
+              onKeyDown={e => e.key === 'Enter' && saveName()}
+              maxLength={100}
+              style={{ flex: 1, fontSize: 12, padding: '6px 9px', border: '1px solid var(--hairline-strong)', borderRadius: 4, background: 'var(--surface-1)', color: 'var(--fg)', outline: 'none' }}
+            />
+            <button className="btn primary sm" onClick={saveName} disabled={saving || nameValue.trim() === app.name}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          {nameError && <div style={{ color: 'var(--danger)', fontSize: 11 }}>{nameError}</div>}
+          {saveOk && !nameError && <div style={{ color: 'var(--success)', fontSize: 11 }}>✓ Saved</div>}
+        </div>
+      </Section>
+
       <Section label="Deployment Model">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: 'var(--surface-1)', padding: 4, borderRadius: 6, border: '1px solid var(--hairline)' }}>
           <button
@@ -462,6 +509,32 @@ function AppConfig({ app, onUpdate }) {
               <button className="btn ghost sm" onClick={addRedirect} disabled={saving || !redirectInput.trim()}><Icon.Plus width={10} height={10}/> Add</button>
             </div>
           </Section>
+
+          <Section label="CORS Origins" count={corsOrigins.length}>
+            <div style={{ fontSize: 10.5, color: 'var(--fg-dim)', marginBottom: 6 }}>
+              Allowed origins for browser-based OAuth flows.
+            </div>
+            <div style={{ border: '1px solid var(--hairline)', borderRadius: 4, background: 'var(--surface-1)', overflow: 'hidden' }}>
+              {corsOrigins.length === 0 ? (
+                <div style={{ padding: '12px', fontSize: 11, color: 'var(--fg-dim)', textAlign: 'center' }}>No CORS origins configured.</div>
+              ) : corsOrigins.map((origin, i) => (
+                <div key={i} className="row" style={{ padding: '7px 10px', gap: 8, borderBottom: i < corsOrigins.length - 1 ? '1px solid var(--hairline)' : 0 }}>
+                  <span className="mono" style={{ fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{origin}</span>
+                  <button className="btn ghost icon sm" onClick={() => removeCors(origin)} disabled={saving}><Icon.X width={10} height={10}/></button>
+                </div>
+              ))}
+            </div>
+            <div className="row" style={{gap: 6, marginTop: 8}}>
+              <input
+                placeholder="https://app.example.com"
+                value={corsInput}
+                onChange={e => setCorsInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addCors()}
+                style={{flex:1, fontSize:11, padding:'6px 9px', border:'1px solid var(--hairline-strong)', borderRadius:4, background:'var(--surface-1)', color:'var(--fg)', outline:'none'}}
+              />
+              <button className="btn ghost sm" onClick={addCors} disabled={saving || !corsInput.trim()}><Icon.Plus width={10} height={10}/> Add</button>
+            </div>
+          </Section>
         </>
       )}
 
@@ -532,10 +605,69 @@ function ConsentPreview({ app }) {
 }
 
 function AppTokens({ app }) {
+  const { data, loading } = useAPI('/admin/audit-logs?limit=100&action=oauth.token.exchanged');
+  const allEvents = data?.data || [];
+  // Filter client-side by client_id matching this app
+  const tokens = allEvents.filter(e => {
+    const meta = e.metadata || e.meta || {};
+    return (
+      e.client_id === app.client_id ||
+      meta.client_id === app.client_id ||
+      meta.app_id === app.id
+    );
+  });
+
+  const thS = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--fg-dim)', padding: '6px 10px', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', fontWeight: 500 };
+  const tdS = { fontSize: 11, padding: '7px 10px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'middle' };
+
+  if (loading) return <div className="faint" style={{padding: 20, fontSize: 12, textAlign: 'center'}}>Loading…</div>;
+
+  if (tokens.length === 0) {
+    return (
+      <div style={{padding: 16}}>
+        <div className="faint" style={{fontSize: 11.5, padding: '20px 0', textAlign:'center'}}>
+          No token exchange events found for this application.
+        </div>
+        <div className="faint" style={{fontSize: 10.5, textAlign: 'center'}}>
+          Events appear here after users complete an OAuth flow with this client.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{padding: 16}}>
-      <div className="faint" style={{fontSize: 11.5, padding: '20px 0', textAlign:'center'}}>
-        Token listing not yet available via API.
+      <div className="row" style={{marginBottom: 10, gap: 6}}>
+        <span style={{fontSize: 12, fontWeight: 500}}>{tokens.length} token event{tokens.length !== 1 ? 's' : ''}</span>
+        <span className="faint" style={{fontSize: 10.5}}>· from audit log</span>
+      </div>
+      <div style={{border: '1px solid var(--hairline)', borderRadius: 4, overflow: 'hidden'}}>
+        <table style={{width: '100%', borderCollapse: 'collapse', fontSize: 12}}>
+          <thead>
+            <tr>
+              <th style={thS}>Type</th>
+              <th style={thS}>Actor / Subject</th>
+              <th style={thS}>Scopes</th>
+              <th style={thS}>Issued</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tokens.map((e, i) => {
+              const meta = e.metadata || e.meta || {};
+              const scopes = meta.scopes || meta.scope || '—';
+              const subject = e.actor || meta.user_id || meta.subject || '—';
+              const grantType = meta.grant_type || 'authorization_code';
+              return (
+                <tr key={e.id || i}>
+                  <td style={tdS}><span className="chip" style={{height: 18, fontSize: 10}}>{grantType}</span></td>
+                  <td style={{...tdS, fontFamily: 'var(--font-mono)'}}>{subject}</td>
+                  <td style={{...tdS, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)', fontSize: 10}}>{Array.isArray(scopes) ? scopes.join(' ') : String(scopes)}</td>
+                  <td style={{...tdS, color: 'var(--fg-dim)'}}>{relativeTime(e.created_at || e.t)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
