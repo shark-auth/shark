@@ -12,6 +12,7 @@ import { usePageActions } from './useKeyboardShortcuts'
 import { DelegationCanvasWithProvider, toReactFlowNodes, toReactFlowEdges } from './delegation_canvas'
 
 // ─── styles reused from audit.tsx / users.tsx gold standard ───────────────────
+
 const thStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '7px 14px',
@@ -25,12 +26,14 @@ const thStyle: React.CSSProperties = {
   textTransform: 'uppercase' as const,
   letterSpacing: '0.05em',
 };
+
 const tdStyle: React.CSSProperties = {
   padding: '6px 14px',
   borderBottom: '1px solid var(--hairline)',
   verticalAlign: 'middle',
   fontSize: 11,
 };
+
 const sectionLabel: React.CSSProperties = {
   fontSize: 10,
   textTransform: 'uppercase' as const,
@@ -76,7 +79,6 @@ function jktShort(jkt?: string) {
   return jkt.slice(0, 4);
 }
 
-/** Parse a raw JSON metadata string (or object) into a plain object. */
 function parseMeta(ev: any): Record<string, any> {
   if (!ev) return {};
   if (typeof ev.metadata === 'string') {
@@ -85,10 +87,8 @@ function parseMeta(ev: any): Record<string, any> {
   return ev.metadata || {};
 }
 
-/** Parse a raw audit-log entry into a normalised shape. */
 function normalizeEntry(e: any) {
   const meta = parseMeta(e);
-  // Three-way resolution: flat array → use as-is; nested RFC 8693 object → flatten; else empty.
   const resolveChain = (raw: any): Array<{sub: string; jkt?: string; label?: string}> => {
     if (Array.isArray(raw) && raw.length > 0) return raw;
     if (raw && typeof raw === 'object' && raw.sub) return flattenActClaim(raw);
@@ -130,7 +130,6 @@ interface Chain {
   lastTarget: string;
 }
 
-/** Group entries into chains by root subject. */
 function buildChains(entries: NormEntry[]): Chain[] {
   const map = new Map<string, NormEntry[]>();
   for (const e of entries) {
@@ -172,7 +171,7 @@ function buildChains(entries: NormEntry[]): Chain[] {
   );
 }
 
-// ─── breadcrumb renderer (with collapse >3 hops) ─────────────────────────────
+// ─── breadcrumb renderer ──────────────────────────────────────────────────────
 
 function ChainBreadcrumb({
   segments,
@@ -189,7 +188,7 @@ function ChainBreadcrumb({
     gap: 3,
     padding: '1px 6px',
     height: 18,
-    fontSize: 10.5,
+    fontSize: 10,
     border: '1px solid var(--hairline-strong)',
     borderRadius: 3,
     background: 'var(--surface-2)',
@@ -197,10 +196,11 @@ function ChainBreadcrumb({
     fontFamily: 'var(--font-mono)',
     whiteSpace: 'nowrap' as const,
     cursor: 'default',
+    letterSpacing: '0.01em',
   };
 
   const arrow = (
-    <span style={{ color: 'var(--fg-dim)', fontSize: 10, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>→</span>
+    <span style={{ color: 'var(--fg-dim)', fontSize: 9, fontFamily: 'var(--font-mono)', flexShrink: 0, opacity: 0.5 }}>→</span>
   );
 
   const renderSegment = (seg: Chain['segments'][0], i: number) => {
@@ -246,7 +246,8 @@ function ChainBreadcrumb({
           border: '1px dashed var(--hairline-strong)',
           cursor: 'pointer',
           color: 'var(--fg-dim)',
-          fontSize: 10,
+          fontSize: 9.5,
+          opacity: 0.65,
         }}
       >
         … ({hidden} more) …
@@ -290,12 +291,11 @@ function ChainDrawer({
       return next;
     });
 
-  // Build react-flow nodes/edges for the linear chain canvas (drawer view)
   const chainRFNodes = React.useMemo(() => {
     return chain.segments.map((seg, i) => ({
       id: seg.sub || seg.label || String(i),
       type: seg.isUser ? 'humanNode' : 'agentNode',
-      position: { x: i * 180, y: 60 },
+      position: { x: i * 200, y: 60 },
       data: {
         label: seg.label || seg.sub,
         jkt: seg.jkt,
@@ -311,7 +311,7 @@ function ChainDrawer({
       const fromId = prev.sub || prev.label || String(i);
       const toId = seg.sub || seg.label || String(i + 1);
       const ev = chain.events[i];
-      const isActive = i === chain.segments.length - 2; // last hop = most recent
+      const isActive = i === chain.segments.length - 2;
       return {
         id: `${fromId}->${toId}`,
         from: fromId,
@@ -344,6 +344,7 @@ function ChainDrawer({
       flexDirection: 'column',
       zIndex: 200,
       overflow: 'hidden',
+      boxShadow: '-4px 0 24px rgba(0,0,0,0.3)',
     }}>
       {/* Header */}
       <div style={{
@@ -352,17 +353,38 @@ function ChainDrawer({
         display: 'flex',
         alignItems: 'center',
         gap: 8,
+        flexShrink: 0,
       }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', flex: 1, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>
-          Chain detail
-        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--fg-dim)',
+            textTransform: 'uppercase' as const,
+            letterSpacing: '0.08em',
+            display: 'block',
+          }}>Chain detail</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9.5,
+            color: 'var(--fg-dim)',
+            opacity: 0.55,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            display: 'block',
+            marginTop: 1,
+          }} title={chain.rootSub}>
+            {chain.rootSub}
+          </span>
+        </div>
         <button className="btn ghost icon sm" onClick={onClose}>
           <Icon.X width={11} height={11}/>
         </button>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
-        {/* Timestamp */}
+        {/* Latest event */}
         <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Latest event</p>
           <span className="mono" style={{ fontSize: 11 }}>
@@ -371,19 +393,19 @@ function ChainDrawer({
           <CopyField value={chain.latestAt} truncate={0}/>
         </div>
 
-        {/* Chain canvas — React Flow linear hop layout */}
+        {/* Chain canvas */}
         <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Chain tree</p>
           <div style={{
             border: '1px solid var(--hairline)',
-            borderRadius: 0,
+            borderRadius: 3,
             overflow: 'hidden',
-            height: Math.max(200, chain.segments.length * 100 + 40),
+            height: Math.max(220, chain.segments.length * 120 + 60),
           }}>
             <DelegationCanvasWithProvider
               rfNodes={chainRFNodes}
               rfEdges={chainRFEdges}
-              height={Math.max(200, chain.segments.length * 100 + 40)}
+              height={Math.max(220, chain.segments.length * 120 + 60)}
               onNodeClick={(nodeId, nodeData) => {
                 if (!nodeData.isUser && nodeId) onAgentClick(nodeId);
               }}
@@ -395,7 +417,7 @@ function ChainDrawer({
           </div>
         </div>
 
-        {/* cnf.jkt verification per hop */}
+        {/* cnf.jkt verification */}
         <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Cnf.jkt verification</p>
           <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)' }}>
@@ -412,24 +434,25 @@ function ChainDrawer({
                 }}>
                   <span style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: 10.5,
+                    fontSize: 10,
                     color: check.ok ? 'var(--fg-dim)' : 'var(--danger)',
                     border: `1px solid ${check.ok ? 'var(--hairline-strong)' : 'var(--danger)'}`,
                     borderRadius: 2,
                     padding: '0px 4px',
                     flexShrink: 0,
+                    opacity: check.ok ? 0.7 : 1,
                   }}>
                     {check.ok ? '[ok]' : '[mismatch]'}
                   </span>
                   <span className="mono" style={{ flex: 1, fontSize: 10.5 }}>{seg.label || seg.sub}</span>
-                  <span style={{ color: 'var(--fg-dim)', fontSize: 9.5 }}>{check.reason}</span>
+                  <span style={{ color: 'var(--fg-dim)', fontSize: 9.5, opacity: 0.6 }}>{check.reason}</span>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* JWT claims per token (collapsible) */}
+        {/* JWT claims per hop */}
         <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>JWT claims per hop</p>
           {chain.segments.map((seg, i) => {
@@ -454,17 +477,18 @@ function ChainDrawer({
                     cursor: 'pointer',
                     borderRadius: open ? '3px 3px 0 0' : 3,
                     textAlign: 'left' as const,
+                    transition: 'background 100ms',
                   }}
                 >
                   <Icon.ChevronDown width={10} height={10} style={{
                     transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
                     transition: 'transform 120ms',
-                    opacity: 0.5,
+                    opacity: 0.4,
                     flexShrink: 0,
                   }}/>
                   <span className="mono" style={{ flex: 1, fontSize: 10.5 }}>{seg.label || seg.sub}</span>
                   {seg.jkt && (
-                    <span style={{ color: 'var(--fg-dim)', fontSize: 9.5, fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ color: 'var(--fg-dim)', fontSize: 9.5, fontFamily: 'var(--font-mono)', opacity: 0.6 }}>
                       jkt:{seg.jkt.slice(0, 8)}…
                     </span>
                   )}
@@ -476,7 +500,7 @@ function ChainDrawer({
                     background: 'var(--surface-0)',
                     fontFamily: 'var(--font-mono)',
                     fontSize: 10.5,
-                    lineHeight: 1.55,
+                    lineHeight: 1.6,
                     color: 'var(--fg)',
                     borderTop: '1px solid var(--hairline)',
                     borderRadius: '0 0 3px 3px',
@@ -488,7 +512,7 @@ function ChainDrawer({
           })}
         </div>
 
-        {/* All audit events */}
+        {/* Audit events */}
         <div style={{ marginBottom: 14 }}>
           <p style={sectionLabel}>Audit events ({chain.events.length})</p>
           <div style={{ border: '1px solid var(--hairline)', borderRadius: 3, background: 'var(--surface-1)', overflowX: 'auto' }}>
@@ -527,7 +551,7 @@ function ChainDrawer({
         </div>
       </div>
 
-      <div style={{ padding: '8px 14px', borderTop: '1px solid var(--hairline)' }}>
+      <div style={{ padding: '8px 14px', borderTop: '1px solid var(--hairline)', flexShrink: 0 }}>
         <button className="btn ghost" style={{ width: '100%', fontSize: 11 }}
           onClick={() => {
             const json = JSON.stringify(chain.events.map(e => e._raw), null, 2);
@@ -574,10 +598,11 @@ function Seg({ value, onChange, opts }: {
             fontSize: 11,
             fontFamily: 'var(--font-mono)',
             background: value === v ? 'var(--surface-3)' : 'var(--surface-2)',
-            color: value === v ? 'var(--fg)' : 'var(--fg-muted)',
+            color: value === v ? 'var(--fg)' : 'var(--fg-dim)',
             borderRight: '1px solid var(--hairline)',
             cursor: 'pointer',
             fontWeight: value === v ? 500 : 400,
+            transition: 'background 80ms, color 80ms',
           }}
         >{label}</button>
       ))}
@@ -585,7 +610,7 @@ function Seg({ value, onChange, opts }: {
   );
 }
 
-// ─── chain summary header helpers ────────────────────────────────────────────
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 /** Format relative time: "2m ago", "3h ago", "5d ago" */
 function relTime(iso: string): string {
@@ -603,11 +628,121 @@ function relTime(iso: string): string {
   }
 }
 
-/** Build "alice@corp → research-agent → tool-agent" path string (max 3 shown) */
+/** Build "alice@corp → research-agent → tool-agent" path string */
 function chainPath(segments: Chain['segments']): string {
   const labels = segments.map(s => s.label || s.sub);
   if (labels.length <= 4) return labels.join(' → ');
   return labels[0] + ' → … → ' + labels[labels.length - 1];
+}
+
+// ─── chain selector panel (left side of canvas split) ────────────────────────
+
+function ChainSelectorItem({
+  chain,
+  isSelected,
+  onClick,
+}: {
+  chain: Chain;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const hopCount = chain.segments.length;
+  const started = relTime(chain.latestAt);
+  const path = chainPath(chain.segments);
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '9px 14px',
+        borderBottom: '1px solid var(--hairline)',
+        background: isSelected ? 'var(--surface-2)' : 'transparent',
+        cursor: 'pointer',
+        transition: 'background 80ms',
+        position: 'relative',
+      }}
+      onMouseEnter={e => {
+        if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'var(--surface-1)';
+      }}
+      onMouseLeave={e => {
+        if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent';
+      }}
+    >
+      {/* Subtle selection indicator — a thin right-side hairline inset via outline, NOT border-left stripe */}
+      {isSelected && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          bottom: 0,
+          width: 2,
+          background: 'var(--fg)',
+          opacity: 0.8,
+        }}/>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        {/* Hop count chip */}
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          color: isSelected ? 'var(--fg)' : 'var(--fg-dim)',
+          border: '1px solid var(--hairline-strong)',
+          borderRadius: 3,
+          padding: '0 4px',
+          height: 14,
+          lineHeight: '14px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          flexShrink: 0,
+          transition: 'color 80ms',
+        }}>
+          {hopCount}-hop
+        </span>
+
+        {/* Root subject */}
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          color: isSelected ? 'var(--fg)' : 'var(--fg-dim)',
+          fontWeight: isSelected ? 500 : 400,
+          flex: 1,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          transition: 'color 80ms',
+        }} title={chain.rootSub}>
+          {chain.rootSub}
+        </span>
+
+        {/* Relative time */}
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9.5,
+          color: 'var(--fg-dim)',
+          flexShrink: 0,
+          opacity: 0.5,
+        }}>
+          {started}
+        </span>
+      </div>
+
+      {/* Path summary */}
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 9.5,
+        color: 'var(--fg-dim)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        opacity: isSelected ? 0.65 : 0.38,
+        paddingLeft: hopCount >= 10 ? 0 : 0,
+        transition: 'opacity 80ms',
+      }}>
+        {path}
+      </div>
+    </div>
+  );
 }
 
 // ─── canvas graph view ────────────────────────────────────────────────────────
@@ -630,7 +765,6 @@ interface GraphEdge {
 }
 
 function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  // Collect unique nodes and edges from all chains
   const nodeMap = new Map<string, { label: string; isUser: boolean }>();
   const edgeSet = new Map<string, GraphEdge>();
 
@@ -642,7 +776,6 @@ function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] }
       if (!nodeMap.has(id)) {
         nodeMap.set(id, { label: seg.label || seg.sub, isUser: seg.isUser });
       }
-      // Edge from previous segment
       if (i > 0) {
         const prev = segs[i - 1];
         const fromId = prev.sub || prev.label || String(i - 1);
@@ -660,13 +793,11 @@ function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] }
     }
   }
 
-  // Topological layering: count inbound edges per node
   const inbound = new Map<string, number>();
   for (const [, edge] of edgeSet) {
     inbound.set(edge.to, (inbound.get(edge.to) || 0) + 1);
   }
 
-  // BFS layer assignment
   const layerMap = new Map<string, number>();
   const queue: string[] = [];
   for (const [id] of nodeMap) {
@@ -675,27 +806,23 @@ function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] }
       queue.push(id);
     }
   }
-  // Process queue
   let qi = 0;
   while (qi < queue.length) {
     const cur = queue[qi++];
     const curLayer = layerMap.get(cur) || 0;
     for (const [, edge] of edgeSet) {
       if (edge.from === cur && !layerMap.has(edge.to)) {
-        layerMap.set(edge.to, Math.min(curLayer + 1, 4)); // cap at layer 4
+        layerMap.set(edge.to, Math.min(curLayer + 1, 4));
         queue.push(edge.to);
       }
     }
   }
-  // Assign remaining nodes to layer 0
   for (const [id] of nodeMap) {
     if (!layerMap.has(id)) layerMap.set(id, 0);
   }
 
-  // Assign slot within each layer
   const layerSlots = new Map<number, number>();
   const nodes: GraphNode[] = [];
-  // Sort for determinism
   const sortedIds = Array.from(nodeMap.keys()).sort((a, b) => {
     const la = layerMap.get(a) || 0;
     const lb = layerMap.get(b) || 0;
@@ -721,26 +848,31 @@ function ChainCanvas({
   setPage?: (p: string, extra?: any) => void;
   onAuditClick: (id: string) => void;
 }) {
-  // Selected chain for detail view (null = show aggregate graph)
   const [selectedChain, setSelectedChain] = React.useState<Chain | null>(null);
 
   const { nodes: graphNodes, edges: graphEdges } = React.useMemo(() => buildGraph(chains), [chains]);
 
-  const rfNodes = React.useMemo(() => toReactFlowNodes(graphNodes), [graphNodes]);
+  const rfNodes = React.useMemo(() => {
+    const base = toReactFlowNodes(graphNodes);
+    return base;
+  }, [graphNodes]);
 
-  // Mark the last edge in the sequence as the active hop (bolder)
   const rfEdges = React.useMemo(() => {
-    const edges = graphEdges.map((e, i) => ({ ...e, id: e.from + '->' + e.to, isActivHop: i === graphEdges.length - 1 }));
+    const edges = graphEdges.map((e, i) => ({
+      ...e,
+      id: e.from + '->' + e.to,
+      isActivHop: i === graphEdges.length - 1,
+    }));
     return toReactFlowEdges(edges);
   }, [graphEdges]);
 
-  // Per-chain view: when a chain is selected, show its linear hop canvas with header
+  // Per-chain nodes/edges for focused view
   const chainRFNodes = React.useMemo(() => {
     if (!selectedChain) return null;
     return selectedChain.segments.map((seg, i) => ({
       id: seg.sub || seg.label || String(i),
       type: seg.isUser ? 'humanNode' : 'agentNode',
-      position: { x: i * 180, y: 60 },
+      position: { x: i * 200, y: 80 },
       data: {
         label: seg.label || seg.sub,
         jkt: seg.jkt,
@@ -757,7 +889,7 @@ function ChainCanvas({
       const fromId = prev.sub || prev.label || String(i);
       const toId = seg.sub || seg.label || String(i + 1);
       const ev = selectedChain.events[i];
-      const isActive = i === selectedChain.segments.length - 2; // last hop
+      const isActive = i === selectedChain.segments.length - 2;
       return {
         id: `${fromId}->${toId}`,
         from: fromId,
@@ -778,109 +910,173 @@ function ChainCanvas({
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40 }}>
         <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--fg-dim)',
-          lineHeight: 1.7,
-          textAlign: 'center' as const,
-          border: '1px solid var(--hairline)',
-          borderRadius: 3,
-          padding: '20px 32px',
-          background: 'var(--surface-1)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 10,
         }}>
-          No delegation chains in the selected window.<br/>
-          Run shark demo delegation-with-trace.
+          <svg width="36" height="24" viewBox="0 0 36 24" fill="none" style={{ opacity: 0.18 }}>
+            <circle cx="4" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/>
+            <circle cx="18" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/>
+            <circle cx="32" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/>
+            <line x1="7" y1="12" x2="15" y2="12" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2"/>
+            <line x1="21" y1="12" x2="29" y2="12" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2"/>
+          </svg>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--fg-dim)',
+            textAlign: 'center' as const,
+            lineHeight: 1.6,
+            opacity: 0.6,
+          }}>
+            No delegation chains in the selected window.<br/>
+            Run shark demo delegation-with-trace.
+          </span>
         </div>
       </div>
     );
   }
 
-  // ── Per-chain detail view ─────────────────────────────────────────────────
+  // ── Selected chain detail view (split: left selector + right canvas) ──────
   if (selectedChain && chainRFNodes && chainRFEdgesBuilt) {
     const hopCount = selectedChain.segments.length;
-    const summary = chainPath(selectedChain.segments);
     const started = relTime(selectedChain.latestAt);
+    const summary = chainPath(selectedChain.segments);
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {/* Chain summary header */}
+      <div style={{ display: 'flex', height: '100%' }}>
+        {/* Chain selector sidebar */}
         <div style={{
-          padding: '8px 16px',
-          borderBottom: '1px solid var(--hairline)',
-          background: 'var(--surface-1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
+          width: 220,
+          borderRight: '1px solid var(--hairline)',
+          overflowY: 'auto',
           flexShrink: 0,
+          background: 'var(--surface-0)',
         }}>
-          <button
-            onClick={() => setSelectedChain(null)}
-            style={{
-              background: 'transparent',
-              border: 0,
-              cursor: 'pointer',
-              color: 'var(--fg-dim)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10.5,
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              flexShrink: 0,
-            }}
-          >
-            ← chains
-          </button>
-          <span style={{ color: 'var(--hairline-strong)', fontSize: 10, flexShrink: 0 }}>|</span>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10.5,
-            color: 'var(--fg)',
-            fontWeight: 500,
-            flexShrink: 0,
+          {/* Sidebar header */}
+          <div style={{
+            padding: '8px 14px',
+            borderBottom: '1px solid var(--hairline)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
           }}>
-            {hopCount}-hop chain
-          </span>
-          {started && (
-            <>
-              <span style={{ color: 'var(--fg-dim)', fontSize: 10, flexShrink: 0 }}>·</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', flexShrink: 0 }}>
-                started {started}
-              </span>
-            </>
-          )}
-          <span style={{ color: 'var(--fg-dim)', fontSize: 10, flexShrink: 0 }}>·</span>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            color: 'var(--fg-dim)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flex: 1,
-            minWidth: 0,
-          }} title={summary}>{summary}</span>
+            <button
+              onClick={() => setSelectedChain(null)}
+              style={{
+                background: 'transparent',
+                border: 0,
+                cursor: 'pointer',
+                color: 'var(--fg-dim)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                flexShrink: 0,
+              }}
+            >
+              ← chains
+            </button>
+            <div style={{ flex: 1 }}/>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--fg-dim)', opacity: 0.45 }}>
+              {chains.length}
+            </span>
+          </div>
+
+          {chains.map(chain => (
+            <ChainSelectorItem
+              key={chain.rootSub}
+              chain={chain}
+              isSelected={chain.rootSub === selectedChain.rootSub}
+              onClick={() => setSelectedChain(chain)}
+            />
+          ))}
         </div>
 
-        <DelegationCanvasWithProvider
-          rfNodes={chainRFNodes}
-          rfEdges={chainRFEdgesBuilt}
-          height={520}
-          onNodeClick={(nodeId, nodeData) => {
-            if (!setPage) return;
-            if (nodeData.isUser) setPage('users', { userId: nodeId });
-            else setPage('agents', { q: nodeId });
-          }}
-          onEdgeClick={(edgeData) => {
-            if (edgeData?.eventId) onAuditClick(edgeData.eventId);
-          }}
-          fitView
-        />
+        {/* Canvas + header */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          {/* Chain summary header */}
+          <div style={{
+            padding: '7px 16px',
+            borderBottom: '1px solid var(--hairline)',
+            background: 'var(--surface-1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexShrink: 0,
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'var(--fg)',
+              fontWeight: 500,
+              flexShrink: 0,
+            }}>
+              {hopCount}-hop chain
+            </span>
+            {started && (
+              <>
+                <span style={{ color: 'var(--hairline-strong)', fontSize: 10, flexShrink: 0, opacity: 0.4 }}>·</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', flexShrink: 0, opacity: 0.65 }}>
+                  started {started}
+                </span>
+              </>
+            )}
+            <span style={{ color: 'var(--hairline-strong)', fontSize: 10, flexShrink: 0, opacity: 0.4 }}>·</span>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--fg-dim)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: 1,
+              minWidth: 0,
+              opacity: 0.55,
+            }} title={summary}>{summary}</span>
+
+            {/* Event count */}
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9.5,
+              color: 'var(--fg-dim)',
+              border: '1px solid var(--hairline-strong)',
+              borderRadius: 3,
+              padding: '0 5px',
+              height: 16,
+              lineHeight: '16px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              flexShrink: 0,
+              opacity: 0.6,
+            }}>
+              {selectedChain.events.length} evt
+            </span>
+          </div>
+
+          <DelegationCanvasWithProvider
+            rfNodes={chainRFNodes}
+            rfEdges={chainRFEdgesBuilt}
+            height={520}
+            onNodeClick={(nodeId, nodeData) => {
+              if (!setPage) return;
+              if (nodeData.isUser) setPage('users', { userId: nodeId });
+              else setPage('agents', { q: nodeId });
+            }}
+            onEdgeClick={(edgeData) => {
+              if (edgeData?.eventId) onAuditClick(edgeData.eventId);
+            }}
+            fitView
+          />
+        </div>
       </div>
     );
   }
 
-  // ── Aggregate graph with clickable nodes → drill into chain ───────────────
+  // ── Aggregate graph ──────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Aggregate header */}
@@ -893,12 +1089,12 @@ function ChainCanvas({
         gap: 8,
         flexShrink: 0,
       }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', opacity: 0.7 }}>
           {chains.length} chain{chains.length !== 1 ? 's' : ''} · click a chain row to drill in
         </span>
         {chains.length > 0 && (
           <>
-            <span style={{ color: 'var(--fg-dim)', fontSize: 10 }}>·</span>
+            <span style={{ color: 'var(--fg-dim)', fontSize: 10, opacity: 0.3 }}>·</span>
             <button
               onClick={() => setSelectedChain(chains[0])}
               style={{
@@ -911,6 +1107,15 @@ function ChainCanvas({
                 fontSize: 10,
                 padding: '1px 7px',
                 height: 20,
+                transition: 'color 80ms, border-color 80ms',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.color = 'var(--fg)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--fg-dim)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.color = 'var(--fg-dim)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--hairline-strong)';
               }}
             >
               view latest chain
@@ -949,12 +1154,10 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const [page, setPageNum] = React.useState(0);
   const rowRefs = React.useRef<(HTMLDivElement | null)[]>([]);
   const [focusedIdx, setFocusedIdx] = React.useState<number>(-1);
-  // View-mode toggle — persisted to localStorage
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     try { return (localStorage.getItem('shark_chains_view') as ViewMode) || 'list'; } catch { return 'list'; }
   });
 
-  // Build query params for token-exchange events
   const exchangeParams = React.useMemo(() => {
     const p = new URLSearchParams();
     p.set('action', 'oauth.token.exchanged');
@@ -985,12 +1188,10 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const refresh = () => { refreshExchange(); refreshRetrieve(); };
   usePageActions({ onRefresh: refresh });
 
-  // Persist view-mode to localStorage on change
   React.useEffect(() => {
     try { localStorage.setItem('shark_chains_view', viewMode); } catch {}
   }, [viewMode]);
 
-  // Reset page on filter change
   React.useEffect(() => { setPageNum(0); }, [timeRange, actorFilter, statusFilter]);
 
   const allChains = React.useMemo(() => {
@@ -1014,7 +1215,6 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const totalPages = Math.ceil(filteredChains.length / PAGE_SIZE);
   const pageChains = filteredChains.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  // Keyboard navigation (arrow up/down through rows)
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (selected) {
@@ -1055,31 +1255,35 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
       {/* Main panel */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
-        {/* Header */}
+        {/* Page header */}
         <div style={{ padding: '12px 20px 0', borderBottom: '1px solid var(--hairline)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
             <div style={{ flex: 1 }}>
               <h1 style={{ fontSize: 16, margin: 0, fontWeight: 600 }}>Delegation Chains</h1>
-              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--fg-dim)' }}>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--fg-dim)', lineHeight: 1.5 }}>
                 Token-exchange delegation graph · grouped by originating subject · sources:{' '}
                 <span className="mono">oauth.token.exchanged</span>,{' '}
                 <span className="mono">vault.token.retrieved</span>
               </p>
             </div>
-            <button className="btn ghost" onClick={refresh} disabled={loading} style={{ flexShrink: 0, fontSize: 11 }}>
+            <button
+              className="btn ghost"
+              onClick={refresh}
+              disabled={loading}
+              style={{ flexShrink: 0, fontSize: 11 }}
+            >
               <Icon.Refresh width={11} height={11}/>
               {loading ? 'Loading…' : 'Refresh'}
             </button>
           </div>
 
-          {/* Filters bar — monospace inputs, 28px height, tight */}
+          {/* Filters */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 8, flexWrap: 'wrap' }}>
             <Seg
               value={timeRange}
               onChange={setTimeRange}
               opts={[['1h','1h'], ['24h','24h'], ['7d','7d'], ['all','all']]}
             />
-            {/* View-mode toggle: List / Canvas */}
             <Seg
               value={viewMode}
               onChange={(v: ViewMode) => setViewMode(v)}
@@ -1097,7 +1301,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
               borderRadius: 3,
               minWidth: 180,
             }}>
-              <Icon.Search width={10} height={10} style={{ opacity: 0.45, flexShrink: 0 }}/>
+              <Icon.Search width={10} height={10} style={{ opacity: 0.4, flexShrink: 0 }}/>
               <input
                 placeholder="Filter by actor…"
                 value={actorFilter}
@@ -1116,16 +1320,36 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
             </div>
 
             <div style={{ flex: 1 }}/>
-            <span style={{ fontSize: 10.5, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: 10, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)', opacity: 0.55 }}>
               {filteredChains.length} / {allChains.length}
             </span>
           </div>
         </div>
 
-        {/* Chain table / canvas */}
+        {/* Content area */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
+
+          {/* Loading state */}
           {loading && (
-            <div style={{ padding: '10px 20px', fontSize: 11, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>Loading…</div>
+            <div style={{
+              padding: '24px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              justifyContent: 'center',
+            }}>
+              {[0,1,2].map(i => (
+                <div key={i} style={{
+                  width: 3,
+                  height: 3,
+                  borderRadius: '50%',
+                  background: 'var(--fg-dim)',
+                  opacity: 0.35,
+                  animation: `edge-glow 1.2s ease-in-out ${i * 200}ms infinite`,
+                }}/>
+              ))}
+              <style>{`@keyframes edge-glow { 0%,100%{opacity:0.35} 50%{opacity:0.9} }`}</style>
+            </div>
           )}
 
           {/* Canvas mode */}
@@ -1137,26 +1361,38 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
             />
           )}
 
+          {/* Empty state — list mode */}
           {!loading && viewMode === 'list' && filteredChains.length === 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, padding: 40 }}>
               <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                color: 'var(--fg-dim)',
-                lineHeight: 1.7,
-                textAlign: 'center' as const,
-                border: '1px solid var(--hairline)',
-                borderRadius: 3,
-                padding: '20px 32px',
-                background: 'var(--surface-1)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 10,
               }}>
-                No delegation chains in the selected window.<br/>
-                Run shark demo delegation-with-trace.
+                <svg width="36" height="24" viewBox="0 0 36 24" fill="none" style={{ opacity: 0.18 }}>
+                  <circle cx="4" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/>
+                  <circle cx="18" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/>
+                  <circle cx="32" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/>
+                  <line x1="7" y1="12" x2="15" y2="12" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2"/>
+                  <line x1="21" y1="12" x2="29" y2="12" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2"/>
+                </svg>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--fg-dim)',
+                  opacity: 0.6,
+                  textAlign: 'center' as const,
+                  lineHeight: 1.6,
+                }}>
+                  No delegation chains in the selected window.<br/>
+                  Run shark demo delegation-with-trace.
+                </span>
               </div>
             </div>
           )}
 
-          {/* Table header row */}
+          {/* Table */}
           {!loading && viewMode === 'list' && pageChains.length > 0 && (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -1178,9 +1414,12 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
                       onClick={() => { setSelected(chain); setFocusedIdx(idx); }}
                       style={{
                         cursor: 'pointer',
-                        background: isSelected ? 'var(--surface-1)' : (focusedIdx === idx ? 'var(--surface-1)' : 'transparent'),
+                        background: isSelected
+                          ? 'var(--surface-1)'
+                          : (focusedIdx === idx ? 'var(--surface-1)' : 'transparent'),
                         outline: focusedIdx === idx ? '1px solid var(--hairline-strong)' : 'none',
                         outlineOffset: -1,
+                        transition: 'background 80ms',
                       }}
                       onMouseEnter={e => {
                         if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'var(--surface-1)';
@@ -1189,36 +1428,27 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
                         if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent';
                       }}
                     >
-                      {/* Root subject */}
                       <td style={{ ...tdStyle, maxWidth: 140 }}>
                         <span className="mono" style={{ fontSize: 10.5, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {chain.rootSub.length > 20 ? chain.rootSub.slice(0, 18) + '…' : chain.rootSub}
                         </span>
                       </td>
-
-                      {/* Breadcrumb */}
                       <td style={{ ...tdStyle, minWidth: 200 }}>
                         <ChainBreadcrumb
                           segments={chain.segments}
                           onAgentClick={sub => navigateToAgent(sub)}
                         />
                       </td>
-
-                      {/* Last action */}
                       <td style={{ ...tdStyle, maxWidth: 160 }}>
                         <span className="mono" style={{ fontSize: 10, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--fg-dim)' }}>
                           {chain.lastAction}
                         </span>
                       </td>
-
-                      {/* Timestamp */}
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                         <span className="mono faint" style={{ fontSize: 10 }}>
                           {fmtTime(chain.latestAt)}
                         </span>
                       </td>
-
-                      {/* Event count chip */}
                       <td style={tdStyle}>
                         <span style={{
                           display: 'inline-block',
@@ -1277,17 +1507,18 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
         <div style={{
           padding: '6px 20px',
           borderTop: '1px solid var(--hairline)',
-          fontSize: 10.5,
+          fontSize: 10,
           display: 'flex',
           gap: 10,
           color: 'var(--fg-dim)',
           fontFamily: 'var(--font-mono)',
+          opacity: 0.65,
         }}>
           <span>{filteredChains.length} chains</span>
           <span>·</span>
           <span>{allChains.reduce((s, c) => s + c.events.length, 0)} events</span>
           <div style={{ flex: 1 }}/>
-          <span style={{ fontSize: 9.5, opacity: 0.6 }}>
+          <span style={{ fontSize: 9, opacity: 0.7 }}>
             shark audit tail --filter "oauth.token.exchanged"
           </span>
         </div>
