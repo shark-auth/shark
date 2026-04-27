@@ -106,6 +106,14 @@ function normalizeEntry(e: any) {
 
   const rootSub = actChain.length > 0 ? (actChain[0].label || actChain[0].sub) : (e.actor_email || e.actor_id || 'unknown');
 
+  // TODO(v0.2): pull per-hop grantedScope from meta.scope / meta.scopes once
+  // backend token_exchange events reliably include scope in audit_log metadata.
+  const grantedScope: string[] | undefined =
+    Array.isArray(meta.scope) ? meta.scope :
+    typeof meta.scope === 'string' ? meta.scope.split(' ').filter(Boolean) :
+    Array.isArray(meta.scopes) ? meta.scopes :
+    undefined;
+
   return {
     id: e.id || '',
     created_at: e.created_at || '',
@@ -115,6 +123,7 @@ function normalizeEntry(e: any) {
     target: [e.target_type, e.target_id].filter(Boolean).join('_') || '',
     actChain,
     rootSub,
+    grantedScope,
     _raw: e,
   };
 }
@@ -125,7 +134,15 @@ interface Chain {
   rootSub: string;
   latestAt: string;
   events: NormEntry[];
-  segments: Array<{ sub: string; jkt?: string; label?: string; isUser: boolean }>;
+  segments: Array<{
+    sub: string;
+    jkt?: string;
+    label?: string;
+    isUser: boolean;
+    // TODO(v0.2): populate from backend audit_log metadata once /api/v1/audit-logs
+    // returns per-hop scope arrays in token_exchange events.
+    grantedScope?: string[];
+  }>;
   lastAction: string;
   lastTarget: string;
 }

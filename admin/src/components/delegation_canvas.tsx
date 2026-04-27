@@ -225,6 +225,9 @@ function AnimatedBezierEdge({
   const isActive = data?.isActive;
   // Full label contains "via token_exchange · HH:MM" — used for hover tooltip
   const label = data?.label;
+  const scopeFrom: string[] | undefined = data?.scopeFrom;
+  const scopeTo: string[] | undefined = data?.scopeTo;
+
   // Static pill shows "acts-as · HH:MM" (user-friendly, no RFC jargon)
   const pillLabel = React.useMemo(() => {
     if (!label) return 'acts-as';
@@ -237,6 +240,17 @@ function AnimatedBezierEdge({
   const tooltipLabel = label
     ? label.replace('via token_exchange', `RFC 8693 token_exchange`)
     : '';
+
+  // Scope delta chip — TODO(v0.2): remove ? placeholder once backend populates scope
+  const scopeChip = React.useMemo(() => {
+    if (scopeFrom && scopeTo) {
+      const diff = scopeFrom.length - scopeTo.length;
+      if (diff > 0) return { text: `${scopeFrom.length}→${scopeTo.length} scopes`, color: 'var(--danger, #ef4444)', dropped: scopeFrom.filter(s => !scopeTo.includes(s)) };
+      return { text: `=${scopeTo.length} scopes`, color: 'var(--fg-dim)', dropped: [] };
+    }
+    // TODO(v0.2): backend doesn't yet emit per-hop scope in audit_log metadata
+    return { text: '? scope', color: 'var(--fg-dim)', dropped: [] };
+  }, [scopeFrom, scopeTo]);
 
   return (
     <>
@@ -273,12 +287,28 @@ function AnimatedBezierEdge({
           <div className={`edge-label-pill${isActive ? ' active' : ''}`}>
             {pillLabel}
           </div>
-          {/* Hover tooltip with full RFC detail */}
+          {/* Scope delta chip — always visible */}
+          <div style={{
+            fontFamily: 'ui-monospace, monospace',
+            fontSize: 7.5,
+            color: scopeChip.color,
+            opacity: 0.8,
+            lineHeight: 1,
+            title: scopeChip.dropped.length > 0 ? `Dropped: ${scopeChip.dropped.join(', ')}` : undefined,
+          }}>
+            {scopeChip.text}
+          </div>
+          {/* Hover tooltip with full RFC detail + dropped scopes */}
           {tooltipLabel && (
             <div className={`edge-tooltip${hovered ? ' visible' : ''}${isActive ? ' active' : ''}`}
               style={{ position: 'static', transform: 'none', marginTop: 2 }}
             >
               {tooltipLabel}
+              {scopeChip.dropped.length > 0 && (
+                <div style={{ marginTop: 2, color: 'var(--danger, #ef4444)', fontSize: 8 }}>
+                  dropped: {scopeChip.dropped.map(s => <span key={s} style={{ textDecoration: 'line-through', marginRight: 3 }}>{s}</span>)}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -623,6 +653,9 @@ export interface DCanvasEdge {
   eventId?: string
   label?: string
   isActivHop?: boolean
+  // TODO(v0.2): populate from backend once per-hop scope is in audit_log metadata
+  scopeFrom?: string[]   // scope count at source hop
+  scopeTo?: string[]     // scope count at target hop (grantedScope)
 }
 
 // ─── layout helper ────────────────────────────────────────────────────────────
@@ -687,8 +720,12 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
 
     const isActive = e.isActivHop === true
     const strokeColor = isActive ? 'var(--fg)' : 'var(--fg-dim)'
-    // Active hop: strokeWidth: 2 (bolder than hairline 1px)
-    const strokeWidth = isActive ? 2 : 1
+    // Active hop: strokeWidth 1.5 (bolder than hairline 1px)
+    const strokeWidth = isActive ? 1.5 : 1
+
+    // Scope delta — TODO(v0.2): remove placeholder once backend populates per-hop scope
+    const scopeFrom = e.scopeFrom
+    const scopeTo = e.scopeTo
 
     return {
       id: e.id,
@@ -696,15 +733,16 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
       target: e.to,
       type: 'animatedBezier',
       className: isActive ? 'active-hop' : '',
+      // P0-6: arrowheads 14/18 for legibility at fitView zoom
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        width: isActive ? 10 : 8,
-        height: isActive ? 10 : 8,
+        width: isActive ? 18 : 14,
+        height: isActive ? 18 : 14,
         color: strokeColor,
       },
       style: {
         stroke: strokeColor,
-        // strokeWidth: 2 for active-hop (bolder), 1 for historical hairline
+        // strokeWidth: 1.5 for active-hop (bolder), 1 for historical hairline
         strokeWidth,
         ...(isActive ? {
           strokeDasharray: '6 4',
@@ -715,6 +753,8 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
         label: edgeLabel,
         eventId: e.eventId,
         isActive,
+        scopeFrom,
+        scopeTo,
       },
     }
   })
@@ -762,18 +802,19 @@ export function toEgoLayout(
     // label stored for hover tooltip; "token_exchange" keyword always present
     const edgeLabel = e.label || (ts ? `via token_exchange · ${ts}` : 'via token_exchange')
     const strokeColor = isActive ? 'var(--fg)' : 'var(--fg-dim)'
-    // Active hop: strokeWidth: 2 (bolder than hairline 1px)
-    const strokeWidth = isActive ? 2 : 1
+    // Active hop: strokeWidth 1.5 (bolder than hairline 1px)
+    const strokeWidth = isActive ? 1.5 : 1
     return {
       id: e.id,
       source: e.from,
       target: e.to,
       type: 'animatedBezier',
       className: isActive ? 'active-hop' : '',
+      // P0-6: arrowheads 14/18 for legibility at fitView zoom
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        width: isActive ? 10 : 8,
-        height: isActive ? 10 : 8,
+        width: isActive ? 18 : 14,
+        height: isActive ? 18 : 14,
         color: strokeColor,
       },
       style: {
@@ -913,6 +954,9 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose }: {
   const edgeLabel = inEdges[0]?.data?.label || outEdges[0]?.data?.label || ''
   const tokenType = edgeLabel.includes('token_exchange') ? 'token_exchange' : (edgeLabel || '—')
   const hopTs = edgeLabel.replace('via token_exchange · ', '').replace('via token_exchange', '').trim() || '—'
+  // Scope: derive from inbound edge data
+  const scopeFrom: string[] | undefined = inEdges[0]?.data?.scopeFrom
+  const scopeTo: string[] | undefined = inEdges[0]?.data?.scopeTo
 
   const auditLink = `/admin/audit?actor_id=${encodeURIComponent(node.id)}`
 
@@ -988,6 +1032,9 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose }: {
               nextHop={nextHop}
               tokenType={tokenType}
               hopTs={hopTs}
+              scopeFrom={scopeFrom}
+              scopeTo={scopeTo}
+              rfEdges={rfEdges}
             />
           )}
 
@@ -1080,17 +1127,73 @@ function HumanDrawerFields({ node }: { node: { id: string; data: any } }) {
 
 // ── Agent drawer fields ───────────────────────────────────────────────────────
 
-function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs }: {
+/** BFS from nodeId through rfEdges — returns all reachable descendant node ids */
+function getDescendants(nodeId: string, rfEdges: any[]): string[] {
+  const visited = new Set<string>()
+  const queue = [nodeId]
+  while (queue.length) {
+    const cur = queue.shift()!
+    for (const e of rfEdges) {
+      if (e.source === cur && !visited.has(e.target)) {
+        visited.add(e.target)
+        queue.push(e.target)
+      }
+    }
+  }
+  visited.delete(nodeId)
+  return Array.from(visited)
+}
+
+function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs, scopeFrom, scopeTo, rfEdges }: {
   node: { id: string; data: any }
   chainPos: number
   prevHop: any
   nextHop: any
   tokenType: string
   hopTs: string
+  scopeFrom?: string[]
+  scopeTo?: string[]
+  rfEdges?: any[]
 }) {
   const d = node.data || {}
   const status = d.status || d.active === false ? 'inactive' : 'active'
   const statusColor = status === 'active' ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'
+
+  // Scope delta derived from edge data
+  // TODO(v0.2): use real grantedScope from backend once per-hop scope is in audit_log metadata
+  const inherited = scopeFrom || (d.scopes ? (Array.isArray(d.scopes) ? d.scopes : d.scopes.split(' ').filter(Boolean)) : null)
+  const granted = scopeTo || null
+  const dropped = inherited && granted ? inherited.filter((s: string) => !granted.includes(s)) : []
+
+  // BFS descendants for blast radius
+  const descendants = React.useMemo(
+    () => rfEdges ? getDescendants(node.id, rfEdges) : [],
+    [node.id, rfEdges]
+  )
+
+  const revokeAgent = async (id: string) => {
+    if (!confirm(`Revoke agent ${id}? This action cannot be undone.`)) return
+    try {
+      await fetch(`/api/v1/agents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    } catch (err) {
+      console.error('revoke failed', err)
+    }
+    // Trigger page refresh to refetch chain
+    window.location.reload()
+  }
+
+  const revokeBranch = async () => {
+    const targets = [node.id, ...descendants]
+    if (!confirm(`Revoke ${targets.length} agent(s) in this branch? This cannot be undone.`)) return
+    try {
+      await Promise.all(targets.map(id =>
+        fetch(`/api/v1/agents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      ))
+    } catch (err) {
+      console.error('branch revoke failed', err)
+    }
+    window.location.reload()
+  }
 
   return (
     <div data-testid="agent-drawer-fields" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1107,7 +1210,33 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs 
       </div>
 
       {d.created_at && <DrawerField label="Created" value={new Date(d.created_at).toLocaleDateString()} />}
-      {d.scopes && <DrawerField label="Scopes" value={Array.isArray(d.scopes) ? d.scopes.join(' ') : d.scopes} mono />}
+
+      {/* Scope section */}
+      <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+        <div style={{ ...drawerLabelStyle, marginBottom: 8 }}>Scope</div>
+        {/* TODO(v0.2): show real per-hop scope diff once backend returns grantedScope in token_exchange events */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {inherited ? (
+            <>
+              <DrawerField label="Inherited" value={inherited.join(', ')} mono />
+              {granted && <DrawerField label="Granted" value={granted.join(', ')} mono />}
+              {dropped.length > 0 && (
+                <div>
+                  <div style={drawerLabelStyle}>Dropped</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--danger, #ef4444)', wordBreak: 'break-all', lineHeight: 1.45 }}>
+                    {dropped.join(', ')}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', opacity: 0.55 }}>
+              {/* TODO(v0.2): scope data not available — backend audit_log metadata missing per-hop scope */}
+              ? (scope data pending backend v0.2)
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Delegation context for this chain */}
       <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
@@ -1118,6 +1247,57 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs 
           <DrawerField label="Delegated to" value={nextHop?.data?.label || nextHop?.id || '—'} />
           <DrawerField label="Token type" value={tokenType} mono />
           <DrawerField label="Hop timestamp" value={hopTs} />
+        </div>
+      </div>
+
+      {/* Revocation section */}
+      <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+        <div style={{ ...drawerLabelStyle, marginBottom: 8 }}>Revocation</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', marginBottom: 8, lineHeight: 1.6 }}>
+          Blast radius:<br/>
+          <span style={{ color: 'var(--fg)' }}>{descendants.length} downstream agent{descendants.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            data-testid="revoke-agent-btn"
+            onClick={() => revokeAgent(node.id)}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              padding: '4px 10px',
+              background: 'transparent',
+              border: '1px solid var(--danger, #ef4444)',
+              borderRadius: 3,
+              color: 'var(--danger, #ef4444)',
+              cursor: 'pointer',
+              transition: 'background 100ms',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.08)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            Revoke this agent
+          </button>
+          {descendants.length > 0 && (
+            <button
+              data-testid="revoke-branch-btn"
+              onClick={revokeBranch}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                padding: '4px 10px',
+                background: 'transparent',
+                border: '1px solid var(--danger, #ef4444)',
+                borderRadius: 3,
+                color: 'var(--danger, #ef4444)',
+                cursor: 'pointer',
+                transition: 'background 100ms',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.08)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              Revoke this branch ({descendants.length + 1})
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1233,7 +1413,8 @@ export function DelegationCanvas({
         defaultEdgeOptions={{
           type: 'animatedBezier',
           style: { stroke: 'var(--fg-dim)', strokeWidth: 1 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--fg-dim)', width: 8, height: 8 },
+          // P0-6: arrowheads 14 default for legibility at fitView zoom
+          markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--fg-dim)', width: 14, height: 14 },
         }}
         proOptions={{ hideAttribution: true }}
         style={{ background: 'var(--surface-0)' }}
