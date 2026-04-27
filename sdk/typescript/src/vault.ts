@@ -103,19 +103,10 @@ export class VaultClient {
   }
 
   /**
-   * Retrieve a fresh access token for the given stored connection.
-   *
-   * This is the primary API. The name matches the task spec (`exchange`).
-   *
-   * @param referenceToken  Connection ID / reference token identifying the stored connection.
-   * @returns {@link VaultToken} with a fresh `accessToken` from the vault.
-   * @throws {@link VaultError} on 404 (not found), 401/403 (auth), or other errors.
+   * @deprecated Use {@link fetchToken} instead — same shape, preferred name matching Python SDK.
    */
   async exchange(referenceToken: string): Promise<VaultToken> {
-    if (!referenceToken) {
-      throw new VaultError("referenceToken (connection ID) is required");
-    }
-    return this._exchangeWithRetry(referenceToken, 0);
+    return this.fetchToken(referenceToken);
   }
 
   private async _exchangeWithRetry(
