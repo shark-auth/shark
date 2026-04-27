@@ -636,9 +636,16 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Path 2: session/JWT auth — fall back to user from context when no user_id
-	// supplied. Path 1 (admin key + explicit user_id) keeps existing behaviour.
-	if req.UserID == "" {
+	// Security: distinguish session callers from admin callers.
+	// Session path (auth_method="jwt" or "cookie"): clamp user_id to the
+	// authenticated caller — silently ignore any user_id in the body to prevent
+	// cross-tenant IDOR (session user probing another user's permissions).
+	// Admin path (auth_method=""): body user_id is trusted for legitimate
+	// backend-to-backend cross-user checks; fall back to ctx for self-checks.
+	authMethod := mw.GetAuthMethod(r.Context())
+	if authMethod == "jwt" || authMethod == "cookie" {
+		req.UserID = mw.GetUserID(r.Context())
+	} else if req.UserID == "" {
 		req.UserID = mw.GetUserID(r.Context())
 	}
 
