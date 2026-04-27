@@ -165,7 +165,19 @@ export function Users() {
           <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
             {loading ? '…' : `${total.toLocaleString()} total`}
           </span>
-          <button className="btn sm">Export</button>
+          <button className="btn sm" onClick={() => {
+            if (!users || users.length === 0) return;
+            const header = 'id,email,name,email_verified,mfa_enabled,created_at';
+            const rows = users.map(u =>
+              [u.id, u.email, u.name || '', u.email_verified ? 'true' : 'false', (u.mfa_enabled || u.mfa) ? 'true' : 'false', u.created_at || ''].join(',')
+            );
+            const csv = [header, ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'users-export.csv'; a.click();
+            URL.revokeObjectURL(url);
+          }}>Export</button>
           <button className="btn primary sm" onClick={() => setCreating(true)}><Icon.Plus width={11} height={11}/>New user</button>
         </div>
 
@@ -323,9 +335,7 @@ export function Users() {
                         return ts ? MOCK.relativeTime(ts) : '—';
                       })()}
                     </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <button className="btn ghost icon sm"><Icon.More width={12} height={12}/></button>
-                    </td>
+                    <td/>
                   </tr>
                 );
               })}
@@ -755,8 +765,6 @@ function UserSlideover({ user, onClose, onDelete, onRefreshList, setPage }) {
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <button className="btn ghost sm" onClick={onClose}><Icon.X width={12} height={12}/>Close</button>
           <div className="row" style={{ gap: 4 }}>
-            <button className="btn ghost sm">Impersonate</button>
-            <button className="btn ghost icon sm"><Icon.More width={12} height={12}/></button>
           </div>
         </div>
         <div className="row" style={{ gap: 12 }}>

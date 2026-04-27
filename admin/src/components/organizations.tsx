@@ -247,7 +247,7 @@ function OrgDetail({ org, onRefresh }) {
 
       {/* Content */}
       <div style={{ padding: 20 }}>
-        {tab === 'overview' && <OrgOverviewTab org={org} members={members}/>}
+        {tab === 'overview' && <OrgOverviewTab org={org} members={members} onInvite={() => setTab('members')}/>}
         {tab === 'members' && <OrgMembersTab org={org} members={members} loading={membersLoading} onRefresh={membersRefresh}/>}
         {tab === 'invitations' && <OrgInvitationsTab org={org}/>}
         {tab === 'roles' && <OrgRolesTab org={org} roles={roles} loading={rolesLoading} onRefresh={rolesRefresh}/>}
@@ -316,7 +316,7 @@ function OrgStat({ label, value, sub, good, progress, last }) {
 
 /* --- Overview tab --- */
 
-function OrgOverviewTab({ org, members }) {
+function OrgOverviewTab({ org, members, onInvite }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
       <div className="col" style={{ gap: 24 }}>
@@ -327,8 +327,7 @@ function OrgOverviewTab({ org, members }) {
       <div className="col" style={{ gap: 24 }}>
         <Panel title="Quick actions">
           <div className="col" style={{ gap: 6 }}>
-            <button className="btn sm" style={{ justifyContent: 'flex-start' }}><Icon.Plus width={11} height={11}/>Invite members</button>
-            <button className="btn sm danger" style={{ justifyContent: 'flex-start', marginTop: 2 }}>Suspend org</button>
+            <button className="btn sm" style={{ justifyContent: 'flex-start' }} onClick={onInvite}><Icon.Plus width={11} height={11}/>Invite members</button>
           </div>
         </Panel>
         {org.metadata && (() => { const meta = typeof org.metadata === 'string' ? (JSON.parse(org.metadata || '{}')) : (org.metadata || {}); return Object.keys(meta).length > 0 ? (
