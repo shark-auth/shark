@@ -68,9 +68,21 @@ def _shark_reachable() -> bool:
         return False
 
 
+def _webhooks_api_available() -> bool:
+    """Return True only if shark is reachable AND the webhooks endpoint exists (not 404/501)."""
+    if not _shark_reachable():
+        return False
+    try:
+        resp = requests.get(f"{BASE_URL}/api/v1/admin/webhooks", timeout=3)
+        # 200/401/403 = endpoint exists; 404/501/405 = not implemented
+        return resp.status_code not in (404, 501)
+    except Exception:
+        return False
+
+
 _REQUIRES_LIVE_SERVER = pytest.mark.skipif(
-    not _shark_reachable(),
-    reason="shark not reachable — live webhook tests skipped (run with shark serving on BASE_URL)",
+    not _webhooks_api_available(),
+    reason="webhooks API not available — live webhook tests skipped (endpoint not implemented or shark not running)",
 )
 
 
