@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -583,6 +586,22 @@ func (s *Server) handleVaultCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Atlassian post-exchange: discover cloud IDs so callers can construct
+	// API URLs (https://api.atlassian.com/ex/jira/{cloudId}/rest/...).
+	// Failure blocks the connection from being saved — a token without a
+	// cloud ID is unusable for Jira Cloud.
+	if provider.Name == "jira" {
+		if metaErr := s.atlassianFetchCloudIDs(r.Context(), conn); metaErr != nil {
+			// Roll back the connection so we don't strand a useless row.
+			_ = s.VaultManager.Disconnect(r.Context(), conn.ID)
+			writeJSON(w, http.StatusBadGateway, map[string]string{
+				"error":   "jira_cloud_id_fetch_failed",
+				"message": fmt.Sprintf("Jira accessible-resources lookup failed: %v", metaErr),
+			})
+			return
+		}
+	}
+
 	action := auditVaultConnectionCreated
 	if isUpdate {
 		action = auditVaultConnectionUpdated
@@ -985,6 +1004,75 @@ func newVaultConnID() (string, error) {
 		return "", err
 	}
 	return "vc_" + hex.EncodeToString(b), nil
+}
+
+// atlassianFetchCloudIDs calls the Atlassian accessible-resources endpoint
+// with the freshly-issued access token, extracts cloud IDs, and persists them
+// in VaultConnection.Metadata["accessible_resources"]. Without this step the
+// token is useless because callers cannot construct a Jira Cloud API URL.
+//
+// On success the connection row is updated in-place. On error the caller
+// should roll back the connection (disconnect it) before returning an error
+// to the user.
+func (s *Server) atlassianFetchCloudIDs(ctx context.Context, conn *storage.VaultConnection) error {
+	// We need the plaintext access token to call the Atlassian API.
+	accessToken, err := s.VaultManager.DecryptAccessToken(ctx, conn)
+	if err != nil {
+		return fmt.Errorf("decrypt access token for accessible-resources: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://api.atlassian.com/oauth/token/accessible-resources", nil)
+	if err != nil {
+		return fmt.Errorf("build accessible-resources request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("accessible-resources GET: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return fmt.Errorf("read accessible-resources body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("accessible-resources returned %d: %s", resp.StatusCode, body)
+	}
+
+	var resources []struct {
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		AvatarURL string   `json:"avatarUrl"`
+	}
+	if err := json.Unmarshal(body, &resources); err != nil {
+		return fmt.Errorf("parse accessible-resources: %w", err)
+	}
+	if len(resources) == 0 {
+		return fmt.Errorf("no Jira Cloud sites found for this token; the app may not be installed on any site")
+	}
+
+	// Persist as structured metadata — callers read
+	// conn.Metadata["accessible_resources"] to pick a cloud ID.
+	type cloudResource struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	out := make([]cloudResource, len(resources))
+	for i, r := range resources {
+		out[i] = cloudResource{ID: r.ID, Name: r.Name}
+	}
+	if conn.Metadata == nil {
+		conn.Metadata = map[string]any{}
+	}
+	conn.Metadata["accessible_resources"] = out
+
+	return s.Store.UpdateVaultConnection(ctx, conn)
 }
 
 // handleAdminDeleteVaultConnection handles DELETE /api/v1/admin/vault/connections/{id}.
