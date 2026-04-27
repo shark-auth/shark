@@ -215,7 +215,7 @@ export class VaultClient {
     if (params?.offset != null) qs.set("offset", String(params.offset));
     if (params?.user_id) qs.set("user_id", params.user_id);
     const query = qs.toString();
-    const url = `${this._authUrl}/api/v1/vault/connections${query ? `?${query}` : ""}`;
+    const url = `${this._authUrl}/api/v1/admin/vault/connections${query ? `?${query}` : ""}`;
     const resp = await httpRequest(url, { headers: this._adminAuth() });
     if (resp.status !== 200) {
       throw new VaultError(`listConnections failed: HTTP ${resp.status}: ${resp.text.slice(0, 200)}`, resp.status);
