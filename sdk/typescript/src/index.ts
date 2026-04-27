@@ -110,11 +110,14 @@ export type {
   AgentsClientOptions,
 } from "./agents.js";
 
-export { OAuthClient } from "./oauth.js";
+export { OAuthClient, pkcePair } from "./oauth.js";
 export type {
   TokenTypeHint,
   IntrospectResult,
   OAuthClientOptions,
+  OAuthToken,
+  PkcePair,
+  BuildAuthorizeUrlOptions,
 } from "./oauth.js";
 
 export { MagicLinkClient } from "./magicLink.js";
@@ -122,5 +125,100 @@ export type {
   SendMagicLinkResult,
   MagicLinkClientOptions,
 } from "./magicLink.js";
+
+// Pass-A human-auth modules (Phase 7 SDK port from Python)
+export { AuthClient, Session } from "./auth.js";
+export type {
+  AuthClientOptions,
+  AuthUser,
+  SignupResult,
+  SignupOptions,
+  LoginResult,
+  MeResult,
+  MagicLinkVerifyResult,
+} from "./auth.js";
+
+export { MfaClient, computeTotp } from "./mfa.js";
+export type {
+  MfaClientOptions,
+  MfaEnrollResult,
+  MfaVerifyResult,
+} from "./mfa.js";
+
+export { SessionsClient } from "./sessions.js";
+export type {
+  SessionsClientOptions,
+  SessionRow,
+} from "./sessions.js";
+
+export { ConsentsClient } from "./consents.js";
+export type {
+  ConsentsClientOptions,
+  ConsentRow,
+} from "./consents.js";
+
+export { DcrClient } from "./dcr.js";
+export type {
+  DcrClientOptions,
+  DcrRegisterInput,
+  DcrRegisterResult,
+  DcrClientMetadata,
+  DcrRotateSecretResult,
+  DcrRotateTokenResult,
+} from "./dcr.js";
+
+// Pass-B admin modules (Phase 7 SDK port from Python)
+export { WebhooksClient, verifySignature } from "./webhooks.js";
+export type {
+  Webhook,
+  WebhookDelivery,
+  RegisterWebhookInput,
+  UpdateWebhookInput,
+  WebhooksClientOptions,
+} from "./webhooks.js";
+
+export { OrganizationsClient } from "./organizations.js";
+export type {
+  Organization,
+  OrgMember,
+  OrgInvitation,
+  CreateOrganizationInput,
+  UpdateOrganizationInput,
+  OrganizationsClientOptions,
+} from "./organizations.js";
+
+export { AppsClient } from "./apps.js";
+export type {
+  App,
+  AppRotateSecretResult,
+  CreateAppInput,
+  UpdateAppInput,
+  AppsClientOptions,
+} from "./apps.js";
+
+export { ApiKeysClient } from "./apiKeys.js";
+export type {
+  ApiKey,
+  CreateApiKeyInput,
+  ApiKeysClientOptions,
+} from "./apiKeys.js";
+
+export { AuditClient } from "./audit.js";
+export type {
+  AuditEvent,
+  AuditListFilters,
+  AuditListResult,
+  AuditExportFilters,
+  AuditPurgeResult,
+  AuditClientOptions,
+} from "./audit.js";
+
+export { RbacClient } from "./rbac.js";
+export type {
+  Role,
+  Permission,
+  UpdateRoleInput,
+  RbacClientOptions,
+} from "./rbac.js";
 
 export const VERSION = "0.1.0";

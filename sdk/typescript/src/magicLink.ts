@@ -97,4 +97,21 @@ export class MagicLinkClient {
     if (resp.status !== 200) await this._throw(resp.status, resp.text);
     return resp.json<SendMagicLinkResult>();
   }
+
+  /**
+   * Verify a magic-link token (companion to {@link sendMagicLink}).
+   *
+   * Wraps `GET /api/v1/auth/magic-link/verify?token=...`. Returns the
+   * authenticated user object on success. The server plants a session
+   * cookie which the browser captures automatically; Node callers using
+   * the {@link AuthClient} cookie jar should prefer `AuthClient.verifyMagicLink`
+   * so the cookie is reused for follow-up calls.
+   */
+  async verify(token: string): Promise<Record<string, unknown>> {
+    const qs = new URLSearchParams({ token }).toString();
+    const url = `${this._base}/api/v1/auth/magic-link/verify?${qs}`;
+    const resp = await httpRequest(url, { method: "GET" });
+    if (resp.status !== 200) await this._throw(resp.status, resp.text);
+    return resp.json<Record<string, unknown>>();
+  }
 }

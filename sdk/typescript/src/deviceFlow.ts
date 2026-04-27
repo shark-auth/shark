@@ -48,7 +48,7 @@ export interface DeviceFlowOptions {
    * to every token-endpoint request.
    */
   dpopProver?: DPoPProver;
-  /** Override the device authorization path. Default: `/oauth/device_authorization`. */
+  /** Override the device authorization path. Default: `/oauth/device`. */
   deviceAuthorizationPath?: string;
   /** Override the token path. Default: `/oauth/token`. */
   tokenPath?: string;
@@ -92,7 +92,7 @@ export class DeviceFlow {
     this._scope = opts.scope;
     this._dpopProver = opts.dpopProver;
     this._deviceAuthUrl =
-      this._authUrl + (opts.deviceAuthorizationPath ?? "/oauth/device_authorization");
+      this._authUrl + (opts.deviceAuthorizationPath ?? "/oauth/device");
     this._tokenUrl = this._authUrl + (opts.tokenPath ?? "/oauth/token");
   }
 

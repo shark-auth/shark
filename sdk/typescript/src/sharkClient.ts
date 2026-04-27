@@ -11,11 +11,22 @@ import { BrandingClient } from "./branding.js";
 import { PaywallClient } from "./paywall.js";
 import { UsersClient } from "./users.js";
 import { AgentsClient } from "./agents.js";
+import { AuthClient } from "./auth.js";
+import { MfaClient } from "./mfa.js";
+import { SessionsClient } from "./sessions.js";
+import { ConsentsClient } from "./consents.js";
+import { DcrClient } from "./dcr.js";
+import { OrganizationsClient } from "./organizations.js";
+import { AppsClient } from "./apps.js";
+import { ApiKeysClient } from "./apiKeys.js";
+import { RbacClient } from "./rbac.js";
+import { AuditClient } from "./audit.js";
+import { WebhooksClient } from "./webhooks.js";
 
 /** Options for {@link SharkClient}. */
 export interface SharkClientOptions {
-  /** Bearer access token for the calling agent. */
-  accessToken: string;
+  /** Bearer access token for the calling agent. Optional in admin-only mode. */
+  accessToken?: string;
   /**
    * Optional {@link DPoPProver} — when supplied, the client will
    * auto-sign every outgoing request with a DPoP proof JWT.
@@ -25,7 +36,8 @@ export interface SharkClientOptions {
   userAgent?: string;
   /**
    * Admin API key used by the admin namespaces
-   * (`proxyRules`, `proxyLifecycle`, `branding`, `users`, `agents`).
+   * (proxy rules, lifecycle, branding, users, agents, organizations,
+   * apps, api-keys, rbac, audit, webhooks).
    * Required if any admin namespace is used.
    */
   adminKey?: string;
@@ -70,13 +82,28 @@ export class SharkClient {
   readonly users: UsersClient;
   readonly agents: AgentsClient;
 
+  // Pass-A human-auth namespaces (Phase 7)
+  readonly auth: AuthClient;
+  readonly mfa: MfaClient;
+  readonly sessions: SessionsClient;
+  readonly consents: ConsentsClient;
+  readonly dcr: DcrClient;
+
+  // Pass-B admin namespaces (Phase 7)
+  readonly organizations: OrganizationsClient;
+  readonly apps: AppsClient;
+  readonly apiKeys: ApiKeysClient;
+  readonly rbac: RbacClient;
+  readonly audit: AuditClient;
+  readonly webhooks: WebhooksClient;
+
   constructor(opts: SharkClientOptions) {
-    this._accessToken = opts.accessToken;
+    this._accessToken = opts.accessToken ?? "";
     this._dpopProver = opts.dpopProver;
     this._userAgent = opts.userAgent ?? "@sharkauth/node/0.1.0";
 
     const baseUrl = opts.baseUrl ?? "";
-    const adminKey = opts.adminKey ?? opts.accessToken;
+    const adminKey = opts.adminKey ?? opts.accessToken ?? "";
 
     this.proxyRules = new ProxyRulesClient({ baseUrl, adminKey });
     this.proxyLifecycle = new ProxyLifecycleClient({ baseUrl, adminKey });
@@ -84,6 +111,19 @@ export class SharkClient {
     this.paywall = new PaywallClient({ baseUrl });
     this.users = new UsersClient({ baseUrl, adminKey });
     this.agents = new AgentsClient({ baseUrl, adminKey });
+
+    this.auth = new AuthClient(baseUrl);
+    this.mfa = new MfaClient(baseUrl);
+    this.sessions = new SessionsClient(baseUrl);
+    this.consents = new ConsentsClient(baseUrl);
+    this.dcr = new DcrClient(baseUrl);
+
+    this.organizations = new OrganizationsClient({ baseUrl, adminKey });
+    this.apps = new AppsClient({ baseUrl, adminKey });
+    this.apiKeys = new ApiKeysClient({ baseUrl, adminKey });
+    this.rbac = new RbacClient({ baseUrl, adminKey });
+    this.audit = new AuditClient({ baseUrl, adminKey });
+    this.webhooks = new WebhooksClient({ baseUrl, adminKey });
   }
 
   /**
