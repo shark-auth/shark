@@ -23,7 +23,21 @@ type devEmailResponse struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// devInboxAvailable returns true when the runtime email provider is "dev".
+// This is the single source of truth for dev-inbox visibility: it follows
+// the DB-backed email.provider config (W17), not the legacy --dev flag.
+func (s *Server) devInboxAvailable() bool {
+	return s.Config != nil && s.Config.Email.Provider == "dev"
+}
+
 func (s *Server) handleListDevEmails(w http.ResponseWriter, r *http.Request) {
+	if !s.devInboxAvailable() {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "Dev inbox is only available when email.provider is set to 'dev'",
+		})
+		return
+	}
 	limit := 100
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -46,6 +60,13 @@ func (s *Server) handleListDevEmails(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetDevEmail(w http.ResponseWriter, r *http.Request) {
+	if !s.devInboxAvailable() {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "Dev inbox is only available when email.provider is set to 'dev'",
+		})
+		return
+	}
 	id := chi.URLParam(r, "id")
 	e, err := s.Store.GetDevEmail(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -63,6 +84,13 @@ func (s *Server) handleGetDevEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteAllDevEmails(w http.ResponseWriter, r *http.Request) {
+	if !s.devInboxAvailable() {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "Dev inbox is only available when email.provider is set to 'dev'",
+		})
+		return
+	}
 	if err := s.Store.DeleteAllDevEmails(r.Context()); err != nil {
 		internal(w, err)
 		return

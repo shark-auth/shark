@@ -67,12 +67,18 @@ export function useAPI(path, deps) {
   const [error, setError] = React.useState(null);
   const abortRef = React.useRef(null);
 
-  const refresh = React.useCallback(() => {
+  const refresh = React.useCallback((opts?: { silent?: boolean }) => {
     if (!path) { setLoading(false); return; }
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setLoading(true);
+    // silent=true (background poll) skips the loading flash when data is
+    // already present — prevents the table from briefly clearing on every
+    // 1.5 s tick and closes the race window where allEmails momentarily
+    // reads [] while the next response is in-flight.
+    if (!opts?.silent) {
+      setLoading(true);
+    }
     setError(null);
     API.get(path, controller.signal)
       .then(d => {

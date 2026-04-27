@@ -694,11 +694,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Post("/{id}/reset", s.handleResetEmailTemplate)
 			})
 
-			if cfg.Server.DevMode {
-				r.Get("/dev/emails", s.handleListDevEmails)
-				r.Get("/dev/emails/{id}", s.handleGetDevEmail)
-				r.Delete("/dev/emails", s.handleDeleteAllDevEmails)
-			}
+			// Dev inbox routes are always mounted; handler-level guard checks
+			// email.provider == "dev" (DB-backed runtime config, W17) so the
+			// surface is live whenever the operator switches to the dev
+			// provider — regardless of whether --dev was passed at startup.
+			r.Get("/dev/emails", s.handleListDevEmails)
+			r.Get("/dev/emails/{id}", s.handleGetDevEmail)
+			r.Delete("/dev/emails", s.handleDeleteAllDevEmails)
 
 			// Phase 6 P4: proxy admin APIs. Always registered (they 404
 			// themselves when the proxy is disabled) so the dashboard can

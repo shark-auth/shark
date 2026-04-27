@@ -344,10 +344,22 @@ export function DevEmail() {
   const [clearing, setClearing] = React.useState(false);
   const [search, setSearch] = React.useState('');
 
-  // Poll every 1.5s for live updates (dev inbox is a live-capture surface; AbortController in useAPI prevents overlapping requests)
+  // Poll every 1.5s for live updates. Silent=true suppresses the loading
+  // flash on background ticks so the email table never clears while a poll
+  // is in-flight — this closes the race window reported in issue P1.
+  // AbortController in useAPI ensures overlapping requests are cancelled.
   React.useEffect(() => {
-    const id = setInterval(refresh, 1500);
+    const id = setInterval(() => refresh({ silent: true }), 1500);
     return () => clearInterval(id);
+  }, [refresh]);
+
+  // Listen for forced refresh events dispatched by other components
+  // (e.g. magic-link send) so the inbox updates immediately after delivery
+  // rather than waiting up to 1.5s for the next poll tick.
+  React.useEffect(() => {
+    const handler = () => refresh({ silent: true });
+    window.addEventListener('shark-dev-email-refresh', handler);
+    return () => window.removeEventListener('shark-dev-email-refresh', handler);
   }, [refresh]);
 
   usePageActions({ onRefresh: refresh });

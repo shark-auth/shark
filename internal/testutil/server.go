@@ -406,6 +406,9 @@ func NewTestServerDev(t *testing.T) *TestServer {
 	store := NewTestDB(t)
 	cfg := TestConfig()
 	cfg.Server.DevMode = true
+	// Provider-based gate (W17): handler checks email.provider == "dev".
+	// Set here so NewTestServerDev routes work without --dev flag at runtime.
+	cfg.Email.Provider = "dev"
 	seedTestDefaultApp(t, store, cfg)
 
 	dev := email.NewDevInboxSender(store)

@@ -342,10 +342,12 @@ func TestUsersSessionsRevokeAllGranularAudit(t *testing.T) {
 
 func TestDevInboxEndpointsRequireDevMode(t *testing.T) {
 	ts := testutil.NewTestServer(t)
-	// Default test config has DevMode=false, so dev routes should 404.
+	// Default test config has email.provider="" (not "dev"), so dev inbox
+	// handler should respond 404. Routes are always mounted; the gate is now
+	// provider-based (W17 DB-backed config), not the legacy --dev flag.
 	resp := ts.GetWithAdminKey("/api/v1/admin/dev/emails")
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 when DevMode off, got %d", resp.StatusCode)
+		t.Fatalf("expected 404 when email.provider != 'dev', got %d", resp.StatusCode)
 	}
 }
 
