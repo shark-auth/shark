@@ -319,4 +319,36 @@ export class AuthClient {
     if (resp.status !== 200) await this._throw(resp.status, resp.text);
     return resp.json<MagicLinkVerifyResult>();
   }
+
+  // ------------------------------------------------------------------
+  // Permission check
+  // ------------------------------------------------------------------
+
+  /**
+   * Check whether the authenticated principal has permission for an action on a resource.
+   *
+   * Wraps `POST /api/v1/auth/check`. Returns the server response (typically `{ allowed: boolean }`).
+   */
+  async check(action: string, resource: string): Promise<Record<string, unknown>> {
+    const resp = await this._request("POST", `${AuthClient.PREFIX}/check`, {
+      json: { action, resource },
+    });
+    if (resp.status !== 200) await this._throw(resp.status, resp.text);
+    return resp.json<Record<string, unknown>>();
+  }
+
+  // ------------------------------------------------------------------
+  // Self-revoke
+  // ------------------------------------------------------------------
+
+  /**
+   * Revoke the calling user's own JWT / session.
+   *
+   * Wraps `POST /api/v1/auth/revoke`. Returns void on 200/204.
+   */
+  async revokeSelf(): Promise<void> {
+    const resp = await this._request("POST", `${AuthClient.PREFIX}/revoke`);
+    if (resp.status !== 200 && resp.status !== 204)
+      await this._throw(resp.status, resp.text);
+  }
 }

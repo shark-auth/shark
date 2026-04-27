@@ -557,10 +557,6 @@ func inviterEmailOrEmpty(u *storage.User) string {
 	return u.Email
 }
 
-func (s *Server) auditOrg(ctx context.Context, actor, action, orgID, ip, ua string) {
-	s.auditOrgWithMeta(ctx, actor, action, orgID, ip, ua, nil)
-}
-
 // auditOrgWithMeta is the structured variant — accepts a metadata map that
 // gets JSON-encoded into AuditLog.Metadata. nil/empty meta yields "{}" so
 // the column is never literal NULL (mirrors other audit helpers in this

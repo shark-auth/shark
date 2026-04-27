@@ -236,3 +236,175 @@ def test_webhooks_list():
     assert result[0]["id"] == "wh_1"
     assert mock.call_args[0][1] == "GET"
     assert "/api/v1/admin/webhooks" in mock.call_args[0][2]
+
+
+# ---------------------------------------------------------------------------
+# New methods (Wave B — auth.check, auth.revoke_self, users.reset_mfa,
+# users.list_user_agents, users.revoke_user_agents, users.get_user_audit_logs,
+# agents.list_tokens, agents.revoke_all, agents.rotate_secret,
+# agents.rotate_dpop_key, vault.disconnect, vault.list_connections)
+# ---------------------------------------------------------------------------
+
+
+def test_auth_check():
+    from shark_auth.auth import AuthClient
+    import requests
+
+    session = requests.Session()
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {"allowed": True})
+        result = AuthClient(BASE, session=session).check("read", "doc:42")
+
+    assert result["allowed"] is True
+    assert mock.call_args[0][1] == "POST"
+    assert "/api/v1/auth/check" in mock.call_args[0][2]
+    body = mock.call_args[1]["json"]
+    assert body["action"] == "read"
+    assert body["resource"] == "doc:42"
+
+
+def test_auth_revoke_self():
+    from shark_auth.auth import AuthClient
+    import requests
+
+    session = requests.Session()
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(204, {})
+        AuthClient(BASE, session=session).revoke_self()
+
+    assert mock.call_args[0][1] == "POST"
+    assert "/api/v1/auth/revoke" in mock.call_args[0][2]
+
+
+def test_users_reset_mfa():
+    from shark_auth.users import UsersClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(204, {})
+        UsersClient(BASE, KEY).reset_mfa("usr_1")
+
+    assert mock.call_args[0][1] == "DELETE"
+    assert "/api/v1/users/usr_1/mfa" in mock.call_args[0][2]
+
+
+def test_users_list_user_agents():
+    from shark_auth.users import UsersClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {"data": [{"id": "ag_1"}], "total": 1, "filter": "all"})
+        result = UsersClient(BASE, KEY).list_agents("usr_1")
+
+    assert result.data[0]["id"] == "ag_1"
+    assert result.total == 1
+    assert mock.call_args[0][1] == "GET"
+    assert "/api/v1/users/usr_1/agents" in mock.call_args[0][2]
+
+
+def test_users_revoke_user_agents():
+    from shark_auth.users import UsersClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {"revoked_agent_ids": ["ag_1"], "revoked_consent_count": 2, "audit_event_id": "ev_1"})
+        result = UsersClient(BASE, KEY).revoke_agents("usr_1")
+
+    assert result.revoked_agent_ids == ["ag_1"]
+    assert result.audit_event_id == "ev_1"
+    assert mock.call_args[0][1] == "POST"
+    assert "/api/v1/users/usr_1/revoke-agents" in mock.call_args[0][2]
+
+
+def test_users_get_user_audit_logs():
+    from shark_auth.users import UsersClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {"data": [], "total": 0})
+        UsersClient(BASE, KEY).get_audit_logs("usr_1", limit=10)
+
+    assert mock.call_args[0][1] == "GET"
+    assert "/api/v1/users/usr_1/audit-logs" in mock.call_args[0][2]
+
+
+def test_agents_list_tokens():
+    from shark_auth.agents import AgentsClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {"data": [{"id": "tok_1", "agent_id": "ag_1", "scope": "vault:read"}]})
+        result = AgentsClient(BASE, KEY).list_tokens("ag_1")
+
+    assert len(result) == 1
+    assert result[0].token_id == "tok_1"
+    assert mock.call_args[0][1] == "GET"
+    assert "/api/v1/agents/ag_1/tokens" in mock.call_args[0][2]
+
+
+def test_agents_revoke_all():
+    from shark_auth.agents import AgentsClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {"agent_id": "ag_1", "revoked_count": 3})
+        result = AgentsClient(BASE, KEY).revoke_all("ag_1")
+
+    assert result.agent_id == "ag_1"
+    assert result.revoked_count == 3
+    assert mock.call_args[0][1] == "POST"
+    assert "/api/v1/agents/ag_1/tokens/revoke-all" in mock.call_args[0][2]
+
+
+def test_agents_rotate_secret():
+    from shark_auth.agents import AgentsClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {"client_id": "ag_1", "client_secret": "newsecret"})
+        result = AgentsClient(BASE, KEY).rotate_secret("ag_1")
+
+    assert result.client_secret == "newsecret"
+    assert mock.call_args[0][1] == "POST"
+    assert "/api/v1/agents/ag_1/rotate-secret" in mock.call_args[0][2]
+
+
+def test_agents_rotate_dpop_key():
+    from shark_auth.agents import AgentsClient
+
+    new_jwk = {"kty": "EC", "crv": "P-256", "x": "abc", "y": "def"}
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {"agent_id": "ag_1", "new_jkt": "newjkt"})
+        AgentsClient(BASE, KEY).rotate_dpop_key("ag_1", new_public_key_jwk=new_jwk)
+
+    assert mock.call_args[0][1] == "POST"
+    assert "/api/v1/agents/ag_1/rotate-dpop-key" in mock.call_args[0][2]
+
+
+def test_vault_disconnect():
+    from shark_auth.vault import VaultClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {
+            "connection_id": "conn_1",
+            "revoked_agent_ids": ["ag_1", "ag_2"],
+            "revoked_token_count": 4,
+        })
+        result = VaultClient(base_url=BASE, admin_key=KEY).disconnect("conn_1")
+
+    assert result.connection_id == "conn_1"
+    assert result.revoked_token_count == 4
+    assert mock.call_args[0][1] == "DELETE"
+    assert "/api/v1/admin/vault/connections/conn_1" in mock.call_args[0][2]
+
+
+def test_vault_list_connections():
+    from shark_auth.vault import VaultClient
+
+    with patch("shark_auth._http.request") as mock:
+        mock.return_value = _resp(200, {
+            "items": [
+                {"id": "conn_1", "user_id": "usr_1", "provider_id": "prov_1", "provider_name": "google_gmail"},
+            ],
+            "total": 1,
+        })
+        result = VaultClient(base_url=BASE, admin_key=KEY).list_connections(provider_id="prov_1")
+
+    assert result.total == 1
+    assert result.items[0].id == "conn_1"
+    assert mock.call_args[0][1] == "GET"
+    assert "/api/v1/admin/vault/connections" in mock.call_args[0][2]
+    assert mock.call_args[1]["params"]["provider_id"] == "prov_1"

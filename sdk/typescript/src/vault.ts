@@ -178,14 +178,14 @@ export class VaultClient {
 
   /**
    * Disconnect a vault connection.
-   * DELETE /api/v1/vault/connections/{id}
+   * DELETE /api/v1/admin/vault/connections/{id}
    *
    * @param connectionId The `conn_*` identifier.
    * @param cascade      When true (default) cascade-revokes agent tokens bound to this connection.
    */
   async disconnect(connectionId: string, cascade = true): Promise<VaultDisconnectResult> {
     const qs = cascade ? "?cascade=true" : "?cascade=false";
-    const url = `${this._authUrl}/api/v1/vault/connections/${encodeURIComponent(connectionId)}${qs}`;
+    const url = `${this._authUrl}/api/v1/admin/vault/connections/${encodeURIComponent(connectionId)}${qs}`;
     const resp = await httpRequest(url, { method: "DELETE", headers: this._adminAuth() });
     if (resp.status === 404) throw new VaultError(`connection not found: ${connectionId}`, 404);
     if (resp.status === 401) throw new VaultError("not authorized (401)", 401);

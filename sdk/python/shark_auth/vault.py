@@ -7,6 +7,7 @@ W2 Method 9 adds:
 - VaultTokenResult
 - VaultClient.disconnect()
 - VaultClient.fetch_token()
+- VaultClient.list_connections()
 """
 
 from __future__ import annotations
@@ -56,6 +57,27 @@ class VaultDisconnectResult:
     revoked_agent_ids: List[str]
     revoked_token_count: int
     cascade_audit_event_id: Optional[str] = None
+
+
+@dataclass
+class VaultConnectionRecord:
+    """A vault connection row returned by ``list_connections``."""
+
+    id: str
+    user_id: str
+    provider_id: str
+    provider_name: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    needs_reauth: bool = False
+
+
+@dataclass
+class VaultConnectionList:
+    """Paginated list of vault connections."""
+
+    items: List[VaultConnectionRecord]
+    total: int = 0
 
 
 @dataclass
@@ -172,6 +194,86 @@ class VaultClient:
         )
 
     # ------------------------------------------------------------------
+    # list_connections — admin-scope paginated listing (parity with TS SDK)
+    # ------------------------------------------------------------------
+
+    def list_connections(
+        self,
+        *,
+        provider_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> VaultConnectionList:
+        """List vault connections (admin scope).
+
+        Wraps ``GET /api/v1/admin/vault/connections``. Optional filters narrow
+        by provider, user, plus standard pagination params. Requires the admin
+        API key (the same key used to construct ``VaultClient``).
+
+        Parameters
+        ----------
+        provider_id:
+            Restrict to a single provider id.
+        user_id:
+            Restrict to a single user id.
+        limit:
+            Page size cap.
+        offset:
+            Pagination offset.
+
+        Returns
+        -------
+        VaultConnectionList
+            ``items`` list of :class:`VaultConnectionRecord` plus ``total``.
+
+        Raises
+        ------
+        VaultError:
+            On 4xx/5xx responses.
+        """
+        params: dict = {}
+        if provider_id is not None:
+            params["provider_id"] = provider_id
+        if user_id is not None:
+            params["user_id"] = user_id
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+
+        url = f"{self._base}/api/v1/admin/vault/connections"
+        resp = _http.request(
+            self._session, "GET", url, headers=self._admin_headers(), params=params
+        )
+
+        if resp.status_code == 200:
+            body = resp.json() or {}
+            raw_items = body.get("items") or body.get("data") or []
+            items = [
+                VaultConnectionRecord(
+                    id=row.get("id", ""),
+                    user_id=row.get("user_id", ""),
+                    provider_id=row.get("provider_id", ""),
+                    provider_name=row.get("provider_name"),
+                    created_at=row.get("created_at"),
+                    updated_at=row.get("updated_at"),
+                    needs_reauth=bool(row.get("needs_reauth", False)),
+                )
+                for row in raw_items
+            ]
+            return VaultConnectionList(items=items, total=int(body.get("total", len(items))))
+
+        if resp.status_code == 401:
+            raise VaultError("not authorized (401)", status_code=401)
+        if resp.status_code == 403:
+            raise VaultError("forbidden — admin key required (403)", status_code=403)
+        raise VaultError(
+            f"list_connections failed: HTTP {resp.status_code}: {resp.text[:200]}",
+            status_code=resp.status_code,
+        )
+
+    # ------------------------------------------------------------------
     # W2 Method 9 — disconnect (with cascade)
     # ------------------------------------------------------------------
 
@@ -215,7 +317,7 @@ class VaultClient:
         >>> print(result.revoked_agent_ids, result.revoked_token_count)
         """
         params = {"cascade": "true" if cascade_to_agents else "false"}
-        url = f"{self._base}/api/v1/vault/connections/{connection_id}"
+        url = f"{self._base}/api/v1/admin/vault/connections/{connection_id}"
         resp = _http.request(
             self._session, "DELETE", url, headers=self._admin_headers(), params=params
         )

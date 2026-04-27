@@ -285,3 +285,188 @@ describe("WebhooksClient.list()", () => {
     expect(init.method).toBe("GET");
   });
 });
+
+// ---------------------------------------------------------------------------
+// New methods (Wave B): auth.check, auth.revokeSelf, users.resetUserMfa,
+// users.listUserAgents, users.revokeUserAgents, users.getUserAuditLogs,
+// agents.listTokens, agents.revokeAllTokens, agents.rotateSecret,
+// agents.rotateDpopKey, vault.disconnect, vault.listConnections
+// ---------------------------------------------------------------------------
+
+describe("AuthClient.check()", () => {
+  it("POST /api/v1/auth/check sends action+resource body", async () => {
+    const { AuthClient } = await import("../src/auth.js");
+    stubFetch(makeResp(200, { allowed: true }));
+
+    const result = await new AuthClient(BASE).check("read", "doc:42");
+    expect((result as Record<string, unknown>).allowed).toBe(true);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/auth/check");
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(String(init.body));
+    expect(body.action).toBe("read");
+    expect(body.resource).toBe("doc:42");
+  });
+});
+
+describe("AuthClient.revokeSelf()", () => {
+  it("POST /api/v1/auth/revoke returns void", async () => {
+    const { AuthClient } = await import("../src/auth.js");
+    stubFetch(makeResp(200, {}));
+
+    await new AuthClient(BASE).revokeSelf();
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/auth/revoke");
+    expect(init.method).toBe("POST");
+  });
+});
+
+describe("UsersClient.resetUserMfa()", () => {
+  it("DELETE /api/v1/users/{id}/mfa", async () => {
+    const { UsersClient } = await import("../src/users.js");
+    stubFetch(makeResp(200, {}));
+
+    await new UsersClient({ baseUrl: BASE, adminKey: KEY }).resetUserMfa("usr_1");
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/users/usr_1/mfa");
+    expect(init.method).toBe("DELETE");
+  });
+});
+
+describe("UsersClient.listUserAgents()", () => {
+  it("GET /api/v1/users/{id}/agents returns paginated list", async () => {
+    const { UsersClient } = await import("../src/users.js");
+    stubFetch(makeResp(200, { data: [{ id: "ag_1", name: "bot" }], total: 1, filter: "all" }));
+
+    const result = await new UsersClient({ baseUrl: BASE, adminKey: KEY }).listUserAgents("usr_1");
+    expect(result.data[0].id).toBe("ag_1");
+    expect(result.total).toBe(1);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/users/usr_1/agents");
+    expect(init.method).toBe("GET");
+  });
+});
+
+describe("UsersClient.revokeUserAgents()", () => {
+  it("POST /api/v1/users/{id}/revoke-agents returns cascade summary", async () => {
+    const { UsersClient } = await import("../src/users.js");
+    stubFetch(makeResp(200, { revoked_agent_ids: ["ag_1"], revoked_consent_count: 1, audit_event_id: "ev_1" }));
+
+    const result = await new UsersClient({ baseUrl: BASE, adminKey: KEY }).revokeUserAgents("usr_1");
+    expect(result.revoked_agent_ids).toEqual(["ag_1"]);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/users/usr_1/revoke-agents");
+    expect(init.method).toBe("POST");
+  });
+});
+
+describe("UsersClient.getUserAuditLogs()", () => {
+  it("GET /api/v1/users/{id}/audit-logs returns events", async () => {
+    const { UsersClient } = await import("../src/users.js");
+    stubFetch(makeResp(200, { data: [], total: 0 }));
+
+    await new UsersClient({ baseUrl: BASE, adminKey: KEY }).getUserAuditLogs("usr_1", { limit: 10 });
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/users/usr_1/audit-logs");
+    expect(init.method).toBe("GET");
+  });
+});
+
+describe("AgentsClient.listTokens()", () => {
+  it("GET /api/v1/agents/{id}/tokens returns active tokens", async () => {
+    const { AgentsClient } = await import("../src/agents.js");
+    stubFetch(makeResp(200, { data: [{ id: "tok_1", agent_id: "ag_1", scope: "vault:read" }] }));
+
+    const result = await new AgentsClient({ baseUrl: BASE, adminKey: KEY }).listTokens("ag_1");
+    expect(result.length).toBe(1);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/agents/ag_1/tokens");
+    expect(init.method).toBe("GET");
+  });
+});
+
+describe("AgentsClient.revokeAllTokens()", () => {
+  it("POST /api/v1/agents/{id}/tokens/revoke-all returns count", async () => {
+    const { AgentsClient } = await import("../src/agents.js");
+    stubFetch(makeResp(200, { agent_id: "ag_1", revoked_count: 3 }));
+
+    const result = await new AgentsClient({ baseUrl: BASE, adminKey: KEY }).revokeAllTokens("ag_1");
+    expect(result.revoked_count).toBe(3);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/agents/ag_1/tokens/revoke-all");
+    expect(init.method).toBe("POST");
+  });
+});
+
+describe("AgentsClient.rotateSecret()", () => {
+  it("POST /api/v1/agents/{id}/rotate-secret returns new credentials", async () => {
+    const { AgentsClient } = await import("../src/agents.js");
+    stubFetch(makeResp(200, { agent_id: "ag_1", client_id: "ag_1", client_secret: "newsecret" }));
+
+    const result = await new AgentsClient({ baseUrl: BASE, adminKey: KEY }).rotateSecret("ag_1");
+    expect(result.client_secret).toBe("newsecret");
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/agents/ag_1/rotate-secret");
+    expect(init.method).toBe("POST");
+  });
+});
+
+describe("AgentsClient.rotateDpopKey()", () => {
+  it("POST /api/v1/agents/{id}/rotate-dpop-key sends new JWK", async () => {
+    const { AgentsClient } = await import("../src/agents.js");
+    const jwk = { kty: "EC", crv: "P-256", x: "abc", y: "def" };
+    stubFetch(makeResp(200, { agent_id: "ag_1", new_jkt: "newjkt" }));
+
+    await new AgentsClient({ baseUrl: BASE, adminKey: KEY }).rotateDpopKey("ag_1", jwk);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/agents/ag_1/rotate-dpop-key");
+    expect(init.method).toBe("POST");
+  });
+});
+
+describe("VaultClient.disconnect()", () => {
+  it("DELETE /api/v1/vault/connections/{id} cascade-revokes", async () => {
+    const { VaultClient } = await import("../src/vault.js");
+    stubFetch(makeResp(200, {
+      connection_id: "conn_1",
+      revoked_agent_ids: ["ag_1", "ag_2"],
+      revoked_token_count: 4,
+    }));
+
+    const result = await new VaultClient({ authUrl: BASE, accessToken: "agent_token", adminKey: KEY }).disconnect("conn_1");
+    expect(result.connection_id).toBe("conn_1");
+    expect(result.revoked_token_count).toBe(4);
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/admin/vault/connections/conn_1");
+    expect(init.method).toBe("DELETE");
+  });
+});
+
+describe("VaultClient.listConnections()", () => {
+  it("GET /api/v1/vault/connections returns user connections", async () => {
+    const { VaultClient } = await import("../src/vault.js");
+    stubFetch(makeResp(200, {
+      data: [{ id: "conn_1", user_id: "usr_1", provider_id: "prov_1", provider_name: "google_gmail" }],
+      total: 1,
+    }));
+
+    const result = await new VaultClient({ authUrl: BASE, accessToken: "agent_token", adminKey: KEY }).listConnections();
+    expect(result.total).toBe(1);
+    expect(result.data[0].id).toBe("conn_1");
+
+    const [url, init] = lastFetchCall();
+    expect(url).toContain("/api/v1/vault/connections");
+    expect(init.method).toBe("GET");
+  });
+});

@@ -193,33 +193,6 @@ func (s *Server) getAppByIDOrClientID(r *http.Request, idParam string) (*storage
 	return s.Store.GetApplicationByClientID(r.Context(), idParam)
 }
 
-// auditApp logs an application-related audit event with structured metadata.
-// ActorID is hardcoded to "admin_key" — admin-key auth doesn't carry a
-// per-user identity, but tagging it explicitly lets dashboard filters
-// distinguish admin-driven events from user/session/agent actor types.
-func (s *Server) auditApp(r *http.Request, action, targetID string, meta map[string]any) {
-	if s.AuditLogger == nil {
-		return
-	}
-	metaJSON := []byte("{}")
-	if meta != nil {
-		if b, err := json.Marshal(meta); err == nil {
-			metaJSON = b
-		}
-	}
-	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
-		ActorType:  "admin",
-		ActorID:    "admin_key",
-		Action:     action,
-		TargetType: "application",
-		TargetID:   targetID,
-		Metadata:   string(metaJSON),
-		IP:         r.RemoteAddr,
-		UserAgent:  r.UserAgent(),
-		Status:     "success",
-	})
-}
-
 // POST /api/v1/admin/apps
 func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	var req struct {

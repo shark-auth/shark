@@ -371,6 +371,42 @@ class UsersClient:
     # Admin MFA disable
     # ------------------------------------------------------------------
 
+    def get_audit_logs(
+        self,
+        user_id: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Fetch audit events filtered to this user.
+
+        Wraps ``GET /api/v1/users/{id}/audit-logs``. Mirrors the TS SDK
+        ``getUserAuditLogs`` for parity.
+
+        Parameters
+        ----------
+        user_id:
+            The ``usr_*`` identifier of the user.
+        limit:
+            Maximum number of events to return. Default: 100.
+        offset:
+            Pagination offset. Default: 0.
+
+        Returns
+        -------
+        list[dict]
+            Audit log entries for the user, newest first.
+        """
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+        url = f"{self._base}/api/v1/users/{user_id}/audit-logs"
+        resp = _http.request(self._session, "GET", url, headers=self._auth(), params=params)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict):
+                return data.get("data", data.get("items", []))
+            return data if isinstance(data, list) else []
+        _raise(resp)
+
     def reset_mfa(self, user_id: str) -> None:
         """Admin-force clear a user's TOTP MFA without requiring their current code.
 
