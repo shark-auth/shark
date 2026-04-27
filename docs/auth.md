@@ -85,35 +85,25 @@ Triggered when the user clicks the URL in their email.
   - Validates the token against the database.
   - If the user does not exist, registers them automatically and marks their email as verified.
   - Generates a secure session and issues a browser cookie.
-  - Redirects the user back to the web application defined in `sharkauth.yaml` under `magic_link.redirect_url`.
+  - Redirects the user back to the web application URL configured via the dashboard (Settings → Magic Link) or `shark admin config`.
 
 ---
 
 ## 3. Configuration & Startup
 
-SharkAuth configurations are defined in `sharkauth.yaml` at the root directory. To run the service, simply execute:
+SharkAuth configuration is managed via the dashboard (Settings) or the `shark admin config` CLI. No YAML file is required — config is stored in the database.
+
+To start the server in dev mode (ephemeral SQLite, no setup needed):
 ```bash
-go run cmd/shark/main.go --config sharkauth.yaml
+shark serve --dev
 ```
 
-**Key Configurations:**
-```yaml
-server:
-  port: 8080
-  secret: "replace-with-super-long-secure-random-string"
+For production, run `shark serve` after completing the first-boot setup wizard at `/admin`. Key settings to configure:
 
-magic_link:
-  token_lifetime: "10m"
-  redirect_url: "http://localhost:3000/dashboard" # Where to send the user after clicking the email link
-
-smtp:
-  host: "smtp.resend.com" # Ex: Resend, Postmark
-  port: 465
-  username: "resend"
-  password: "re_..." 
-  from: "auth@yourdomain.com"
-  from_name: "SharkAuth"
-```
+- **Server base URL** — your HTTPS public URL
+- **Magic link redirect URL** — where users land after clicking the email link
+- **Email provider** — Resend, SMTP, SES, Postmark, or Mailgun (dev mode uses built-in inbox)
+- **CORS origins** — your frontend origin(s)
 
 ## Security Overview
 

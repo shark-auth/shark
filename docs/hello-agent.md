@@ -40,8 +40,8 @@ go build -o bin/shark ./cmd/shark
 ## Step 2 — Start the server (1 min)
 
 `--dev` boots an ephemeral SQLite store, auto-creates a default OAuth
-application, and prints a one-time admin API key. You can skip
-`shark init` entirely in dev mode.
+application, and prints a one-time admin API key. No config file or setup
+wizard required in dev mode — just run and go.
 
 ```bash
 ./bin/shark serve --dev
@@ -114,10 +114,17 @@ flow but not for `client_credentials`. DCR is the agent-native path.)*
 
 ## Step 4 — Install the Python SDK (1 min)
 
-`shark-auth` is not yet on PyPI — install it editable from this repo:
+`shark-auth` is not yet on PyPI — install directly from the repo:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
+pip install git+https://github.com/sharkauth/sharkauth#subdirectory=sdk/python
+# PyPI release coming after dogfood validation
+```
+
+Or install editable from a local clone:
+
+```bash
 pip install -e sdk/python
 ```
 
@@ -125,7 +132,7 @@ Or with `uv`:
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install -e sdk/python
+uv pip install git+https://github.com/sharkauth/sharkauth#subdirectory=sdk/python
 ```
 
 Smoke-test the import:

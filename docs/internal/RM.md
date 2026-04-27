@@ -353,7 +353,7 @@ Customize in the dashboard visual editor. Click "Copy Code." The code is yours â
 
 ```bash
 npm install @sharkauth/node      # Node.js admin SDK
-pip install sharkauth             # Python admin SDK
+pip install git+https://github.com/sharkauth/sharkauth#subdirectory=sdk/python  # Python SDK (PyPI release coming after dogfood validation)
 go get github.com/shark-auth/go   # Go admin SDK
 ```
 

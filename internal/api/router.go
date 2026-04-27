@@ -229,6 +229,8 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	// API reference docs (Scalar UI) — public, no auth
 	r.Get("/api/docs", s.handleAPIDocs)
 	r.Get("/api/docs/openapi.yaml", s.handleAPISpec)
+	// Canonical spec URL — shorter alias used by smoke tests + external tooling
+	r.Get("/api/openapi.yaml", s.handleAPISpec)
 
 	// JWKS endpoint (RFC 7517) — public, no auth, top-level
 	r.Get("/.well-known/jwks.json", s.HandleJWKS)

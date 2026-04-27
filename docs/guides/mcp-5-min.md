@@ -49,7 +49,7 @@ shark version
 shark serve --dev
 ```
 
-`--dev` skips config entirely: ephemeral SQLite in `dev.db`, permissive CORS, built-in email inbox at `/admin/inbox`. No `shark init` needed.
+`--dev` skips config entirely: ephemeral SQLite in `dev.db`, permissive CORS, built-in email inbox at `/admin/inbox`. No setup wizard needed.
 
 Expected output:
 
@@ -374,7 +374,7 @@ elif self.path == "/tools/write-op":
 
 - **DPoP binding** — pass `resource=mcp://localhost:9000/my-server` at token request and a `DPoP:` proof header for audience-bound, key-confirmed tokens. See [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449).
 - **Token exchange** — chain agents with downscoped tokens. See [agent-delegation.md](./agent-delegation.md).
-- **Production config** — run `shark init`, set `server.base_url` to your HTTPS URL, switch email provider. See README.
+- **Production config** — configure `server.base_url` via the dashboard (Settings) or `shark admin config`, switch email provider. See README.
 - **Dashboard** — `http://localhost:8080/admin` — view registered clients, audit logs, active sessions.
 
 ## Troubleshooting

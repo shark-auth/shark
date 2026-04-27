@@ -23,7 +23,7 @@ Self-hosted is not a "lite" version. It runs the same OAuth 2.1 stack, the same 
 | **Admin dashboard** | Svelte, embedded in binary | Next.js, hosted |
 | **Database** | SQLite (default) or Postgres | Managed Postgres, multi-tenant |
 | **Email** | Self-configured (Resend, SMTP, SES, Postmark, Mailgun) or `shark.email` (dev) | Preconfigured per tenant |
-| **OAuth configuration** | YAML + env vars | Dashboard UI |
+| **OAuth configuration** | Dashboard Settings or `shark admin config` CLI | Dashboard UI |
 | **Scaling** | Single instance (SQLite) → horizontal (Postgres + Redis, post-v0.1) | Multi-instance behind LB |
 | **High availability** | You operate it | Managed (SLA tiers, see below) |
 | **Multi-tenancy** | Single tenant | Multi-tenant, isolated |
@@ -76,11 +76,11 @@ SQLite is appropriate for most self-hosted deployments. If you're running auth f
 
 Postgres support is on the [Q3 2026 roadmap](../../SCALE.md). Once available:
 
-```yaml
-# sharkauth.yaml
-storage:
-  driver: postgres
-  dsn: "${DATABASE_URL}"
+Configure via `shark admin config` or the dashboard Settings → Database:
+
+```
+storage.driver = postgres
+storage.dsn    = ${DATABASE_URL}
 ```
 
 Postgres unlocks:
@@ -201,15 +201,13 @@ Self-hosted → Cloud migration will require:
 go install github.com/sharkauth/sharkauth/cmd/shark@latest
 # or download a prebuilt binary from GitHub Releases
 
-# 2. Init config
-shark init
-# Asks for base_url, writes sharkauth.yaml
-
-# 3. Run
-shark serve --config sharkauth.yaml
-
-# Dev mode (no config needed)
+# 2. Dev mode (no config needed — ephemeral SQLite, built-in email inbox)
 shark serve --dev
+
+# 3. Production — run once, complete setup via dashboard at /admin
+shark serve
+# First-boot wizard at http://localhost:8080/admin sets base_url, email provider, etc.
+# Config stored in DB — manage via dashboard Settings or: shark admin config
 ```
 
 Production checklist before exposing to users:

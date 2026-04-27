@@ -1163,7 +1163,7 @@ Passkeys, MFA, SSO, RBAC, magic links, API keys, admin dashboard — all in one 
 
 ## Quickstart
 
-curl -sSL get.sharkauth.dev | sh
+# Download binary from GitHub Releases: https://github.com/sharkauth/sharkauth/releases
 ./shark serve
 
 # Dashboard at http://localhost:8080/admin
