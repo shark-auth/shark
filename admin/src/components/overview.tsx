@@ -3,6 +3,83 @@ import React from 'react'
 import { Icon, Sparkline, Donut } from './shared'
 import { useAPI } from './api'
 
+// useAgentMetrics — derives total, active, created-this-week, and a 7-day sparkline
+// from /api/v1/agents (client-side aggregation; no new backend endpoints needed).
+//
+// "Active" definition: agent has active=true AND issued ≥1 token in the last 7 days.
+// We approximate the "issued ≥1 token" part via audit-logs token.exchange events.
+// If audit-logs are unavailable, we fall back to active=true only.
+function useAgentMetrics() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(false);
+
+  const load = React.useCallback(() => {
+    const key = localStorage.getItem('shark_admin_key');
+    if (!key) { setLoading(false); return; }
+    const headers = { Authorization: 'Bearer ' + key };
+
+    const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    Promise.all([
+      // All agents (cap 500 to cover most deployments)
+      fetch('/api/v1/agents?limit=500', { headers }).then(r => r.ok ? r.json() : { data: [], total: 0 }),
+      // Audit: token.exchange events last 7d — used to determine which agents are "active"
+      fetch(`/api/v1/admin/audit-logs?action=token.exchange&from=${encodeURIComponent(since7d)}&limit=500`, { headers })
+        .then(r => r.ok ? r.json() : { data: [] })
+        .catch(() => ({ data: [] })),
+    ]).then(([agentsResp, auditResp]) => {
+      const agents = Array.isArray(agentsResp?.data) ? agentsResp.data : [];
+      const total = agentsResp?.total ?? agents.length;
+
+      // Build set of agent client_ids that issued a token in last 7d
+      const auditEvents = Array.isArray(auditResp?.data) ? auditResp.data : [];
+      const activeClientIds = new Set(
+        auditEvents
+          .map(e => e.client_id || e.actor_id || e.metadata?.client_id)
+          .filter(Boolean)
+      );
+
+      // Active = not deactivated (active===true) AND issued ≥1 token last 7d
+      // If no audit events at all, fall back to active flag only
+      const hasAuditData = auditEvents.length > 0 || activeClientIds.size > 0;
+      const activeCount = agents.filter(ag =>
+        ag.active && (hasAuditData ? (activeClientIds.has(ag.client_id) || activeClientIds.has(ag.id)) : true)
+      ).length;
+
+      // Agents created this week (client-side)
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const createdThisWeek = agents.filter(ag => new Date(ag.created_at).getTime() >= cutoff).length;
+
+      // Build 7-day sparkline: count agents created per day (day 0 = 7d ago, day 6 = today)
+      const dayCounts = Array(7).fill(0);
+      for (const ag of agents) {
+        const ageMs = Date.now() - new Date(ag.created_at).getTime();
+        const dayIdx = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+        if (dayIdx >= 0 && dayIdx < 7) {
+          // dayIdx 0 = today, map to sparkline index 6-dayIdx
+          dayCounts[6 - dayIdx]++;
+        }
+      }
+
+      setData({ total, activeCount, createdThisWeek, sparkline: dayCounts });
+      setLoading(false);
+      setError(false);
+    }).catch(() => {
+      setError(true);
+      setLoading(false);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    load();
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  return { data, loading, error, refresh: load };
+}
+
 // Poll /admin/proxy/status just for the 404 (disabled) signal.
 function useProxyConfigured() {
   const [configured, setConfigured] = React.useState(null); // null = unknown
@@ -157,10 +234,10 @@ export function Overview({ setPage } = {}) {
 
   const { data: trendsRaw } = useAPI('/admin/stats/trends?days=14');
   const { data: healthRaw, loading: healthLoading, error: healthError, refresh: refreshHealth } = useAPI('/admin/health');
-  const { data: agentsRaw } = useAPI('/agents?limit=1');
+  const { data: agentMetrics, loading: agentMetricsLoading, error: agentMetricsError } = useAgentMetrics();
   const { events: liveActivity, status: streamStatus } = useRealtimeActivity();
 
-  function mapStats(s, agentsTotal) {
+  function mapStats(s) {
     if (!s) return null;
     return {
       users: { total: s.users?.total ?? 0, delta7d: s.users?.created_last_7d ?? 0 },
@@ -168,13 +245,12 @@ export function Overview({ setPage } = {}) {
       mfa: { pct: s.mfa?.total > 0 ? (s.mfa.enabled / s.mfa.total) : 0, enabled: s.mfa?.enabled ?? 0, total: s.mfa?.total ?? 0 },
       failedLogins24h: { count: s.failed_logins_24h ?? 0, deltaPct: 0 },
       apiKeys: { count: s.api_keys?.active ?? 0, expiring: s.api_keys?.expiring_7d ?? 0 },
-      agents: { count: agentsTotal ?? 0 },
     };
   }
 
   function mapTrends(t) {
     const signupCounts = Array.isArray(t?.signups_by_day) ? t.signups_by_day.map(p => p.count) : null;
-    return { users: signupCounts, sessions: null, mfa: null, failed: null, keys: null, agents: null };
+    return { users: signupCounts, sessions: null, mfa: null, failed: null, keys: null };
   }
 
   const AUTH_COLORS = { password: '#e4e4e4', oauth: '#888', passkey: '#555', magic_link: '#3a3a3a' };
@@ -233,12 +309,19 @@ export function Overview({ setPage } = {}) {
     });
   }
 
-  const agentsTotal = agentsRaw?.total ?? null;
-  const stats = mapStats(statsRaw, agentsTotal) || { users: { total: 0, delta7d: 0 }, sessions: { active: 0 }, mfa: { pct: 0, enabled: 0, total: 0 }, failedLogins24h: { count: 0, deltaPct: 0 }, apiKeys: { count: 0, expiring: 0 }, agents: { count: 0 } };
+  const stats = mapStats(statsRaw) || { users: { total: 0, delta7d: 0 }, sessions: { active: 0 }, mfa: { pct: 0, enabled: 0, total: 0 }, failedLogins24h: { count: 0, deltaPct: 0 }, apiKeys: { count: 0, expiring: 0 } };
   const trends = mapTrends(trendsRaw);
   const authData = mapAuthBreakdown(trendsRaw);
   const health = mapHealth(healthRaw);
   const activity = mapActivity(liveActivity);
+
+  // Agent metric helpers — resolve loading/error states cleanly
+  const agentTotal = agentMetricsLoading ? null : agentMetricsError ? 'err' : (agentMetrics?.total ?? 0);
+  const agentActive = agentMetricsLoading ? null : agentMetricsError ? 'err' : (agentMetrics?.activeCount ?? 0);
+  const agentThisWeek = agentMetricsLoading ? null : agentMetricsError ? 'err' : (agentMetrics?.createdThisWeek ?? 0);
+  const agentSparkline = agentMetrics?.sparkline ?? null;
+
+  const ACTIVE_AGENT_TOOLTIP = 'Active = issued ≥1 token in the last 7 days, not deactivated';
 
   const metrics = [
     { k: 'Users', v: stats.users.total.toLocaleString(), sub: `+${stats.users.delta7d} last 7d`, trend: trends.users },
@@ -246,7 +329,8 @@ export function Overview({ setPage } = {}) {
     { k: 'MFA adoption', v: Math.round(stats.mfa.pct * 100) + '%', sub: `${stats.mfa.enabled.toLocaleString()} enabled`, trend: trends.mfa },
     { k: 'Failed logins 24h', v: stats.failedLogins24h.count, sub: '—', trend: trends.failed, good: true },
     { k: 'API keys active', v: stats.apiKeys.count, sub: `${stats.apiKeys.expiring} expiring`, trend: trends.keys, warn: true },
-    { k: 'Agents active', v: stats.agents.count, sub: '—', trend: trends.agents, agent: true },
+    { k: 'Total agents', v: agentTotal, sub: `+${agentThisWeek === null ? '…' : agentThisWeek === 'err' ? '?' : agentThisWeek} this week`, trend: agentSparkline, agent: true, agentLoading: agentMetricsLoading, agentError: agentMetricsError },
+    { k: 'Active agents', v: agentActive, sub: null, trend: agentSparkline, agent: true, agentLoading: agentMetricsLoading, agentError: agentMetricsError, activeTooltip: ACTIVE_AGENT_TOOLTIP },
   ];
 
   function SkeletonBox({ w, h, style }) {
@@ -306,21 +390,49 @@ export function Overview({ setPage } = {}) {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, padding: 16, flex: 1, overflow: 'auto' }}>
       <div className="col" style={{ minWidth: 0 }}>
         {showHero ? <MagicalMomentTile onGo={goConfigureProxy} onSkip={dismissHero}/> : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
-            {statsLoading ? Array.from({ length: 6 }).map((_, i) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+            {statsLoading ? Array.from({ length: 7 }).map((_, i) => (
               <div key={i} className="card" style={{ padding: 12 }}><SkeletonBox h={10} w="60%"/><SkeletonBox h={24} w="80%" style={{ margin: '4px 0' }}/><SkeletonBox h={10} w="70%"/></div>
-            )) : metrics.map((m, i) => (
-              <div key={i} className="card" style={{ padding: 12 }}>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--fg-muted)' }}>{m.k}</span>
-                  {m.agent && <span className="chip agent sm">new</span>}
-                  {m.warn && <Icon.Warn width={11} height={11} style={{ color: 'var(--warn)' }}/>}
+            )) : metrics.map((m, i) => {
+              // Resolve display value for agent cards
+              let displayVal = m.v;
+              if (m.agentLoading) displayVal = <span style={{ color: 'var(--fg-muted)', fontSize: 16 }}>—</span>;
+              else if (m.agentError) displayVal = (
+                <span title="couldn't load" style={{ color: 'var(--warn)', fontSize: 13, cursor: 'default' }}>
+                  <Icon.Warn width={13} height={13} style={{ verticalAlign: 'middle', marginRight: 4 }}/>
+                  <span style={{ fontSize: 12 }}>couldn't load</span>
+                </span>
+              );
+              else if (m.v !== null && m.v !== undefined && m.v !== 'err') displayVal = typeof m.v === 'number' ? m.v.toLocaleString() : m.v;
+
+              return (
+                <div key={i} className="card" style={{ padding: 12 }}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
+                      {m.k}
+                      {m.activeTooltip && (
+                        <span
+                          title={m.activeTooltip}
+                          style={{ marginLeft: 4, cursor: 'help', opacity: 0.55, fontSize: 10, fontFamily: 'var(--font-mono)' }}
+                        >(?)</span>
+                      )}
+                    </span>
+                    {m.agent && !m.activeTooltip && <span className="chip agent sm">live</span>}
+                    {m.warn && <Icon.Warn width={11} height={11} style={{ color: 'var(--warn)' }}/>}
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4 }}>{displayVal}</div>
+                  {m.sub !== null && <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{m.sub}</div>}
+                  {m.activeTooltip && (
+                    <div style={{ fontSize: 10, color: 'var(--fg-dim)', marginTop: 1, lineHeight: 1.3 }}>
+                      issued ≥1 token · 7d · not deactivated
+                    </div>
+                  )}
+                  {m.trend && !m.agentLoading && !m.agentError && (
+                    <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>
+                  )}
                 </div>
-                <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4 }}>{m.v}</div>
-                <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{m.sub}</div>
-                {m.trend && <Sparkline data={m.trend} height={22} color={m.agent ? 'var(--agent)' : (m.good ? 'var(--success)' : 'var(--fg)')}/>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
