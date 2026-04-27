@@ -7,8 +7,43 @@ import (
 	"time"
 
 	"github.com/sharkauth/sharkauth/internal/auth"
+	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
+
+// AdminOrSessionFunc returns a middleware that accepts either an admin API key
+// (sk_live_ Bearer token validated against the store) OR a session/JWT credential
+// validated by RequireSessionFunc. Admin key takes priority; if the Authorization
+// header looks like a session JWT (no sk_live_ prefix) the request is handed to the
+// session path. Either path must succeed — both failing returns 401.
+//
+// Use this on endpoints that need to serve both backend-to-backend admin calls and
+// end-user session calls (e.g. POST /auth/check).
+func AdminOrSessionFunc(store storage.Store, rateLimiter *auth.TokenBucket, sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(http.Handler) http.Handler {
+	adminMW := AdminAPIKeyFromStore(store, rateLimiter)
+	sessionMW := RequireSessionFunc(sm, jwtMgr)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			rawKey := ""
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+					rawKey = parts[1]
+				}
+			}
+			if rawKey == "" {
+				rawKey = r.URL.Query().Get("token")
+			}
+			// Route to admin path when key has sk_live_ prefix, session path otherwise.
+			if strings.HasPrefix(rawKey, "sk_live_") {
+				adminMW(next).ServeHTTP(w, r)
+			} else {
+				sessionMW(next).ServeHTTP(w, r)
+			}
+		})
+	}
+}
 
 // AdminAPIKeyFromStore returns a middleware that validates admin access using M2M API keys.
 // It checks the Authorization: Bearer sk_live_... header against the api_keys table

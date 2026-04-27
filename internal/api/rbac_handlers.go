@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
+	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
 	"github.com/sharkauth/sharkauth/internal/storage"
 )
 
@@ -633,6 +634,12 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 			"message": "Invalid JSON body",
 		})
 		return
+	}
+
+	// Path 2: session/JWT auth — fall back to user from context when no user_id
+	// supplied. Path 1 (admin key + explicit user_id) keeps existing behaviour.
+	if req.UserID == "" {
+		req.UserID = mw.GetUserID(r.Context())
 	}
 
 	if req.UserID == "" || req.Action == "" || req.Resource == "" {

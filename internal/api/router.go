@@ -427,9 +427,10 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{id}/users", s.handleListUsersByPermission)
 		})
 
-		// Auth check (admin) — validates if a user has a specific permission
+		// Auth check — accepts both admin key + user_id (path 1) and
+		// session/JWT auth (path 2, user resolved from context).
 		r.Group(func(r chi.Router) {
-			r.Use(mw.AdminAPIKeyFromStore(s.Store, s.RateLimiter))
+			r.Use(mw.AdminOrSessionFunc(s.Store, s.RateLimiter, sm, s.JWTManager))
 			r.Post("/auth/check", s.handleAuthCheck)
 		})
 
