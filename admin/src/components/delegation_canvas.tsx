@@ -893,7 +893,7 @@ export function toEgoLayout(
         strokeWidth,
         ...(isActive ? { strokeDasharray: '6 4', animation: 'dash-march 800ms linear infinite' } : {}),
       },
-      data: { label: edgeLabel, eventId: e.eventId, isActive },
+      data: { label: edgeLabel, eventId: e.eventId, isActive, scopeFrom: e.scopeFrom, scopeTo: e.scopeTo },
     }
   }
 
