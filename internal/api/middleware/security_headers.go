@@ -20,6 +20,18 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 			if strings.HasPrefix(r.URL.Path, "/hosted/") || r.URL.Query().Get("preview") == "true" {
 				h.Set("X-Frame-Options", "SAMEORIGIN")
 				h.Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline'; frame-ancestors 'self'")
+			} else if strings.HasPrefix(r.URL.Path, "/api/docs") {
+				// Scalar API reference UI loads its bundle from jsdelivr and uses
+				// inline scripts/styles to bootstrap. Allow exactly what's needed.
+				h.Set("X-Frame-Options", "DENY")
+				h.Set("Content-Security-Policy",
+					"default-src 'self'; "+
+						"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "+
+						"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "+
+						"font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "+
+						"img-src 'self' data: https:; "+
+						"connect-src 'self' https://cdn.jsdelivr.net; "+
+						"frame-ancestors 'none'")
 			} else {
 				h.Set("X-Frame-Options", "DENY")
 				h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
