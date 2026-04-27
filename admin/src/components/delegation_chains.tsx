@@ -42,6 +42,24 @@ const sectionLabel: React.CSSProperties = {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * flattenActClaim — convert an RFC 8693 nested act-chain object into a flat
+ * array of hops.  Backend buildActClaim emits:
+ *   { "sub": "a2", "act": { "sub": "a1" } }
+ * This walker unrolls the chain so delegation_chains and agents_manage can
+ * render hops correctly regardless of whether the server returns an array or
+ * a nested object.
+ */
+function flattenActClaim(nested: any): Array<{sub: string; jkt?: string; label?: string}> {
+  const hops: Array<{sub: string; jkt?: string}> = [];
+  let cur = nested;
+  while (cur && typeof cur === 'object' && cur.sub) {
+    hops.push({ sub: cur.sub, jkt: cur.jkt });
+    cur = cur.act;
+  }
+  return hops;
+}
+
 function fmtTime(iso: string) {
   try {
     return new Date(iso).toLocaleString(undefined, {
@@ -70,11 +88,18 @@ function parseMeta(ev: any): Record<string, any> {
 /** Parse a raw audit-log entry into a normalised shape. */
 function normalizeEntry(e: any) {
   const meta = parseMeta(e);
+  // Three-way resolution: flat array → use as-is; nested RFC 8693 object → flatten; else empty.
+  const resolveChain = (raw: any): Array<{sub: string; jkt?: string; label?: string}> => {
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    if (raw && typeof raw === 'object' && raw.sub) return flattenActClaim(raw);
+    return [];
+  };
+
   const actChain: Array<{ sub: string; jkt?: string; label?: string }> =
-    Array.isArray(e.act_chain) && e.act_chain.length > 0
-      ? e.act_chain
-      : Array.isArray(meta.act_chain) && meta.act_chain.length > 0
-        ? meta.act_chain
+    resolveChain(e.act_chain).length > 0
+      ? resolveChain(e.act_chain)
+      : resolveChain(meta.act_chain).length > 0
+        ? resolveChain(meta.act_chain)
         : e.oauth?.act
           ? [{ sub: e.oauth.act.sub || '', label: e.oauth.act.email || e.oauth.act.sub || 'user' }]
           : [];

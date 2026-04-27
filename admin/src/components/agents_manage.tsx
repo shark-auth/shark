@@ -1541,7 +1541,26 @@ function DelegationsTab({ agent, setPage }) {
           } else if (ev?.metadata && typeof ev.metadata === 'object') {
             parsedMeta = ev.metadata;
           }
-          const chain = ev.act_chain || parsedMeta.act_chain || ev?.meta?.act_chain || [];
+          // Flatten RFC 8693 nested act-chain object if needed (same logic as delegation_chains.tsx)
+          const flattenActClaim = (nested: any): Array<{sub: string}> => {
+            const hops: Array<{sub: string}> = [];
+            let cur = nested;
+            while (cur && typeof cur === 'object' && cur.sub) {
+              hops.push({ sub: cur.sub });
+              cur = cur.act;
+            }
+            return hops;
+          };
+          const resolveChain = (raw: any): Array<{sub: string}> => {
+            if (Array.isArray(raw) && raw.length > 0) return raw;
+            if (raw && typeof raw === 'object' && raw.sub) return flattenActClaim(raw);
+            return [];
+          };
+          const chain = resolveChain(ev.act_chain).length > 0
+            ? resolveChain(ev.act_chain)
+            : resolveChain(parsedMeta.act_chain).length > 0
+              ? resolveChain(parsedMeta.act_chain)
+              : resolveChain(ev?.meta?.act_chain);
           return chain.some((n: any) => n.sub === agent.id || n.agent_id === agent.id);
         });
 
