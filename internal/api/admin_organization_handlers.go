@@ -430,8 +430,11 @@ func (s *Server) sendAdminInvitationResend(parent context.Context, inv *storage.
 	if inv.InvitedBy != nil {
 		inviter, _ = s.Store.GetUserByID(ctx, *inv.InvitedBy)
 	}
-	acceptURL := fmt.Sprintf("%s/organizations/invitations/%s/accept",
-		strings.TrimRight(s.Config.Server.BaseURL, "/"), rawToken)
+	inviteBase, _, _ := email.GetRedirectURL(ctx, s.Store, "invite", strings.TrimRight(s.Config.Server.BaseURL, "/"))
+	if inviteBase == "" {
+		inviteBase = strings.TrimRight(s.Config.Server.BaseURL, "/")
+	}
+	acceptURL := fmt.Sprintf("%s/organizations/invitations/%s/accept", inviteBase, rawToken)
 
 	branding, _ := s.Store.ResolveBranding(ctx, "")
 	rendered, err := email.RenderOrganizationInvitation(ctx, s.Store, branding, email.OrganizationInvitationData{

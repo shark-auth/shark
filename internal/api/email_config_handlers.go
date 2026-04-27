@@ -17,12 +17,12 @@ import (
 	"net/http"
 )
 
-// emailConfig holds the redirect URL settings surfaced in the Branding > Email
-// > Redirect URLs panel.
+// emailConfig holds the redirect URL settings surfaced in Admin > Email > Redirect URLs.
 type emailConfig struct {
 	VerifyRedirectURL    string `json:"verify_redirect_url"`
 	ResetRedirectURL     string `json:"reset_redirect_url"`
 	MagicLinkRedirectURL string `json:"magic_link_redirect_url"`
+	InviteRedirectURL    string `json:"invite_redirect_url"`
 }
 
 // sysConfigEmailWrapper is the envelope we merge into the existing system_config
@@ -66,6 +66,9 @@ func (s *Server) handlePatchEmailConfig(w http.ResponseWriter, r *http.Request) 
 	}
 	if patch.MagicLinkRedirectURL != "" {
 		existing.MagicLinkRedirectURL = patch.MagicLinkRedirectURL
+	}
+	if patch.InviteRedirectURL != "" {
+		existing.InviteRedirectURL = patch.InviteRedirectURL
 	}
 
 	// Read the full blob, merge our key, write back.

@@ -527,8 +527,11 @@ func (s *Server) sendOrgInvitationEmail(inv *storage.OrganizationInvitation, org
 	defer cancel()
 
 	inviter, _ := s.Store.GetUserByID(ctx, inviterID)
-	acceptURL := fmt.Sprintf("%s/organizations/invitations/%s/accept",
-		strings.TrimRight(s.Config.Server.BaseURL, "/"), rawToken)
+	inviteBase, _, err := email.GetRedirectURL(ctx, s.Store, "invite", strings.TrimRight(s.Config.Server.BaseURL, "/"))
+	if err != nil || inviteBase == "" {
+		inviteBase = strings.TrimRight(s.Config.Server.BaseURL, "/")
+	}
+	acceptURL := fmt.Sprintf("%s/organizations/invitations/%s/accept", inviteBase, rawToken)
 	branding, _ := s.Store.ResolveBranding(ctx, "")
 	rendered, err := email.RenderOrganizationInvitation(ctx, s.Store, branding, email.OrganizationInvitationData{
 		AppName:      s.Config.MFA.Issuer,

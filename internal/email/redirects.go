@@ -31,6 +31,7 @@ type emailRedirectConfig struct {
 	VerifyRedirectURL    string `json:"verify_redirect_url"`
 	ResetRedirectURL     string `json:"reset_redirect_url"`
 	MagicLinkRedirectURL string `json:"magic_link_redirect_url"`
+	InviteRedirectURL    string `json:"invite_redirect_url"`
 }
 
 // GetRedirectURL returns the configured redirect base URL for the given kind.
@@ -79,6 +80,8 @@ func GetRedirectURL(ctx context.Context, store RedirectStore, kind string, fallb
 		configured = cfg.ResetRedirectURL
 	case "magic_link":
 		configured = cfg.MagicLinkRedirectURL
+	case "invite":
+		configured = cfg.InviteRedirectURL
 	default:
 		return fallbackURL, false, fmt.Errorf("email/redirects: unknown kind %q", kind)
 	}
