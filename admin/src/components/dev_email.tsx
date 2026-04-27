@@ -70,12 +70,24 @@ function relativeTime(ts: string | number | null | undefined): string {
 function extractMagicLink(html: string, text: string): string | null {
   const sources = [html || '', text || ''];
   for (const src of sources) {
-    const hrefMatch = src.match(/href=["']([^"']*(?:magic|verify|confirm|token|otp|click)[^"']*)/i);
+    const hrefMatch = src.match(/href=["']([^"']*(?:magic|verify|confirm|token|otp|click|accept|invitation|reset|password)[^"']*)/i);
     if (hrefMatch) return hrefMatch[1];
-    const urlMatch = src.match(/(https?:\/\/\S+(?:magic|verify|confirm|token|otp|click)\S+)/i);
+    const urlMatch = src.match(/(https?:\/\/\S+(?:magic|verify|confirm|token|otp|click|accept|invitation|reset|password)\S+)/i);
     if (urlMatch) return urlMatch[1];
   }
   return null;
+}
+
+function rewriteToLocalhost(url: string): string {
+  try {
+    const u = new URL(url);
+    const here = new URL(window.location.origin);
+    if (u.origin !== here.origin) {
+      u.protocol = here.protocol;
+      u.host = here.host;
+    }
+    return u.toString();
+  } catch { return url; }
 }
 
 // ── Slide-over detail panel ──────────────────────────────────────────────────
@@ -86,6 +98,7 @@ function EmailSlideOver({ email, onClose }: { email: any; onClose: () => void })
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
+  const [rewriteHost, setRewriteHost] = React.useState(true);
 
   React.useEffect(() => {
     if (!email?.id) return;
@@ -112,7 +125,10 @@ function EmailSlideOver({ email, onClose }: { email: any; onClose: () => void })
   const d = detail || email;
   const htmlBody: string = d?.html_body || d?.html || d?.body_html || '';
   const textBody: string = d?.text_body || d?.text || d?.body_text || d?.body || '';
-  const magicLink = extractMagicLink(htmlBody, textBody);
+  const magicLinkRaw = extractMagicLink(htmlBody, textBody);
+  const magicLinkRewritten = magicLinkRaw ? rewriteToLocalhost(magicLinkRaw) : null;
+  const magicLink = rewriteHost ? magicLinkRewritten : magicLinkRaw;
+  const hostDiffers = magicLinkRaw && magicLinkRewritten && magicLinkRaw !== magicLinkRewritten;
   const emailType = email.type || email.email_type || detectEmailType(email.subject);
 
   const copyMagicLink = () => {
@@ -183,35 +199,58 @@ function EmailSlideOver({ email, onClose }: { email: any; onClose: () => void })
       </div>
 
       {/* Magic link action strip */}
-      {magicLink && (
+      {magicLinkRaw && (
         <div style={{
           padding: '8px 14px',
           borderBottom: '1px solid var(--hairline)',
           display: 'flex',
-          alignItems: 'center',
-          gap: 8,
+          flexDirection: 'column',
+          gap: 6,
           flexShrink: 0,
         }}>
-          <a
-            href={magicLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn sm"
-            style={{ textDecoration: 'none', fontSize: 11.5, gap: 5 }}
-          >
-            <Icon.External width={10} height={10}/>
-            Open link
-          </a>
-          <button
-            className="btn ghost sm"
-            style={{ fontSize: 11.5 }}
-            onClick={copyMagicLink}
-          >
-            {copied ? '✓ Copied' : 'Copy link'}
-          </button>
-          <span className="mono faint" style={{ fontSize: 9.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {magicLink.replace(/^https?:\/\/[^/]+/, '')}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <a
+              href={magicLink || magicLinkRaw}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn sm"
+              style={{ textDecoration: 'none', fontSize: 11.5, gap: 5 }}
+            >
+              <Icon.External width={10} height={10}/>
+              Open link
+            </a>
+            <button
+              className="btn ghost sm"
+              style={{ fontSize: 11.5 }}
+              onClick={copyMagicLink}
+            >
+              {copied ? '✓ Copied' : 'Copy link'}
+            </button>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: 'var(--fg-dim)', cursor: 'pointer', marginLeft: 'auto' }}>
+              <input
+                type="checkbox"
+                checked={rewriteHost}
+                onChange={e => setRewriteHost(e.target.checked)}
+                style={{ margin: 0, cursor: 'pointer' }}
+              />
+              local server
+            </label>
+          </div>
+          {hostDiffers && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="mono faint" style={{ fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={magicLinkRewritten || ''}>
+                local: {(magicLinkRewritten || '').replace(/^https?:\/\/[^/]+/, '')}
+              </span>
+              <span className="mono faint" style={{ fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.55 }} title={magicLinkRaw}>
+                orig: {magicLinkRaw.replace(/^https?:\/\/[^/]+/, '')}
+              </span>
+            </div>
+          )}
+          {!hostDiffers && magicLink && (
+            <span className="mono faint" style={{ fontSize: 9.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {magicLink.replace(/^https?:\/\/[^/]+/, '')}
+            </span>
+          )}
         </div>
       )}
 
