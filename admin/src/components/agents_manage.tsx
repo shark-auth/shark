@@ -1564,14 +1564,48 @@ function DelegationsTab({ agent, setPage }) {
 
     const load = async () => {
       try {
-        const [outRes, inRes] = await Promise.all([
+        // Fetch outbound by both DB UUID (actor_id) and client_id — backend may index either
+        const clientIdParam = agent.client_id || agent.clientId || '';
+        const [outRes, outRes2, inRes] = await Promise.all([
           fetch(`/api/v1/audit-logs?action=oauth.token.exchanged&actor_id=${agent.id}&limit=100`, { headers }),
+          clientIdParam
+            ? fetch(`/api/v1/audit-logs?action=oauth.token.exchanged&actor_id=${encodeURIComponent(clientIdParam)}&limit=100`, { headers })
+            : Promise.resolve(null),
           fetch(`/api/v1/audit-logs?action=oauth.token.exchanged&limit=200`, { headers }),
         ]);
-        const [outData, inData] = await Promise.all([outRes.json(), inRes.json()]);
+        const [outData, outData2, inData] = await Promise.all([
+          outRes.json(),
+          outRes2 ? outRes2.json() : Promise.resolve({}),
+          inRes.json(),
+        ]);
+        // Merge outbound results, dedup by id
+        const outMergedMap: Record<string, any> = {};
+        for (const ev of [...(outData?.data || outData?.items || []), ...(outData2?.data || outData2?.items || [])]) {
+          outMergedMap[ev.id || ev.event_id || JSON.stringify(ev)] = ev;
+        }
         if (cancelled) return;
 
-        const outItems = outData?.data || outData?.items || [];
+        const outItems = Object.values(outMergedMap);
+        // Flatten RFC 8693 nested act-chain object if needed (same logic as delegation_chains.tsx)
+        const flattenActClaim = (nested: any): Array<{sub: string}> => {
+          const hops: Array<{sub: string}> = [];
+          let cur = nested;
+          while (cur && typeof cur === 'object' && cur.sub) {
+            hops.push({ sub: cur.sub });
+            cur = cur.act;
+          }
+          return hops;
+        };
+        const resolveChain = (raw: any): Array<{sub: string}> => {
+          if (Array.isArray(raw) && raw.length > 0) return raw;
+          if (raw && typeof raw === 'object' && raw.sub) return flattenActClaim(raw);
+          return [];
+        };
+        // Backend emits act_chain.sub = actingAgent.ClientID (not DB UUID).
+        // Match against both agent.id (DB UUID) AND agent.client_id so neither is missed.
+        const agentMatchIds = new Set<string>(
+          [agent.id, agent.client_id, agent.clientId].filter(Boolean)
+        );
         const inItems = (inData?.data || inData?.items || []).filter(ev => {
           let parsedMeta: Record<string, any> = {};
           if (typeof ev?.metadata === 'string') {
@@ -1579,27 +1613,18 @@ function DelegationsTab({ agent, setPage }) {
           } else if (ev?.metadata && typeof ev.metadata === 'object') {
             parsedMeta = ev.metadata;
           }
-          // Flatten RFC 8693 nested act-chain object if needed (same logic as delegation_chains.tsx)
-          const flattenActClaim = (nested: any): Array<{sub: string}> => {
-            const hops: Array<{sub: string}> = [];
-            let cur = nested;
-            while (cur && typeof cur === 'object' && cur.sub) {
-              hops.push({ sub: cur.sub });
-              cur = cur.act;
-            }
-            return hops;
-          };
-          const resolveChain = (raw: any): Array<{sub: string}> => {
-            if (Array.isArray(raw) && raw.length > 0) return raw;
-            if (raw && typeof raw === 'object' && raw.sub) return flattenActClaim(raw);
-            return [];
-          };
+          // Apply flattenActClaim BEFORE empty check — resolve from all possible locations
           const chain = resolveChain(ev.act_chain).length > 0
             ? resolveChain(ev.act_chain)
             : resolveChain(parsedMeta.act_chain).length > 0
               ? resolveChain(parsedMeta.act_chain)
               : resolveChain(ev?.meta?.act_chain);
-          return chain.some((n: any) => n.sub === agent.id || n.agent_id === agent.id);
+          // Also check top-level actor / metadata.client_id for events where chain is absent
+          const actorMatch =
+            agentMatchIds.has(ev.actor_id) ||
+            agentMatchIds.has(parsedMeta.client_id) ||
+            agentMatchIds.has(parsedMeta.actor_id);
+          return chain.some((n: any) => agentMatchIds.has(n.sub) || agentMatchIds.has(n.agent_id)) || actorMatch;
         });
 
         setOutbound(groupByCounterpart(outItems, agent.id, 'outbound'));
@@ -1624,7 +1649,10 @@ function DelegationsTab({ agent, setPage }) {
   if (inbound.length === 0 && outbound.length === 0) {
     return (
       <div style={{ padding: 24, textAlign: 'center', fontFamily: 'monospace', fontSize: 12, color: 'var(--fg-dim)', lineHeight: 1.7 }}>
-        No delegations recorded.<br/>
+        No delegations found for this agent.<br/>
+        <span style={{ fontSize: 10, opacity: 0.6 }}>
+          (agent.id: {agent.id}{agent.client_id ? ` · client_id: ${agent.client_id}` : ''})
+        </span><br/>
         Run the demo or use tools/agent_demo_tester.py<br/>
         to populate the chain.
       </div>

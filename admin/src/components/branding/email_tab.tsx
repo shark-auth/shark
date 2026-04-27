@@ -87,9 +87,15 @@ function EmailRedirectConfig() {
       </div>
 
       <div>
-        <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 5, fontWeight: 500 }}>
-          Verify-email redirect
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+          <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: 0 }}>
+            Verify-email redirect
+          </label>
+          <span
+            title="Shark appends ?token=<token> to this URL before sending. Your page reads the token and POSTs it to /api/v1/auth/verify-email to complete verification."
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', border: '1px solid var(--fg-dim)', fontSize: 9, color: 'var(--fg-dim)', cursor: 'default', flexShrink: 0, lineHeight: 1 }}
+          >?</span>
+        </div>
         <input
           type="url"
           value={cfg.verify_redirect_url}
@@ -104,9 +110,15 @@ function EmailRedirectConfig() {
       </div>
 
       <div>
-        <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 5, fontWeight: 500 }}>
-          Password-reset redirect
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+          <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: 0 }}>
+            Password-reset redirect
+          </label>
+          <span
+            title="Shark appends ?token=<token> to this URL before sending. Your page collects the new password and POSTs {token, password} to /api/v1/auth/reset-password."
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', border: '1px solid var(--fg-dim)', fontSize: 9, color: 'var(--fg-dim)', cursor: 'default', flexShrink: 0, lineHeight: 1 }}
+          >?</span>
+        </div>
         <input
           type="url"
           value={cfg.reset_redirect_url}
@@ -121,9 +133,15 @@ function EmailRedirectConfig() {
       </div>
 
       <div>
-        <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', marginBottom: 5, fontWeight: 500 }}>
-          Magic-link redirect (default)
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+          <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: 0 }}>
+            Magic-link redirect (default)
+          </label>
+          <span
+            title="Shark appends ?token=<token> to this URL before sending. The token is already verified server-side — redirect the user straight to their destination (dashboard, etc.)."
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', border: '1px solid var(--fg-dim)', fontSize: 9, color: 'var(--fg-dim)', cursor: 'default', flexShrink: 0, lineHeight: 1 }}
+          >?</span>
+        </div>
         <input
           type="url"
           value={cfg.magic_link_redirect_url}

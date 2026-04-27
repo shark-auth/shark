@@ -90,9 +90,13 @@ func (m *MagicLinkManager) SendMagicLink(ctx context.Context, emailAddr string) 
 		return fmt.Errorf("storing magic link token: %w", err)
 	}
 
-	// Build the magic link URL
+	// Build the magic link URL.
+	// Use the configured redirect URL (Admin > Branding > Email) if set;
+	// otherwise fall back to the built-in shark verify endpoint.
 	baseURL := strings.TrimRight(m.cfg.Server.BaseURL, "/")
-	magicLinkURL := fmt.Sprintf("%s/api/v1/auth/magic-link/verify?token=%s", baseURL, rawToken)
+	fallbackMagicURL := fmt.Sprintf("%s/api/v1/auth/magic-link/verify", baseURL)
+	redirectBase, _, _ := email.GetRedirectURL(ctx, m.store, "magic_link", fallbackMagicURL)
+	magicLinkURL := email.AppendToken(redirectBase, rawToken)
 
 	// Compute expiry in minutes for the email template
 	expiryMinutes := int(lifetime.Minutes())
@@ -160,8 +164,14 @@ func (m *MagicLinkManager) SendPasswordReset(ctx context.Context, emailAddr stri
 		return fmt.Errorf("storing password reset token: %w", err)
 	}
 
-	redirectURL := strings.TrimRight(m.cfg.PasswordReset.RedirectURL, "/")
-	resetURL := fmt.Sprintf("%s?token=%s", redirectURL, rawToken)
+	// Use DB-configured redirect URL if set; fall back to static config value.
+	baseURLForReset := strings.TrimRight(m.cfg.Server.BaseURL, "/")
+	fallbackResetURL := strings.TrimRight(m.cfg.PasswordReset.RedirectURL, "/")
+	if fallbackResetURL == "" {
+		fallbackResetURL = fmt.Sprintf("%s/api/v1/auth/password-reset/verify", baseURLForReset)
+	}
+	resetRedirectBase, _, _ := email.GetRedirectURL(ctx, m.store, "reset", fallbackResetURL)
+	resetURL := email.AppendToken(resetRedirectBase, rawToken)
 
 	appName := "SharkAuth"
 	if m.cfg.SMTP.FromName != "" {
@@ -252,8 +262,13 @@ func (m *MagicLinkManager) SendEmailVerification(ctx context.Context, emailAddr 
 		return fmt.Errorf("storing email verification token: %w", err)
 	}
 
-	baseURL := strings.TrimRight(m.cfg.Server.BaseURL, "/")
-	verifyURL := fmt.Sprintf("%s/hosted/default/verify?token=%s", baseURL, rawToken)
+	// Use DB-configured redirect URL if set; fall back to built-in shark endpoint.
+	// NOTE: /hosted/default/verify is NOT shipped in this version — devs MUST configure
+	// their own verify_redirect_url via Admin > Branding > Email > Redirect URLs.
+	baseURLForVerify := strings.TrimRight(m.cfg.Server.BaseURL, "/")
+	fallbackVerifyURL := fmt.Sprintf("%s/api/v1/auth/verify-email", baseURLForVerify)
+	verifyRedirectBase, _, _ := email.GetRedirectURL(ctx, m.store, "verify", fallbackVerifyURL)
+	verifyURL := email.AppendToken(verifyRedirectBase, rawToken)
 
 	appName := "SharkAuth"
 	if m.cfg.SMTP.FromName != "" {

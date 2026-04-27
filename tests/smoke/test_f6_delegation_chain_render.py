@@ -159,6 +159,39 @@ def test_audit_log_token_exchange_endpoint():
     assert isinstance(items, list)
 
 
+def test_agents_manage_inbound_filter_matches_client_id():
+    """
+    Regression: inbound filter must match events where act_chain.sub == agent.client_id
+    (not just agent.id). Backend emits act_chain.sub = actingAgent.ClientID.
+    Fix: agentMatchIds set now includes agent.client_id and agent.clientId.
+    """
+    path = os.path.join(ADMIN_DIR, "agents_manage.tsx")
+    content = open(path, encoding="utf-8").read()
+    # Must build a set of IDs that includes client_id
+    assert "agentMatchIds" in content, (
+        "agents_manage.tsx must define agentMatchIds set to match both agent.id and agent.client_id"
+    )
+    assert "agent.client_id" in content, (
+        "agents_manage.tsx filter must include agent.client_id in match candidates"
+    )
+    # Must apply resolveChain BEFORE the empty check (chain resolved then .some() called)
+    assert "agentMatchIds.has(n.sub)" in content, (
+        "inbound filter must use agentMatchIds.has() on chain node .sub field"
+    )
+
+
+def test_agents_manage_empty_state_shows_agent_ids():
+    """
+    Regression: empty state must show agent.id and client_id for diagnostics,
+    distinguishing 'no events' from 'events exist but filter mismatch'.
+    """
+    path = os.path.join(ADMIN_DIR, "agents_manage.tsx")
+    content = open(path, encoding="utf-8").read()
+    assert "agent.id" in content and "client_id" in content, (
+        "Empty delegation state must show agent.id and client_id for debugging"
+    )
+
+
 @pytest.mark.skipif(not _shark_reachable(), reason="shark not reachable")
 def test_audit_log_has_chain_with_flatten():
     """If token-exchange events exist, at least one must have a flattenable act_chain."""
