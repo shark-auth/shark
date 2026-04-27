@@ -366,3 +366,29 @@ class UsersClient:
                 )
             return AgentList(data=data if isinstance(data, list) else [], total=len(data or []))
         _raise(resp)
+
+    # ------------------------------------------------------------------
+    # Admin MFA disable
+    # ------------------------------------------------------------------
+
+    def reset_mfa(self, user_id: str) -> None:
+        """Admin-force clear a user's TOTP MFA without requiring their current code.
+
+        Wraps ``DELETE /api/v1/users/{id}/mfa``.  Use when a user has lost their
+        MFA device and cannot log in.  Returns ``None`` on success (204).
+
+        Parameters
+        ----------
+        user_id:
+            The ``usr_*`` identifier of the user.
+
+        Raises
+        ------
+        SharkAuthError
+            On HTTP error from the server.
+        """
+        url = f"{self._base}/api/v1/users/{user_id}/mfa"
+        resp = _http.request(self._session, "DELETE", url, headers=self._auth())
+        if resp.status_code in (200, 204):
+            return
+        _raise(resp)

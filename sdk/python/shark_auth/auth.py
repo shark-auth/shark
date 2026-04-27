@@ -229,3 +229,45 @@ class AuthClient:
         if resp.status_code == 200:
             return resp.json()
         _raise_auth(resp)
+
+    # ------------------------------------------------------------------
+    # Permission check
+    # ------------------------------------------------------------------
+
+    def check(self, action: str, resource: str) -> Dict[str, Any]:
+        """Check whether the authenticated principal has permission for *action* on *resource*.
+
+        Wraps ``POST /api/v1/auth/check``.  Requires a valid session or bearer token.
+
+        Parameters
+        ----------
+        action:
+            The action to check (e.g. ``"read"``, ``"write"``).
+        resource:
+            The resource to check against (e.g. ``"documents:123"``).
+
+        Returns
+        -------
+        dict
+            Server response — typically ``{"allowed": True/False}``.
+        """
+        url = f"{self._base}{self._PREFIX}/check"
+        resp = _http.request(self._session, "POST", url, json={"action": action, "resource": resource})
+        if resp.status_code == 200:
+            return resp.json()
+        _raise_auth(resp)
+
+    # ------------------------------------------------------------------
+    # Self-revoke
+    # ------------------------------------------------------------------
+
+    def revoke_self(self) -> None:
+        """Revoke the calling user's own JWT / session.
+
+        Wraps ``POST /api/v1/auth/revoke``.  Requires a valid session or bearer token.
+        """
+        url = f"{self._base}{self._PREFIX}/revoke"
+        resp = _http.request(self._session, "POST", url)
+        if resp.status_code in (200, 204):
+            return
+        _raise_auth(resp)

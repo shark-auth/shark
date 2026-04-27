@@ -181,3 +181,54 @@ def test_revoke_agent_403():
             client.revoke_agent("agent_abc")
 
     assert exc_info.value.status == 403
+
+
+# ---------------------------------------------------------------------------
+# P1 smoke tests — list_tokens, revoke_all, rotate_secret, rotate_dpop_key
+# ---------------------------------------------------------------------------
+
+
+def test_list_tokens_hits_correct_path():
+    with patch("shark_auth._http.request") as mock_req:
+        mock_req.return_value = _mock_resp(200, {"data": [{"id": "tok_1", "agent_id": "agent_abc"}]})
+        client = _make_client()
+        tokens = client.list_tokens("agent_abc")
+    assert mock_req.call_args[0][1] == "GET"
+    assert mock_req.call_args[0][2].endswith("/api/v1/agents/agent_abc/tokens")
+    assert tokens[0].token_id == "tok_1"
+
+
+def test_revoke_all_hits_correct_path():
+    with patch("shark_auth._http.request") as mock_req:
+        resp = _mock_resp(200, {"revoked_count": 3})
+        resp.content = b'{"revoked_count": 3}'
+        mock_req.return_value = resp
+        client = _make_client()
+        result = client.revoke_all("agent_abc")
+    assert mock_req.call_args[0][1] == "POST"
+    assert mock_req.call_args[0][2].endswith("/api/v1/agents/agent_abc/tokens/revoke-all")
+    assert result.revoked_count == 3
+
+
+def test_rotate_secret_hits_correct_path():
+    with patch("shark_auth._http.request") as mock_req:
+        mock_req.return_value = _mock_resp(
+            200, {"agent_id": "agent_abc", "client_id": "cid", "client_secret": "s3cr3t"}
+        )
+        client = _make_client()
+        creds = client.rotate_secret("agent_abc")
+    assert mock_req.call_args[0][1] == "POST"
+    assert mock_req.call_args[0][2].endswith("/api/v1/agents/agent_abc/rotate-secret")
+    assert creds.client_secret == "s3cr3t"
+
+
+def test_rotate_dpop_key_hits_correct_path():
+    with patch("shark_auth._http.request") as mock_req:
+        mock_req.return_value = _mock_resp(
+            200, {"old_jkt": "old", "new_jkt": "new", "revoked_token_count": 2, "audit_event_id": "ev_1"}
+        )
+        client = _make_client()
+        result = client.rotate_dpop_key("agent_abc", new_public_key_jwk={"kty": "EC"})
+    assert mock_req.call_args[0][1] == "POST"
+    assert mock_req.call_args[0][2].endswith("/api/v1/agents/agent_abc/rotate-dpop-key")
+    assert result.new_jkt == "new"

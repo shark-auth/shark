@@ -156,3 +156,41 @@ def test_set_user_tier_403():
             client.set_user_tier("usr_abc", "pro")
 
     assert exc_info.value.status == 403
+
+
+# ---------------------------------------------------------------------------
+# P1 smoke tests — list_agents, revoke_agents, P2 reset_mfa
+# ---------------------------------------------------------------------------
+
+
+def test_list_user_agents_hits_correct_path():
+    with patch("shark_auth._http.request") as mock_req:
+        mock_req.return_value = _mock_resp(200, {"data": [{"id": "agent_x"}], "total": 1})
+        client = _make_client()
+        result = client.list_agents("usr_abc")
+    assert mock_req.call_args[0][1] == "GET"
+    assert mock_req.call_args[0][2].endswith("/api/v1/users/usr_abc/agents")
+    assert result.total == 1
+
+
+def test_revoke_user_agents_hits_correct_path():
+    with patch("shark_auth._http.request") as mock_req:
+        resp = _mock_resp(200, {"revoked_agent_ids": ["agent_x"], "revoked_consent_count": 1})
+        resp.content = b'{"revoked_agent_ids": ["agent_x"], "revoked_consent_count": 1}'
+        mock_req.return_value = resp
+        client = _make_client()
+        result = client.revoke_agents("usr_abc")
+    assert mock_req.call_args[0][1] == "POST"
+    assert mock_req.call_args[0][2].endswith("/api/v1/users/usr_abc/revoke-agents")
+    assert result.revoked_consent_count == 1
+
+
+def test_reset_mfa_hits_correct_path():
+    with patch("shark_auth._http.request") as mock_req:
+        mock_req.return_value = _mock_resp(204, {})
+        mock_req.return_value.status_code = 204
+        client = _make_client()
+        result = client.reset_mfa("usr_abc")
+    assert result is None
+    assert mock_req.call_args[0][1] == "DELETE"
+    assert mock_req.call_args[0][2].endswith("/api/v1/users/usr_abc/mfa")
