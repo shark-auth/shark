@@ -1,0 +1,48 @@
+name: Publish Python SDK
+
+on:
+  push:
+    tags:
+      - 'py-sdk-v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build wheel + sdist
+        run: python -m build
+
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+
+      - name: Verify post-publish availability
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#py-sdk-v}"
+          echo "Verifying shark-auth==${VERSION} on PyPI…"
+          for i in 1 2 3; do
+            if pip install --index-url https://pypi.org/simple/ "shark-auth==${VERSION}" --dry-run 2>&1 | grep -q "Would install"; then
+              echo "shark-auth==${VERSION} available on PyPI."
+              exit 0
+            fi
+            echo "Attempt ${i}/3 failed — sleeping 30s…"
+            sleep 30
+          done
+          echo "ERROR: shark-auth==${VERSION} not yet visible on PyPI after 3 attempts."
+          exit 1
