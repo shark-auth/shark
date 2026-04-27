@@ -45,6 +45,8 @@ export function Audit() {
   const [query, setQuery] = useURLParam('q', '');
   const [urlRange, setUrlRange] = useURLParam('range', '24h');
   const [urlActor, setUrlActor] = useURLParam('actor', '');
+  // grant_id chip — set by EdgeDrawer "View audit →". Persists in URL.
+  const [grantID, setGrantID] = useURLParam('grant_id', '');
   const [filters, setFilters] = React.useState({
     actorType: urlActor || null,
     severity: null,
@@ -66,6 +68,7 @@ export function Audit() {
     params.set('per_page', '100');
     if (filters.actorType) params.set('actor_type', filters.actorType);
     if (filters.actionPrefix) params.set('action', filters.actionPrefix);
+    if (grantID) params.set('grant_id', grantID);
     if (filters.timeRange !== 'all') {
       const cutoffs = { '1h': 1, '24h': 24, '7d': 168 };
       const hours = cutoffs[filters.timeRange];
@@ -75,7 +78,7 @@ export function Audit() {
       }
     }
     return '/audit-logs?' + params.toString();
-  }, [filters.actorType, filters.actionPrefix, filters.timeRange]);
+  }, [filters.actorType, filters.actionPrefix, filters.timeRange, grantID]);
 
   const { data, loading, error, refresh } = useAPI(apiPath);
   const [extraPages, setExtraPages] = React.useState([]);
@@ -306,6 +309,25 @@ export function Audit() {
             />
             <Kbd keys="/"/>
           </div>
+
+          {/* grant_id chip — appears only when set; click ✕ to clear */}
+          {grantID && (
+            <button
+              data-testid="grant-id-chip"
+              onClick={() => setGrantID('')}
+              title="Clear grant_id filter"
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                padding: '2px 8px', height: 26,
+                background: 'var(--surface-1)', border: '1px solid var(--hairline-strong)',
+                color: 'var(--fg)', borderRadius: 3, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              grant_id: {grantID.length > 16 ? grantID.slice(0, 14) + '…' : grantID}
+              <span style={{ color: 'var(--fg-dim)' }}>✕</span>
+            </button>
+          )}
 
           <Seg value={filters.timeRange} onChange={v => setFilters(f => ({...f, timeRange: v}))}
             opts={[['1h','1h'], ['24h','24h'], ['7d','7d'], ['all','all']]}/>

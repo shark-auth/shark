@@ -19,7 +19,7 @@ const PAGES = [
   { id: 'signing', label: 'Signing Keys', icon: 'Signing' },
   { id: 'settings', label: 'Settings', icon: 'Settings', hint: 'g s' },
   { id: 'dev-inbox', label: 'Dev Inbox', icon: 'Mail', hint: 'g d' },
-  { id: 'device-flow', label: 'Device Flow', icon: 'Device' },
+  // device-flow hidden for v0.1 — not battle-tested
   { id: 'tokens', label: 'Tokens', icon: 'Token', hint: 'g t' },
   { id: 'vault', label: 'Vault', icon: 'Vault', hint: 'g v' },
   { id: 'consents', label: 'Consents', icon: 'Consent' },

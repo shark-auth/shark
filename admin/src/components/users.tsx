@@ -116,9 +116,14 @@ export function Users() {
   const users = rawUsers;
 
   const handleDelete = async (userId) => {
-    await API.del('/users/' + userId);
-    refresh();
-    setSelected(null);
+    try {
+      await API.del('/users/' + userId);
+      toast.success('User deleted');
+      refresh();
+      setSelected(null);
+    } catch (e) {
+      toast.error(e?.message || 'Delete failed');
+    }
   };
 
   return (
@@ -1093,15 +1098,27 @@ function SecurityTab({ user }) {
     user ? `/users/${user.id}/sessions` : null
   );
   const sessions = sessionsData?.data || [];
+  const toast = useToast();
 
   const handleRevokeSession = async (sessionId) => {
-    await API.del('/admin/sessions/' + sessionId);
-    refreshSessions();
+    try {
+      await API.del('/admin/sessions/' + sessionId);
+      toast.success('Session revoked');
+      refreshSessions();
+    } catch (e) {
+      toast.error(e?.message || 'Failed to revoke session');
+    }
   };
 
   const handleRevokeAll = async () => {
-    await API.del('/users/' + user.id + '/sessions');
-    refreshSessions();
+    if (!confirm(`Revoke all active sessions for ${user.email || user.id}?`)) return;
+    try {
+      await API.del('/users/' + user.id + '/sessions');
+      toast.success('All sessions revoked');
+      refreshSessions();
+    } catch (e) {
+      toast.error(e?.message || 'Failed to revoke sessions');
+    }
   };
 
   const mfaLabel = user.mfa_method || user.mfa;
@@ -1168,6 +1185,7 @@ function RolesTab({ user }) {
 
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [assigning, setAssigning] = React.useState(null);
+  const toast = useToast();
 
   const assignedIds = new Set((Array.isArray(roles) ? roles : []).map(r => typeof r === 'string' ? r : r.id));
   const availableRoles = (Array.isArray(allRoles) ? allRoles : []).filter(r => {
@@ -1176,8 +1194,13 @@ function RolesTab({ user }) {
   });
 
   const handleRemoveRole = async (roleId) => {
-    await API.del('/users/' + user.id + '/roles/' + roleId);
-    refreshRoles();
+    try {
+      await API.del('/users/' + user.id + '/roles/' + roleId);
+      toast.success('Role removed');
+      refreshRoles();
+    } catch (e) {
+      toast.error(e?.message || 'Failed to remove role');
+    }
   };
 
   const handleAssignRole = async (roleId) => {

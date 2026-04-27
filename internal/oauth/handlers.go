@@ -47,6 +47,7 @@ func dpopTokenEndpointURL(r *http.Request) string {
 func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	// Device Authorization Grant (RFC 8628) is disabled for v0.1 — coming v0.2.
 	// Return unsupported_grant_type so clients get a clear, spec-compliant error.
+	// Defense-in-depth — routes are unmounted in v0.1, but kept here in case they come back.
 	if r.FormValue("grant_type") == "urn:ietf:params:oauth:grant-type:device_code" {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

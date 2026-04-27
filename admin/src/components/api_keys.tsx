@@ -6,6 +6,7 @@ import { CLIFooter } from './CLIFooter'
 import { useURLParam } from './useURLParams'
 import { usePageActions } from './useKeyboardShortcuts'
 import { TeachEmptyState } from './TeachEmptyState'
+import { useToast } from './toast'
 
 // API Keys page — M2M credential management
 // Table + detail w/ rotation timeline + create/rotate modals + scope matrix
@@ -31,6 +32,7 @@ export function ApiKeys() {
 
   const { data: keysRaw, loading, refresh } = useAPI('/api-keys');
   const keys = keysRaw?.api_keys || [];
+  const toast = useToast();
 
   React.useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -88,9 +90,14 @@ export function ApiKeys() {
   };
 
   const handleRevoke = async (keyId) => {
-    await API.del(`/api-keys/${keyId}`);
-    if (selected?.id === keyId) setSelected(null);
-    refresh();
+    try {
+      await API.del(`/api-keys/${keyId}`);
+      if (selected?.id === keyId) setSelected(null);
+      toast?.success?.('API key revoked');
+      refresh();
+    } catch (e) {
+      toast?.error?.(`Revoke failed: ${e?.message || e}`);
+    }
   };
 
   const handleUpdate = async (keyId, updates) => {
@@ -354,6 +361,7 @@ function ReqSparkline({ count }) {
 function KeyDetail({ k, onClose, onRotate, onRevoke, onUpdate }) {
   const allScopes = ['users:read', 'users:write', 'orgs:read', 'orgs:write', 'audit:export', 'webhooks:manage', 'agents:manage', 'billing:write', 'billing:read', 'metrics:read'];
   const status = k.revoked_at ? 'revoked' : 'active';
+  const isMaster = (k.scopes || []).includes('*');
 
   return (
     <aside style={{
@@ -422,7 +430,17 @@ function KeyDetail({ k, onClose, onRotate, onRevoke, onUpdate }) {
         {/* Scope matrix */}
         <div>
           <h4 style={sectionLabelStyle}>Scopes</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+          {isMaster && (
+            <div style={{
+              padding: '8px 10px', marginBottom: 10, borderRadius: 3,
+              background: 'var(--surface-2)', border: '1px solid var(--warn)',
+              fontSize: 11.5, color: 'var(--warn)', display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span style={{width:10, height:10, background:'var(--warn)', borderRadius: 2}}/>
+              <span><strong>Master key</strong> — wildcard <span className="mono">*</span> scope grants full access to every endpoint.</span>
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, opacity: isMaster ? 0.5 : 1 }}>
             {allScopes.map(s => {
               const granted = (k.scopes || []).includes(s);
               const danger = s.endsWith(':write') || s.includes('manage');
@@ -467,7 +485,8 @@ function KeyDetail({ k, onClose, onRotate, onRevoke, onUpdate }) {
 
 function CurlSnippet({ keyPrefix, scopes }) {
   const [copied, setCopied] = React.useState(false);
-  const endpoint = scopes.includes('users:read') ? '/api/v1/users'
+  const endpoint = scopes.includes('*') ? '/api/v1/users'
+    : scopes.includes('users:read') ? '/api/v1/users'
     : scopes.includes('orgs:read') ? '/api/v1/organizations'
     : scopes.includes('audit:export') ? '/api/v1/audit-logs'
     : '/api/v1/users';
@@ -491,7 +510,8 @@ function CurlSnippet({ keyPrefix, scopes }) {
 
 function KeyUsageAudit({ keyId }) {
   const { data, loading } = useAPI('/audit-logs?limit=10&actor_type=api_key&actor_id=' + keyId);
-  const events = data?.items || data || [];
+  // Backend returns { data: [...], has_more, next_cursor }. Older callers used `items`.
+  const events = Array.isArray(data) ? data : (data?.data || data?.items || []);
 
   return (
     <div>
@@ -527,6 +547,7 @@ function KeyUsageAudit({ keyId }) {
 
 function CreateKeyModal({ onClose, onCreate }) {
   const [name, setName] = React.useState('');
+  const [scopeMode, setScopeMode] = React.useState('granular'); // granular | master
   const [selectedScopes, setSelectedScopes] = React.useState(new Set(['users:read']));
   const [expires, setExpires] = React.useState('90d');
   const [submitting, setSubmitting] = React.useState(false);
@@ -562,9 +583,15 @@ function CreateKeyModal({ onClose, onCreate }) {
     setSubmitting(true);
     setError(null);
     try {
+      const scopes = scopeMode === 'master' ? ['*'] : Array.from(selectedScopes);
+      if (scopes.length === 0) {
+        setError('Select at least one scope, or pick Master for full access.');
+        setSubmitting(false);
+        return;
+      }
       await onCreate({
         name,
-        scopes: Array.from(selectedScopes),
+        scopes,
         expiresAt: expiresAt(),
       });
       onClose();
@@ -600,18 +627,43 @@ function CreateKeyModal({ onClose, onCreate }) {
         </div>
 
         <div style={{marginTop: 14}}>
-          <label style={labelStyle}>Scopes · {selectedScopes.size} selected</label>
-          <div style={{border:'1px solid var(--hairline)', borderRadius: 3, maxHeight: 200, overflow:'auto'}}>
-            {allScopes.map(s => (
-              <label key={s.id} className="row" style={{padding: '6px 10px', borderBottom: '1px solid var(--hairline)', gap: 10, cursor:'pointer'}}>
-                <input type="checkbox" checked={selectedScopes.has(s.id)} onChange={() => toggle(s.id)}/>
-                <span className="mono" style={{fontSize: 11, flex: 1}}>{s.id}</span>
-                {s.danger && <span className="chip warn" style={{height:15, fontSize:9}}>write</span>}
-                <span className="faint" style={{fontSize: 10.5, width: 160, textAlign:'right'}}>{s.desc}</span>
-              </label>
+          <label style={labelStyle}>Access</label>
+          <div className="seg" style={{...segStyle, width: '100%'}}>
+            {[['granular','Granular scopes'],['master','Master ( * — full access)']].map(([v,l]) => (
+              <button key={v} onClick={() => setScopeMode(v)}
+                style={{...segBtn, flex:1, padding: '6px 10px', background: scopeMode===v ? 'var(--surface-3)':'var(--surface-2)', color: scopeMode===v ? 'var(--fg)':'var(--fg-muted)'}}>
+                {l}
+              </button>
             ))}
           </div>
+          {scopeMode === 'master' && (
+            <div style={{
+              marginTop: 8, padding: '8px 10px', borderRadius: 3,
+              background: 'var(--surface-1)', border: '1px solid var(--warn)',
+              fontSize: 11, color: 'var(--warn)', lineHeight: 1.5,
+            }}>
+              ⚠ Master key holds the wildcard <span className="mono">*</span> scope. It bypasses all scope checks
+              and can read/write every admin endpoint. Use only for bootstrap, ops, or single-operator deploys.
+              Prefer granular scopes for service-to-service integrations.
+            </div>
+          )}
         </div>
+
+        {scopeMode === 'granular' && (
+          <div style={{marginTop: 14}}>
+            <label style={labelStyle}>Scopes · {selectedScopes.size} selected</label>
+            <div style={{border:'1px solid var(--hairline)', borderRadius: 3, maxHeight: 200, overflow:'auto'}}>
+              {allScopes.map(s => (
+                <label key={s.id} className="row" style={{padding: '6px 10px', borderBottom: '1px solid var(--hairline)', gap: 10, cursor:'pointer'}}>
+                  <input type="checkbox" checked={selectedScopes.has(s.id)} onChange={() => toggle(s.id)}/>
+                  <span className="mono" style={{fontSize: 11, flex: 1}}>{s.id}</span>
+                  {s.danger && <span className="chip warn" style={{height:15, fontSize:9}}>write</span>}
+                  <span className="faint" style={{fontSize: 10.5, width: 160, textAlign:'right'}}>{s.desc}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {error && (
           <div style={{marginTop: 12, padding: '8px 10px', background: 'var(--surface-1)', border: '1px solid var(--danger)', borderRadius: 3, color: 'var(--danger)', fontSize: 11.5}}>

@@ -9,7 +9,13 @@ import React from 'react'
 import { Icon, CopyField } from './shared'
 import { useAPI } from './api'
 import { usePageActions } from './useKeyboardShortcuts'
-import { DelegationCanvasWithProvider, toReactFlowNodes, toReactFlowEdges } from './delegation_canvas'
+import { DelegationCanvasWithProvider, toReactFlowNodes, toReactFlowEdges, stripLanePrefix } from './delegation_canvas'
+import { useURLParam } from './useURLParams'
+
+// Identity shape heuristics. Users carry usr_ prefix or email shape; agents
+// carry shark_agent_. Service-mode chains have an agent at position 0 too.
+const looksHuman = (s?: string) => !!s && (s.startsWith('usr_') || s.includes('@'))
+const looksAgent = (s?: string) => !!s && s.startsWith('shark_agent_')
 
 // ─── styles reused from audit.tsx / users.tsx gold standard ───────────────────
 
@@ -104,7 +110,13 @@ function normalizeEntry(e: any) {
           ? [{ sub: e.oauth.act.sub || '', label: e.oauth.act.email || e.oauth.act.sub || 'user' }]
           : [];
 
-  const rootSub = actChain.length > 0 ? (actChain[0].label || actChain[0].sub) : (e.actor_email || e.actor_id || 'unknown');
+  // Pick the most readable root id. For service-mode chains where the root is
+  // an agent, prefer the label/sub over actor_email — actor_email is empty
+  // and would have fallen through to actor_id, which is the same agent_id.
+  const rootSeg = actChain[0];
+  const rootSub = rootSeg
+    ? (rootSeg.label || rootSeg.sub || 'unknown')
+    : (e.actor_email || e.actor_id || 'unknown');
 
   // Read structured scope fields emitted by backend (v0.2+).
   // Fall back to the legacy flat "scope" string for older events.
@@ -187,9 +199,12 @@ function buildChains(entries: NormEntry[]): Chain[] {
       ev.actChain.forEach((seg, i) => {
         const k = seg.sub || seg.label || String(i);
         if (!segMap.has(k)) {
+          // Position alone is not enough: service-mode chains have an agent at
+          // index 0. Require shape evidence too (usr_ prefix or email).
+          const isUser = i === 0 && looksHuman(seg.sub) && !looksAgent(seg.sub);
           segMap.set(k, {
             ...seg,
-            isUser: i === 0,
+            isUser,
             grantedScope: ev.grantedScope,
             subjectScope: ev.subjectScope,
             droppedScope: ev.droppedScope,
@@ -197,8 +212,11 @@ function buildChains(entries: NormEntry[]): Chain[] {
         }
       });
       if (ev.actor && !segMap.has(ev.actor)) {
+        // Same shape guard for the actor fallback. ev.actor falls back to
+        // actor_id which can be an agent_id in service-mode.
+        const isUser = looksHuman(ev.actor) && !looksAgent(ev.actor);
         segMap.set(ev.actor, {
-          sub: ev.actor, label: ev.actor, isUser: false,
+          sub: ev.actor, label: ev.actor, isUser,
           grantedScope: ev.grantedScope,
           subjectScope: ev.subjectScope,
           droppedScope: ev.droppedScope,
@@ -327,11 +345,15 @@ function ChainDrawer({
   onClose,
   onAuditClick,
   onAgentClick,
+  agentStatus,
+  onCanvasRefresh,
 }: {
   chain: Chain;
   onClose: () => void;
-  onAuditClick: (id: string) => void;
+  onAuditClick: (id: string, grantId?: string) => void;
   onAgentClick: (sub: string) => void;
+  agentStatus?: Map<string, any>;
+  onCanvasRefresh?: () => void;
 }) {
   const [expandedTokens, setExpandedTokens] = React.useState<Set<number>>(new Set());
   const toggleToken = (i: number) =>
@@ -461,12 +483,12 @@ function ChainDrawer({
               rfNodes={chainRFNodes}
               rfEdges={chainRFEdges}
               height={Math.max(220, chain.segments.length * 120 + 60)}
-              onNodeClick={(nodeId, nodeData) => {
-                if (!nodeData.isUser && nodeId) onAgentClick(nodeId);
+              onNavigate={(target, id) => {
+                if (target === 'agent') onAgentClick(id);
               }}
-              onEdgeClick={(edgeData) => {
-                if (edgeData?.eventId) onAuditClick(edgeData.eventId);
-              }}
+              onAuditClick={onAuditClick}
+              agentStatus={agentStatus}
+              onCanvasRefresh={onCanvasRefresh}
               fitView
             />
           </div>
@@ -884,10 +906,14 @@ function ChainCanvas({
   chains,
   setPage,
   onAuditClick,
+  agentStatus,
+  onCanvasRefresh,
 }: {
   chains: Chain[];
   setPage?: (p: string, extra?: any) => void;
-  onAuditClick: (id: string) => void;
+  onAuditClick: (id: string, grantId?: string) => void;
+  agentStatus?: Map<string, any>;
+  onCanvasRefresh?: () => void;
 }) {
   const [selectedChain, setSelectedChain] = React.useState<Chain | null>(null);
 
@@ -1140,15 +1166,16 @@ function ChainCanvas({
             rfNodes={chainRFNodes}
             rfEdges={chainRFEdgesBuilt}
             height={520}
-            onNodeClick={(nodeId, nodeData) => {
+            onNavigate={(target, id) => {
               if (!setPage) return;
-              if (nodeData.isUser) setPage('users', { userId: nodeId });
-              else setPage('agents', { q: nodeId });
+              if (target === 'user') setPage('users', { userId: id });
+              else setPage('agents', { q: id });
             }}
-            onEdgeClick={(edgeData) => {
-              if (edgeData?.eventId) onAuditClick(edgeData.eventId);
-            }}
+            onAuditClick={onAuditClick}
+            agentStatus={agentStatus}
+            onCanvasRefresh={onCanvasRefresh}
             fitView
+            chainKey={selectedChain.rootSub}
           />
         </div>
       </div>
@@ -1207,14 +1234,18 @@ function ChainCanvas({
         rfNodes={rfNodes}
         rfEdges={rfEdges}
         height={554}
-        onNodeClick={(nodeId, nodeData) => {
+        onNavigate={(target, id) => {
           if (!setPage) return;
-          if (nodeData.isUser) setPage('users', { userId: nodeId });
-          else setPage('agents', { q: nodeId });
+          if (target === 'user') setPage('users', { userId: id });
+          else {
+            // strip lane prefix that buildGraph added so the agent page receives the bare id
+            const bare = id.replace(/^lane\d+__/, '');
+            setPage('agents', { q: bare });
+          }
         }}
-        onEdgeClick={(edgeData) => {
-          if (edgeData?.eventId) onAuditClick(edgeData.eventId);
-        }}
+        onAuditClick={onAuditClick}
+        agentStatus={agentStatus}
+        onCanvasRefresh={onCanvasRefresh}
         fitView
       />
     </div>
@@ -1229,6 +1260,8 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const [timeRange, setTimeRange] = React.useState<TimeRange>('24h');
   const [actorFilter, setActorFilter] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
+  // 'all' | 'only' | 'hide' — chain is "revoked" if any agent in it is active=false
+  const [revokedFilter, setRevokedFilter] = useURLParam('revoked', 'all');
   const [selected, setSelected] = React.useState<Chain | null>(null);
   const [page, setPageNum] = React.useState(0);
   const rowRefs = React.useRef<(HTMLDivElement | null)[]>([]);
@@ -1263,15 +1296,28 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
 
   const { data: exchangeData, loading: loadingExchange, refresh: refreshExchange } = useAPI(exchangeParams);
   const { data: retrieveData, loading: loadingRetrieve, refresh: refreshRetrieve } = useAPI(retrieveParams);
+  // Agent roster for status overlay on canvas (revoked node greyscale).
+  // Cheap: one list call, cached by useAPI.
+  const { data: agentsData, refresh: refreshAgents } = useAPI('/agents?limit=500');
+  const agentStatusMap = React.useMemo(() => {
+    const m = new Map<string, any>();
+    const list = agentsData?.data || (Array.isArray(agentsData) ? agentsData : []);
+    for (const a of list) {
+      const entry = { active: a.active !== false, updated_at: a.updated_at, deactivated_at: a.deactivated_at };
+      if (a.id) m.set(a.id, entry);
+      if (a.client_id) m.set(a.client_id, entry);
+    }
+    return m;
+  }, [agentsData]);
 
-  const refresh = () => { refreshExchange(); refreshRetrieve(); };
+  const refresh = () => { refreshExchange(); refreshRetrieve(); refreshAgents(); };
   usePageActions({ onRefresh: refresh });
 
   React.useEffect(() => {
     try { localStorage.setItem('shark_chains_view', viewMode); } catch {}
   }, [viewMode]);
 
-  React.useEffect(() => { setPageNum(0); }, [timeRange, actorFilter, statusFilter]);
+  React.useEffect(() => { setPageNum(0); }, [timeRange, actorFilter, statusFilter, revokedFilter]);
 
   const allChains = React.useMemo(() => {
     const rawExchange = exchangeData?.items || exchangeData?.audit_logs || exchangeData?.data || (Array.isArray(exchangeData) ? exchangeData : []);
@@ -1280,15 +1326,25 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
     return buildChains(all);
   }, [exchangeData, retrieveData]);
 
+  // A chain is "revoked" if any agent segment has agentStatus.active === false.
+  const isChainRevoked = React.useCallback((chain: Chain) =>
+    chain.segments.some(seg => {
+      if (seg.isUser) return false;
+      const status = agentStatusMap?.get(seg.sub) || agentStatusMap?.get(stripLanePrefix(seg.sub));
+      return status?.active === false;
+    }), [agentStatusMap]);
+
   const filteredChains = React.useMemo(() => {
     return allChains.filter(c => {
       if (actorFilter && !c.rootSub.toLowerCase().includes(actorFilter.toLowerCase()) &&
           !c.segments.some(s => (s.label || s.sub).toLowerCase().includes(actorFilter.toLowerCase()))) {
         return false;
       }
+      if (revokedFilter === 'hide' && isChainRevoked(c)) return false;
+      if (revokedFilter === 'only' && !isChainRevoked(c)) return false;
       return true;
     });
-  }, [allChains, actorFilter]);
+  }, [allChains, actorFilter, revokedFilter, isChainRevoked]);
 
   const loading = loadingExchange || loadingRetrieve;
   const totalPages = Math.ceil(filteredChains.length / PAGE_SIZE);
@@ -1319,8 +1375,8 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
     return () => window.removeEventListener('keydown', handler);
   }, [pageChains, selected]);
 
-  const navigateToAudit = (id: string) => {
-    if (setPage) setPage('audit', { q: id });
+  const navigateToAudit = (id: string, grantId?: string) => {
+    if (setPage) setPage('audit', grantId ? { q: id, grant_id: grantId } : { q: id });
     else window.location.hash = '/audit?q=' + encodeURIComponent(id);
   };
 
@@ -1367,6 +1423,11 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
               value={viewMode}
               onChange={(v: ViewMode) => setViewMode(v)}
               opts={[['list','List'], ['canvas','Canvas']]}
+            />
+            <Seg
+              value={revokedFilter}
+              onChange={(v: string) => setRevokedFilter(v)}
+              opts={[['all','All chains'], ['hide','Active only'], ['only','Revoked only']]}
             />
 
             <div style={{
@@ -1437,6 +1498,8 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
               chains={filteredChains}
               setPage={setPage}
               onAuditClick={navigateToAudit}
+              agentStatus={agentStatusMap}
+              onCanvasRefresh={refresh}
             />
           )}
 
@@ -1464,8 +1527,16 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
                   textAlign: 'center' as const,
                   lineHeight: 1.6,
                 }}>
-                  No delegation chains in the selected window.<br/>
-                  Run shark demo delegation-with-trace.
+                  {revokedFilter === 'only' && allChains.length > 0 ? (
+                    'No revoked chains'
+                  ) : revokedFilter === 'hide' && allChains.length > 0 ? (
+                    'No active chains'
+                  ) : (
+                    <>
+                      No delegation chains in the selected window.<br/>
+                      Run shark demo delegation-with-trace.
+                    </>
+                  )}
                 </span>
               </div>
             </div>
@@ -1610,6 +1681,8 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
           onClose={() => { setSelected(null); setFocusedIdx(-1); }}
           onAuditClick={navigateToAudit}
           onAgentClick={navigateToAgent}
+          agentStatus={agentStatusMap}
+          onCanvasRefresh={refresh}
         />
       )}
     </div>

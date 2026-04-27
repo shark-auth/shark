@@ -117,3 +117,5 @@ admin.key.firstboot
 !.env.example
 .gstack/
 .git-rewrite/
+free-claude-code/
+shark.new

@@ -45,6 +45,7 @@ from .errors import (
 )
 from .http_client import DPoPHTTPClient
 from .magic_link import MagicLinkClient
+from .may_act import MayActClient
 from .mfa import MFAClient, compute_totp
 from .oauth import BulkRevokeResult, OAuthClient, Token, pkce_pair
 from .organizations import OrganizationsClient
@@ -143,6 +144,7 @@ __all__ = [
     "AppsClient",
     "APIKeysClient",
     "AuditClient",
+    "MayActClient",
     "RBACClient",
     "__version__",
 ]

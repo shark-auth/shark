@@ -12,13 +12,12 @@ import { usePageActions } from './useKeyboardShortcuts'
 // flows. No YAML, no read-only "info" sections, no JWT/session mode toggle.
 
 // ─── Section registry ────────────────────────────────────────────────────────
+// System tab — server / org / operator config that's NOT auth-flow specific.
+// Auth-flow policy (sessions, JWT lifetimes, password rules, magic-link, OAuth
+// server, MFA, SSO) lives in the Identity tab.
 const SECTIONS = [
-  { id: 'server',       label: 'Server',         desc: 'Base URL, CORS, port' },
-  { id: 'tokens',       label: 'Sessions & Tokens', desc: 'Cookie + JWT lifetimes, signing key' },
-  { id: 'auth_policy',  label: 'Auth Policy',    desc: 'Password rules, magic links, password reset' },
-  { id: 'oauth_sso',    label: 'OAuth & SSO',    desc: 'OAuth server, SSO connections, MFA enforcement' },
+  { id: 'server',       label: 'Server',         desc: 'Base URL, CORS, port, JWT signing key' },
   { id: 'email',        label: 'Email Delivery', desc: 'Provider, sender, test send' },
-  { id: 'oauth',        label: 'OAuth Providers', desc: 'Per-provider credentials' },
   { id: 'audit',        label: 'Audit & Data',   desc: 'Retention, purge, export' },
   { id: 'maintenance',  label: 'Maintenance',    desc: 'Sessions + audit cleanup' },
 ];
@@ -281,54 +280,6 @@ export function Settings() {
   const [drawer, setDrawer] = React.useState(null);
   const [rotating, setRotating] = React.useState(false);
 
-  // OAuth & SSO section state (moved from Identity Hub — source of truth here)
-  const adminKey = typeof localStorage !== 'undefined' ? localStorage.getItem('shark_admin_key') || '' : '';
-  const authHeaders = { Authorization: `Bearer ${adminKey}`, 'Content-Type': 'application/json' };
-
-  const [ssoConns, setSsoConns] = React.useState([]);
-  const [ssoLoading, setSsoLoading] = React.useState(false);
-  const [ssoTick, setSsoTick] = React.useState(0);
-  const [ssoDrawer, setSsoDrawer] = React.useState(null);
-  const [deletingSSO, setDeletingSSO] = React.useState(null);
-
-  const [deviceCodes, setDeviceCodes] = React.useState([]);
-  const [dcLoading, setDcLoading] = React.useState(false);
-  const [dcTick, setDcTick] = React.useState(0);
-  const [dcActing, setDcActing] = React.useState(null);
-
-  // SSO fetch
-  React.useEffect(() => {
-    setSsoLoading(true);
-    fetch('/api/v1/sso/connections', { headers: authHeaders })
-      .then(r => r.ok ? r.json() : { data: [] })
-      .then(j => { setSsoConns(j?.data || j?.connections || []); setSsoLoading(false); })
-      .catch(() => { setSsoConns([]); setSsoLoading(false); });
-  }, [ssoTick]);
-
-  // Device codes fetch
-  React.useEffect(() => {
-    setDcLoading(true);
-    fetch('/api/v1/admin/oauth/device-codes', { headers: authHeaders })
-      .then(r => r.ok ? r.json() : { data: [] })
-      .then(j => { setDeviceCodes(j?.data || j?.codes || []); setDcLoading(false); })
-      .catch(() => { setDeviceCodes([]); setDcLoading(false); });
-  }, [dcTick]);
-
-  const deleteSSOConn = async (id) => {
-    setDeletingSSO(id);
-    await fetch(`/api/v1/sso/connections/${id}`, { method: 'DELETE', headers: authHeaders }).catch(() => {});
-    setDeletingSSO(null);
-    setSsoDrawer(null);
-    setSsoTick(t => t + 1);
-  };
-
-  const deviceCodeAction = async (userCode, action) => {
-    setDcActing(userCode);
-    await fetch(`/api/v1/admin/oauth/device-codes/${userCode}/${action}`, { method: 'POST', headers: authHeaders }).catch(() => {});
-    setDcActing(null);
-    setDcTick(t => t + 1);
-  };
-
   // Initialize editable form from config payload. Sentinels:
   //  - email.api_key === '********' means "set, masked".
   React.useEffect(() => {
@@ -340,23 +291,6 @@ export function Settings() {
         cors_origins: config.server?.cors_origins ?? config.cors_origins ?? [],
         cors_relaxed: config.server?.cors_relaxed ?? false,
       },
-      auth: {
-        session_lifetime:    config.auth?.session_lifetime || '30d',
-        password_min_length: config.auth?.password_min_length ?? 8,
-      },
-      jwt: {
-        // NO mode toggle. Cookie + JWT both always on.
-        lifetime: config.jwt?.lifetime || config.jwt?.access_token_ttl || '15m',
-      },
-      magic_link: {
-        ttl: config.magic_link?.ttl || '15m',
-      },
-      password_reset: {
-        ttl: config.password_reset?.ttl || '1h',
-      },
-      social: {
-        redirect_url: config.social?.redirect_url || '',
-      },
       email: {
         provider:          config.email?.provider || 'shark',
         api_key:           config.email?.api_key || '',
@@ -367,18 +301,6 @@ export function Settings() {
       audit: {
         retention:        config.audit?.retention || '30d',
         cleanup_interval: config.audit?.cleanup_interval || '1h',
-      },
-      oauth_server: {
-        enabled:                config.oauth_server?.enabled                ?? true,
-        issuer:                 config.oauth_server?.issuer                 ?? '',
-        access_token_lifetime:  config.oauth_server?.access_token_lifetime  ?? '15m',
-        refresh_token_lifetime: config.oauth_server?.refresh_token_lifetime ?? '30d',
-        require_dpop:           config.oauth_server?.require_dpop           ?? false,
-      },
-      mfa: {
-        enforcement:    config.mfa?.enforcement    ?? 'optional',
-        issuer:         config.mfa?.issuer         ?? '',
-        recovery_codes: config.mfa?.recovery_codes ?? 10,
       },
     });
   }, [config]);
@@ -406,11 +328,6 @@ export function Settings() {
         cors_origins: config.server?.cors_origins ?? config.cors_origins ?? [],
         cors_relaxed: config.server?.cors_relaxed ?? false,
       },
-      auth:           { session_lifetime: config.auth?.session_lifetime || '30d', password_min_length: config.auth?.password_min_length ?? 8 },
-      jwt:            { lifetime: config.jwt?.lifetime || config.jwt?.access_token_ttl || '15m' },
-      magic_link:     { ttl: config.magic_link?.ttl || '15m' },
-      password_reset: { ttl: config.password_reset?.ttl || '1h' },
-      social:         { redirect_url: config.social?.redirect_url || '' },
       email:  {
         provider:          config.email?.provider || 'shark',
         api_key:           config.email?.api_key || '',
@@ -421,18 +338,6 @@ export function Settings() {
       audit:  {
         retention: config.audit?.retention || '30d',
         cleanup_interval: config.audit?.cleanup_interval || '1h',
-      },
-      oauth_server: {
-        enabled:                config.oauth_server?.enabled                ?? true,
-        issuer:                 config.oauth_server?.issuer                 ?? '',
-        access_token_lifetime:  config.oauth_server?.access_token_lifetime  ?? '15m',
-        refresh_token_lifetime: config.oauth_server?.refresh_token_lifetime ?? '30d',
-        require_dpop:           config.oauth_server?.require_dpop           ?? false,
-      },
-      mfa: {
-        enforcement:    config.mfa?.enforcement    ?? 'optional',
-        issuer:         config.mfa?.issuer         ?? '',
-        recovery_codes: config.mfa?.recovery_codes ?? 10,
       },
     };
     return JSON.stringify(baseline) !== JSON.stringify(form);
@@ -445,10 +350,6 @@ export function Settings() {
       const payload = deepClone(form);
       // Don't echo the masked sentinel back — backend interprets unchanged.
       if (payload.email?.api_key === '********') delete payload.email.api_key;
-      // Remove empty social.redirect_url to avoid overwriting with blank.
-      if (payload.social?.redirect_url === '') delete payload.social;
-      // Coerce numeric fields
-      if (payload.mfa?.recovery_codes) payload.mfa.recovery_codes = Number(payload.mfa.recovery_codes);
       await API.patch('/admin/config', payload);
       toast.success('Configuration saved');
       refresh();
@@ -513,8 +414,11 @@ export function Settings() {
         padding: '12px 0',
         overflowY: 'auto',
       }}>
-        <div style={{ padding: '0 16px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', fontWeight: 600 }}>
-          Settings
+        <div style={{ padding: '0 16px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', fontWeight: 600 }}>
+          System
+        </div>
+        <div style={{ padding: '0 16px 10px', fontSize: 10.5, lineHeight: 1.5, color: 'var(--fg-muted)' }}>
+          Server, email, audit, operator controls. Auth-flow policy lives in <a href="/admin/auth" style={{ color: 'var(--fg)' }}>Identity</a>.
         </div>
         {SECTIONS.map(s => {
           const on = active === s.id;
@@ -562,7 +466,7 @@ export function Settings() {
         {/* Sections — anchored scroll */}
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 80 }}>
           {/* Server */}
-          <Section id="server" title="Server" desc="HTTP listener, public base URL, allowed origins" onSection={setActive}>
+          <Section id="server" title="Server" desc="HTTP listener, public base URL, CORS, JWT signing key" onSection={setActive}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <Field label="Base URL" hint="Public URL clients use to reach this server" span={2}>
                 <Input value={form.server.base_url}
@@ -596,21 +500,7 @@ export function Settings() {
                   </span>
                 </div>
               </Field>
-            </div>
-          </Section>
-
-          {/* Sessions & Tokens — single section. Cookie + JWT both ON, no mode toggle. */}
-          <Section id="tokens" title="Sessions & Tokens" desc="Cookie sessions and JWT access tokens are both always active. Configure lifetimes and rotate the signing key." onSection={setActive}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              <Field label="Cookie session lifetime" hint="How long a sign-in remains valid · accepts 30m, 24h, 30d">
-                <Input value={form.auth.session_lifetime} mono
-                  onChange={(v) => set('auth.session_lifetime', v)} placeholder="30d" width={140}/>
-              </Field>
-              <Field label="JWT access token lifetime" hint="Short-lived bearer tokens for SDKs and APIs">
-                <Input value={form.jwt.lifetime} mono
-                  onChange={(v) => set('jwt.lifetime', v)} placeholder="15m" width={140}/>
-              </Field>
-              <Field label="JWT signing key" hint={`${activeKeys} active key${activeKeys === 1 ? '' : 's'} · keys retire after 2× access TTL`} span={2}>
+              <Field label="JWT signing key" hint={`${activeKeys} active key${activeKeys === 1 ? '' : 's'} · keys retire after 2× access TTL · token lifetimes live in Identity → Sessions & Tokens`} span={2}>
                 <div className="row" style={{ gap: 8 }}>
                   <div style={{
                     flex: 1, height: 28, padding: '0 10px',
@@ -628,206 +518,6 @@ export function Settings() {
                   </button>
                 </div>
               </Field>
-            </div>
-          </Section>
-
-          {/* Auth Policy */}
-          <Section id="auth_policy" title="Auth Policy" desc="Password requirements, magic-link expiry, password-reset window" onSection={setActive}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              <Field label="Min password length" hint="Characters required for new passwords (min 6)">
-                <Input value={form.auth.password_min_length} type="number" mono
-                  onChange={(v) => set('auth.password_min_length', v)} placeholder="8" width={100}/>
-              </Field>
-              <Field label="Magic-link TTL" hint="How long a magic-link sign-in link stays valid">
-                <Input value={form.magic_link.ttl} mono
-                  onChange={(v) => set('magic_link.ttl', v)} placeholder="15m" width={120}/>
-              </Field>
-              <Field label="Password-reset TTL" hint="How long a reset-password link stays valid">
-                <Input value={form.password_reset.ttl} mono
-                  onChange={(v) => set('password_reset.ttl', v)} placeholder="1h" width={120}/>
-              </Field>
-            </div>
-          </Section>
-
-          {/* OAuth & SSO — moved from Identity Hub. Source of truth for server-level OAuth config. */}
-          <Section id="oauth_sso" title="OAuth & SSO" desc="OAuth authorization server config, SSO connections, and MFA enforcement policy" onSection={setActive}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-              {/* OAuth Server sub-section */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em', marginBottom: 10, textTransform: 'uppercase' }}>
-                  OAuth Authorization Server
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <Field label="Enabled">
-                    <Select value={form.oauth_server.enabled ? 'true' : 'false'}
-                      onChange={v => set('oauth_server.enabled', v === 'true')}
-                      options={[{ v: 'true', l: 'On' }, { v: 'false', l: 'Off' }]}
-                      width={140}/>
-                  </Field>
-                  <Field label="Require DPoP" hint="Enforce Demonstrating Proof of Possession on all tokens">
-                    <Select value={form.oauth_server.require_dpop ? 'true' : 'false'}
-                      onChange={v => set('oauth_server.require_dpop', v === 'true')}
-                      options={[{ v: 'false', l: 'Off' }, { v: 'true', l: 'Required' }]}
-                      width={140}/>
-                  </Field>
-                  <Field label="Issuer URL" hint="Authorization server issuer (iss claim)" span={2}>
-                    <Input value={form.oauth_server.issuer} mono
-                      onChange={v => set('oauth_server.issuer', v)}
-                      placeholder="https://auth.example.com"/>
-                  </Field>
-                  <Field label="Access token lifetime">
-                    <Input value={form.oauth_server.access_token_lifetime} mono
-                      onChange={v => set('oauth_server.access_token_lifetime', v)}
-                      placeholder="15m" width={140}/>
-                  </Field>
-                  <Field label="Refresh token lifetime">
-                    <Input value={form.oauth_server.refresh_token_lifetime} mono
-                      onChange={v => set('oauth_server.refresh_token_lifetime', v)}
-                      placeholder="30d" width={140}/>
-                  </Field>
-                </div>
-
-                {/* Device code queue */}
-                <div style={{ marginTop: 14 }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
-                  }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Device Code Queue</div>
-                    <div style={{ flex: 1 }}/>
-                    <button className="btn ghost sm" onClick={() => setDcTick(t => t + 1)}>
-                      <Icon.Refresh width={11} height={11}/>
-                    </button>
-                  </div>
-                  {dcLoading ? (
-                    <span className="faint" style={{ fontSize: 11 }}>Loading…</span>
-                  ) : deviceCodes.length === 0 ? (
-                    <span className="faint" style={{ fontSize: 11 }}>No pending device codes</span>
-                  ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>User code</th>
-                          <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Client</th>
-                          <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Scopes</th>
-                          <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'right' }}>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {deviceCodes.map(dc => (
-                          <tr key={dc.user_code}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                          >
-                            <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="mono" style={{ fontSize: 11 }}>{dc.user_code}</span></td>
-                            <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="faint" style={{ fontSize: 11 }}>{dc.client_id ? dc.client_id.slice(0, 18) + (dc.client_id.length > 18 ? '…' : '') : '—'}</span></td>
-                            <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="faint" style={{ fontSize: 11 }}>{Array.isArray(dc.scopes) ? dc.scopes.join(' ') : (dc.scope || '—')}</span></td>
-                            <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)', textAlign: 'right' }}>
-                              <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                                <button className="btn ghost sm" disabled={dcActing === dc.user_code}
-                                  onClick={() => deviceCodeAction(dc.user_code, 'approve')}>Approve</button>
-                                <button className="btn ghost sm" style={{ color: 'var(--danger)' }}
-                                  disabled={dcActing === dc.user_code}
-                                  onClick={() => deviceCodeAction(dc.user_code, 'deny')}>Deny</button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-
-              {/* MFA sub-section */}
-              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em', marginBottom: 10, textTransform: 'uppercase' }}>
-                  MFA Enforcement
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <Field label="Enforcement" hint="Whether MFA is required for admin users">
-                    <Select value={form.mfa.enforcement}
-                      onChange={v => set('mfa.enforcement', v)}
-                      options={[
-                        { v: 'off',      l: 'Off' },
-                        { v: 'optional', l: 'Optional' },
-                        { v: 'required', l: 'Required' },
-                      ]} width={160}/>
-                  </Field>
-                  <Field label="Recovery code count" hint="Backup codes per user">
-                    <Input value={form.mfa.recovery_codes} type="number" mono
-                      onChange={v => set('mfa.recovery_codes', v)} placeholder="10" width={80}/>
-                  </Field>
-                  <Field label="TOTP issuer" hint="Shown in authenticator apps" span={2}>
-                    <Input value={form.mfa.issuer}
-                      onChange={v => set('mfa.issuer', v)} placeholder="MyApp"/>
-                  </Field>
-                </div>
-              </div>
-
-              {/* SSO Connections sub-section */}
-              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>SSO Connections</div>
-                  <div style={{ flex: 1 }}/>
-                  <button className="btn ghost sm" onClick={() => setSsoTick(t => t + 1)}>
-                    <Icon.Refresh width={11} height={11}/>
-                    Refresh
-                  </button>
-                </div>
-                {ssoLoading ? (
-                  <span className="faint" style={{ fontSize: 11 }}>Loading…</span>
-                ) : ssoConns.length === 0 ? (
-                  <div>
-                    <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>No SSO connections configured.</div>
-                    <div className="faint" style={{ fontSize: 11 }}>
-                      Create via Admin API: <span className="mono" style={{ fontSize: 10.5 }}>POST /api/v1/admin/sso/connections</span>
-                    </div>
-                  </div>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Name / ID</th>
-                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Type</th>
-                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Domain</th>
-                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'left' }}>Status</th>
-                        <th style={{ padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-1)', textAlign: 'right' }}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ssoConns.map(conn => (
-                        <tr key={conn.id}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => setSsoDrawer(conn)}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}>
-                            <div>{conn.name || conn.id}</div>
-                            <div className="mono faint" style={{ fontSize: 10 }}>{conn.id ? conn.id.slice(0, 24) : ''}</div>
-                          </td>
-                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="mono faint" style={{ fontSize: 11 }}>{conn.type || conn.provider || '—'}</span></td>
-                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}><span className="faint" style={{ fontSize: 11 }}>{conn.domain || '—'}</span></td>
-                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)' }}>
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center',
-                              height: 16, padding: '0 5px', borderRadius: 3,
-                              fontSize: 10, fontWeight: 500,
-                              background: 'var(--surface-2)',
-                              color: conn.enabled !== false ? 'var(--success)' : 'var(--fg-dim)',
-                              border: '1px solid var(--hairline)',
-                            }}>{conn.enabled !== false ? 'active' : 'disabled'}</span>
-                          </td>
-                          <td style={{ padding: '7px 14px', fontSize: 12.5, borderBottom: '1px solid var(--hairline)', textAlign: 'right' }}>
-                            <button className="btn ghost sm" onClick={e => { e.stopPropagation(); setSsoDrawer(conn); }}>Inspect</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
             </div>
           </Section>
 
@@ -894,43 +584,6 @@ export function Settings() {
                   <span className="faint" style={{ fontSize: 11 }}>Save changes first if you edited provider settings</span>
                 </div>
               </Field>
-            </div>
-          </Section>
-
-          {/* OAuth Providers — quick-link to Identity Hub for social provider credentials */}
-          <Section id="oauth" title="OAuth Providers" desc="Social provider credentials (Google, GitHub, Apple, Discord) are configured in Identity Hub" onSection={setActive}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <Field label="OAuth redirect URL" hint="Where users land after completing OAuth — leave blank to use server default">
-                <Input value={form.social.redirect_url} mono
-                  onChange={(v) => set('social.redirect_url', v)} placeholder="/dashboard"/>
-              </Field>
-              <div style={{
-                padding: 14,
-                border: '1px solid var(--hairline)',
-                borderRadius: 5,
-                background: 'var(--surface-1)',
-                display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center',
-              }}>
-                <div>
-                  <div style={{ fontSize: 13, color: 'var(--fg)', marginBottom: 4 }}>
-                    {(config.oauth_providers || []).length} provider{(config.oauth_providers || []).length === 1 ? '' : 's'} configured
-                  </div>
-                  <div className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-                    Google, GitHub, Apple, Discord — client IDs, secrets, and per-provider scopes are managed in Identity Hub.
-                  </div>
-                  <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
-                    {(config.oauth_providers || []).map((p) => (
-                      <span key={p} className="chip" style={{ height: 18 }}>{p}</span>
-                    ))}
-                    {(!config.oauth_providers || config.oauth_providers.length === 0) && (
-                      <span className="faint" style={{ fontSize: 11 }}>No providers active</span>
-                    )}
-                  </div>
-                </div>
-                <a href="/admin/identity-hub" className="btn sm" style={{ textDecoration: 'none' }}>
-                  Open Identity Hub →
-                </a>
-              </div>
             </div>
           </Section>
 
@@ -1110,34 +763,6 @@ export function Settings() {
       )}
       {drawer === 'rotate_key' && (
         <RotateKeyDrawer onClose={() => setDrawer(null)}/>
-      )}
-
-      {/* SSO inspect drawer — from OAuth & SSO section */}
-      {ssoDrawer && (
-        <Drawer
-          title={ssoDrawer.name || 'SSO Connection'}
-          subtitle={ssoDrawer.type || ssoDrawer.provider || ''}
-          onClose={() => setSsoDrawer(null)}
-          footer={(
-            <>
-              <button className="btn sm ghost" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                disabled={deletingSSO === ssoDrawer.id}
-                onClick={() => deleteSSOConn(ssoDrawer.id)}>
-                {deletingSSO === ssoDrawer.id ? 'Deleting…' : 'Delete connection'}
-              </button>
-              <button className="btn sm ghost" onClick={() => setSsoDrawer(null)}>Close</button>
-            </>
-          )}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {Object.entries(ssoDrawer).map(([k, v]) => (
-              <div key={k}>
-                <div style={{ fontSize: 10, color: 'var(--fg-muted)', fontWeight: 500, marginBottom: 2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{k}</div>
-                <span className="mono" style={{ fontSize: 11, wordBreak: 'break-all', color: 'var(--fg)' }}>{String(v)}</span>
-              </div>
-            ))}
-          </div>
-        </Drawer>
       )}
     </div>
   );

@@ -213,6 +213,14 @@ export type {
   AuditClientOptions,
 } from "./audit.js";
 
+export { MayActClient } from "./mayAct.js";
+export type {
+  MayActGrant,
+  MayActFindOptions,
+  MayActCreateInput,
+  MayActClientOptions,
+} from "./mayAct.js";
+
 export { RbacClient } from "./rbac.js";
 export type {
   Role,

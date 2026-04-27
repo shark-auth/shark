@@ -21,7 +21,8 @@ export const NAV = [
     { id: 'consents', label: 'Consents', icon: 'Consent' },
     { id: 'tokens', label: 'Tokens', icon: 'Token' },
     { id: 'vault', label: 'Vault', icon: 'Vault' },
-    { id: 'device-flow', label: 'Device Flow', icon: 'Device', live: true },
+    // device-flow hidden for v0.1 — not battle-tested. Component still mounted
+    // for direct nav (?page=device-flow); just absent from sidebar.
   ]},
   { group: 'IDENTITY', items: [
     { id: 'auth', label: 'Identity', icon: 'Lock' },

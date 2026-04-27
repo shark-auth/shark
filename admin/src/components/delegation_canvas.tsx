@@ -16,6 +16,7 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   MarkerType,
   Handle,
   Position,
@@ -24,6 +25,8 @@ import {
   BaseEdge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { API } from './api'
+import { useToast } from './toast'
 
 // ─── keyframe animations ──────────────────────────────────────────────────────
 
@@ -186,6 +189,17 @@ const CANVAS_OVERRIDES = `
 `
 
 // ─── initials helper ─────────────────────────────────────────────────────────
+
+/**
+ * stripLanePrefix — buildGraph in delegation_chains scopes node ids to a lane
+ * (lane0__sub, lane1__sub) so distinct chains stay disjoint on the aggregate
+ * canvas. The lane is a render-only concern; never show it to operators or
+ * pass it to APIs.
+ */
+export function stripLanePrefix(id: string): string {
+  if (!id) return id
+  return id.replace(/^lane\d+__/, '')
+}
 
 /**
  * getInitials — extract 1-2 uppercase letters from an email or display name.
@@ -413,12 +427,13 @@ function HumanNode({ data, selected }: { data: any; selected?: boolean }) {
  * Visually distinct from HumanNode (circular accent border).
  */
 function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
+  const revoked = data.revoked === true;
   return (
     <div style={{
       width: 80,
       height: 80,
       background: selected ? 'var(--surface-2)' : 'rgba(94, 234, 212, 0.02)',
-      border: `1px solid ${selected ? 'var(--fg)' : 'var(--hairline-strong)'}`,
+      border: `1px solid ${selected ? 'var(--fg)' : revoked ? 'var(--danger, #ef4444)' : 'var(--hairline-strong)'}`,
       borderRadius: 6,
       display: 'flex',
       flexDirection: 'column',
@@ -427,12 +442,15 @@ function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
       padding: '8px 6px',
       cursor: 'pointer',
       position: 'relative',
-      transition: 'border-color 100ms, box-shadow 100ms, background 100ms',
+      transition: 'border-color 100ms, box-shadow 100ms, background 100ms, filter 200ms ease',
       gap: 4,
       boxShadow: selected
         ? '0 0 0 1px var(--fg), 0 4px 16px rgba(0,0,0,0.45)'
         : '0 2px 8px rgba(0,0,0,0.28)',
       animation: 'fade-in 160ms ease-out',
+      // Revoked: desaturate + dim. Border goes red. REVOKED stripe overlays.
+      filter: revoked ? 'grayscale(1) brightness(0.7)' : 'none',
+      opacity: revoked ? 0.78 : 1,
     }}
       onMouseEnter={e => {
         if (!selected) {
@@ -449,6 +467,34 @@ function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
     >
       <Handle type="target" position={Position.Left} style={{ left: -3 }} />
       <Handle type="source" position={Position.Right} style={{ right: -3 }} />
+
+      {/* REVOKED diagonal stripe — emotionally legible kill mark */}
+      {revoked && (
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          pointerEvents: 'none',
+          overflow: 'hidden',
+          borderRadius: 6,
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: '50%', left: '-15%',
+            width: '130%',
+            transform: 'translateY(-50%) rotate(-18deg)',
+            background: 'rgba(239, 68, 68, 0.85)',
+            color: '#fff',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.18em',
+            textAlign: 'center',
+            padding: '2px 0',
+            textTransform: 'uppercase',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+          }}>revoked</div>
+        </div>
+      )}
 
       {/* </> glyph — top-left corner indicator */}
       <span style={{
@@ -533,13 +579,16 @@ function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
  * CenterAgentNode — ego-graph focal node, slightly larger, full-brightness border.
  */
 function CenterAgentNode({ data, selected }: { data: any; selected?: boolean }) {
+  const revoked = data.revoked === true;
   return (
     <div style={{
       width: 88,
       height: 88,
       background: 'var(--surface-2)',
-      border: '1.5px solid var(--fg)',
+      border: `1.5px solid ${revoked ? 'var(--danger, #ef4444)' : 'var(--fg)'}`,
       borderRadius: 8,
+      filter: revoked ? 'grayscale(1) brightness(0.7)' : 'none',
+      opacity: revoked ? 0.85 : 1,
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -555,6 +604,22 @@ function CenterAgentNode({ data, selected }: { data: any; selected?: boolean }) 
       <Handle type="source" position={Position.Bottom} style={{ bottom: -3 }} />
       <Handle type="target" position={Position.Left} style={{ left: -3 }} />
       <Handle type="source" position={Position.Right} style={{ right: -3 }} />
+
+      {revoked && (
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          overflow: 'hidden', borderRadius: 8,
+        }}>
+          <div style={{
+            position: 'absolute', top: '50%', left: '-15%', width: '130%',
+            transform: 'translateY(-50%) rotate(-18deg)',
+            background: 'rgba(239, 68, 68, 0.85)', color: '#fff',
+            fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+            letterSpacing: '0.2em', textAlign: 'center', padding: '3px 0',
+            textTransform: 'uppercase', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+          }}>revoked</div>
+        </div>
+      )}
 
       <span style={{
         fontFamily: 'var(--font-mono)',
@@ -995,11 +1060,14 @@ const DRAWER_SLIDE_IN = `
   }
 `
 
-function NodeDrawer({ node, rfNodes, rfEdges, onClose }: {
+function NodeDrawer({ node, rfNodes, rfEdges, onClose, onNavigate, onCanvasRefresh, markRevoked }: {
   node: { id: string; data: any } | null
   rfNodes: any[]
   rfEdges: any[]
   onClose: () => void
+  onNavigate?: (target: 'agent' | 'user', id: string) => void
+  onCanvasRefresh?: () => void
+  markRevoked?: (ids: string[]) => void
 }) {
   // Close on Escape
   React.useEffect(() => {
@@ -1073,7 +1141,7 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose }: {
             letterSpacing: '0.08em',
             color: 'var(--fg-dim)',
           }}>
-            {isHuman ? 'human · ' : 'agent · '}{node.id.slice(0, 12)}
+            {isHuman ? 'human · ' : 'agent · '}{stripLanePrefix(node.id).slice(0, 12)}
           </span>
           <button
             onClick={onClose}
@@ -1093,7 +1161,7 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose }: {
 
           {isHuman ? (
             // ── Human fields ──────────────────────────────────────────────────
-            <HumanDrawerFields node={node} />
+            <HumanDrawerFields node={node} onNavigate={onNavigate} />
           ) : (
             // ── Agent fields ──────────────────────────────────────────────────
             <AgentDrawerFields
@@ -1106,6 +1174,10 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose }: {
               scopeFrom={scopeFrom}
               scopeTo={scopeTo}
               rfEdges={rfEdges}
+              onNavigate={onNavigate}
+              onClose={onClose}
+              onCanvasRefresh={onCanvasRefresh}
+              markRevoked={markRevoked}
             />
           )}
 
@@ -1133,15 +1205,253 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose }: {
   )
 }
 
+// ── Edge drawer ───────────────────────────────────────────────────────────────
+// Slides in for delegation edges. Shows from/to, hop timestamp, token type,
+// scope delta (granted_scope vs subject_scope), and audit-event link.
+// Backend doesn't yet expose grant-level fields (max_hops, expires_at, revoked,
+// grant_id) on token-exchange events; surfaced as "—" until /api/v1/may-act
+// joins are added (see follow-up note in coverage matrix).
+
+function EdgeDrawer({ edge, rfNodes, onClose, onAuditClick, onCanvasRefresh }: {
+  edge: { id: string; source: string; target: string; data: any } | null
+  rfNodes: any[]
+  onClose: () => void
+  onAuditClick?: (eventId: string, grantId?: string) => void
+  onCanvasRefresh?: () => void
+}) {
+  React.useEffect(() => {
+    if (!edge) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [edge, onClose])
+
+  // Fetch matching may_act grants for this edge. Pick most recent un-revoked,
+  // else most recent overall. Falls back to "no grant correlated" when empty.
+  const [grant, setGrant] = React.useState<any>(null)
+  const [grantLoading, setGrantLoading] = React.useState(false)
+  const [revokeBusy, setRevokeBusy] = React.useState(false)
+  const toast = useToast()
+
+  React.useEffect(() => {
+    if (!edge) { setGrant(null); return }
+    let cancelled = false
+    setGrantLoading(true)
+    const qs = `from_id=${encodeURIComponent(edge.source)}&to_id=${encodeURIComponent(edge.target)}&include_revoked=true`
+    API.get(`/admin/may-act?${qs}`)
+      .then((d: any) => {
+        if (cancelled) return
+        const list: any[] = d?.grants || []
+        const live = list.find(g => !g.revoked_at)
+        setGrant(live || list[0] || null)
+      })
+      .catch(() => { if (!cancelled) setGrant(null) })
+      .finally(() => { if (!cancelled) setGrantLoading(false) })
+    return () => { cancelled = true }
+  }, [edge?.source, edge?.target])
+
+  if (!edge) return null
+
+  const d = edge.data || {}
+  const fromNode = rfNodes.find(n => n.id === edge.source)
+  const toNode = rfNodes.find(n => n.id === edge.target)
+  const fromLabel = fromNode?.data?.label || edge.source
+  const toLabel = toNode?.data?.label || edge.target
+  const tsRaw = (d.label || '').match(/· (.+)$/)?.[1] || ''
+  const isActive = !!d.isActive
+  const tokenType = (d.label || '').includes('token_exchange') ? 'token_exchange' : '—'
+
+  const scopeFrom: string[] | undefined = d.scopeFrom
+  const scopeTo: string[] | undefined = d.scopeTo
+  const dropped = scopeFrom && scopeTo ? scopeFrom.filter(s => !scopeTo.includes(s)) : []
+
+  const auditHref = d.eventId ? `/admin/audit?q=${encodeURIComponent(d.eventId)}` : null
+
+  return (
+    <>
+      <style>{DRAWER_SLIDE_IN}</style>
+      <div
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.18)' }}
+        data-testid="edge-drawer-backdrop"
+      />
+      <div
+        onClick={e => e.stopPropagation()}
+        data-testid="edge-drawer"
+        style={{
+          position: 'absolute', top: 0, right: 0, bottom: 0,
+          width: 400, maxWidth: '92%', zIndex: 21,
+          background: 'var(--surface-0)',
+          borderLeft: '1px solid var(--hairline)',
+          display: 'flex', flexDirection: 'column',
+          animation: 'drawerSlideIn 200ms ease-out',
+          overflowY: 'auto',
+        }}
+      >
+        <div style={{
+          padding: '12px 14px 10px',
+          borderBottom: '1px solid var(--hairline)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10,
+            textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)',
+          }}>
+            delegation · {isActive ? 'active hop' : 'historical'}
+          </span>
+          <button
+            onClick={onClose}
+            data-testid="edge-drawer-close"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--fg-dim)', fontSize: 16, lineHeight: 1,
+              padding: '2px 4px', fontFamily: 'var(--font-mono)',
+            }}
+            title="Close (Esc)"
+          >✕</button>
+        </div>
+
+        <div style={{ flex: 1, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <DrawerField label="From" value={fromLabel} />
+          <DrawerField label="From id" value={edge.source} mono />
+          <DrawerField label="To" value={toLabel} />
+          <DrawerField label="To id" value={edge.target} mono />
+          <DrawerField label="Token type" value={tokenType} mono />
+          <DrawerField label="Hop timestamp" value={tsRaw || '—'} />
+
+          {/* Scope delta */}
+          <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+            <div style={{ ...drawerLabelStyle, marginBottom: 8 }}>Scope</div>
+            {scopeFrom || scopeTo ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {scopeFrom && <DrawerField label="Subject scope" value={scopeFrom.join(', ')} mono />}
+                {scopeTo && <DrawerField label="Granted scope" value={scopeTo.join(', ')} mono />}
+                {dropped.length > 0 && (
+                  <div>
+                    <div style={drawerLabelStyle}>Dropped</div>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 10,
+                      color: 'var(--danger, #ef4444)', wordBreak: 'break-all', lineHeight: 1.45,
+                    }}>{dropped.join(', ')}</div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', opacity: 0.55 }}>
+                No scope data for this hop.
+              </span>
+            )}
+          </div>
+
+          {/* Grant fields — real data from /admin/may-act */}
+          <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+            <div style={{ ...drawerLabelStyle, marginBottom: 8 }}>Delegation grant</div>
+            {grantLoading ? (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', opacity: 0.55 }}>
+                Loading grant…
+              </span>
+            ) : grant ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <DrawerField label="grant_id" value={grant.id} mono />
+                <DrawerField label="max_hops" value={String(grant.max_hops ?? 1)} />
+                <DrawerField
+                  label="expires_at"
+                  value={grant.expires_at ? new Date(grant.expires_at).toLocaleString() : 'never'}
+                />
+                <DrawerField
+                  label="revoked"
+                  value={grant.revoked_at ? new Date(grant.revoked_at).toLocaleString() : '—'}
+                />
+                {Array.isArray(grant.scopes) && grant.scopes.length > 0 && (
+                  <DrawerField label="scopes" value={grant.scopes.join(', ')} mono />
+                )}
+                <button
+                  data-testid="revoke-grant-btn"
+                  disabled={!!grant.revoked_at || revokeBusy}
+                  onClick={async () => {
+                    if (!grant?.id) return
+                    if (!confirm(`Revoke grant ${grant.id}?\n\nFuture token-exchange via this grant will be denied. This cannot be undone.`)) return
+                    setRevokeBusy(true)
+                    try {
+                      await API.del('/admin/may-act/' + encodeURIComponent(grant.id))
+                      toast?.success?.(`Grant revoked.`)
+                      onClose()
+                      onCanvasRefresh?.()
+                    } catch (err: any) {
+                      console.error('revoke grant failed', err)
+                      toast?.error?.(`Revoke failed: ${err?.message || err}`)
+                    } finally {
+                      setRevokeBusy(false)
+                    }
+                  }}
+                  style={{
+                    marginTop: 6, alignSelf: 'flex-start',
+                    fontFamily: 'var(--font-mono)', fontSize: 10,
+                    padding: '4px 10px',
+                    background: grant.revoked_at ? 'var(--surface-1)' : 'var(--surface-0)',
+                    color: grant.revoked_at ? 'var(--fg-dim)' : 'var(--fg)',
+                    border: '1px solid var(--hairline)',
+                    cursor: grant.revoked_at ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {grant.revoked_at ? 'Already revoked' : (revokeBusy ? 'Revoking…' : 'Revoke this grant')}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <DrawerField label="max_hops" value="—" />
+                <DrawerField label="expires_at" value="—" />
+                <DrawerField label="revoked" value="—" />
+                <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--fg-dim)', opacity: 0.55, lineHeight: 1.5 }}>
+                  No may_act grant found for this edge.
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Audit link — pass grant_id when known so the audit page filters too */}
+          {auditHref && (
+            <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+              <a
+                href={auditHref}
+                data-testid="edge-drawer-audit-link"
+                onClick={e => {
+                  if (onAuditClick && d.eventId) {
+                    e.preventDefault()
+                    onAuditClick(d.eventId, grant?.id)
+                  }
+                }}
+                style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11,
+                  color: 'var(--fg-dim)', textDecoration: 'none',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg-dim)')}
+              >
+                View audit →
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ── Human drawer fields ───────────────────────────────────────────────────────
 
-function HumanDrawerFields({ node }: { node: { id: string; data: any } }) {
+function HumanDrawerFields({ node, onNavigate }: { node: { id: string; data: any }; onNavigate?: (target: 'agent' | 'user', id: string) => void }) {
   const d = node.data || {}
+  // Lead with Name → ID → Email (only when truly email-shaped). Don't fake an
+  // email by falling back to label — label is often an agent_id for service-mode.
+  const realEmail = typeof d.email === 'string' && d.email.includes('@') ? d.email : null
   return (
     <div data-testid="human-drawer-fields" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <DrawerField label="Name" value={d.label || d.name || '—'} />
-      <DrawerField label="Email" value={d.email || d.label || '—'} />
-      <DrawerField label="ID" value={node.id} mono />
+      <DrawerField label="ID" value={stripLanePrefix(node.id)} mono />
+      {realEmail && <DrawerField label="Email" value={realEmail} />}
       <DrawerField label="Signed up" value={d.created_at ? new Date(d.created_at).toLocaleDateString() : '—'} />
 
       {/* Role chips */}
@@ -1179,10 +1489,13 @@ function HumanDrawerFields({ node }: { node: { id: string; data: any } }) {
 
       <DrawerField label="Recent sessions" value={d.sessionCount != null ? String(d.sessionCount) : '—'} />
 
-      {/* View user link */}
+      {/* View user link — uses in-app router when wired, hash fallback otherwise */}
       <a
         href={`/admin/users?id=${encodeURIComponent(node.id)}`}
         data-testid="human-drawer-user-link"
+        onClick={e => {
+          if (onNavigate) { e.preventDefault(); onNavigate('user', node.id); }
+        }}
         style={{
           fontFamily: 'var(--font-mono)', fontSize: 11,
           color: 'var(--fg-dim)', textDecoration: 'none',
@@ -1215,7 +1528,7 @@ function getDescendants(nodeId: string, rfEdges: any[]): string[] {
   return Array.from(visited)
 }
 
-function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs, scopeFrom, scopeTo, rfEdges }: {
+function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs, scopeFrom, scopeTo, rfEdges, onNavigate, onClose, onCanvasRefresh, markRevoked }: {
   node: { id: string; data: any }
   chainPos: number
   prevHop: any
@@ -1225,10 +1538,18 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
   scopeFrom?: string[]
   scopeTo?: string[]
   rfEdges?: any[]
+  onNavigate?: (target: 'agent' | 'user', id: string) => void
+  onClose?: () => void
+  onCanvasRefresh?: () => void
+  markRevoked?: (ids: string[]) => void
 }) {
   const d = node.data || {}
-  const status = d.status || d.active === false ? 'inactive' : 'active'
+  const toast = useToast()
+  // d.revoked is set by canvas when agentStatus.active === false OR fresh kill.
+  const isRevoked = d.revoked === true || d.active === false
+  const status = isRevoked ? 'inactive' : 'active'
   const statusColor = status === 'active' ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'
+  const revokedAt = d.revoked_at
 
   // Scope delta from inbound edge data (subject_scope / granted_scope in audit metadata).
   const inherited = scopeFrom || (d.scopes ? (Array.isArray(d.scopes) ? d.scopes : d.scopes.split(' ').filter(Boolean)) : null)
@@ -1242,33 +1563,57 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
   )
 
   const revokeAgent = async (id: string) => {
-    if (!confirm(`Revoke agent ${id}? This action cannot be undone.`)) return
+    const label = d.label || id
+    // Strip lane prefix before calling the API — the prefix is render-only.
+    const apiId = stripLanePrefix(id)
+    if (!confirm(`Revoke agent ${label}?\n\nAll outstanding tokens will be revoked. This cannot be undone.`)) return
     try {
-      await fetch(`/api/v1/agents/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    } catch (err) {
+      await API.del(`/agents/${encodeURIComponent(apiId)}`)
+    } catch (err: any) {
       console.error('revoke failed', err)
+      toast?.error?.(`Revoke failed: ${err?.message || err}`)
+      return
     }
-    // Trigger page refresh to refetch chain
-    window.location.reload()
+    // Optimistic: grey the node immediately. Map both lane-prefixed id and
+    // canonical id + client_id so the canvas picks it up regardless of key.
+    const cid = d.client_id || d.clientId
+    markRevoked?.([id, apiId, cid].filter(Boolean) as string[])
+    toast?.success?.(`Agent ${label} revoked. Tokens revoked.`)
+    if (typeof onCanvasRefresh === 'function') onCanvasRefresh()
+    if (typeof onClose === 'function') onClose()
   }
 
   const revokeBranch = async () => {
     const targets = [node.id, ...descendants]
-    if (!confirm(`Revoke ${targets.length} agent(s) in this branch? This cannot be undone.`)) return
-    try {
-      await Promise.all(targets.map(id =>
-        fetch(`/api/v1/agents/${encodeURIComponent(id)}`, { method: 'DELETE' })
-      ))
-    } catch (err) {
-      console.error('branch revoke failed', err)
+    if (!confirm(`Revoke ${targets.length} agent(s) in this branch?\n\nAll outstanding tokens will be revoked. This cannot be undone.`)) return
+    const results = await Promise.allSettled(
+      // Strip lane prefix per id — prefix is render-only.
+      targets.map(id => API.del(`/agents/${encodeURIComponent(stripLanePrefix(id))}`))
+    )
+    const ok = results.filter(r => r.status === 'fulfilled').length
+    const failed = results.length - ok
+    // Mark non-failed targets as revoked (optimistic). Include both forms so
+    // the canvas matches regardless of which key the node uses.
+    const succeeded = targets.filter((_, i) => results[i].status === 'fulfilled')
+    const succeededCanonical = succeeded.map(stripLanePrefix)
+    markRevoked?.([...succeeded, ...succeededCanonical])
+    if (failed > 0) {
+      console.error('branch revoke partial failure', results)
+      toast?.error?.(`Revoked ${ok} of ${targets.length} agents. ${failed} failed.`)
+    } else {
+      toast?.success?.(`Branch revoked. ${ok} agent${ok !== 1 ? 's' : ''} killed.`)
     }
-    window.location.reload()
+    if (typeof onCanvasRefresh === 'function') onCanvasRefresh()
+    if (typeof onClose === 'function') onClose()
   }
 
   return (
     <div data-testid="agent-drawer-fields" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <DrawerField label="Name" value={d.label || d.name || '—'} />
-      <DrawerField label="client_id" value={d.client_id || d.clientId || node.id} mono />
+      <DrawerField label="ID" value={stripLanePrefix(node.id)} mono />
+      {(d.client_id || d.clientId) && (d.client_id || d.clientId) !== stripLanePrefix(node.id) && (
+        <DrawerField label="client_id" value={d.client_id || d.clientId} mono />
+      )}
       {d.jkt && <DrawerField label="DPoP jkt" value={d.jkt} mono />}
 
       {/* Status — color-coded (only place color is used per .impeccable.md) */}
@@ -1278,6 +1623,10 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
           {status}
         </span>
       </div>
+
+      {revokedAt && (
+        <DrawerField label="Revoked at" value={new Date(revokedAt).toLocaleString()} />
+      )}
 
       {d.created_at && <DrawerField label="Created" value={new Date(d.created_at).toLocaleDateString()} />}
 
@@ -1328,24 +1677,25 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             data-testid="revoke-agent-btn"
+            disabled={isRevoked}
             onClick={() => revokeAgent(node.id)}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
               padding: '4px 10px',
-              background: 'transparent',
-              border: '1px solid var(--danger, #ef4444)',
+              background: isRevoked ? 'var(--surface-1)' : 'transparent',
+              border: `1px solid ${isRevoked ? 'var(--hairline)' : 'var(--danger, #ef4444)'}`,
               borderRadius: 3,
-              color: 'var(--danger, #ef4444)',
-              cursor: 'pointer',
+              color: isRevoked ? 'var(--fg-dim)' : 'var(--danger, #ef4444)',
+              cursor: isRevoked ? 'not-allowed' : 'pointer',
               transition: 'background 100ms',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.08)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            onMouseEnter={e => { if (!isRevoked) e.currentTarget.style.background = 'rgba(239,68,68,0.08)' }}
+            onMouseLeave={e => { if (!isRevoked) e.currentTarget.style.background = 'transparent' }}
           >
-            Revoke this agent
+            {isRevoked ? 'Already revoked' : 'Revoke this agent'}
           </button>
-          {descendants.length > 0 && (
+          {descendants.length > 0 && !isRevoked && (
             <button
               data-testid="revoke-branch-btn"
               onClick={revokeBranch}
@@ -1368,6 +1718,100 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
           )}
         </div>
       </div>
+
+      {/* Grants from/to this agent — surfaced from /admin/may-act */}
+      <AgentGrantsTables agentId={node.id} />
+
+      {/* View agent page link */}
+      <a
+        href={`/admin/agents?q=${encodeURIComponent(node.id)}`}
+        data-testid="agent-drawer-agent-link"
+        onClick={e => {
+          if (onNavigate) { e.preventDefault(); onNavigate('agent', node.id); }
+        }}
+        style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11,
+          color: 'var(--fg-dim)', textDecoration: 'none',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+        onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg-dim)')}
+      >
+        View agent →
+      </a>
+    </div>
+  )
+}
+
+// AgentGrantsTables fetches both directions of grants for an agent and renders
+// two compact tables. Empty-state per direction. Skipped entirely when fetch
+// fails (best-effort UI surface — never breaks the drawer).
+function AgentGrantsTables({ agentId }: { agentId: string }) {
+  const [from, setFrom] = React.useState<any[] | null>(null)
+  const [to, setTo] = React.useState<any[] | null>(null)
+  React.useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      API.get(`/admin/may-act?from_id=${encodeURIComponent(agentId)}&include_revoked=true`).catch(() => null),
+      API.get(`/admin/may-act?to_id=${encodeURIComponent(agentId)}&include_revoked=true`).catch(() => null),
+    ]).then(([a, b]) => {
+      if (cancelled) return
+      setFrom(a?.grants || [])
+      setTo(b?.grants || [])
+    })
+    return () => { cancelled = true }
+  }, [agentId])
+
+  const renderTable = (title: string, rows: any[] | null, dirLabel: 'to_id' | 'from_id') => (
+    <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+      <div style={{ ...drawerLabelStyle, marginBottom: 8 }}>{title}</div>
+      {rows == null ? (
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', opacity: 0.55 }}>
+          Loading…
+        </span>
+      ) : rows.length === 0 ? (
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', opacity: 0.55 }}>
+          no grants
+        </span>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+          <thead>
+            <tr style={{ color: 'var(--fg-dim)', textAlign: 'left' }}>
+              <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)' }}>{dirLabel}</th>
+              <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)' }}>scopes</th>
+              <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)' }}>hops</th>
+              <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)' }}>exp</th>
+              <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)' }}>revoked</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(g => (
+              <tr key={g.id}>
+                <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)', wordBreak: 'break-all' }}>
+                  {dirLabel === 'to_id' ? g.to_id : g.from_id}
+                </td>
+                <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)' }}>
+                  {(g.scopes || []).slice(0, 3).join(',') || '—'}
+                  {(g.scopes || []).length > 3 ? '…' : ''}
+                </td>
+                <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)' }}>{g.max_hops}</td>
+                <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)' }}>
+                  {g.expires_at ? new Date(g.expires_at).toLocaleDateString() : '—'}
+                </td>
+                <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--hairline)', color: g.revoked_at ? 'var(--danger, #ef4444)' : 'var(--fg-dim)' }}>
+                  {g.revoked_at ? 'yes' : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+
+  return (
+    <div data-testid="agent-grants-tables">
+      {renderTable('Grants FROM this agent', from, 'to_id')}
+      {renderTable('Grants TO this agent', to, 'from_id')}
     </div>
   )
 }
@@ -1414,13 +1858,31 @@ function DrawerField({ label, value, mono = false }: { label: string; value: str
 interface DelegationCanvasProps {
   rfNodes: any[]
   rfEdges: any[]
+  // onNodeClick / onEdgeClick stay for telemetry/debug, but the drawer is the
+  // primary interaction. Don't navigate from these callbacks — the drawer's
+  // "View user/agent →" links call onNavigate instead.
   onNodeClick?: (nodeId: string, nodeData: any) => void
   onEdgeClick?: (edgeData: any) => void
+  // onNavigate fires when the user clicks "View agent/user →" inside the drawer.
+  // Pass it the page's setPage to wire up real routing.
+  onNavigate?: (target: 'agent' | 'user', id: string) => void
+  // onAuditClick fires when the edge drawer's "View audit event →" is clicked.
+  // grantId (when known) lets the parent route to /admin/audit?grant_id=<id>.
+  onAuditClick?: (eventId: string, grantId?: string) => void
+  // onCanvasRefresh fires after a destructive action (e.g. revoke grant) so
+  // the parent page can refetch graph data. Optional.
+  onCanvasRefresh?: () => void
+  // agentStatus: id-or-client_id → {active, updated_at}. Lets the canvas
+  // overlay REVOKED on historical nodes whose backing agent is now inactive.
+  agentStatus?: Map<string, { active: boolean; updated_at?: string; deactivated_at?: string }>
   height?: number
   fitView?: boolean
   loading?: boolean
   emptyMessage?: string
   emptyHint?: string
+  // change me to force a re-fit after data swap (e.g. selectedChain.rootSub).
+  // RF's `fitView` PROP only runs at mount; this drives an imperative fitView.
+  chainKey?: string
 }
 
 export function DelegationCanvas({
@@ -1428,20 +1890,89 @@ export function DelegationCanvas({
   rfEdges,
   onNodeClick,
   onEdgeClick,
+  onNavigate,
+  onAuditClick,
+  onCanvasRefresh,
+  agentStatus,
   height = 520,
   fitView = true,
   loading = false,
   emptyMessage = 'No delegation chains.',
   emptyHint,
+  chainKey,
 }: DelegationCanvasProps) {
-  const [nodes, , onNodesChange] = useNodesState(rfNodes)
-  const [edges, , onEdgesChange] = useEdgesState(rfEdges)
-  // selectedNode drives the right-side drawer
+  // Optimistic kill list — feels instant, before refetch lands
+  const [freshlyRevoked, setFreshlyRevoked] = React.useState<Set<string>>(new Set())
+  const markRevoked = React.useCallback((ids: string[]) => {
+    setFreshlyRevoked(prev => {
+      const next = new Set(prev)
+      for (const id of ids) next.add(id)
+      return next
+    })
+  }, [])
+
+  // Decorate nodes with revoked state from agentStatus + freshlyRevoked.
+  // Match by node.id and by data.client_id (audit-derived nodes use client_id).
+  const decoratedRfNodes = React.useMemo(() => {
+    if (!rfNodes) return rfNodes
+    return rfNodes.map(n => {
+      const cid = n.data?.client_id || n.data?.clientId
+      const lookupKeys = [n.id, cid].filter(Boolean) as string[]
+      let statusEntry: any = null
+      if (agentStatus) {
+        for (const k of lookupKeys) {
+          const e = agentStatus.get(k)
+          if (e) { statusEntry = e; break }
+        }
+      }
+      const fresh = lookupKeys.some(k => freshlyRevoked.has(k))
+      const revokedFromStatus = statusEntry && statusEntry.active === false
+      const revoked = fresh || revokedFromStatus || n.data?.revoked === true
+      if (!revoked && !statusEntry) return n
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          revoked,
+          revoked_at: statusEntry?.deactivated_at || statusEntry?.updated_at,
+          active: statusEntry?.active,
+        },
+      }
+    })
+  }, [rfNodes, agentStatus, freshlyRevoked])
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(decoratedRfNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges)
+  // useNodesState/useEdgesState only seed from initial props. Sync when parent
+  // hands us a new set (e.g. circular chain-button swap) — without this the
+  // canvas keeps rendering the previous chain's graph.
+  React.useEffect(() => { setNodes(decoratedRfNodes) }, [decoratedRfNodes, setNodes])
+  React.useEffect(() => { setEdges(rfEdges) }, [rfEdges, setEdges])
+  const rfApi = useReactFlow()
+  // Re-fit viewport when chainKey flips. RF preserves pan/zoom across renders,
+  // so swapping rfNodes alone leaves the camera on the old graph.
+  // Timeout: let RF apply new nodes/edges before measuring bounds.
+  React.useEffect(() => {
+    if (!chainKey) return
+    const t = setTimeout(() => {
+      try { rfApi.fitView({ padding: 0.32, duration: 300 }) } catch {}
+    }, 80)
+    return () => clearTimeout(t)
+  }, [chainKey, rfApi])
+  // selectedNode/Edge drive the right-side drawer (one open at a time)
   const [selectedNode, setSelectedNode] = useState<{ id: string; data: any } | null>(null)
+  const [selectedEdge, setSelectedEdge] = useState<{ id: string; source: string; target: string; data: any } | null>(null)
 
   const handleNodeClick = (_: any, node: any) => {
+    setSelectedEdge(null)
     setSelectedNode({ id: node.id, data: node.data })
     onNodeClick?.(node.id, node.data)
+  }
+
+  const handleEdgeClick = (_: any, edge: any) => {
+    setSelectedNode(null)
+    setSelectedEdge({ id: edge.id, source: edge.source, target: edge.target, data: edge.data })
+    onEdgeClick?.(edge.data)
   }
 
   if (loading) {
@@ -1473,7 +2004,7 @@ export function DelegationCanvas({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodeClick={handleNodeClick}
-        onEdgeClick={(_, edge) => onEdgeClick?.(edge.data)}
+        onEdgeClick={handleEdgeClick}
         fitView={fitView}
         fitViewOptions={{ padding: 0.32 }}
         minZoom={0.15}
@@ -1508,9 +2039,20 @@ export function DelegationCanvas({
       {/* Node detail drawer — slides in from right */}
       <NodeDrawer
         node={selectedNode}
-        rfNodes={rfNodes}
+        rfNodes={decoratedRfNodes}
         rfEdges={rfEdges}
         onClose={() => setSelectedNode(null)}
+        onNavigate={onNavigate}
+        onCanvasRefresh={onCanvasRefresh}
+        markRevoked={markRevoked}
+      />
+      {/* Edge detail drawer — same right slot, mutually exclusive with node drawer */}
+      <EdgeDrawer
+        edge={selectedEdge}
+        rfNodes={decoratedRfNodes}
+        onClose={() => setSelectedEdge(null)}
+        onAuditClick={onAuditClick}
+        onCanvasRefresh={onCanvasRefresh}
       />
     </div>
   )

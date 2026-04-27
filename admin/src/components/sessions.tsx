@@ -99,8 +99,13 @@ export function Sessions() {
   }, [liveTail]);
 
   const handleRevoke = async (sessionId) => {
-    await API.del('/admin/sessions/' + sessionId);
-    refresh();
+    try {
+      await API.del('/admin/sessions/' + sessionId);
+      toast.success('Session revoked');
+      refresh();
+    } catch (e) {
+      toast.error(e?.message || 'Failed to revoke session');
+    }
   };
 
   const handleRevokeJTI = async () => {
@@ -109,6 +114,7 @@ export function Sessions() {
     try {
       await API.post('/admin/auth/revoke-jti', { jti });
       setJtiInput('');
+      toast.success(`JTI ${jti.slice(0, 8)}… revoked`);
       refresh();
     } catch (e) {
       toast.error(e?.message || 'Failed to revoke JTI');

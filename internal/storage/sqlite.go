@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -1231,6 +1232,12 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 		conditions = append(conditions, "ip = ?")
 		args = append(args, opts.IP)
 	}
+	if opts.GrantID != "" {
+		// metadata is a JSON TEXT column. SQLite ships JSON1; existing patterns
+		// in this codebase already use json_extract for nested metadata fields.
+		conditions = append(conditions, "json_extract(metadata, '$.grant_id') = ?")
+		args = append(args, opts.GrantID)
+	}
 	if opts.From != "" {
 		conditions = append(conditions, "created_at >= ?")
 		args = append(args, opts.From)
@@ -1280,6 +1287,152 @@ func (s *SQLiteStore) DeleteAuditLogsBefore(ctx context.Context, before time.Tim
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// --- MayActGrants ---
+
+// scopesToJSON encodes a string slice as a JSON array. Nil/empty -> "[]".
+func scopesToJSON(scopes []string) string {
+	if len(scopes) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(scopes)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+// scopesFromJSON decodes a JSON array TEXT column into []string. Empty/null -> [].
+func scopesFromJSON(raw string) []string {
+	if raw == "" || raw == "null" {
+		return []string{}
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return []string{}
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
+func (s *SQLiteStore) CreateMayActGrant(ctx context.Context, g *MayActGrant) error {
+	if g.CreatedAt == "" {
+		g.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	if g.MaxHops <= 0 {
+		g.MaxHops = 1
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO may_act_grants (id, from_id, to_id, max_hops, scopes, expires_at, revoked_at, created_by, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		g.ID, g.FromID, g.ToID, g.MaxHops, scopesToJSON(g.Scopes),
+		nullableStr(g.ExpiresAt), nullableStr(g.RevokedAt), g.CreatedBy, g.CreatedAt,
+	)
+	return err
+}
+
+func nullableStr(p *string) interface{} {
+	if p == nil || *p == "" {
+		return nil
+	}
+	return *p
+}
+
+func scanMayActGrant(row interface {
+	Scan(dest ...interface{}) error
+}) (*MayActGrant, error) {
+	var g MayActGrant
+	var scopesRaw string
+	var expires, revoked sql.NullString
+	var createdBy sql.NullString
+	if err := row.Scan(&g.ID, &g.FromID, &g.ToID, &g.MaxHops, &scopesRaw, &expires, &revoked, &createdBy, &g.CreatedAt); err != nil {
+		return nil, err
+	}
+	g.Scopes = scopesFromJSON(scopesRaw)
+	if expires.Valid {
+		v := expires.String
+		g.ExpiresAt = &v
+	}
+	if revoked.Valid {
+		v := revoked.String
+		g.RevokedAt = &v
+	}
+	if createdBy.Valid {
+		g.CreatedBy = createdBy.String
+	}
+	return &g, nil
+}
+
+func (s *SQLiteStore) GetMayActGrantByID(ctx context.Context, id string) (*MayActGrant, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, from_id, to_id, max_hops, scopes, expires_at, revoked_at, created_by, created_at
+		 FROM may_act_grants WHERE id = ?`, id,
+	)
+	return scanMayActGrant(row)
+}
+
+func (s *SQLiteStore) ListMayActGrants(ctx context.Context, opts ListMayActGrantsQuery) ([]*MayActGrant, error) {
+	var conditions []string
+	var args []interface{}
+	if opts.FromID != "" {
+		conditions = append(conditions, "from_id = ?")
+		args = append(args, opts.FromID)
+	}
+	if opts.ToID != "" {
+		conditions = append(conditions, "to_id = ?")
+		args = append(args, opts.ToID)
+	}
+	if !opts.IncludeRevoked {
+		conditions = append(conditions, "revoked_at IS NULL")
+	}
+	q := `SELECT id, from_id, to_id, max_hops, scopes, expires_at, revoked_at, created_by, created_at FROM may_act_grants`
+	if len(conditions) > 0 {
+		q += " WHERE " + strings.Join(conditions, " AND ") //#nosec G202 -- predicates are constants; values via ? placeholders
+	}
+	q += " ORDER BY created_at DESC"
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*MayActGrant
+	for rows.Next() {
+		g, err := scanMayActGrant(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) RevokeMayActGrant(ctx context.Context, id string, revokedAt time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE may_act_grants SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`,
+		revokedAt.UTC().Format(time.RFC3339), id,
+	)
+	return err
+}
+
+// FindLiveMayActGrant returns the most-recent un-revoked, un-expired grant for
+// (from_id, to_id) at time `at`. Used by token-exchange to surface grant_id in
+// audit metadata. Returns sql.ErrNoRows when nothing matches.
+func (s *SQLiteStore) FindLiveMayActGrant(ctx context.Context, fromID, toID string, at time.Time) (*MayActGrant, error) {
+	atStr := at.UTC().Format(time.RFC3339)
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, from_id, to_id, max_hops, scopes, expires_at, revoked_at, created_by, created_at
+		 FROM may_act_grants
+		 WHERE from_id = ? AND to_id = ?
+		   AND revoked_at IS NULL
+		   AND (expires_at IS NULL OR expires_at = '' OR expires_at > ?)
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		fromID, toID, atStr,
+	)
+	return scanMayActGrant(row)
 }
 
 // --- Migrations ---

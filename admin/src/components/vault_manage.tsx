@@ -26,6 +26,7 @@ export function Vault() {
   const [query, setQuery] = React.useState('');
   const [createOpen, setCreateOpen] = React.useState(false);
   const [deleteModal, setDeleteModal] = React.useState(null);
+  const toast = useToast();
 
   const { data: listRaw, loading, refresh } = useAPI('/vault/providers');
   const providers = listRaw?.data || [];
@@ -215,10 +216,15 @@ export function Vault() {
           provider={deleteModal}
           onClose={() => setDeleteModal(null)}
           onConfirm={async () => {
-            await API.del('/vault/providers/' + deleteModal.id);
-            setDeleteModal(null);
-            setSelected(null);
-            refresh();
+            try {
+              await API.del('/vault/providers/' + deleteModal.id);
+              toast.success(`Provider "${deleteModal.name || deleteModal.id}" deleted`);
+              setDeleteModal(null);
+              setSelected(null);
+              refresh();
+            } catch (e) {
+              toast.error(e?.message || 'Delete failed');
+            }
           }}
         />
       )}

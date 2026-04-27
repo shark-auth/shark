@@ -17,6 +17,7 @@ Demonstrates:
 import os
 import sys
 
+import requests
 from shark_auth import Client, DPoPProver
 from shark_auth.claims import AgentTokenClaims
 
@@ -34,6 +35,11 @@ agent = client.agents.register_agent(
     app_id="demo",
     name="delegation-demo-agent",
     scopes=["mcp:read", "mcp:write"],
+    grant_types=[
+        "client_credentials",
+        "urn:ietf:params:oauth:grant-type:token-exchange",
+    ],
+    token_endpoint_auth_method="client_secret_post",
 )
 agent_id = agent["id"]
 client_id = agent["client_id"]
@@ -41,25 +47,44 @@ client_secret = agent["client_secret"]
 print(f"Registered agent: {agent_id}  client_id={client_id}")
 
 # 2. Get a DPoP-bound access token
-token = client.oauth.get_token_with_dpop(
-    grant_type="client_credentials",
-    dpop_prover=prover,
-    client_id=client_id,
-    client_secret=client_secret,
-    scope="mcp:write",
+token_url = f"{BASE_URL}/oauth/token"
+proof1 = prover.make_proof(htm="POST", htu=token_url)
+r1 = requests.post(
+    token_url,
+    data={"grant_type": "client_credentials", "scope": "mcp:read mcp:write"},
+    auth=(client_id, client_secret),
+    headers={"DPoP": proof1},
+    timeout=10,
 )
-print(f"Got DPoP token (scope={token.scope})")
+if r1.status_code != 200:
+    sys.exit(f"Failed to get token: {r1.text}")
+token_data = r1.json()
+print(f"Got DPoP token (scope={token_data.get('scope')})")
 
 # 3. Exchange for a narrower delegated sub-token (RFC 8693)
-sub_token = client.oauth.token_exchange(
-    subject_token=token.access_token,
-    scope="mcp:read",
-    dpop_prover=prover,
+proof2 = prover.make_proof(htm="POST", htu=token_url)
+r2 = requests.post(
+    token_url,
+    data={
+        "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+        "subject_token": token_data["access_token"],
+        "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
+        "actor_token": token_data["access_token"],
+        "actor_token_type": "urn:ietf:params:oauth:token-type:access_token",
+        "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
+        "scope": "mcp:read",
+    },
+    auth=(client_id, client_secret),
+    headers={"DPoP": proof2},
+    timeout=10,
 )
-print(f"Got delegated sub-token (scope={sub_token.scope})")
+if r2.status_code != 200:
+    sys.exit(f"Token exchange failed: {r2.text}")
+sub_token_data = r2.json()
+print(f"Got delegated sub-token (scope={sub_token_data.get('scope')})")
 
 # 4. Walk the delegation chain (Method 4 — no backend needed)
-claims = AgentTokenClaims.parse(sub_token.access_token)
+claims = AgentTokenClaims.parse(sub_token_data["access_token"])
 chain = claims.delegation_chain()
 print(f"is_delegated={claims.is_delegated()}  chain_length={len(chain)}")
 for i, hop in enumerate(chain):

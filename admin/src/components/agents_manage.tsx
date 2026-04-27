@@ -177,7 +177,7 @@ export function Agents({ setPage }) {
                   <th style={{...appThStyle, width: 28}}/>
                   <th style={appThStyle}>Name</th>
                   <th style={appThStyle}>Client ID</th>
-                  <th style={appThStyle}>Grants</th>
+                  <th style={appThStyle}>Grant types</th>
                   <th style={appThStyle}>Scopes</th>
                   <th style={appThStyle}>Created</th>
                   <th style={appThStyle}>Created by</th>
@@ -214,7 +214,7 @@ export function Agents({ setPage }) {
                     </td>
                     <td style={appTdStyle}>
                       <span className="mono faint" style={{fontSize: 10.5}}>
-                        {(a.grant_types || []).length} grant{(a.grant_types || []).length !== 1 && 's'}
+                        {(a.grant_types || []).length} grant type{(a.grant_types || []).length !== 1 && 's'}
                       </span>
                     </td>
                     <td style={appTdStyle}>
@@ -296,10 +296,15 @@ export function Agents({ setPage }) {
           agent={deactivateModal}
           onClose={() => setDeactivateModal(null)}
           onConfirm={async () => {
-            await API.del('/agents/' + deactivateModal.id);
-            setDeactivateModal(null);
-            setSelected(null);
-            refresh();
+            try {
+              await API.del('/agents/' + deactivateModal.id);
+              toast.success(`Agent "${deactivateModal.name || deactivateModal.client_id}" deactivated. Tokens revoked.`);
+              setDeactivateModal(null);
+              setSelected(null);
+              refresh();
+            } catch (e) {
+              toast.error(e?.message || 'Deactivate failed');
+            }
           }}
         />
       )}
@@ -481,7 +486,10 @@ function AgentDetail({ agent, tab, setTab, setPage, onClose, onDeactivate, onUpd
           ['consents', 'Consents'],
           ['audit', 'Audit'],
           ['security', 'Security'],
-          ['delegation', 'Delegation Policies'],
+          // 'Delegation Policies' tab removed in v0.1 — was a write-only mirror
+          // of agent.metadata.policies.may_act that nothing in the codebase
+          // actually enforced. Authorization now flows through the
+          // may_act_grants table (see Grants TO/FROM on the canvas drawer).
           ['delegations', 'Delegations'],
         ].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
@@ -1556,6 +1564,18 @@ function DelegationsTab({ agent, setPage }) {
   const [inbound, setInbound] = React.useState(null);   // null = loading
   const [outbound, setOutbound] = React.useState(null);
   const [error, setError] = React.useState(null);
+  // Pull agent roster for canvas status overlay (revoked node greyscale).
+  const { data: agentsData, refresh: refreshAgents } = useAPI('/agents?limit=500');
+  const agentStatusMap = React.useMemo(() => {
+    const m = new Map<string, any>();
+    const list = agentsData?.data || (Array.isArray(agentsData) ? agentsData : []);
+    for (const a of list) {
+      const entry = { active: a.active !== false, updated_at: a.updated_at };
+      if (a.id) m.set(a.id, entry);
+      if (a.client_id) m.set(a.client_id, entry);
+    }
+    return m;
+  }, [agentsData]);
 
   React.useEffect(() => {
     if (!agent?.id) return;
@@ -1721,9 +1741,13 @@ function DelegationsTab({ agent, setPage }) {
         rfNodes={rfNodes}
         rfEdges={rfEdges}
         height={500}
-        onNodeClick={(nodeId, nodeData) => {
-          if (nodeId !== agent.id) setPage('agents', { agentId: nodeId });
+        onNavigate={(target, id) => {
+          if (target === 'user') setPage('users', { userId: id });
+          else if (id !== agent.id) setPage('agents', { agentId: id });
         }}
+        onAuditClick={(eventId) => setPage('audit', { q: eventId })}
+        agentStatus={agentStatusMap}
+        onCanvasRefresh={refreshAgents}
         fitView
       />
     </div>

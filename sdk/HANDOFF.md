@@ -4,8 +4,10 @@
 
 | SDK | Backend coverage | Parity |
 |---|---|---|
-| Python (`sdk/python/shark_auth/`) | ~75% (50+ of 236 routes wrapped + helpers) | reference |
-| TypeScript (`sdk/typescript/`) | ~75% | matches Python class-for-class |
+| Python (`sdk/python/shark_auth/`) | 73 / 130 SDK-callable endpoints = **56%** raw, **~85%** of launch-critical agent-platform + OAuth core path | reference |
+| TypeScript (`sdk/typescript/`) | 71 / 130 = **55%** raw, **~85%** of launch-critical path | matches Python class-for-class |
+
+Denominator is 130 SDK-callable endpoints. The full backend exposes 236 routes; we exclude `/healthz`, the SPA shell, `.well-known/*`, `/api/docs`, static assets, redirects, and catch-all handlers from the SDK denominator. See `documentation/sdk/index.md` for the full coverage-by-area breakdown and roadmap to 90%+.
 
 Both shipped 2026-04-27 via three parallel sonnet worktrees per language. Backend frozen during entire SDK push (concurrent agent owned `internal/`).
 

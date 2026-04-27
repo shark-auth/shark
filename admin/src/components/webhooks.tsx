@@ -118,6 +118,7 @@ export function Webhooks() {
     try {
       await API.del('/webhooks/' + id);
       if (selected?.id === id) setSelected(null);
+      showToast('Webhook deleted');
       refresh();
     } catch (e) {
       showToast(e?.message || 'Failed to delete webhook', 'danger');

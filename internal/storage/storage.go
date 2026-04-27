@@ -194,6 +194,14 @@ type Store interface {
 	QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([]*AuditLog, error)
 	DeleteAuditLogsBefore(ctx context.Context, before time.Time) (int64, error)
 
+	// MayActGrants — operator-issued delegation grants. Verified during
+	// token-exchange and surfaced via the dashboard delegation graph.
+	CreateMayActGrant(ctx context.Context, g *MayActGrant) error
+	GetMayActGrantByID(ctx context.Context, id string) (*MayActGrant, error)
+	ListMayActGrants(ctx context.Context, opts ListMayActGrantsQuery) ([]*MayActGrant, error)
+	RevokeMayActGrant(ctx context.Context, id string, revokedAt time.Time) error
+	FindLiveMayActGrant(ctx context.Context, fromID, toID string, at time.Time) (*MayActGrant, error)
+
 	// Migrations (Auth0 import tracking)
 	CreateMigration(ctx context.Context, m *Migration) error
 	GetMigrationByID(ctx context.Context, id string) (*Migration, error)
@@ -744,6 +752,29 @@ type AuditLogQuery struct {
 	To           string // end of date range (RFC3339)
 	Limit        int    // page size (default 50, max 200)
 	Cursor       string // cursor-based pagination (ID of last item)
+	GrantID      string // metadata.grant_id (json_extract) — correlates rows to may_act_grants.id
+}
+
+// MayActGrant is an operator-issued delegation grant. Verified at token-exchange
+// time and recorded by id into audit metadata so the dashboard can correlate
+// hops to their backing grant.
+type MayActGrant struct {
+	ID         string   `json:"id"`
+	FromID     string   `json:"from_id"`
+	ToID       string   `json:"to_id"`
+	MaxHops    int      `json:"max_hops"`
+	Scopes     []string `json:"scopes"`
+	ExpiresAt  *string  `json:"expires_at,omitempty"`
+	RevokedAt  *string  `json:"revoked_at,omitempty"`
+	CreatedBy  string   `json:"created_by,omitempty"`
+	CreatedAt  string   `json:"created_at"`
+}
+
+// ListMayActGrantsQuery filters the grant list. Empty fields = no filter.
+type ListMayActGrantsQuery struct {
+	FromID         string
+	ToID           string
+	IncludeRevoked bool
 }
 
 // SigningKey represents a JWT signing keypair stored in the database.

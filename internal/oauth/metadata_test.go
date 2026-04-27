@@ -100,8 +100,9 @@ func TestMetadataEndpoint(t *testing.T) {
 	if v := getString("introspection_endpoint"); v != testIssuer+"/oauth/introspect" {
 		t.Errorf("introspection_endpoint: got %q", v)
 	}
-	if v := getString("device_authorization_endpoint"); v != testIssuer+"/oauth/device" {
-		t.Errorf("device_authorization_endpoint: got %q", v)
+	// device_authorization_endpoint intentionally absent — device flow hidden in v0.1.
+	if _, ok := meta["device_authorization_endpoint"]; ok {
+		t.Errorf("device_authorization_endpoint must not be advertised in v0.1 (device flow hidden)")
 	}
 	if v := getString("service_documentation"); v != "https://sharkauth.com/docs" {
 		t.Errorf("service_documentation: got %q", v)
@@ -113,12 +114,12 @@ func TestMetadataEndpoint(t *testing.T) {
 		t.Errorf("code_challenge_methods_supported does not contain S256; got %v", ccm)
 	}
 
-	// --- grant_types_supported must include all 5 grant types ---
+	// --- grant_types_supported must include the v0.1 grant types ---
+	// device_code (RFC 8628) intentionally excluded — device flow hidden in v0.1.
 	wantGrants := []string{
 		"authorization_code",
 		"client_credentials",
 		"refresh_token",
-		"urn:ietf:params:oauth:grant-type:device_code",
 		"urn:ietf:params:oauth:grant-type:token-exchange",
 	}
 	grants := getStrings("grant_types_supported")
@@ -126,6 +127,9 @@ func TestMetadataEndpoint(t *testing.T) {
 		if !slices.Contains(grants, g) {
 			t.Errorf("grant_types_supported missing %q; got %v", g, grants)
 		}
+	}
+	if slices.Contains(grants, "urn:ietf:params:oauth:grant-type:device_code") {
+		t.Errorf("grant_types_supported must not advertise device_code in v0.1 (device flow hidden); got %v", grants)
 	}
 
 	// --- response_types_supported should only contain "code" (no implicit) ---

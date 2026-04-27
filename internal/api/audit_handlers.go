@@ -54,6 +54,7 @@ func (s *Server) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		IP:           q.Get("ip"),
 		From:         q.Get("from"),
 		To:           q.Get("to"),
+		GrantID:      q.Get("grant_id"),
 		Limit:        limit + 1, // fetch one extra to determine has_more
 		Cursor:       q.Get("cursor"),
 	}

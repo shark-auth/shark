@@ -125,6 +125,20 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// --- Step 4b: correlate to a may_act_grants row (best-effort) ---
+	// Look up a live grant matching (acting -> subject). Try client_id first, then
+	// agent ID; the table is operator-managed and either form may be canonical.
+	// Absence is fine — JWT may_act path stays authoritative.
+	var matchedGrant *storage.MayActGrant
+	if subjectSub != "" {
+		now := time.Now().UTC()
+		if g, gErr := s.RawStore.FindLiveMayActGrant(ctx, actingAgent.ClientID, subjectSub, now); gErr == nil {
+			matchedGrant = g
+		} else if g, gErr := s.RawStore.FindLiveMayActGrant(ctx, actingAgent.ID, subjectSub, now); gErr == nil {
+			matchedGrant = g
+		}
+	}
+
 	// --- Step 5: Build delegation chain ---
 	actClaim := buildActClaim(actingAgent.ClientID, subjectAct)
 
@@ -249,6 +263,21 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 			"granted_scope":    grantedScopeOut,
 			"dropped_scope":    droppedScopes,
 			"requested_scope":  requestedScopeOut,
+		}
+		// Only populate grant_* keys when a real grants-table row matched.
+		// Absent fields stay absent — keeps backwards compat with audit rows
+		// emitted before grants existed.
+		if matchedGrant != nil {
+			metaMap["grant_id"] = matchedGrant.ID
+			metaMap["grant_max_hops"] = matchedGrant.MaxHops
+			scopesOut := matchedGrant.Scopes
+			if scopesOut == nil {
+				scopesOut = []string{}
+			}
+			metaMap["grant_scopes"] = scopesOut
+			if matchedGrant.ExpiresAt != nil {
+				metaMap["grant_expires_at"] = *matchedGrant.ExpiresAt
+			}
 		}
 		metaJSON, _ := json.Marshal(metaMap)
 		_ = s.AuditLogger.Log(ctx, &storage.AuditLog{

@@ -1,67 +1,156 @@
 <p align="center">
-  <img src="admin/src/assets/sharky-full.png" alt="SharkAuth" width="200">
+  <img src="admin/src/assets/sharky-full.png" alt="SharkAuth" width="180">
 </p>
 
-<h3 align="center">Auth for apps that ship agents to customers.</h3>
-<p align="center">Self-hosted · Single binary · SQLite · OAuth 2.1 · DPoP · Delegation chains</p>
+<h3 align="center">Open-source auth for the agent-on-behalf-of-user world.</h3>
+<p align="center">Real delegation. Real DPoP. Real audit. One ~40MB Go binary, SQLite-embedded, runs on a Raspberry Pi.</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
-  <a href="https://github.com/sharkauth/sharkauth/actions"><img src="https://img.shields.io/github/actions/workflow/status/sharkauth/sharkauth/ci.yml?style=flat-square" alt="Build"></a>
-  <a href="https://github.com/sharkauth/sharkauth/releases/latest"><img src="https://img.shields.io/github/v/release/sharkauth/sharkauth?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/sharkauth/sharkauth/releases/latest"><img src="https://img.shields.io/badge/version-v0.9.0-blue?style=flat-square" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/go-1.22%2B-00ADD8?style=flat-square" alt="Go"></a>
+  <a href="#"><img src="https://img.shields.io/badge/SQLite-embedded-003B57?style=flat-square" alt="SQLite"></a>
 </p>
 
 ---
 
 ## What is this
 
-SharkAuth is an open-source auth server for products where **each customer gets their own AI agents**  and those agents need scoped credentials, delegation chains, and revocation that actually works.
+An OAuth 2.1 + OIDC authorization server that treats agents as first-class identities. RFC 8693 token exchange with verifiable `act` claim chains, RFC 9449 DPoP key-binding, an issuer-issued `may_act_grants` table that is revocable and audit-correlated, and a built-in admin UI that has a working revoke button on every primitive it shows.
 
-One ~30MB binary. No config files. No external database. `shark serve` and you're running.
+It compiles to a single ~40MB binary. No Postgres. No Redis. No Docker required. `./shark serve` and you have an OIDC IdP running on `:8080`.
 
-
-
-## Quickstart
-
-```bash
-# Download from GitHub Releases (macOS, Linux, Windows)
-curl -fsSL https://github.com/sharkauth/sharkauth/releases/latest/download/shark-$(uname -s)-$(uname -m) -o shark
-chmod +x shark
-./shark serve
-
-# Open http://localhost:8080/admin
-# Paste the admin key printed in your terminal
+```
+[ user ]
+   │  OAuth 2.1 + PKCE  (or passkey, or magic link, or SSO)
+   ▼
+[ SharkAuth ]──────────────  may_act_grants  (operator-issued, max_hops, expires_at, revocable)
+   │  DPoP-bound access token (cnf.jkt)
+   ▼
+[ agent-A ]
+   │  RFC 8693 token exchange   subject_token = agent-A
+   │  act chain recorded        scope downscoped
+   ▼
+[ agent-B ]                     act: { sub: agent-A, act: { sub: user } }
+   │
+   ▼
+[ resource ]   audit row carries grant_id, jkt, full act chain
 ```
 
-Docker image ships in v0.2.
-
-**That's it.** No YAML. No Postgres. No env vars. First boot creates everything.
-
-```bash
-# Run the concierge demo — full delegation chain end-to-end
-shark demo concierge
-```
-
-Shows user → research-agent → tool-agent with `act` chain + audit trail.
+> Drop a real screenshot here once captured: `![Delegation canvas](docs/assets/delegation-canvas.png)`
+> The screen lives at `admin/src/components/delegation_canvas.tsx` and renders the full hop chain with revoke buttons inline.
 
 ---
 
 ## Why this exists
 
-You're building a product where each customer gets agents — a coding assistant, a support bot, a research tool. Those agents hold your customer's credentials, call APIs on their behalf, and delegate to sub-agents.
+Auth0, Clerk, WorkOS, Stytch, Keycloak. They all built for the human-and-app world. Login, SSO, MFA, RBAC. Done.
 
-Today, you hand-roll all of this:
+That world is gone. The product you ship in 2026 has agents. Coding agents, support agents, research agents. They hold tokens, they act for the user, they delegate to sub-agents, and on a bad day they get prompt-injected into doing the wrong thing.
 
-- Per-tenant token scoping
-- Agent credential rotation
-- A vault for customer OAuth tokens (Gmail, Slack, GitHub)
-- Revocation when something goes wrong
+The questions that matter now:
 
-And your hand-rolled stack is probably missing layers. SharkAuth handles the full chain — from human login to the agent's third-hop delegated sub-token — in one server, one audit log, one revocation model.
+- Who authorized this agent to act for this user, and when does that authorization expire?
+- Is this token bound to a key the holder actually controls, or is "the bearer of this string" still the security model?
+- When agent-A delegated to agent-B, was agent-A allowed to do that? How many more hops are allowed?
+- One audit query, one `grant_id`, and we should be able to reconstruct every token, every hop, every resource touched.
+- When something goes wrong, what is the blast radius and how do I shrink it without taking the customer offline?
+
+SharkAuth answers those questions in primitives the OAuth standards already specified. Nobody else shipped them.
+
+You are the user. Your agent acts on your behalf. Both should be auditable end to end. That is the whole pitch.
 
 ---
 
-## Agent auth in 10 lines
+## The 60-second quickstart
+
+```bash
+# 1. Download the binary (Linux/macOS, arm64 + amd64)
+curl -fsSL https://github.com/sharkauth/sharkauth/releases/latest/download/shark-$(uname -s)-$(uname -m) -o shark
+chmod +x shark
+
+# 2. Boot. First-run prints an admin key on stdout.
+./shark serve
+# => admin key: sk_live_xxxxx
+# => admin UI : http://localhost:8080/admin
+# => issuer   : http://localhost:8080
+
+# 3. Run the bundled demo: full delegation chain end to end.
+./shark demo concierge
+# user → research-agent → tool-agent
+# prints DPoP-bound tokens, the act chain, and the matching audit rows.
+```
+
+That is the wow moment. Three commands. No YAML. No schema bootstrap. SQLite WAL file in `./data/`. 29 migrations apply on first boot.
+
+Already running it? Skip to [Code samples](#code-samples).
+
+---
+
+## What makes it different
+
+### `may_act_grants` are real rows, not vibes
+
+```sql
+CREATE TABLE may_act_grants (
+    id          TEXT PRIMARY KEY,
+    from_id     TEXT NOT NULL,   -- agent that may act
+    to_id       TEXT NOT NULL,   -- subject they may act for
+    max_hops    INTEGER NOT NULL DEFAULT 1,
+    scopes      TEXT NOT NULL DEFAULT '[]',
+    expires_at  TIMESTAMP,
+    revoked_at  TIMESTAMP,
+    created_by  TEXT,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+Every token-exchange call that traverses a grant writes the matching `grant_id` into the audit row. Operators can revoke by `id`, by `from_id`, by `to_id`, or in bulk. The grant lives outside the JWT, so revocation does not require token rotation to take effect.
+
+Source of truth: `internal/oauth/exchange.go`, migration `00028_may_act_grants.sql`.
+
+### DPoP-bound access tokens (RFC 9449)
+
+Every token carries `cnf.jkt`, the SHA-256 thumbprint of the holder's public key. The resource server verifies the DPoP proof JWT on each request. Steal the token, you get nothing. The key never leaves the agent.
+
+### Token Exchange with full `act` chain (RFC 8693)
+
+Multi-hop delegation produces a nested `act` claim. Every hop is recorded. The chain flattens into one audit query. `max_hops` is enforced at exchange time, not by the client.
+
+### One `grant_id`, one audit query, one full picture
+
+Audit log carries: subject sub, acting client_id, granted scopes, jkt, parent token id, the matched grant id, the act chain, the issued token id, the issuance time. Pivot on any of those columns. The admin UI has a screen for it, the SDK has a method for it.
+
+### Five layers of revocation, each independently callable
+
+| Layer | Threat | Response |
+|:------|:-------|:---------|
+| Token | Agent's token leaks via prompt injection | Revoke the token + its refresh family |
+| Agent | One agent is compromised | Kill all tokens for that agent |
+| User | User goes rogue or cancels | Cascade-revoke every agent they spawned |
+| Pattern | Buggy agent template across all customers | Bulk-revoke by `client_id` pattern |
+| Vault | Customer's external OAuth credential is compromised | Vault disconnect cascades to derived agent tokens |
+
+Layers 1-3 ship in v0.9. Layers 4-5 ship in v1.0.
+
+### One ~40MB binary, no ceremony
+
+```
+$ ls -lh ./shark
+-rwxr-xr-x  ~42M  ./shark
+```
+
+That includes the Go runtime, the SQLite engine, the embedded React admin UI, the migrations, the JWKS rotation worker, the proxy engine, and every SSO connector. Cross-compiles cleanly to darwin/linux/windows on amd64 and arm64.
+
+### Battery-included admin UI
+
+Every primitive has a screen. Every screen has a working revoke. Highlights: applications, agents, delegation canvas, delegation chain audit, vault manager, signing keys, RBAC matrix, organizations, sessions debugger, audit log, proxy config, branding, command palette. Source: `admin/src/components/`.
+
+---
+
+## Code samples
+
+### Python: agent acts for a user, then delegates to a sub-agent
 
 ```python
 from shark_auth import Client, DPoPProver
@@ -69,158 +158,48 @@ from shark_auth import Client, DPoPProver
 client = Client(base_url="http://localhost:8080", token="sk_live_...")
 prover = DPoPProver.generate()
 
-# DPoP-bound token — theft alone is useless without the private key
+# 1. Agent gets a DPoP-bound access token (cnf.jkt locked to its key)
 token = client.oauth.get_token_with_dpop(
     grant_type="client_credentials",
     dpop_prover=prover,
-    client_id="agent-123",
-    client_secret="secret",
+    client_id="research-agent",
+    client_secret="...",
     scope="mcp:write",
 )
 
-# Delegate to a sub-agent with narrower scope (RFC 8693)
+# 2. Agent exchanges that token down to a narrower scope for a sub-agent.
+#    The act chain is recorded server-side. max_hops on the may_act grant
+#    decides whether this is allowed.
 sub_token = client.oauth.token_exchange(
     subject_token=token.access_token,
     scope="mcp:read",
     dpop_prover=prover,
 )
 
-# Every request carries cryptographic proof of possession
-resp = client.http.get_with_dpop("/resource", token=sub_token.access_token, prover=prover)
-```
-
-Every line above is something Auth0, Clerk, and WorkOS cannot do today. Not because they're slow — because their token model wasn't built for agents.
-
----
-
-## What ships
-
-### Human auth (complete)
-- Password + MFA/TOTP + recovery codes
-- Magic link (passwordless)
-- Passkeys / WebAuthn
-- SSO: SAML 2.0 + OIDC federation
-- OAuth 2.1: auth code + PKCE, client credentials, device flow, refresh rotation
-- Dynamic Client Registration (RFC 7591)
-- Organizations + RBAC
-- Session management + admin dashboard
-
-### Agent auth (the part that's new)
-- **DPoP (RFC 9449)** — every token is cryptographically bound to the agent's keypair. Steal the token, it's useless without the key.
-- **Token exchange (RFC 8693)** — agents delegate to sub-agents with `act` claim chains. Every hop is audited.
-- **Agent identities** — agents are first-class entities, not hacked-on machine clients.
-- **Delegation policies** — `may_act` rules control which agents can delegate to which.
-- **Token vault** — encrypted storage for customer OAuth tokens. Verified end-to-end: Google (Gmail/Drive/Calendar), GitHub. Experimental in v0.1: Slack, Microsoft (multi-tenant), Notion. Linear and Jira land in v0.2 with full provider-quirk handling. Custom OAuth 2.0 providers supported for textbook auth-code flows; non-standard token responses, post-exchange steps, and rotating-refresh quirks ship in v0.2 (see `playbook/CUSTOM_VAULT_LIMITATIONS.md`). Agents retrieve tokens via DPoP-bound requests scoped to the delegation chain.
-
-### Revocation (depth-of-defense)
-
-When something goes wrong, you need the right blast radius:
-
-| Layer | Threat | Response |
-|:------|:-------|:---------|
-| **Token** | Agent's token leaks via prompt injection | Revoke that specific token + its refresh family |
-| **Agent** | One agent is compromised | Kill all tokens for that agent |
-| **Customer** | Customer goes rogue or cancels | Cascade-revoke every agent they spawned — one call |
-| **Pattern** | Buggy agent template v3.2 across all customers | Bulk-revoke by `client_id` pattern |
-| **Vault** | Customer's external OAuth credential compromised | Vault disconnect cascades to every derived agent token |
-
-Five layers. Each independently callable. Layers 1–3 ship in v0.1. Layers 4–5 ship in v0.2.
-
-**Custom OAuth providers (v0.1):** standard auth-code flows with RFC 6749 token responses work via the admin "Add provider" form. Non-standard quirks (custom token parsing, required extra params, post-exchange steps) ship in v0.2 — see `playbook/CUSTOM_VAULT_LIMITATIONS.md`.
-
-### Audit
-- Every token issuance, exchange, and revocation is logged
-- Delegation chain canvas: visual trace of `[user] → [agent-A] → [agent-B]`
-- Full `act` claim chain flattened for query
-
----
-
-## Architecture
-
-```
-Human ─── OAuth 2.1 + PKCE ──→ Your App
-                                   │
-                              DCR (RFC 7591)
-                                   │
-                                   ▼
-                               SharkAuth ◄── admin dashboard
-                                   │          SQLite (embedded)
-                              DPoP-bound      audit log
-                              token issued    delegation policies
-                                   │
-                                   ▼
-                            Agent (your code)
-                                   │
-                         token exchange (RFC 8693)
-                         scope downscoped
-                         act chain recorded
-                                   │
-                                   ▼
-                          Sub-agent / Resource
-```
-
-- **Single binary** — Go, ~30MB, cross-compiles to macOS/Linux/Windows (arm64 + amd64)
-- **SQLite** — embedded, WAL mode, zero ops. All state in `./data/`
-- **No external dependencies** — no Redis, no Postgres, no message queue
-- **Admin dashboard** — built-in React admin UI, embedded in the binary
-
----
-
-## SDK
-
-### Python
-
-_Available on PyPI — install snippet below works once published; tracking ship today._
-
-```bash
-pip install shark-auth
-```
-
-```python
-from shark_auth import Client, DPoPProver, decode_agent_token
-
-client = Client(base_url="http://localhost:8080", token="sk_live_...")
-
-# Register an agent
-agent = client.agents.register_agent(
-    app_id="my-app",
-    name="research-bot",
-    scopes=["mcp:read", "mcp:write"],
-)
-
-# Verify tokens locally (3 lines)
-claims = decode_agent_token(
-    token,
-    jwks_url="http://localhost:8080/.well-known/jwks.json",
-    expected_issuer="http://localhost:8080",
-    expected_audience=agent["client_id"],
+# 3. Every call to the resource carries a fresh DPoP proof JWT.
+resp = client.http.get_with_dpop(
+    "/resource",
+    token=sub_token.access_token,
+    prover=prover,
 )
 ```
 
-See [`examples/`](examples/) for runnable scripts.
-
-### TypeScript
-
-```bash
-npm install @sharkauth/node
-```
+### TypeScript: same flow, browser-safe primitives
 
 ```typescript
-import { Client, DPoPProver } from "@sharkauth/node";
+import { SharkClient, DPoPProver } from "@sharkauth/sdk";
 
-const client = new Client({ baseUrl: "http://localhost:8080", token: "sk_live_..." });
+const client = new SharkClient({ baseUrl: "http://localhost:8080", adminKey: "sk_live_..." });
 const prover = await DPoPProver.generate();
 
-// DPoP-bound token
 const token = await client.oauth.getTokenWithDpop({
   grantType: "client_credentials",
   dpopProver: prover,
-  clientId: "agent-123",
-  clientSecret: "secret",
+  clientId: "research-agent",
+  clientSecret: "...",
   scope: "mcp:write",
 });
 
-// Delegate to sub-agent (RFC 8693)
 const subToken = await client.oauth.tokenExchange({
   subjectToken: token.accessToken,
   scope: "mcp:read",
@@ -228,94 +207,132 @@ const subToken = await client.oauth.tokenExchange({
 });
 ```
 
-Coverage: ~40% of admin surface in v0.1; full parity in v0.2.
+### curl: prove it works without an SDK
+
+```bash
+# Issue a may_act grant: research-agent may act for alice, max 2 hops.
+curl -X POST http://localhost:8080/admin/may-act-grants \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"from_id":"research-agent","to_id":"alice","max_hops":2,"scopes":["mcp:read","mcp:write"],"expires_at":"2026-12-31T00:00:00Z"}'
+
+# Inspect the issuer metadata. Look for token_endpoint, exchange grant types,
+# DPoP signing alg list, and the JWKS URL.
+curl -s http://localhost:8080/.well-known/openid-configuration | jq
+```
+
+Full SDK docs: [`documentation/sdk/index.md`](documentation/sdk/index.md). Delegation deep-dive: [`documentation/sdk/delegation-and-agents.md`](documentation/sdk/delegation-and-agents.md). DPoP primitives: [`documentation/sdk/dpop.md`](documentation/sdk/dpop.md). Token exchange: [`documentation/sdk/token-exchange.md`](documentation/sdk/token-exchange.md).
 
 ---
 
 ## Comparison
 
-| | SharkAuth | Auth0 | Clerk | WorkOS |
-|:--|:--|:--|:--|:--|
-| Self-hosted, single binary | ✅ | ❌ | ❌ | ❌ |
-| Agent as first-class identity | ✅ | ❌ | ❌ | ❌ |
-| DPoP (RFC 9449) | ✅ | ❌ | ❌ | ❌ |
-| Token exchange with `act` chain (RFC 8693) | ✅ | ❌ | ❌ | ❌ |
-| Delegation chain audit | ✅ | ❌ | ❌ | ❌ |
-| Cascade revocation (user → agents → tokens) | ✅ | ❌ | ❌ | ❌ |
-| Token vault for customer OAuth credentials | ✅ | ❌ | ❌ | ❌ |
-| Human auth (SSO, MFA, passkeys, magic link) | ✅ | ✅ | ✅ | ✅ |
-| Per-MAU pricing | Free | $$$  | $$$  | $$$  |
+|                                    | SharkAuth | Auth0 | Clerk | Keycloak |
+|:-----------------------------------|:---------:|:-----:|:-----:|:--------:|
+| Agent as first-class identity      | yes       | no    | no    | no       |
+| RFC 8693 token exchange + `act`    | yes       | partial (paid tier) | no | partial (extension) |
+| `may_act_grants` table, revocable  | yes       | no    | no    | no       |
+| `max_hops` enforced server-side    | yes       | no    | no    | no       |
+| RFC 9449 DPoP                      | yes       | no    | no    | partial  |
+| `grant_id` correlated audit        | yes       | no    | no    | no       |
+| Cascade revocation (user → agents) | yes       | no    | no    | no       |
+| Single binary, ~40MB               | yes       | no    | no    | no (JVM, ~1GB image) |
+| Self-hostable, fully OSS           | yes       | no    | no    | yes      |
+| Human auth (SSO, MFA, passkeys)    | yes       | yes   | yes   | yes      |
+| Polished hosted-tier UX            | not yet   | yes   | yes   | no       |
+| Per-MAU pricing on the hosted tier | n/a       | yes   | yes   | n/a      |
 
-SharkAuth is not trying to replace Auth0 for a standard SaaS login page. It's built for the products that also need **agent auth on top of human auth** — and need both in the same trust chain.
-
----
-
-## Who is this for
-
-**AI SaaS shipping agents per customer.** You give each paying customer one or more agents. Agents need scoped credentials, key-bound tokens, and a revocation path that works at cancellation time.
-
-**Platform teams running LLM infrastructure.** Security wants an audit record of every delegation hop: which agent accessed which resource, via which chain, at which timestamp.
-
-**MCP server developers.** You need to gate tool calls behind scoped tokens with DPoP binding. SharkAuth is a drop-in OAuth 2.1 + DPoP authorization server. Register your server as an application, issue client credentials per consumer, enforce scope per tool.
-
-**Self-hosters who want auth they own.** Complete OAuth 2.1 authorization server with SSO, passkeys, MFA, RBAC, organizations, webhooks, audit log, in a binary you control. No per-MAU rent.
+Where Auth0 and Clerk win today: bigger ecosystems, polished hosted UX, mature SDKs across more languages, real customer support. SharkAuth is not trying to replace them for a marketing-site login form. It is for products that ship agents and need both halves of the trust chain in the same audit log.
 
 ---
 
-## Roadmap
+## Use cases
 
-**v0.1 (now):**
-- Full human + agent auth stack
-- DPoP + token exchange + delegation chains
-- Token vault (7 providers)
-- Revocation layers 1–3
-- Python SDK
-- Admin dashboard + audit log
+- **Personal AI assistant on your inbox.** Issue a `may_act` grant from `you` to `assistant-agent`, scope `gmail:read`, expires in 24h. Revoke the grant from the admin UI when you stop trusting it.
+- **Multi-agent orchestrator.** Planner agent delegates to a research agent, research agent delegates to a tool agent. `max_hops=3`, scopes downscoped at each hop, every hop recorded.
+- **Internal employee + agent SSO.** Employees log in via OIDC federation or SAML. Each employee spawns one or more agents that inherit a scoped subset of their authority.
+- **MCP server auth.** Register the MCP server as an application, issue per-consumer client credentials, gate tool calls behind DPoP-bound scoped tokens.
+- **Embedded auth for an open-source SaaS.** Drop the binary next to your app, point your app at it for OAuth + OIDC + admin UI. No tenant of your tenants ends up paying Auth0 retail.
+- **Compliance-grade audit for an existing OAuth deployment.** Run the proxy in front of your APIs, get DPoP enforcement and `grant_id` audit on top of identities you already have.
 
-**v0.2:**
-- Revocation layers 4–5 (pattern + vault cascade)
-- Reverse proxy with identity header injection
+---
+
+## Status: v0.9.0 (launch week, 2026-04-29)
+
+What works today:
+
+- OAuth 2.1: auth code + PKCE, client credentials, device flow (RFC 8628), refresh rotation
+- OIDC: discovery, JWKS rotation, ID tokens, userinfo
+- Token exchange with `act` chain (RFC 8693)
+- DPoP (RFC 9449) on token issuance + protected resources
+- Dynamic Client Registration (RFC 7591/7592)
+- `may_act_grants` table, admin CRUD, audit correlation by `grant_id`
+- Human auth: password, MFA/TOTP, recovery codes, magic link, passkeys/WebAuthn
+- SSO: SAML 2.0, OIDC federation
+- Organizations + RBAC matrix
+- Token vault (Google, GitHub verified end-to-end; Slack, Microsoft, Notion experimental)
+- Reverse proxy mode with identity header injection
+- Audit log, webhooks with signature verification, branding, hosted login pages
+- 252 backend routes wired into the chi router (`internal/api/router.go`)
+- 29 migrations, all idempotent, applied on first boot
+- Python SDK + TypeScript SDK, ~75% endpoint coverage on the agent platform + OAuth core (`documentation/sdk/index.md`)
+- React component library: `@sharkauth/react`
+- Embedded React admin UI, ~50 screens
+
+What is on the v1.0 list (next 2-4 weeks):
+
+- Revocation layers 4 + 5 (pattern bulk-revoke, vault disconnect cascade)
 - Auth flow builder UI
-- Vault custom-provider quirks (Linear, Jira, Slack quirks, rotating refresh)
-
-**v0.3:**
+- Vault custom-provider quirks (Linear, Jira, Slack rotating refresh)
 - Hosted/cloud tier
-- Claude Code skill + MCP server wrapper
+- Public Postman + OpenAPI 3.1 spec polish
 
-Full roadmap: [STRATEGY.md](STRATEGY.md)
+This README documents what ships today. Nothing aspirational.
 
 ---
 
-## Build from source
+## Install
 
 ```bash
+# Binary
+curl -fsSL https://github.com/sharkauth/sharkauth/releases/latest/download/shark-$(uname -s)-$(uname -m) -o shark
+chmod +x shark
+./shark serve
+
+# Docker
+docker run -p 8080:8080 -v $(pwd)/data:/data ghcr.io/sharkauth/sharkauth:latest
+
+# Build from source
 git clone https://github.com/sharkauth/sharkauth
-cd sharkauth
-
-# Build frontend + backend
-cd admin && npm install && npm run build && cd ..
+cd sharkauth/admin && pnpm install && pnpm build && cd ..
 go build -o shark ./cmd/shark
-
 ./shark serve
 ```
 
-Requires Go 1.22+ and Node 20+.
+Requires Go 1.22+ and Node 20+ to build from source.
 
 ---
 
-## Contributing
+## Docs and community
 
-SharkAuth is open source under the [MIT License](LICENSE).
+- SDK index: [`documentation/sdk/index.md`](documentation/sdk/index.md)
+- Delegation guide: [`documentation/sdk/delegation-and-agents.md`](documentation/sdk/delegation-and-agents.md)
+- Token exchange: [`documentation/sdk/token-exchange.md`](documentation/sdk/token-exchange.md)
+- DPoP primitives: [`documentation/sdk/dpop.md`](documentation/sdk/dpop.md)
+- Vault: [`documentation/sdk/vault.md`](documentation/sdk/vault.md)
+- OpenAPI 3.1 spec: `documentation/openapi.yaml`
+- Issues: https://github.com/sharkauth/sharkauth/issues
+- Discussions: https://github.com/sharkauth/sharkauth/discussions
 
-- **Issues:** [GitHub Issues](https://github.com/sharkauth/sharkauth/issues) — bug reports and feature requests
-- **Discussions:** [GitHub Discussions](https://github.com/sharkauth/sharkauth/discussions) — questions, integrations, proposals
-- **Discord:** [Join](https://discord.gg/sharkauth)
-
-If you want to be an early integrator, open an issue or DM. I'll help wire it up.
+If you are an early integrator and want help wiring it up, open an issue. There is exactly one person at the wheel and they answer.
 
 ---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 <p align="center">
 Built by <a href="https://github.com/raulgooo">Raúl</a> in Monterrey, Mexico.<br>
-If your product ships agents to customers, their auth stack starts here.
+If your product ships agents, the auth stack starts here.
 </p>

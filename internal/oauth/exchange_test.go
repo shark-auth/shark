@@ -672,6 +672,115 @@ func TestExchange_AuditMetadata_EmptyArrays(t *testing.T) {
 	}
 }
 
+// TestExchange_AuditMetadata_GrantID — when a may_act_grants row matches
+// (acting_client_id, subject), the audit row's metadata.grant_id is populated.
+// Proves Phase A: token-exchange correlates to an operator-issued grant.
+func TestExchange_AuditMetadata_GrantID(t *testing.T) {
+	_, srv, store := mountExchangeServer(t)
+	srv.AuditLogger = audit.NewLogger(store)
+
+	seedAgentWithScopes(t, store, "grant-actor", []string{"openid", "read"})
+	subjectEmail := seedUser(t, store, "grant-user@example.com")
+
+	// Operator inserts a grant: from=acting client_id, to=subject (the user).
+	expires := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	g := &storage.MayActGrant{
+		ID:        "mag_test1",
+		FromID:    "grant-actor",
+		ToID:      subjectEmail,
+		MaxHops:   3,
+		Scopes:    []string{"read"},
+		ExpiresAt: &expires,
+	}
+	if err := store.CreateMayActGrant(context.Background(), g); err != nil {
+		t.Fatalf("seed grant: %v", err)
+	}
+
+	subjectToken := mintSubjectJWT(t, srv, subjectEmail, "openid read", nil)
+	form := url.Values{
+		"subject_token":      {subjectToken},
+		"subject_token_type": {tokenTypeAccessToken},
+		"scope":              {"read"},
+	}
+	form.Set("grant_type", grantTypeTokenExchange)
+	req, _ := http.NewRequest("POST", "http://localhost", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("grant-actor", "test-secret")
+	rr := httptest.NewRecorder()
+	srv.HandleToken(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	logs, err := store.QueryAuditLogs(context.Background(), storage.AuditLogQuery{
+		Action: "oauth.token.exchanged",
+		Limit:  10,
+	})
+	if err != nil || len(logs) == 0 {
+		t.Fatalf("query audit: %v len=%d", err, len(logs))
+	}
+	var meta map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(logs[0].Metadata), &meta); err != nil {
+		t.Fatalf("parse meta: %v", err)
+	}
+	gid, ok := meta["grant_id"]
+	if !ok {
+		t.Fatalf("metadata missing grant_id: %s", logs[0].Metadata)
+	}
+	var got string
+	_ = json.Unmarshal(gid, &got)
+	if got != "mag_test1" {
+		t.Errorf("grant_id: want mag_test1, got %q", got)
+	}
+	// Also assert max_hops + scopes + expires_at present.
+	if _, ok := meta["grant_max_hops"]; !ok {
+		t.Errorf("missing grant_max_hops")
+	}
+	if _, ok := meta["grant_scopes"]; !ok {
+		t.Errorf("missing grant_scopes")
+	}
+	if _, ok := meta["grant_expires_at"]; !ok {
+		t.Errorf("missing grant_expires_at")
+	}
+}
+
+// TestExchange_AuditMetadata_NoGrant — when no may_act_grants row exists,
+// grant_* keys are absent (not empty/null). Proves backwards-compat.
+func TestExchange_AuditMetadata_NoGrant(t *testing.T) {
+	_, srv, store := mountExchangeServer(t)
+	srv.AuditLogger = audit.NewLogger(store)
+
+	seedAgentWithScopes(t, store, "no-grant-actor", []string{"read"})
+	subjectEmail := seedUser(t, store, "no-grant-user@example.com")
+
+	subjectToken := mintSubjectJWT(t, srv, subjectEmail, "read", nil)
+	form := url.Values{
+		"subject_token":      {subjectToken},
+		"subject_token_type": {tokenTypeAccessToken},
+	}
+	form.Set("grant_type", grantTypeTokenExchange)
+	req, _ := http.NewRequest("POST", "http://localhost", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("no-grant-actor", "test-secret")
+	rr := httptest.NewRecorder()
+	srv.HandleToken(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	logs, _ := store.QueryAuditLogs(context.Background(), storage.AuditLogQuery{
+		Action: "oauth.token.exchanged",
+		Limit:  10,
+	})
+	if len(logs) == 0 {
+		t.Fatal("no audit row")
+	}
+	var meta map[string]json.RawMessage
+	_ = json.Unmarshal([]byte(logs[0].Metadata), &meta)
+	if _, ok := meta["grant_id"]; ok {
+		t.Errorf("grant_id should be absent when no grant matches; meta: %s", logs[0].Metadata)
+	}
+}
+
 // TestBuildActClaim_Logic: unit tests for the buildActClaim helper.
 func TestBuildActClaim_Logic(t *testing.T) {
 	// No prior act.

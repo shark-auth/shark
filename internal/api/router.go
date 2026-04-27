@@ -643,12 +643,21 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// dashboard "authorize agent on behalf of user" flow).
 			r.Post("/consents", s.handleAdminGrantConsent)
 
+			// may_act grants — operator-issued delegation rows backing the
+			// dashboard's edge drawer. Listed/queried by from_id/to_id, revoked
+			// individually. The exchange handler correlates audit rows to these
+			// via metadata.grant_id.
+			r.Get("/may-act", s.handleListMayActGrants)
+			r.Post("/may-act", s.handleCreateMayActGrant)
+			r.Delete("/may-act/{id}", s.handleRevokeMayActGrant)
+
+			// Device flow hidden for v0.1 — not battle-tested. Re-enable when implementation lands.
 			// Admin device-code queue + override decision endpoints. Used by
 			// the dashboard to triage pending device flows when the user
 			// can't reach the verify URL themselves.
-			r.Get("/oauth/device-codes", s.handleAdminListDeviceCodes)
-			r.Post("/oauth/device-codes/{user_code}/approve", s.handleAdminApproveDeviceCode)
-			r.Post("/oauth/device-codes/{user_code}/deny", s.handleAdminDenyDeviceCode)
+			// r.Get("/oauth/device-codes", s.handleAdminListDeviceCodes)
+			// r.Post("/oauth/device-codes/{user_code}/approve", s.handleAdminApproveDeviceCode)
+			// r.Post("/oauth/device-codes/{user_code}/deny", s.handleAdminDenyDeviceCode)
 
 			// Admin organization endpoints (admin key auth, not session auth).
 			// User-facing /api/v1/organizations/{id} requires a session cookie
@@ -781,13 +790,14 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// Token Introspection (RFC 7662) and Revocation (RFC 7009)
 			r.Post("/introspect", s.OAuthServer.HandleIntrospect)
 			r.Post("/revoke", s.OAuthServer.HandleRevoke)
+			// Device flow hidden for v0.1 — not battle-tested. Re-enable when implementation lands.
 			// Device Authorization Grant (RFC 8628)
-			r.Post("/device", s.OAuthServer.HandleDeviceAuthorization)
-			r.Group(func(r chi.Router) {
-				r.Use(mw.OptionalSessionFunc(sm, s.JWTManager))
-				r.Get("/device/verify", s.OAuthServer.HandleDeviceVerify)
-				r.Post("/device/verify", s.OAuthServer.HandleDeviceApprove)
-			})
+			// r.Post("/device", s.OAuthServer.HandleDeviceAuthorization)
+			// r.Group(func(r chi.Router) {
+			// 	r.Use(mw.OptionalSessionFunc(sm, s.JWTManager))
+			// 	r.Get("/device/verify", s.OAuthServer.HandleDeviceVerify)
+			// 	r.Post("/device/verify", s.OAuthServer.HandleDeviceApprove)
+			// })
 		})
 	}
 
