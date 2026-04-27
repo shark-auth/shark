@@ -197,3 +197,104 @@ def test_get_initials_single_word():
 
 def test_get_initials_empty():
     assert python_get_initials("") == "?"
+
+
+# ─── Fix 2: onNodeClick drawer static checks ─────────────────────────────────
+
+def test_canvas_on_node_click_handler():
+    """delegation_canvas.tsx must register onNodeClick handler on ReactFlow."""
+    content = _canvas_content()
+    assert "onNodeClick" in content, (
+        "delegation_canvas.tsx must register onNodeClick on the ReactFlow component"
+    )
+    assert "handleNodeClick" in content or "onNodeClick={" in content, (
+        "onNodeClick handler must be wired to ReactFlow component"
+    )
+
+
+def test_canvas_selected_node_state():
+    """delegation_canvas.tsx must manage selectedNode state for drawer."""
+    content = _canvas_content()
+    assert "selectedNode" in content, (
+        "delegation_canvas.tsx must have selectedNode state for the node detail drawer"
+    )
+    assert "setSelectedNode" in content, (
+        "delegation_canvas.tsx must have setSelectedNode state setter"
+    )
+
+
+def test_canvas_drawer_component_present():
+    """delegation_canvas.tsx must define NodeDrawer component."""
+    content = _canvas_content()
+    assert "NodeDrawer" in content, (
+        "delegation_canvas.tsx must define NodeDrawer component"
+    )
+    assert "node-drawer" in content or "data-testid" in content, (
+        "NodeDrawer must include data-testid attribute for test targeting"
+    )
+
+
+def test_canvas_drawer_human_fields():
+    """NodeDrawer must render human-specific fields (email, name, role chips, user link)."""
+    content = _canvas_content()
+    assert "HumanDrawerFields" in content or "human-drawer-fields" in content, (
+        "NodeDrawer must render HumanDrawerFields for human nodes"
+    )
+    assert "View user" in content, (
+        "Human drawer must include 'View user →' link to /admin/users"
+    )
+
+
+def test_canvas_drawer_agent_fields():
+    """NodeDrawer must render agent-specific fields (client_id, jkt, chain context)."""
+    content = _canvas_content()
+    assert "AgentDrawerFields" in content or "agent-drawer-fields" in content, (
+        "NodeDrawer must render AgentDrawerFields for agent nodes"
+    )
+    assert "client_id" in content, (
+        "Agent drawer must display client_id field"
+    )
+    assert "DPoP jkt" in content or "jkt" in content, (
+        "Agent drawer must display DPoP jkt thumbprint"
+    )
+    assert "Position in chain" in content or "chainPos" in content, (
+        "Agent drawer must show position in delegation chain"
+    )
+
+
+def test_canvas_drawer_audit_link():
+    """NodeDrawer must include 'View in audit log →' link."""
+    content = _canvas_content()
+    assert "View in audit log" in content, (
+        "NodeDrawer must include 'View in audit log →' link for both node types"
+    )
+    assert "node-drawer-audit-link" in content, (
+        "Audit log link must have data-testid='node-drawer-audit-link'"
+    )
+
+
+def test_canvas_drawer_escape_close():
+    """NodeDrawer must close on Escape key."""
+    content = _canvas_content()
+    assert "Escape" in content, (
+        "NodeDrawer must close on Escape key press"
+    )
+
+
+def test_canvas_drawer_slide_animation():
+    """NodeDrawer must use slide-in animation (200ms per spec)."""
+    content = _canvas_content()
+    assert "drawerSlideIn" in content or "slideIn" in content, (
+        "NodeDrawer must define slide-in animation"
+    )
+    assert "200ms" in content, (
+        "Drawer animation must be 200ms per spec"
+    )
+
+
+def test_canvas_drawer_hairline_border():
+    """NodeDrawer must use hairline left border per .impeccable.md v3 DNA."""
+    content = _canvas_content()
+    assert "borderLeft" in content and "hairline" in content, (
+        "NodeDrawer must use hairline left border (borderLeft: '1px solid var(--hairline)')"
+    )

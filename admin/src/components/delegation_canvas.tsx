@@ -760,6 +760,297 @@ function LoadingCanvas() {
   );
 }
 
+// ─── node detail drawer ───────────────────────────────────────────────────────
+// Slides in from right on node click. 400px, hairline left border, monochrome.
+// Human node: email, name, ID, signup date, role chips, owned agents, sessions.
+// Agent node: name, client_id, DPoP jkt, status, created_at, scopes, chain ctx.
+// Both: "View in audit log →" link.
+
+const DRAWER_SLIDE_IN = `
+  @keyframes drawerSlideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+`
+
+function NodeDrawer({ node, rfNodes, rfEdges, onClose }: {
+  node: { id: string; data: any } | null
+  rfNodes: any[]
+  rfEdges: any[]
+  onClose: () => void
+}) {
+  // Close on Escape
+  React.useEffect(() => {
+    if (!node) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [node, onClose])
+
+  if (!node) return null
+
+  const d = node.data || {}
+  const isHuman = d.isUser === true || d.type === 'human'
+
+  // Derive chain context for agent nodes
+  // Position = 1-based index among all edges where this node appears as source or target
+  const inEdges = rfEdges.filter(e => e.target === node.id)
+  const outEdges = rfEdges.filter(e => e.source === node.id)
+  const allNodes = rfNodes || []
+  const prevHop = inEdges.length > 0 ? allNodes.find(n => n.id === inEdges[0].source) : null
+  const nextHop = outEdges.length > 0 ? allNodes.find(n => n.id === outEdges[0].target) : null
+  const chainPos = inEdges.length + 1  // 1 = first actor, 2 = second, etc.
+  const edgeLabel = inEdges[0]?.data?.label || outEdges[0]?.data?.label || ''
+  const tokenType = edgeLabel.includes('token_exchange') ? 'token_exchange' : (edgeLabel || '—')
+  const hopTs = edgeLabel.replace('via token_exchange · ', '').replace('via token_exchange', '').trim() || '—'
+
+  const auditLink = `/admin/audit?actor_id=${encodeURIComponent(node.id)}`
+
+  return (
+    <>
+      <style>{DRAWER_SLIDE_IN}</style>
+      {/* Backdrop — click outside to close */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'absolute', inset: 0, zIndex: 20,
+          background: 'rgba(0,0,0,0.18)',
+          cursor: 'default',
+        }}
+        data-testid="node-drawer-backdrop"
+      />
+      {/* Drawer panel */}
+      <div
+        onClick={e => e.stopPropagation()}
+        data-testid="node-drawer"
+        style={{
+          position: 'absolute', top: 0, right: 0, bottom: 0,
+          width: 400, maxWidth: '92%',
+          zIndex: 21,
+          background: 'var(--surface-0)',
+          borderLeft: '1px solid var(--hairline)',
+          display: 'flex', flexDirection: 'column',
+          animation: 'drawerSlideIn 200ms ease-out',
+          overflowY: 'auto',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          padding: '12px 14px 10px',
+          borderBottom: '1px solid var(--hairline)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: 'var(--fg-dim)',
+          }}>
+            {isHuman ? 'human · ' : 'agent · '}{node.id.slice(0, 12)}
+          </span>
+          <button
+            onClick={onClose}
+            data-testid="node-drawer-close"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--fg-dim)', fontSize: 16, lineHeight: 1,
+              padding: '2px 4px', borderRadius: 2,
+              fontFamily: 'var(--font-mono)',
+            }}
+            title="Close (Esc)"
+          >✕</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {isHuman ? (
+            // ── Human fields ──────────────────────────────────────────────────
+            <HumanDrawerFields node={node} />
+          ) : (
+            // ── Agent fields ──────────────────────────────────────────────────
+            <AgentDrawerFields
+              node={node}
+              chainPos={chainPos}
+              prevHop={prevHop}
+              nextHop={nextHop}
+              tokenType={tokenType}
+              hopTs={hopTs}
+            />
+          )}
+
+          {/* View in audit log — both types */}
+          <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+            <a
+              href={auditLink}
+              data-testid="node-drawer-audit-link"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--fg-dim)',
+                textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg-dim)')}
+            >
+              View in audit log →
+            </a>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Human drawer fields ───────────────────────────────────────────────────────
+
+function HumanDrawerFields({ node }: { node: { id: string; data: any } }) {
+  const d = node.data || {}
+  return (
+    <div data-testid="human-drawer-fields" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <DrawerField label="Name" value={d.label || d.name || '—'} />
+      <DrawerField label="Email" value={d.email || d.label || '—'} />
+      <DrawerField label="ID" value={node.id} mono />
+      <DrawerField label="Signed up" value={d.created_at ? new Date(d.created_at).toLocaleDateString() : '—'} />
+
+      {/* Role chips */}
+      {d.roles && d.roles.length > 0 && (
+        <div>
+          <div style={drawerLabelStyle}>Roles</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+            {d.roles.map((r: any) => (
+              <span key={r.id || r} style={chipStyle}>{r.name || r}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Owned agents */}
+      {d.ownedAgents && d.ownedAgents.length > 0 && (
+        <div data-testid="human-owned-agents">
+          <div style={drawerLabelStyle}>Owned agents</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
+            {d.ownedAgents.map((a: any) => (
+              <span key={a.id || a} style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10,
+                color: 'var(--fg-dim)', cursor: 'pointer',
+                padding: '2px 0',
+              }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg-dim)')}
+              >
+                {a.name || a.client_id || a}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <DrawerField label="Recent sessions" value={d.sessionCount != null ? String(d.sessionCount) : '—'} />
+
+      {/* View user link */}
+      <a
+        href={`/admin/users?id=${encodeURIComponent(node.id)}`}
+        data-testid="human-drawer-user-link"
+        style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11,
+          color: 'var(--fg-dim)', textDecoration: 'none',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+        onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg-dim)')}
+      >
+        View user →
+      </a>
+    </div>
+  )
+}
+
+// ── Agent drawer fields ───────────────────────────────────────────────────────
+
+function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs }: {
+  node: { id: string; data: any }
+  chainPos: number
+  prevHop: any
+  nextHop: any
+  tokenType: string
+  hopTs: string
+}) {
+  const d = node.data || {}
+  const status = d.status || d.active === false ? 'inactive' : 'active'
+  const statusColor = status === 'active' ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'
+
+  return (
+    <div data-testid="agent-drawer-fields" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <DrawerField label="Name" value={d.label || d.name || '—'} />
+      <DrawerField label="client_id" value={d.client_id || d.clientId || node.id} mono />
+      {d.jkt && <DrawerField label="DPoP jkt" value={d.jkt} mono />}
+
+      {/* Status — color-coded (only place color is used per .impeccable.md) */}
+      <div>
+        <div style={drawerLabelStyle}>Status</div>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: statusColor }}>
+          {status}
+        </span>
+      </div>
+
+      {d.created_at && <DrawerField label="Created" value={new Date(d.created_at).toLocaleDateString()} />}
+      {d.scopes && <DrawerField label="Scopes" value={Array.isArray(d.scopes) ? d.scopes.join(' ') : d.scopes} mono />}
+
+      {/* Delegation context for this chain */}
+      <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
+        <div style={{ ...drawerLabelStyle, marginBottom: 8 }}>Delegation context</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <DrawerField label="Position in chain" value={`${chainPos === 1 ? '1st' : chainPos === 2 ? '2nd' : chainPos === 3 ? '3rd' : `${chainPos}th`} actor`} />
+          <DrawerField label="Delegated by" value={prevHop?.data?.label || prevHop?.id || '—'} />
+          <DrawerField label="Delegated to" value={nextHop?.data?.label || nextHop?.id || '—'} />
+          <DrawerField label="Token type" value={tokenType} mono />
+          <DrawerField label="Hop timestamp" value={hopTs} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Shared drawer primitives ──────────────────────────────────────────────────
+
+const drawerLabelStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 9,
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  color: 'var(--fg-dim)',
+  marginBottom: 2,
+  opacity: 0.7,
+}
+
+const chipStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 9.5,
+  padding: '2px 6px',
+  border: '1px solid var(--hairline)',
+  borderRadius: 2,
+  color: 'var(--fg-dim)',
+  background: 'var(--surface-1)',
+}
+
+function DrawerField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <div style={drawerLabelStyle}>{label}</div>
+      <div style={{
+        fontFamily: mono ? 'var(--font-mono)' : 'var(--font-body, var(--font-mono))',
+        fontSize: mono ? 10 : 11,
+        color: 'var(--fg)',
+        wordBreak: 'break-all',
+        lineHeight: 1.45,
+      }}>{value || '—'}</div>
+    </div>
+  )
+}
+
 // ─── main canvas component ────────────────────────────────────────────────────
 
 interface DelegationCanvasProps {
@@ -787,6 +1078,13 @@ export function DelegationCanvas({
 }: DelegationCanvasProps) {
   const [nodes, , onNodesChange] = useNodesState(rfNodes)
   const [edges, , onEdgesChange] = useEdgesState(rfEdges)
+  // selectedNode drives the right-side drawer
+  const [selectedNode, setSelectedNode] = useState<{ id: string; data: any } | null>(null)
+
+  const handleNodeClick = (_: any, node: any) => {
+    setSelectedNode({ id: node.id, data: node.data })
+    onNodeClick?.(node.id, node.data)
+  }
 
   if (loading) {
     return (
@@ -816,7 +1114,7 @@ export function DelegationCanvas({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onNodeClick={(_, node) => onNodeClick?.(node.id, node.data)}
+        onNodeClick={handleNodeClick}
         onEdgeClick={(_, edge) => onEdgeClick?.(edge.data)}
         fitView={fitView}
         fitViewOptions={{ padding: 0.32 }}
@@ -848,6 +1146,13 @@ export function DelegationCanvas({
           nodeColor="var(--fg-dim)"
         />
       </ReactFlow>
+      {/* Node detail drawer — slides in from right */}
+      <NodeDrawer
+        node={selectedNode}
+        rfNodes={rfNodes}
+        rfEdges={rfEdges}
+        onClose={() => setSelectedNode(null)}
+      />
     </div>
   )
 }
