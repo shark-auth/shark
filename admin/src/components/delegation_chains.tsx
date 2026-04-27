@@ -290,40 +290,38 @@ function ChainDrawer({
       return next;
     });
 
-  // Build react-flow nodes/edges for the linear chain canvas
+  // Build react-flow nodes/edges for the linear chain canvas (drawer view)
   const chainRFNodes = React.useMemo(() => {
     return chain.segments.map((seg, i) => ({
       id: seg.sub || seg.label || String(i),
-      type: seg.isUser ? 'userNode' : 'agentNode',
-      position: { x: 0, y: i * 100 },
+      type: seg.isUser ? 'humanNode' : 'agentNode',
+      position: { x: i * 180, y: 60 },
       data: {
         label: seg.label || seg.sub,
         jkt: seg.jkt,
         isUser: seg.isUser,
+        actAsCount: chain.segments.length > 1 ? chain.segments.length : undefined,
       },
     }));
   }, [chain.segments]);
 
   const chainRFEdges = React.useMemo(() => {
-    return chain.segments.slice(1).map((seg, i) => {
+    const rawEdges = chain.segments.slice(1).map((seg, i) => {
       const prev = chain.segments[i];
       const fromId = prev.sub || prev.label || String(i);
       const toId = seg.sub || seg.label || String(i + 1);
       const ev = chain.events[i];
-      const ts = ev?.created_at ? new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      const isActive = i === chain.segments.length - 2; // last hop = most recent
       return {
         id: `${fromId}->${toId}`,
-        source: fromId,
-        target: toId,
-        type: 'default',
-        markerEnd: { type: 'arrowclosed' as const, color: 'var(--fg-dim)' },
-        style: { stroke: 'var(--fg-dim)', strokeWidth: 1.5 },
-        label: ts || undefined,
-        labelStyle: { fontFamily: 'var(--font-mono)', fontSize: 9, fill: 'var(--fg-dim)' },
-        labelBgStyle: { fill: 'var(--surface-1)', fillOpacity: 1 },
-        data: { eventId: ev?.id },
+        from: fromId,
+        to: toId,
+        timestamp: ev?.created_at,
+        isActivHop: isActive,
+        eventId: ev?.id,
       };
     });
+    return toReactFlowEdges(rawEdges);
   }, [chain.segments, chain.events]);
 
   const jktChecks: Array<{ ok: boolean; reason: string }> = chain.segments.map((seg, i) => {
@@ -587,6 +585,31 @@ function Seg({ value, onChange, opts }: {
   );
 }
 
+// ─── chain summary header helpers ────────────────────────────────────────────
+
+/** Format relative time: "2m ago", "3h ago", "5d ago" */
+function relTime(iso: string): string {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const s = Math.floor(diff / 1000);
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  } catch {
+    return '';
+  }
+}
+
+/** Build "alice@corp → research-agent → tool-agent" path string (max 3 shown) */
+function chainPath(segments: Chain['segments']): string {
+  const labels = segments.map(s => s.label || s.sub);
+  if (labels.length <= 4) return labels.join(' → ');
+  return labels[0] + ' → … → ' + labels[labels.length - 1];
+}
+
 // ─── canvas graph view ────────────────────────────────────────────────────────
 
 type ViewMode = 'list' | 'canvas';
@@ -698,10 +721,58 @@ function ChainCanvas({
   setPage?: (p: string, extra?: any) => void;
   onAuditClick: (id: string) => void;
 }) {
+  // Selected chain for detail view (null = show aggregate graph)
+  const [selectedChain, setSelectedChain] = React.useState<Chain | null>(null);
+
   const { nodes: graphNodes, edges: graphEdges } = React.useMemo(() => buildGraph(chains), [chains]);
 
   const rfNodes = React.useMemo(() => toReactFlowNodes(graphNodes), [graphNodes]);
-  const rfEdges = React.useMemo(() => toReactFlowEdges(graphEdges), [graphEdges]);
+
+  // Mark the last edge in the sequence as the active hop (bolder)
+  const rfEdges = React.useMemo(() => {
+    const edges = graphEdges.map((e, i) => ({ ...e, id: e.from + '->' + e.to, isActivHop: i === graphEdges.length - 1 }));
+    return toReactFlowEdges(edges);
+  }, [graphEdges]);
+
+  // Per-chain view: when a chain is selected, show its linear hop canvas with header
+  const chainRFNodes = React.useMemo(() => {
+    if (!selectedChain) return null;
+    return selectedChain.segments.map((seg, i) => ({
+      id: seg.sub || seg.label || String(i),
+      type: seg.isUser ? 'humanNode' : 'agentNode',
+      position: { x: i * 180, y: 60 },
+      data: {
+        label: seg.label || seg.sub,
+        jkt: seg.jkt,
+        isUser: seg.isUser,
+        actAsCount: selectedChain.segments.length > 1 ? selectedChain.segments.length : undefined,
+      },
+    }));
+  }, [selectedChain]);
+
+  const chainRFEdges = React.useMemo(() => {
+    if (!selectedChain) return null;
+    return selectedChain.segments.slice(1).map((seg, i) => {
+      const prev = selectedChain.segments[i];
+      const fromId = prev.sub || prev.label || String(i);
+      const toId = seg.sub || seg.label || String(i + 1);
+      const ev = selectedChain.events[i];
+      const isActive = i === selectedChain.segments.length - 2; // last hop
+      return {
+        id: `${fromId}->${toId}`,
+        from: fromId,
+        to: toId,
+        timestamp: ev?.created_at,
+        isActivHop: isActive,
+        eventId: ev?.id,
+      };
+    });
+  }, [selectedChain]);
+
+  const chainRFEdgesBuilt = React.useMemo(
+    () => chainRFEdges ? toReactFlowEdges(chainRFEdges) : null,
+    [chainRFEdges]
+  );
 
   if (graphNodes.length === 0) {
     return (
@@ -724,21 +795,145 @@ function ChainCanvas({
     );
   }
 
+  // ── Per-chain detail view ─────────────────────────────────────────────────
+  if (selectedChain && chainRFNodes && chainRFEdgesBuilt) {
+    const hopCount = selectedChain.segments.length;
+    const summary = chainPath(selectedChain.segments);
+    const started = relTime(selectedChain.latestAt);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Chain summary header */}
+        <div style={{
+          padding: '8px 16px',
+          borderBottom: '1px solid var(--hairline)',
+          background: 'var(--surface-1)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexShrink: 0,
+        }}>
+          <button
+            onClick={() => setSelectedChain(null)}
+            style={{
+              background: 'transparent',
+              border: 0,
+              cursor: 'pointer',
+              color: 'var(--fg-dim)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10.5,
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              flexShrink: 0,
+            }}
+          >
+            ← chains
+          </button>
+          <span style={{ color: 'var(--hairline-strong)', fontSize: 10, flexShrink: 0 }}>|</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10.5,
+            color: 'var(--fg)',
+            fontWeight: 500,
+            flexShrink: 0,
+          }}>
+            {hopCount}-hop chain
+          </span>
+          {started && (
+            <>
+              <span style={{ color: 'var(--fg-dim)', fontSize: 10, flexShrink: 0 }}>·</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', flexShrink: 0 }}>
+                started {started}
+              </span>
+            </>
+          )}
+          <span style={{ color: 'var(--fg-dim)', fontSize: 10, flexShrink: 0 }}>·</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--fg-dim)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+            minWidth: 0,
+          }} title={summary}>{summary}</span>
+        </div>
+
+        <DelegationCanvasWithProvider
+          rfNodes={chainRFNodes}
+          rfEdges={chainRFEdgesBuilt}
+          height={520}
+          onNodeClick={(nodeId, nodeData) => {
+            if (!setPage) return;
+            if (nodeData.isUser) setPage('users', { userId: nodeId });
+            else setPage('agents', { q: nodeId });
+          }}
+          onEdgeClick={(edgeData) => {
+            if (edgeData?.eventId) onAuditClick(edgeData.eventId);
+          }}
+          fitView
+        />
+      </div>
+    );
+  }
+
+  // ── Aggregate graph with clickable nodes → drill into chain ───────────────
   return (
-    <DelegationCanvasWithProvider
-      rfNodes={rfNodes}
-      rfEdges={rfEdges}
-      height={580}
-      onNodeClick={(nodeId, nodeData) => {
-        if (!setPage) return;
-        if (nodeData.isUser) setPage('users', { userId: nodeId });
-        else setPage('agents', { q: nodeId });
-      }}
-      onEdgeClick={(edgeData) => {
-        if (edgeData?.eventId) onAuditClick(edgeData.eventId);
-      }}
-      fitView
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Aggregate header */}
+      <div style={{
+        padding: '7px 16px',
+        borderBottom: '1px solid var(--hairline)',
+        background: 'var(--surface-1)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        flexShrink: 0,
+      }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)' }}>
+          {chains.length} chain{chains.length !== 1 ? 's' : ''} · click a chain row to drill in
+        </span>
+        {chains.length > 0 && (
+          <>
+            <span style={{ color: 'var(--fg-dim)', fontSize: 10 }}>·</span>
+            <button
+              onClick={() => setSelectedChain(chains[0])}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--hairline-strong)',
+                borderRadius: 3,
+                cursor: 'pointer',
+                color: 'var(--fg-dim)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                padding: '1px 7px',
+                height: 20,
+              }}
+            >
+              view latest chain
+            </button>
+          </>
+        )}
+      </div>
+
+      <DelegationCanvasWithProvider
+        rfNodes={rfNodes}
+        rfEdges={rfEdges}
+        height={554}
+        onNodeClick={(nodeId, nodeData) => {
+          if (!setPage) return;
+          if (nodeData.isUser) setPage('users', { userId: nodeId });
+          else setPage('agents', { q: nodeId });
+        }}
+        onEdgeClick={(edgeData) => {
+          if (edgeData?.eventId) onAuditClick(edgeData.eventId);
+        }}
+        fitView
+      />
+    </div>
   );
 }
 
