@@ -77,10 +77,10 @@ const CANVAS_OVERRIDES = `
     stroke-width: 1px !important;
   }
 
-  /* Active-hop edge: dashed march animation — strokeWidth: 2 (bolder than hairline) */
+  /* Active-hop edge: dashed march animation — strokeWidth: 1.5 (bolder than hairline) */
   .react-flow__edge.active-hop .react-flow__edge-path {
     stroke: var(--fg) !important;
-    stroke-width: 2px !important;
+    stroke-width: 1.5px !important;
     stroke-dasharray: 6 4 !important;
     animation: dash-march 800ms linear infinite !important;
   }
