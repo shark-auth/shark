@@ -116,3 +116,4 @@ admin.key.firstboot
 .env.*
 !.env.example
 .gstack/
+.git-rewrite/
