@@ -920,6 +920,9 @@ function TierSection({ user, onUpdated }) {
 function ProfileTab({ user, onDelete, onRefreshList }) {
   const [nameVal, setNameVal] = React.useState(user.name || '');
   const [emailVal, setEmailVal] = React.useState(user.email || '');
+  const [metadataVal, setMetadataVal] = React.useState(
+    user.metadata ? JSON.stringify(user.metadata, null, 2) : '{\n  \n}'
+  );
   const [saving, setSaving] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [deleteInput, setDeleteInput] = React.useState('');
@@ -931,6 +934,16 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
       const patch = {};
       if (nameVal !== (user.name || '')) patch.name = nameVal;
       if (emailVal !== (user.email || '')) patch.email = emailVal;
+      try {
+        const parsed = JSON.parse(metadataVal);
+        const canonical = JSON.stringify(user.metadata || {});
+        if (JSON.stringify(parsed) !== canonical) patch.metadata = parsed;
+      } catch (_) {
+        // invalid JSON — skip metadata; user sees no silent loss
+        toast.error('Metadata is not valid JSON — fix before saving');
+        setSaving(false);
+        return;
+      }
       if (Object.keys(patch).length > 0) {
         await API.patch('/users/' + user.id, patch);
         if (onRefreshList) onRefreshList();
@@ -952,7 +965,6 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
   };
 
   const isVerified = user.email_verified !== undefined ? user.email_verified : user.verified;
-  const metadata = user.metadata ? JSON.stringify(user.metadata, null, 2) : '{\n  \n}';
 
   return (
     <>
@@ -990,7 +1002,8 @@ function ProfileTab({ user, onDelete, onRefreshList }) {
       <div style={{ marginTop: 24 }}>
         <Field label="Metadata (json)">
           <textarea
-            defaultValue={metadata}
+            value={metadataVal}
+            onChange={e => setMetadataVal(e.target.value)}
             style={{
               width: '100%', minHeight: 90,
               background: 'var(--surface-1)',
