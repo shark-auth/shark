@@ -106,11 +106,29 @@ def test_exit_code_one_when_admin_key_missing(tmp_path):
     (or is empty) and the key file check fails too.
     """
     fake_db = str(tmp_path / "empty.db")
-    # Remove any key file that might be in cwd
-    for candidate in ["admin.key.firstboot", "data/admin.key.firstboot"]:
+
+    # Key files may live in cwd OR repo root — resolve absolute paths for both
+    _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    _cwd = os.getcwd()
+    candidates = []
+    for base in [_cwd, _repo_root]:
+        candidates.append(os.path.join(base, "admin.key.firstboot"))
+        candidates.append(os.path.join(base, "data", "admin.key.firstboot"))
+    # Deduplicate
+    seen = set()
+    unique_candidates = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            unique_candidates.append(c)
+
+    backed_up = []
+    for candidate in unique_candidates:
         if os.path.exists(candidate):
+            bak = candidate + ".bak_f5test"
             try:
-                os.rename(candidate, candidate + ".bak_f5test")
+                os.rename(candidate, bak)
+                backed_up.append((candidate, bak))
             except OSError:
                 pass
 
@@ -131,11 +149,10 @@ def test_exit_code_one_when_admin_key_missing(tmp_path):
         )
     finally:
         # Restore key file backups
-        for candidate in ["admin.key.firstboot", "data/admin.key.firstboot"]:
-            bak = candidate + ".bak_f5test"
+        for original, bak in backed_up:
             if os.path.exists(bak):
                 try:
-                    os.rename(bak, candidate)
+                    os.rename(bak, original)
                 except OSError:
                     pass
 
