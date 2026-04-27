@@ -49,7 +49,10 @@ def test_as_metadata_rfc8414():
         # Grants
         grants = meta.get("grant_types_supported", [])
         assert "client_credentials" in grants
-        assert "urn:ietf:params:oauth:grant-type:device_code" in grants
+        # device_code was intentionally removed (commit f6462a6) — assert it is absent
+        assert "urn:ietf:params:oauth:grant-type:device_code" not in grants, (
+            "device_authorization_endpoint grant was intentionally disabled — must not appear in metadata"
+        )
         assert "urn:ietf:params:oauth:grant-type:token-exchange" in grants
         assert "authorization_code" in grants
         assert "refresh_token" in grants
