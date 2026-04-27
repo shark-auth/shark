@@ -84,9 +84,16 @@ func main() {
 	dbPath := filepath.Join("tests", "smoke", "data", "sharkauth.db")
 
 	all := []scenario.Scenario{
+		// Phase A (original)
 		scenario.NewSignupStorm(dbPath),
 		scenario.NewLoginBurst(100),
 		scenario.NewOAuthClientCredentials(),
+		// Phase B (marquee) — new
+		scenario.NewTokenExchangeChain(),
+		scenario.NewCascadeRevokeUserAgents(100),
+		scenario.NewOAuthDPoP(),
+		scenario.NewRBACPermissionCheckHot(),
+		scenario.NewVaultReadConcurrent(),
 	}
 
 	scenarios := all

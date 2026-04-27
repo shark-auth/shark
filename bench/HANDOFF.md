@@ -1,6 +1,27 @@
-# Bench Suite — Handoff (deferred 2026-04-27)
+# Bench Suite — Handoff (Phase B done 2026-04-27)
 
-Phase A landed. Phases B/C/D deferred — pivoted to SDK gap investigation for launch.
+Phase A + Phase B (marquee scenarios) shipped. vault_read_concurrent and proxy_auth_passthrough skipped (backend gaps documented below).
+
+## Phase B status
+
+| Scenario | Status | Key number |
+|---|---|---|
+| `oauth_client_credentials` (Phase A) | ✓ verified | 195 rps, p99=160ms |
+| `token_exchange_chain` | ✓ shipped | depth-3 p50=12ms p99=113ms |
+| `cascade_revoke_user_agents` | ✓ shipped | 100 agents p50=18ms p99=410ms |
+| `oauth_dpop` | ✓ shipped | +76ms overhead p99 (resign mode) |
+| `rbac_permission_check_hot` | ✓ shipped | p50=149µs p99=771µs; rate-limited at 100 rps/IP |
+| `vault_read_concurrent` | SKIP | backend bug: `extra_auth_params` column missing in vault_providers |
+| `proxy_auth_passthrough_load` | NOT IMPL | requires echo upstream + proxy rule fixture; deferred |
+
+See `bench/RESULTS.md` for full numbers with hardware context.
+
+## Phase B implementation notes
+
+- `token_exchange_chain` uses `/api/v1/agents` (admin API) not DCR — DCR rejects `token-exchange` grant type.
+- `rbac_permission_check_hot` uses `runID`-suffixed resource to avoid conflict across runs.
+- `vault_read_concurrent` soft-skips with `skipReason` in `Extra` when setup fails (graceful degradation pattern).
+- Global rate limiter (`mw.RateLimit(100, 100)`) limits all scenarios to ~100 rps/IP from localhost. This is an honest deployment constraint documented in RESULTS.md.
 
 ## What's done (Phase A)
 
@@ -42,7 +63,8 @@ bcrypt cost=12 dominates signup/login p99. Token issuance hot path is healthy.
 
 | Phase | Scope | Estimated CC |
 |---|---|---|
-| B | scenarios 4-7: oauth_dpop, token_exchange_chain, vault_read_concurrent, cascade_revoke_layer3 | ~2h |
+| B-remaining | vault_read_concurrent (blocked on backend migration gap) | unblock when `extra_auth_params` column lands |
+| B-remaining | proxy_auth_passthrough_load (bench fixture needed: echo upstream server) | ~1h |
 | C | scenarios 8-10 + REPORT.md markdown writer + baseline.json regression diff + DB probe (sqlite WAL/BUSY) | ~2h |
 | D | marketing run on this laptop, write `bench/README.md` w/ machine specs + hypothesis-validation table, polish | ~1h |
 
