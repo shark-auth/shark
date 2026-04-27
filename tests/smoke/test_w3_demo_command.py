@@ -10,7 +10,7 @@ def test_demo_delegation_with_trace_runs(server, admin_key):
         [_BIN, "demo", "delegation-with-trace",
          "--base-url", "http://localhost:8080",
          "--admin-key", admin_key,
-         "--plain"],
+         "--plain", "--fast"],
         capture_output=True, text=True, timeout=60,
     )
     assert res.returncode == 0, f"stdout: {res.stdout}\nstderr: {res.stderr}"
@@ -22,4 +22,6 @@ def test_demo_delegation_with_trace_runs(server, admin_key):
     assert "Token 1:" in out
     assert "Token 2:" in out
     assert "Token 3:" in out
-    assert "DPoP proofs: 3/3 verified" in out
+    # Wave M (2026-04-27): hardcoded "DPoP proofs: 3/3 verified" was a lie —
+    # replaced with honest claim that all tokens are cnf.jkt-bound.
+    assert "cnf.jkt set on all 3 issued tokens" in out
