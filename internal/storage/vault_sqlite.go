@@ -15,6 +15,10 @@ func (s *SQLiteStore) CreateVaultProvider(ctx context.Context, p *VaultProvider)
 	if err != nil {
 		return fmt.Errorf("marshal scopes: %w", err)
 	}
+	extraJSON, err := marshalStringMap(p.ExtraAuthParams)
+	if err != nil {
+		return fmt.Errorf("marshal extra_auth_params: %w", err)
+	}
 	var iconURL interface{}
 	if p.IconURL != "" {
 		iconURL = p.IconURL
@@ -23,10 +27,11 @@ func (s *SQLiteStore) CreateVaultProvider(ctx context.Context, p *VaultProvider)
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO vault_providers
 		 (id, name, display_name, auth_url, token_url, client_id,
-		  client_secret_enc, scopes, icon_url, active, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		  client_secret_enc, scopes, icon_url, active, extra_auth_params, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.ID, p.Name, p.DisplayName, p.AuthURL, p.TokenURL, p.ClientID,
 		p.ClientSecretEnc, scopesJSON, iconURL, boolToInt(p.Active),
+		extraJSON,
 		p.CreatedAt.UTC().Format(time.RFC3339),
 		p.UpdatedAt.UTC().Format(time.RFC3339),
 	)
@@ -36,20 +41,20 @@ func (s *SQLiteStore) CreateVaultProvider(ctx context.Context, p *VaultProvider)
 func (s *SQLiteStore) GetVaultProviderByID(ctx context.Context, id string) (*VaultProvider, error) {
 	return s.scanVaultProvider(s.db.QueryRowContext(ctx,
 		`SELECT id, name, display_name, auth_url, token_url, client_id,
-		        client_secret_enc, scopes, icon_url, active, created_at, updated_at
+		        client_secret_enc, scopes, icon_url, active, extra_auth_params, created_at, updated_at
 		 FROM vault_providers WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetVaultProviderByName(ctx context.Context, name string) (*VaultProvider, error) {
 	return s.scanVaultProvider(s.db.QueryRowContext(ctx,
 		`SELECT id, name, display_name, auth_url, token_url, client_id,
-		        client_secret_enc, scopes, icon_url, active, created_at, updated_at
+		        client_secret_enc, scopes, icon_url, active, extra_auth_params, created_at, updated_at
 		 FROM vault_providers WHERE name = ?`, name))
 }
 
 func (s *SQLiteStore) ListVaultProviders(ctx context.Context, activeOnly bool) ([]*VaultProvider, error) {
 	query := `SELECT id, name, display_name, auth_url, token_url, client_id,
-	                 client_secret_enc, scopes, icon_url, active, created_at, updated_at
+	                 client_secret_enc, scopes, icon_url, active, extra_auth_params, created_at, updated_at
 	          FROM vault_providers`
 	if activeOnly {
 		query += ` WHERE active = 1`
@@ -78,6 +83,10 @@ func (s *SQLiteStore) UpdateVaultProvider(ctx context.Context, p *VaultProvider)
 	if err != nil {
 		return fmt.Errorf("marshal scopes: %w", err)
 	}
+	extraJSON, err := marshalStringMap(p.ExtraAuthParams)
+	if err != nil {
+		return fmt.Errorf("marshal extra_auth_params: %w", err)
+	}
 	var iconURL interface{}
 	if p.IconURL != "" {
 		iconURL = p.IconURL
@@ -87,11 +96,11 @@ func (s *SQLiteStore) UpdateVaultProvider(ctx context.Context, p *VaultProvider)
 		`UPDATE vault_providers SET
 		   name = ?, display_name = ?, auth_url = ?, token_url = ?,
 		   client_id = ?, client_secret_enc = ?, scopes = ?, icon_url = ?,
-		   active = ?, updated_at = ?
+		   active = ?, extra_auth_params = ?, updated_at = ?
 		 WHERE id = ?`,
 		p.Name, p.DisplayName, p.AuthURL, p.TokenURL,
 		p.ClientID, p.ClientSecretEnc, scopesJSON, iconURL,
-		boolToInt(p.Active), time.Now().UTC().Format(time.RFC3339),
+		boolToInt(p.Active), extraJSON, time.Now().UTC().Format(time.RFC3339),
 		p.ID,
 	)
 	return err
@@ -104,43 +113,43 @@ func (s *SQLiteStore) DeleteVaultProvider(ctx context.Context, id string) error 
 
 func (s *SQLiteStore) scanVaultProvider(row *sql.Row) (*VaultProvider, error) {
 	var p VaultProvider
-	var scopesJSON string
+	var scopesJSON, extraJSON string
 	var iconURL sql.NullString
 	var active int
 	var createdAtStr, updatedAtStr string
 
 	err := row.Scan(
 		&p.ID, &p.Name, &p.DisplayName, &p.AuthURL, &p.TokenURL, &p.ClientID,
-		&p.ClientSecretEnc, &scopesJSON, &iconURL, &active,
+		&p.ClientSecretEnc, &scopesJSON, &iconURL, &active, &extraJSON,
 		&createdAtStr, &updatedAtStr,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return unmarshalVaultProvider(&p, scopesJSON, iconURL, active, createdAtStr, updatedAtStr)
+	return unmarshalVaultProvider(&p, scopesJSON, extraJSON, iconURL, active, createdAtStr, updatedAtStr)
 }
 
 func (s *SQLiteStore) scanVaultProviderFromRows(rows *sql.Rows) (*VaultProvider, error) {
 	var p VaultProvider
-	var scopesJSON string
+	var scopesJSON, extraJSON string
 	var iconURL sql.NullString
 	var active int
 	var createdAtStr, updatedAtStr string
 
 	err := rows.Scan(
 		&p.ID, &p.Name, &p.DisplayName, &p.AuthURL, &p.TokenURL, &p.ClientID,
-		&p.ClientSecretEnc, &scopesJSON, &iconURL, &active,
+		&p.ClientSecretEnc, &scopesJSON, &iconURL, &active, &extraJSON,
 		&createdAtStr, &updatedAtStr,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return unmarshalVaultProvider(&p, scopesJSON, iconURL, active, createdAtStr, updatedAtStr)
+	return unmarshalVaultProvider(&p, scopesJSON, extraJSON, iconURL, active, createdAtStr, updatedAtStr)
 }
 
 func unmarshalVaultProvider(
 	p *VaultProvider,
-	scopesJSON string,
+	scopesJSON, extraJSON string,
 	iconURL sql.NullString,
 	active int,
 	createdAtStr, updatedAtStr string,
@@ -155,6 +164,16 @@ func unmarshalVaultProvider(
 	}
 	if p.Scopes == nil {
 		p.Scopes = []string{}
+	}
+
+	if extraJSON == "" {
+		extraJSON = "{}"
+	}
+	if err := json.Unmarshal([]byte(extraJSON), &p.ExtraAuthParams); err != nil {
+		return nil, fmt.Errorf("unmarshal extra_auth_params: %w", err)
+	}
+	if p.ExtraAuthParams == nil {
+		p.ExtraAuthParams = map[string]string{}
 	}
 
 	var err error

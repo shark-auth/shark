@@ -404,3 +404,15 @@ func marshalMetadata(m map[string]any) (string, error) {
 	}
 	return string(b), nil
 }
+
+// marshalStringMap encodes a map[string]string to JSON, always returning "{}" for nil/empty.
+func marshalStringMap(m map[string]string) (string, error) {
+	if len(m) == 0 {
+		return "{}", nil
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}

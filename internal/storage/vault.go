@@ -9,18 +9,23 @@ import "time"
 // ClientSecretEnc is stored encrypted via FieldEncryptor (enc::<b64> prefix).
 // Handlers decrypt it before using in OAuth flows; storage never touches crypto.
 type VaultProvider struct {
-	ID              string    `json:"id"`              // vp_<nanoid>
-	Name            string    `json:"name"`            // unique short key, e.g. "google_calendar"
-	DisplayName     string    `json:"display_name"`    // user-facing, e.g. "Google Calendar"
-	AuthURL         string    `json:"auth_url"`
-	TokenURL        string    `json:"token_url"`
-	ClientID        string    `json:"client_id"`
-	ClientSecretEnc string    `json:"-"`               // encrypted; never exposed on the wire
-	Scopes          []string  `json:"scopes"`          // default scopes requested at auth time
-	IconURL         string    `json:"icon_url,omitempty"`
-	Active          bool      `json:"active"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              string            `json:"id"`              // vp_<nanoid>
+	Name            string            `json:"name"`            // unique short key, e.g. "google_calendar"
+	DisplayName     string            `json:"display_name"`    // user-facing, e.g. "Google Calendar"
+	AuthURL         string            `json:"auth_url"`
+	TokenURL        string            `json:"token_url"`
+	ClientID        string            `json:"client_id"`
+	ClientSecretEnc string            `json:"-"`               // encrypted; never exposed on the wire
+	Scopes          []string          `json:"scopes"`          // default scopes requested at auth time
+	IconURL         string            `json:"icon_url,omitempty"`
+	Active          bool              `json:"active"`
+	// ExtraAuthParams holds provider-specific query parameters appended to the
+	// authorize URL at BuildAuthURL time (e.g. prompt=consent, audience=...).
+	// Persisted per-provider so manual providers get the same behaviour as
+	// template-created ones. Empty map serialises as "{}".
+	ExtraAuthParams map[string]string `json:"extra_auth_params,omitempty"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 }
 
 // VaultConnection represents a single user's OAuth connection to a given

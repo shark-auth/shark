@@ -457,6 +457,66 @@ func TestVaultConnectionMarkNeedsReauth(t *testing.T) {
 	}
 }
 
+func TestVaultProviderExtraAuthParamsRoundTrip(t *testing.T) {
+	store := testutil.NewTestDB(t)
+	ctx := context.Background()
+
+	p := newTestVaultProvider(t, "linear_custom", true)
+	p.ExtraAuthParams = map[string]string{"prompt": "consent"}
+
+	if err := store.CreateVaultProvider(ctx, p); err != nil {
+		t.Fatalf("CreateVaultProvider: %v", err)
+	}
+
+	// Read back via GetByID.
+	got, err := store.GetVaultProviderByID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("GetVaultProviderByID: %v", err)
+	}
+	if got.ExtraAuthParams["prompt"] != "consent" {
+		t.Errorf("ExtraAuthParams round-trip via GetByID: got %v, want prompt=consent", got.ExtraAuthParams)
+	}
+
+	// Read back via GetByName.
+	byName, err := store.GetVaultProviderByName(ctx, p.Name)
+	if err != nil {
+		t.Fatalf("GetVaultProviderByName: %v", err)
+	}
+	if byName.ExtraAuthParams["prompt"] != "consent" {
+		t.Errorf("ExtraAuthParams round-trip via GetByName: got %v", byName.ExtraAuthParams)
+	}
+
+	// Update: replace extra params.
+	p.ExtraAuthParams = map[string]string{"audience": "api.example.com", "prompt": "consent"}
+	if err := store.UpdateVaultProvider(ctx, p); err != nil {
+		t.Fatalf("UpdateVaultProvider: %v", err)
+	}
+	upd, err := store.GetVaultProviderByID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("Get after update: %v", err)
+	}
+	if upd.ExtraAuthParams["audience"] != "api.example.com" {
+		t.Errorf("ExtraAuthParams after update: got %v", upd.ExtraAuthParams)
+	}
+	if upd.ExtraAuthParams["prompt"] != "consent" {
+		t.Errorf("ExtraAuthParams[prompt] after update: got %v", upd.ExtraAuthParams)
+	}
+
+	// Provider with nil/empty extra params serialises as "{}" (no error).
+	p2 := newTestVaultProvider(t, "no_extra_provider", false)
+	p2.ExtraAuthParams = nil
+	if err := store.CreateVaultProvider(ctx, p2); err != nil {
+		t.Fatalf("CreateVaultProvider with nil ExtraAuthParams: %v", err)
+	}
+	got2, err := store.GetVaultProviderByID(ctx, p2.ID)
+	if err != nil {
+		t.Fatalf("GetVaultProviderByID nil extra: %v", err)
+	}
+	if got2.ExtraAuthParams == nil {
+		t.Error("ExtraAuthParams should be non-nil empty map when stored as nil")
+	}
+}
+
 func TestVaultConnectionEmptyOptionalFields(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	ctx := context.Background()
