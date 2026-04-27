@@ -1,56 +1,24 @@
 // @ts-nocheck
 import React from 'react'
-import { BrandingVisualsTab } from './branding/visuals_tab'
-import { BrandingEmailTab } from './branding/email_tab'
-import { BrandingIntegrationsTab } from './branding/integrations_tab'
 
-const TABS = [
-  ['visuals', 'Visuals'],
-  ['email', 'Email templates'],
-  ['integrations', 'Integrations'],
-] as const
+// Branding sub-tabs (visuals / email / integrations) are implemented under
+// ./branding/* but NOT battle-tested for v0.1. Keep stub until v0.2.
+// Re-enable by importing the tabbed container from git history at
+// commit b482cf9 (Wave C admin polish, 2026-04-27).
 
 export function Branding() {
-  const [tab, setTab] = React.useState<string>('visuals')
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Tab bar */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 0,
-          padding: '0 20px',
-          borderBottom: '1px solid var(--hairline)',
-          background: 'var(--surface-0)',
-          flexShrink: 0,
-        }}
-      >
-        {TABS.map(([v, l]) => (
-          <button
-            key={v}
-            onClick={() => setTab(v)}
-            style={{
-              padding: '10px 12px 8px',
-              fontSize: 12,
-              color: tab === v ? 'var(--fg)' : 'var(--fg-muted)',
-              borderBottom: tab === v ? '2px solid var(--fg)' : '2px solid transparent',
-              fontWeight: tab === v ? 500 : 400,
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {l}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-        {tab === 'visuals' && <BrandingVisualsTab />}
-        {tab === 'email' && <BrandingEmailTab />}
-        {tab === 'integrations' && <BrandingIntegrationsTab />}
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      height: '100%', textAlign: 'center', padding: 40,
+    }}>
+      <div style={{ maxWidth: 460, border: '1px solid var(--hairline-strong)', padding: '28px 32px', background: 'var(--surface-1)' }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--fg-muted)', fontWeight: 600 }}>Coming soon</div>
+        <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--fg)', marginTop: 10 }}>Branding</div>
+        <div style={{ marginTop: 12, fontSize: 13, color: 'var(--fg-dim)', lineHeight: 1.6 }}>
+          Logo, colors, typography, and email-template styling for hosted login pages and customer-facing emails.
+          Lands in v0.2 once the sub-tabs (visuals / email / integrations) are battle-tested.
+        </div>
       </div>
     </div>
   )
