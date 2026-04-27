@@ -237,10 +237,11 @@ function AnimatedBezierEdge({
     const ts = parts.length > 1 ? parts[parts.length - 1] : '';
     return ts ? `acts-as · ${ts}` : 'acts-as';
   }, [label]);
-  // Hover tooltip shows full technical detail
-  const tooltipLabel = label
-    ? label.replace('via token_exchange', `RFC 8693 token_exchange`)
-    : '';
+  // Hover tooltip shows full RFC detail (jargon-free on pill, technical here)
+  const tooltipLabel = React.useMemo(() => {
+    if (!label) return '';
+    return label.replace(/^via token_exchange/, 'RFC 8693 token_exchange');
+  }, [label]);
 
   // Scope delta chip — TODO(v0.2): remove ? placeholder once backend populates scope
   const scopeChip = React.useMemo(() => {
