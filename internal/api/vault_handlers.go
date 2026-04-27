@@ -352,12 +352,23 @@ func (s *Server) handleUpdateVaultProvider(w http.ResponseWriter, r *http.Reques
 			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "auth_url cannot be empty"))
 			return
 		}
+		// SSRF guard: reject non-https URLs and bare-IP / metadata hosts on
+		// PATCH, mirroring the create path. Without this, an admin could point
+		// the provider at http://169.254.169.254 or other internal endpoints.
+		if !isHTTPSURL(*req.AuthURL) {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "auth_url must be https and not target internal/metadata hosts"))
+			return
+		}
 		p.AuthURL = *req.AuthURL
 		changed = true
 	}
 	if req.TokenURL != nil {
 		if *req.TokenURL == "" {
 			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "token_url cannot be empty"))
+			return
+		}
+		if !isHTTPSURL(*req.TokenURL) {
+			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "token_url must be https and not target internal/metadata hosts"))
 			return
 		}
 		p.TokenURL = *req.TokenURL

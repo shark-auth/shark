@@ -234,19 +234,23 @@ func (s *Server) handleFirstbootKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Security gate: once any admin.* audit event exists the operator has
-	// already consumed the key — stop serving it.
-	logs, err := s.Store.QueryAuditLogs(r.Context(), storage.AuditLogQuery{Limit: 1})
-	if err == nil {
-		for _, l := range logs {
-			if strings.HasPrefix(l.Action, "admin.") {
-				writeJSON(w, http.StatusNotFound, map[string]string{
-					"error":   "not_found",
-					"message": "Admin already bootstrapped.",
-				})
-				return
-			}
-		}
+	// Security gate: once any API key exists the admin has already bootstrapped
+	// — stop serving the key. FAIL CLOSED on any DB error so a transient
+	// failure cannot bypass the gate.
+	keys, err := s.Store.ListAPIKeys(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Failed to verify bootstrap state.",
+		})
+		return
+	}
+	if len(keys) > 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "not_found",
+			"message": "Admin already bootstrapped.",
+		})
+		return
 	}
 
 	data, err := os.ReadFile(keyPath)
@@ -259,9 +263,10 @@ func (s *Server) handleFirstbootKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := strings.TrimSpace(string(data))
+	// Do NOT include filesystem path in response — it leaks deployment layout
+	// to unauthenticated callers.
 	writeJSON(w, http.StatusOK, map[string]string{
-		"key":  key,
-		"path": keyPath,
+		"key": key,
 	})
 }
 
