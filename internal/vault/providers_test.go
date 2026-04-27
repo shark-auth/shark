@@ -221,6 +221,52 @@ func TestApplyTemplate_BuildsVaultProvider_WithDefaultsAndOverrides(t *testing.T
 	})
 }
 
+// TestExtraAuthParams_LinearAndJira verifies that Linear gets prompt=consent
+// and Jira gets both audience=api.atlassian.com and prompt=consent baked into
+// the template. Microsoft gets prompt=select_account. Slack gets no extra
+// auth params (its quirk is in the token response shape, not the auth URL).
+func TestExtraAuthParams_LinearAndJira(t *testing.T) {
+	cases := []struct {
+		name   string
+		params map[string]string
+	}{
+		{"linear", map[string]string{"prompt": "consent"}},
+		{"jira", map[string]string{"audience": "api.atlassian.com", "prompt": "consent"}},
+		{"microsoft", map[string]string{"prompt": "select_account"}},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tpl, ok := vault.Template(tc.name)
+			if !ok {
+				t.Fatalf("template %q not found", tc.name)
+			}
+			for k, want := range tc.params {
+				got, exists := tpl.ExtraAuthParams[k]
+				if !exists {
+					t.Errorf("ExtraAuthParams[%q] missing", k)
+					continue
+				}
+				if got != want {
+					t.Errorf("ExtraAuthParams[%q] = %q, want %q", k, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestTokenResponseShape_Slack verifies the Slack template carries
+// TokenResponseShape="slack_v2" so the exchange path branches correctly.
+func TestTokenResponseShape_Slack(t *testing.T) {
+	tpl, ok := vault.Template("slack")
+	if !ok {
+		t.Fatal("slack template not found")
+	}
+	if tpl.TokenResponseShape != "slack_v2" {
+		t.Errorf("Slack TokenResponseShape = %q, want %q", tpl.TokenResponseShape, "slack_v2")
+	}
+}
+
 // TestApplyTemplate_PreservesNameAndURLs sanity-checks every template in
 // the catalog can be applied without dropping any URL-ish field, so adding
 // a new template can't silently land with a half-wired mapping.

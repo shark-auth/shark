@@ -9,8 +9,12 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -172,7 +176,18 @@ func (m *Manager) BuildAuthURL(ctx context.Context, providerID, state, redirectU
 	// AccessTypeOffline triggers a refresh token on the first consent with
 	// providers that honour it (notably Google); harmless on providers that
 	// ignore it.
-	return cfg.AuthCodeURL(state, oauth2.AccessTypeOffline), nil
+	opts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
+
+	// Per-template extra authorize-URL params (e.g. prompt=consent for Linear,
+	// audience=api.atlassian.com for Jira). We look up by provider name so
+	// templates drive this without any handler-layer branch.
+	if tpl, ok := Template(provider.Name); ok {
+		for k, v := range tpl.ExtraAuthParams {
+			opts = append(opts, oauth2.SetAuthURLParam(k, v))
+		}
+	}
+
+	return cfg.AuthCodeURL(state, opts...), nil
 }
 
 // ExchangeAndStore completes the OAuth dance: swaps `code` for tokens,
@@ -195,7 +210,19 @@ func (m *Manager) ExchangeAndStore(ctx context.Context, providerID, userID, code
 		return nil, err
 	}
 
-	token, err := cfg.Exchange(ctx, code)
+	// Determine token response shape from the built-in template (if any).
+	var tokenShape string
+	if tpl, ok := Template(provider.Name); ok {
+		tokenShape = tpl.TokenResponseShape
+	}
+
+	var token *oauth2.Token
+	switch tokenShape {
+	case "slack_v2":
+		token, err = m.exchangeSlackV2(ctx, cfg, code)
+	default:
+		token, err = cfg.Exchange(ctx, code)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("oauth exchange: %w", err)
 	}
@@ -388,6 +415,21 @@ func (m *Manager) GetFreshToken(ctx context.Context, providerID, userID string) 
 	return fresh.AccessToken, nil
 }
 
+// DecryptAccessToken decrypts the access token stored on conn and returns the
+// plaintext. Used by handler-layer post-exchange steps (e.g. Atlassian
+// accessible-resources) that need to call upstream APIs immediately after
+// ExchangeAndStore.
+func (m *Manager) DecryptAccessToken(_ context.Context, conn *storage.VaultConnection) (string, error) {
+	if conn == nil {
+		return "", errors.New("vault: connection is nil")
+	}
+	plain, err := m.encryptor.Decrypt(conn.AccessTokenEnc)
+	if err != nil {
+		return "", fmt.Errorf("decrypt access token: %w", err)
+	}
+	return plain, nil
+}
+
 // Disconnect deletes a single connection by its ID. Returns
 // ErrConnectionNotFound when no row matched.
 func (m *Manager) Disconnect(ctx context.Context, connectionID string) error {
@@ -410,6 +452,102 @@ func (m *Manager) ListConnections(ctx context.Context, userID string) ([]*storag
 }
 
 // --- Internal helpers ---
+
+// exchangeSlackV2 performs the token exchange for Slack's non-standard
+// oauth.v2.access endpoint. Slack returns HTTP 200 even on errors, using an
+// `ok` boolean field instead of a non-2xx status. The response may contain
+// both a bot token (top-level access_token, xoxb-...) and a user token
+// (authed_user.access_token, xoxp-...). We prefer the user token when present
+// so callers get user-scoped access; the bot token is stored as a fallback.
+//
+// Reference: https://api.slack.com/methods/oauth.v2.access
+func (m *Manager) exchangeSlackV2(ctx context.Context, cfg *oauth2.Config, code string) (*oauth2.Token, error) {
+	// Build the POST form body directly — we can't use cfg.Exchange because
+	// oauth2.Transport parses the response as RFC 6749 and misses the ok flag.
+	form := url.Values{
+		"code":          {code},
+		"client_id":     {cfg.ClientID},
+		"client_secret": {cfg.ClientSecret},
+		"redirect_uri":  {cfg.RedirectURL},
+	}
+
+	httpClient := http.DefaultClient
+	if hc, ok := ctx.Value(oauth2.HTTPClient).(*http.Client); ok && hc != nil {
+		httpClient = hc
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.Endpoint.TokenURL,
+		strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("slack_v2: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("slack_v2: POST: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return nil, fmt.Errorf("slack_v2: read body: %w", err)
+	}
+
+	var raw struct {
+		OK          bool   `json:"ok"`
+		Error       string `json:"error"`
+		AccessToken string `json:"access_token"` // bot token (xoxb-)
+		TokenType   string `json:"token_type"`
+		Scope       string `json:"scope"`
+		AuthedUser  struct {
+			AccessToken string `json:"access_token"` // user token (xoxp-)
+			Scope       string `json:"scope"`
+			TokenType   string `json:"token_type"`
+		} `json:"authed_user"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("slack_v2: parse response: %w", err)
+	}
+	if !raw.OK {
+		errMsg := raw.Error
+		if errMsg == "" {
+			errMsg = "unknown_error"
+		}
+		return nil, fmt.Errorf("slack_v2: exchange failed: %s", errMsg)
+	}
+
+	// Prefer the user (xoxp) token when present; fall back to the bot (xoxb) token.
+	accessToken := raw.AccessToken
+	tokenType := raw.TokenType
+	scope := raw.Scope
+	if raw.AuthedUser.AccessToken != "" {
+		accessToken = raw.AuthedUser.AccessToken
+		if raw.AuthedUser.TokenType != "" {
+			tokenType = raw.AuthedUser.TokenType
+		}
+		if raw.AuthedUser.Scope != "" {
+			scope = raw.AuthedUser.Scope
+		}
+	}
+	if accessToken == "" {
+		return nil, fmt.Errorf("slack_v2: exchange succeeded but access_token is empty")
+	}
+	if tokenType == "" {
+		tokenType = "Bearer"
+	}
+
+	tok := &oauth2.Token{
+		AccessToken: accessToken,
+		TokenType:   tokenType,
+	}
+	// Inject scope into Extra so extractGrantedScopes can pick it up.
+	if scope != "" {
+		tok = tok.WithExtra(map[string]interface{}{"scope": scope})
+	}
+	return tok, nil
+}
 
 // oauthConfig builds an *oauth2.Config from a VaultProvider, decrypting the
 // client secret on the fly. The redirectURI and scopes are request-time

@@ -28,20 +28,21 @@ type ProviderTemplate struct {
 	// IconURL is an optional public URL for a branded icon. Empty when
 	// we don't want to commit to a specific CDN path.
 	IconURL string `json:"icon_url,omitempty"`
+	// ExtraAuthParams holds provider-specific query parameters appended to the
+	// authorize URL at BuildAuthURL time (e.g. prompt=consent, audience=...).
+	// These are baked into the template so the handler doesn't need provider-
+	// specific branches; they are NOT stored on VaultProvider because they are
+	// a function of the provider type, not a per-install admin choice.
+	ExtraAuthParams map[string]string `json:"extra_auth_params,omitempty"`
+	// TokenResponseShape names the token-response unmarshaler to use.
+	// "" or "rfc6749" → standard golang.org/x/oauth2 path.
+	// "slack_v2"      → Slack's ok-flag + nested authed_user token.
+	TokenResponseShape string `json:"token_response_shape,omitempty"`
 }
 
 // builtinTemplates is the internal registry. Access via Templates() /
 // Template() / ListTemplates() rather than touching the map directly so
 // we can swap storage strategies later without breaking callers.
-//
-// TODO(T4): some providers require extra auth-URL query params that the
-// oauth2.Config doesn't model cleanly:
-//   - Linear: prompt=consent to force the consent screen every time.
-//   - Jira (Atlassian): audience=api.atlassian.com & prompt=consent.
-//
-// The handler layer (T4) adds these via oauth2.AuthCodeOption when building
-// the authorize URL; we intentionally do NOT bake them into the template so
-// the template stays a pure endpoint descriptor.
 var builtinTemplates = map[string]*ProviderTemplate{
 	"google_calendar": {
 		Name:        "google_calendar",
@@ -81,12 +82,13 @@ var builtinTemplates = map[string]*ProviderTemplate{
 		IconURL: "https://www.google.com/s2/favicons?domain=google.com&sz=64",
 	},
 	"slack": {
-		Name:          "slack",
-		DisplayName:   "Slack",
-		AuthURL:       "https://slack.com/oauth/v2/authorize",
-		TokenURL:      "https://slack.com/api/oauth.v2.access",
-		DefaultScopes: []string{"chat:write", "channels:read", "users:read"},
-		IconURL:       "https://a.slack-edge.com/80588/marketing/img/meta/favicon-32.png",
+		Name:               "slack",
+		DisplayName:        "Slack",
+		AuthURL:            "https://slack.com/oauth/v2/authorize",
+		TokenURL:           "https://slack.com/api/oauth.v2.access",
+		DefaultScopes:      []string{"chat:write", "channels:read", "users:read"},
+		IconURL:            "https://a.slack-edge.com/80588/marketing/img/meta/favicon-32.png",
+		TokenResponseShape: "slack_v2",
 	},
 	"github": {
 		Name:          "github",
@@ -103,6 +105,9 @@ var builtinTemplates = map[string]*ProviderTemplate{
 		TokenURL:      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
 		DefaultScopes: []string{"offline_access", "User.Read", "Mail.Read"},
 		IconURL:       "https://c.s-microsoft.com/favicon.ico?v2",
+		ExtraAuthParams: map[string]string{
+			"prompt": "select_account",
+		},
 	},
 	"notion": {
 		Name:        "notion",
@@ -115,24 +120,27 @@ var builtinTemplates = map[string]*ProviderTemplate{
 		IconURL:       "https://www.notion.so/front-static/favicon.ico",
 	},
 	"linear": {
-		Name:        "linear",
-		DisplayName: "Linear",
-		AuthURL:     "https://linear.app/oauth/authorize",
-		TokenURL:    "https://api.linear.app/oauth/token",
-		// Linear requires prompt=consent at authorize-URL build time; see
-		// the TODO on builtinTemplates above.
+		Name:          "linear",
+		DisplayName:   "Linear",
+		AuthURL:       "https://linear.app/oauth/authorize",
+		TokenURL:      "https://api.linear.app/oauth/token",
 		DefaultScopes: []string{"read", "write"},
 		IconURL:       "https://linear.app/favicon.ico",
+		ExtraAuthParams: map[string]string{
+			"prompt": "consent",
+		},
 	},
 	"jira": {
-		Name:        "jira",
-		DisplayName: "Jira Cloud",
-		AuthURL:     "https://auth.atlassian.com/authorize",
-		TokenURL:    "https://auth.atlassian.com/oauth/token",
-		// Atlassian requires audience=api.atlassian.com & prompt=consent at
-		// authorize-URL build time; see the TODO on builtinTemplates above.
+		Name:          "jira",
+		DisplayName:   "Jira Cloud",
+		AuthURL:       "https://auth.atlassian.com/authorize",
+		TokenURL:      "https://auth.atlassian.com/oauth/token",
 		DefaultScopes: []string{"read:jira-work", "write:jira-work", "offline_access"},
 		IconURL:       "https://www.atlassian.com/favicon.ico",
+		ExtraAuthParams: map[string]string{
+			"audience": "api.atlassian.com",
+			"prompt":   "consent",
+		},
 	},
 }
 

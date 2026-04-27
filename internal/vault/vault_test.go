@@ -729,6 +729,169 @@ func TestUpdateProviderSecret(t *testing.T) {
 	}
 }
 
+// TestBuildAuthURL_LinearExtraParams verifies that BuildAuthURL injects
+// prompt=consent into the authorize URL for a provider named "linear", relying
+// on the template registry — not a hard-coded branch in the manager.
+func TestBuildAuthURL_LinearExtraParams(t *testing.T) {
+	now := time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC)
+	m, _, _ := setupManager(t, func() time.Time { return now })
+
+	// Seed a provider with name "linear" so the template lookup finds the extras.
+	p := &storage.VaultProvider{
+		Name:        "linear",
+		DisplayName: "Linear",
+		AuthURL:     "https://linear.app/oauth/authorize",
+		TokenURL:    "https://api.linear.app/oauth/token",
+		ClientID:    "linear-client",
+		Scopes:      []string{"read", "write"},
+		Active:      true,
+	}
+	if err := m.CreateProvider(context.Background(), p, "linear-secret"); err != nil {
+		t.Fatalf("create linear provider: %v", err)
+	}
+
+	raw, err := m.BuildAuthURL(context.Background(), p.ID, "state-xyz", "https://app.test/cb", nil)
+	if err != nil {
+		t.Fatalf("BuildAuthURL: %v", err)
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse URL: %v", err)
+	}
+	q := u.Query()
+	if got := q.Get("prompt"); got != "consent" {
+		t.Errorf("prompt: got %q, want consent (Linear requires prompt=consent)", got)
+	}
+}
+
+// TestBuildAuthURL_JiraExtraParams verifies both audience and prompt are injected.
+func TestBuildAuthURL_JiraExtraParams(t *testing.T) {
+	now := time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC)
+	m, _, _ := setupManager(t, func() time.Time { return now })
+
+	p := &storage.VaultProvider{
+		Name:        "jira",
+		DisplayName: "Jira Cloud",
+		AuthURL:     "https://auth.atlassian.com/authorize",
+		TokenURL:    "https://auth.atlassian.com/oauth/token",
+		ClientID:    "jira-client",
+		Scopes:      []string{"read:jira-work"},
+		Active:      true,
+	}
+	if err := m.CreateProvider(context.Background(), p, "jira-secret"); err != nil {
+		t.Fatalf("create jira provider: %v", err)
+	}
+
+	raw, err := m.BuildAuthURL(context.Background(), p.ID, "state-jira", "https://app.test/cb", nil)
+	if err != nil {
+		t.Fatalf("BuildAuthURL: %v", err)
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse URL: %v", err)
+	}
+	q := u.Query()
+	if got := q.Get("audience"); got != "api.atlassian.com" {
+		t.Errorf("audience: got %q, want api.atlassian.com", got)
+	}
+	if got := q.Get("prompt"); got != "consent" {
+		t.Errorf("prompt: got %q, want consent", got)
+	}
+}
+
+// TestExchangeAndStore_SlackV2_OkFalse verifies that a Slack v2 token
+// endpoint returning HTTP 200 with {ok:false, error:"invalid_code"} is
+// surfaced as an error, not a silent empty-token success.
+func TestExchangeAndStore_SlackV2_OkFalse(t *testing.T) {
+	// Slack returns HTTP 200 even for errors.
+	slackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_code"}`))
+	}))
+	t.Cleanup(slackServer.Close)
+
+	now := time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC)
+	m, _, store := setupManager(t, func() time.Time { return now })
+	seedUser(t, store, "usr_slack_err")
+
+	// Use token URL pointing at our mock but name the provider "slack" so
+	// the slack_v2 branch activates.
+	p := &storage.VaultProvider{
+		Name:        "slack",
+		DisplayName: "Slack",
+		AuthURL:     "https://slack.com/oauth/v2/authorize",
+		TokenURL:    slackServer.URL,
+		ClientID:    "slack-client",
+		Scopes:      []string{"chat:write"},
+		Active:      true,
+	}
+	if err := m.CreateProvider(context.Background(), p, "slack-secret"); err != nil {
+		t.Fatalf("create slack provider: %v", err)
+	}
+
+	ctx := ctxWithHTTPClient(context.Background(), slackServer)
+	_, err := m.ExchangeAndStore(ctx, p.ID, "usr_slack_err", "bad-code", "https://app.test/cb")
+	if err == nil {
+		t.Fatal("expected error from Slack ok:false response, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid_code") {
+		t.Errorf("expected error to contain Slack's error field, got: %v", err)
+	}
+}
+
+// TestExchangeAndStore_SlackV2_XoxpPreferred verifies that when both bot
+// (xoxb) and user (xoxp) tokens are present we prefer the user token.
+func TestExchangeAndStore_SlackV2_XoxpPreferred(t *testing.T) {
+	slackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"ok": true,
+			"access_token": "xoxb-bot-token",
+			"token_type": "bot",
+			"scope": "chat:write",
+			"authed_user": {
+				"access_token": "xoxp-user-token",
+				"scope": "identity.basic",
+				"token_type": "user"
+			}
+		}`))
+	}))
+	t.Cleanup(slackServer.Close)
+
+	now := time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC)
+	m, enc, store := setupManager(t, func() time.Time { return now })
+	seedUser(t, store, "usr_slack_xoxp")
+
+	p := &storage.VaultProvider{
+		Name:        "slack",
+		DisplayName: "Slack",
+		AuthURL:     "https://slack.com/oauth/v2/authorize",
+		TokenURL:    slackServer.URL,
+		ClientID:    "slack-client",
+		Scopes:      []string{"chat:write"},
+		Active:      true,
+	}
+	if err := m.CreateProvider(context.Background(), p, "slack-secret"); err != nil {
+		t.Fatalf("create slack provider: %v", err)
+	}
+
+	ctx := ctxWithHTTPClient(context.Background(), slackServer)
+	conn, err := m.ExchangeAndStore(ctx, p.ID, "usr_slack_xoxp", "good-code", "https://app.test/cb")
+	if err != nil {
+		t.Fatalf("ExchangeAndStore: %v", err)
+	}
+
+	plain, err := enc.Decrypt(conn.AccessTokenEnc)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if plain != "xoxp-user-token" {
+		t.Errorf("expected xoxp user token, got %q", plain)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
