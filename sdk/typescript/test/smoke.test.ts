@@ -466,7 +466,7 @@ describe("VaultClient.listConnections()", () => {
     expect(result.data[0].id).toBe("conn_1");
 
     const [url, init] = lastFetchCall();
-    expect(url).toContain("/api/v1/vault/connections");
+    expect(url).toContain("/api/v1/admin/vault/connections");
     expect(init.method).toBe("GET");
   });
 });
