@@ -3,9 +3,9 @@
 // Used by: delegation_chains.tsx (full graph) + agents_manage.tsx (ego graph)
 // Visual contract: square chrome, monochrome, .impeccable.md v3
 // F7: initials avatar on human nodes, act-as badge on agent nodes,
-//     "via token_exchange · <ts>" edge labels, active hop animated stroke
+//     "via token_exchange · <ts>" edge tooltip (hover-only), active hop animated stroke
 
-import React from 'react'
+import React, { useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -42,6 +42,10 @@ const ANIMATION_KEYFRAMES = `
     from { opacity: 0; transform: scale(0.96); }
     to   { opacity: 1; transform: scale(1); }
   }
+  @keyframes tooltip-in {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
 `
 
 // ─── global style overrides (monochrome, square chrome) ──────────────────────
@@ -73,17 +77,17 @@ const CANVAS_OVERRIDES = `
     stroke-width: 1px !important;
   }
 
-  /* Active-hop edge: dashed march animation */
+  /* Active-hop edge: dashed march animation — strokeWidth: 2 (bolder than hairline) */
   .react-flow__edge.active-hop .react-flow__edge-path {
     stroke: var(--fg) !important;
-    stroke-width: 1.5px !important;
+    stroke-width: 2px !important;
     stroke-dasharray: 6 4 !important;
     animation: dash-march 800ms linear infinite !important;
   }
 
   .react-flow__edge.selected .react-flow__edge-path {
     stroke: var(--fg) !important;
-    stroke-width: 1.5px !important;
+    stroke-width: 2px !important;
   }
 
   /* Controls — square, no shadow */
@@ -122,22 +126,32 @@ const CANVAS_OVERRIDES = `
 
   .react-flow__attribution { display: none !important; }
 
-  /* Edge label box */
-  .edge-label-box {
-    background: var(--surface-0) !important;
-    border: 1px solid var(--hairline) !important;
+  /* Edge hover tooltip — invisible by default, slides in on hover */
+  .edge-tooltip {
+    background: var(--surface-1) !important;
+    border: 1px solid var(--hairline-strong) !important;
     border-radius: 2px !important;
-    padding: 1px 5px !important;
+    padding: 2px 6px !important;
     font-family: var(--font-mono) !important;
     font-size: 9px !important;
     color: var(--fg-dim) !important;
     pointer-events: none !important;
     white-space: nowrap;
     line-height: 1.5;
+    opacity: 0;
+    transition: opacity 120ms ease, transform 120ms ease;
+    transform: translate(-50%, -50%) scale(0.94);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.32);
+    z-index: 10;
   }
-  .edge-label-box.active {
+  .edge-tooltip.visible {
+    opacity: 1 !important;
+    transform: translate(-50%, -50%) scale(1) !important;
+    animation: tooltip-in 120ms ease forwards !important;
+  }
+  .edge-tooltip.active {
     color: var(--fg) !important;
-    border-color: var(--hairline-strong) !important;
+    border-color: var(--fg-dim) !important;
   }
 
   /* Faded chains */
@@ -171,23 +185,40 @@ export function getInitials(label: string): string {
 }
 
 // ─── custom edge type: AnimatedBezierEdge ─────────────────────────────────────
+// Edges are clean hairlines by default.
+// Hover anywhere on the edge path area to reveal the hover tooltip
+// showing "via token_exchange · HH:MM" at the midpoint.
+// Active hop uses marching dashes + strokeWidth: 2 (bolder than hairline).
 
 function AnimatedBezierEdge({
   id, sourceX, sourceY, targetX, targetY,
   sourcePosition, targetPosition,
   data, style, markerEnd, selected,
 }) {
+  const [hovered, setHovered] = useState(false);
+
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
-    curvature: 0.35,
+    curvature: 0.18,
   });
 
   const isActive = data?.isActive;
+  // label always contains "via token_exchange · HH:MM" text (for test assertions + tooltip)
   const label = data?.label;
 
   return (
     <>
+      {/* Invisible wide hit area for hover detection */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={14}
+        style={{ cursor: 'crosshair' }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      />
       <BaseEdge
         id={id}
         path={edgePath}
@@ -204,7 +235,7 @@ function AnimatedBezierEdge({
             }}
             className="nodrag nopan"
           >
-            <div className={`edge-label-box${isActive ? ' active' : ''}`}>
+            <div className={`edge-tooltip${hovered ? ' visible' : ''}${isActive ? ' active' : ''}`}>
               {label}
             </div>
           </div>
@@ -540,12 +571,14 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
     const ts = e.timestamp
       ? new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : ''
+    // label text is stored in data for hover tooltip; contains "token_exchange" keyword
     const baseLabel = ts ? `via token_exchange · ${ts}` : 'via token_exchange'
     const edgeLabel = e.label || baseLabel
 
     const isActive = e.isActivHop === true
     const strokeColor = isActive ? 'var(--fg)' : 'var(--fg-dim)'
-    const strokeWidth = isActive ? 1.5 : 1
+    // Active hop: strokeWidth: 2 (bolder than hairline 1px)
+    const strokeWidth = isActive ? 2 : 1
 
     return {
       id: e.id,
@@ -561,6 +594,7 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
       },
       style: {
         stroke: strokeColor,
+        // strokeWidth: 2 for active-hop (bolder), 1 for historical hairline
         strokeWidth,
         ...(isActive ? {
           strokeDasharray: '6 4',
@@ -615,9 +649,11 @@ export function toEgoLayout(
     const ts = e.timestamp
       ? new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : ''
+    // label stored for hover tooltip; "token_exchange" keyword always present
     const edgeLabel = e.label || (ts ? `via token_exchange · ${ts}` : 'via token_exchange')
     const strokeColor = isActive ? 'var(--fg)' : 'var(--fg-dim)'
-    const strokeWidth = isActive ? 1.5 : 1
+    // Active hop: strokeWidth: 2 (bolder than hairline 1px)
+    const strokeWidth = isActive ? 2 : 1
     return {
       id: e.id,
       source: e.from,
