@@ -33,15 +33,6 @@ const WHY_BULLETS = [
 // ─── 60-second setup tasks (Section 2) ──────────────────────────────────────
 const SETUP_TASKS = [
   {
-    id: 'setup.install',
-    title: 'Install',
-    summary: 'Download the binary or build from source. Single binary, no external dependencies.',
-    cli: 'curl -fsSL https://sharkauth.dev/install.sh | sh',
-    extraSnippets: [
-      { label: 'Build from source', code: 'git clone https://github.com/sharkauth/sharkauth && cd sharkauth && go build ./cmd/shark' },
-    ],
-  },
-  {
     id: 'setup.serve',
     title: 'Run shark serve',
     summary: 'Starts the auth server on port 8080. First boot prints a one-time admin key.',
@@ -63,12 +54,21 @@ const SETUP_TASKS = [
 // ─── Your first agent tasks (Section 3) ─────────────────────────────────────
 const AGENT_TASKS = [
   {
+    id: 'user.create',
+    title: 'Create your first human user',
+    summary: 'Your first end-user. Real humans authenticate against shark — sessions, MFA, password reset all built-in.',
+    page: 'users',
+    pageLabel: '→ /users (create-drawer)',
+    cli: 'shark user create --email demo@example.com',
+    autoCheck: 'hasUser',
+  },
+  {
     id: 'agent.register',
-    title: 'Register an agent',
-    summary: 'Creates a machine identity. SharkAuth issues a client_credentials grant scoped to this agent.',
+    title: 'Register your first agent',
+    summary: 'Each agent gets a DPoP-bound credential. Tokens are cryptographically tied to the agent\'s keypair — token theft is useless without the private key.',
     page: 'agents',
     pageLabel: '→ /agents/new',
-    cli: 'shark agents create --name my-agent',
+    cli: 'shark agent register --name my-first-agent',
     autoCheck: 'hasAgent',
   },
   {
@@ -211,12 +211,11 @@ const HUMAN_TASKS = [
   },
   {
     id: 'human.sdk',
-    title: 'Install the SDK',
-    summary: 'The React SDK wraps the core TypeScript client with hooks and a provider.',
-    cli: 'npm install @sharkauth/react',
+    title: 'Ship to your stack',
+    summary: 'Python SDK (dogfood mode): install from git. TypeScript SDK coming v0.2 (W18-W19).',
+    cli: 'pip install git+https://github.com/sharkauth/shark#subdirectory=sdk/python',
     extraSnippets: [
-      { label: 'Python', code: 'pip install shark-auth' },
-      { label: 'TypeScript core', code: 'npm install @sharkauth/sdk' },
+      { label: 'TypeScript SDK', code: '// TypeScript SDK coming v0.2 (W18-W19). No install snippet yet.' },
     ],
   },
 ];
@@ -243,6 +242,7 @@ function persist(state) {
 function useAutoChecks() {
   const [checks, setChecks] = React.useState({
     hasAdminKey: false,
+    hasUser: false,
     hasAgent: false,
     hasAgentPolicy: false,
     hasDPoPToken: false,
@@ -250,10 +250,15 @@ function useAutoChecks() {
   });
 
   const probe = React.useCallback(async () => {
-    const next = { hasAdminKey: false, hasAgent: false, hasAgentPolicy: false, hasDPoPToken: false, hasDelegationEvent: false };
+    const next = { hasAdminKey: false, hasUser: false, hasAgent: false, hasAgentPolicy: false, hasDPoPToken: false, hasDelegationEvent: false };
     try {
       const r = await API.get('/admin/bootstrap/status');
       next.hasAdminKey = !!(r && (r.consumed || r.bootstrapped));
+    } catch {}
+    try {
+      const r = await API.get('/admin/users?limit=1');
+      const users = r?.users || r?.data || (Array.isArray(r) ? r : []);
+      next.hasUser = Array.isArray(users) && users.length > 0;
     } catch {}
     try {
       const r = await API.get('/admin/agents?limit=1');
