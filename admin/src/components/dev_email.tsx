@@ -344,9 +344,9 @@ export function DevEmail() {
   const [clearing, setClearing] = React.useState(false);
   const [search, setSearch] = React.useState('');
 
-  // Poll every 3s for live updates
+  // Poll every 1.5s for live updates (dev inbox is a live-capture surface; AbortController in useAPI prevents overlapping requests)
   React.useEffect(() => {
-    const id = setInterval(refresh, 3000);
+    const id = setInterval(refresh, 1500);
     return () => clearInterval(id);
   }, [refresh]);
 

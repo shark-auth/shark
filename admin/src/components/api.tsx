@@ -4,7 +4,7 @@ import React from 'react'
 export const API = {
   _key: () => localStorage.getItem('shark_admin_key'),
 
-  async request(method, path, body) {
+  async request(method, path, body, signal) {
     const key = this._key();
     if (!key) throw new Error('Not authenticated');
     const opts = {
@@ -15,6 +15,7 @@ export const API = {
       },
     };
     if (body && method !== 'GET') opts.body = JSON.stringify(body);
+    if (signal) opts.signal = signal;
     const res = await fetch(`/api/v1${path}`, opts);
     if (res.status === 401) {
       if (path.startsWith('/admin/') || path.startsWith('/agents') || path.startsWith('/api-keys') || path.startsWith('/users') || path.startsWith('/roles') || path.startsWith('/audit-logs')) {
@@ -31,7 +32,7 @@ export const API = {
     return res.json();
   },
 
-  get(path) { return this.request('GET', path); },
+  get(path, signal) { return this.request('GET', path, null, signal); },
   post(path, body) { return this.request('POST', path, body); },
   patch(path, body) { return this.request('PATCH', path, body); },
   put(path, body) { return this.request('PUT', path, body); },
@@ -64,18 +65,34 @@ export function useAPI(path, deps) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
+  const abortRef = React.useRef(null);
 
   const refresh = React.useCallback(() => {
     if (!path) { setLoading(false); return; }
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
-    API.get(path)
-      .then(d => { setData(d); setError(null); })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+    API.get(path, controller.signal)
+      .then(d => {
+        if (controller.signal.aborted) return;
+        setData(d);
+        setError(null);
+      })
+      .catch(e => {
+        if (e.name === 'AbortError' || controller.signal.aborted) return;
+        setError(e.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
   }, [path, ...(deps || [])]);
 
-  React.useEffect(() => { refresh(); }, [refresh]);
+  React.useEffect(() => {
+    refresh();
+    return () => { if (abortRef.current) abortRef.current.abort(); };
+  }, [refresh]);
 
   return { data, loading, error, refresh, setData };
 }
