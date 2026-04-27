@@ -140,11 +140,38 @@ def test_resolve_chain_empty():
 
 # ─── live checks ─────────────────────────────────────────────────────────────
 
+def _get_admin_key_for_live() -> str:
+    """Try to load the admin key from firstboot file or environment."""
+    # Try env first
+    key = os.environ.get("SHARK_ADMIN_KEY", "") or os.environ.get("SHARK_ADMIN_KEY_PATH", "")
+    if key.startswith("sk_live_"):
+        return key
+    # Try reading from firstboot file (same logic as conftest)
+    import glob as _glob
+    _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    for candidate in [
+        os.path.join(_repo_root, "admin.key.firstboot"),
+        os.path.join(_repo_root, "data", "admin.key.firstboot"),
+        "admin.key.firstboot",
+        "data/admin.key.firstboot",
+    ]:
+        if os.path.exists(candidate):
+            try:
+                val = open(candidate).read().strip()
+                if val.startswith("sk_live_"):
+                    return val
+            except OSError:
+                pass
+    return ""
+
+
 @pytest.mark.skipif(not _shark_reachable(), reason="shark not reachable")
 def test_audit_log_token_exchange_endpoint():
     """GET /api/v1/audit-logs?action=oauth.token.exchanged must return 200."""
-    admin_key = os.environ.get("SHARK_ADMIN_KEY", "")
-    headers = {"Authorization": f"Bearer {admin_key}"} if admin_key else {}
+    admin_key = _get_admin_key_for_live()
+    if not admin_key:
+        pytest.skip("No admin key available for live F6 test — set SHARK_ADMIN_KEY env or run after first boot")
+    headers = {"Authorization": f"Bearer {admin_key}"}
     resp = requests.get(
         f"{BASE_URL}/api/v1/audit-logs",
         params={"action": "oauth.token.exchanged", "limit": "10"},
@@ -195,8 +222,10 @@ def test_agents_manage_empty_state_shows_agent_ids():
 @pytest.mark.skipif(not _shark_reachable(), reason="shark not reachable")
 def test_audit_log_has_chain_with_flatten():
     """If token-exchange events exist, at least one must have a flattenable act_chain."""
-    admin_key = os.environ.get("SHARK_ADMIN_KEY", "")
-    headers = {"Authorization": f"Bearer {admin_key}"} if admin_key else {}
+    admin_key = _get_admin_key_for_live()
+    if not admin_key:
+        pytest.skip("No admin key available for live F6 test — set SHARK_ADMIN_KEY env or run after first boot")
+    headers = {"Authorization": f"Bearer {admin_key}"}
     resp = requests.get(
         f"{BASE_URL}/api/v1/audit-logs",
         params={"action": "oauth.token.exchanged", "limit": "50"},
