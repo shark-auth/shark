@@ -43,17 +43,18 @@ const (
 // We never let ciphertext or plaintext secrets leak out to API callers, even
 // admin ones — rotation goes through a dedicated PATCH body field.
 type vaultProviderResponse struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	DisplayName string    `json:"display_name"`
-	AuthURL     string    `json:"auth_url"`
-	TokenURL    string    `json:"token_url"`
-	ClientID    string    `json:"client_id"`
-	Scopes      []string  `json:"scopes"`
-	IconURL     string    `json:"icon_url,omitempty"`
-	Active      bool      `json:"active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID              string            `json:"id"`
+	Name            string            `json:"name"`
+	DisplayName     string            `json:"display_name"`
+	AuthURL         string            `json:"auth_url"`
+	TokenURL        string            `json:"token_url"`
+	ClientID        string            `json:"client_id"`
+	Scopes          []string          `json:"scopes"`
+	IconURL         string            `json:"icon_url,omitempty"`
+	Active          bool              `json:"active"`
+	ExtraAuthParams map[string]string `json:"extra_auth_params,omitempty"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 }
 
 func sanitizeVaultProvider(p *storage.VaultProvider) vaultProviderResponse {
@@ -64,18 +65,23 @@ func sanitizeVaultProvider(p *storage.VaultProvider) vaultProviderResponse {
 	if scopes == nil {
 		scopes = []string{}
 	}
+	extra := p.ExtraAuthParams
+	if extra == nil {
+		extra = map[string]string{}
+	}
 	return vaultProviderResponse{
-		ID:          p.ID,
-		Name:        p.Name,
-		DisplayName: p.DisplayName,
-		AuthURL:     p.AuthURL,
-		TokenURL:    p.TokenURL,
-		ClientID:    p.ClientID,
-		Scopes:      scopes,
-		IconURL:     p.IconURL,
-		Active:      p.Active,
-		CreatedAt:   p.CreatedAt,
-		UpdatedAt:   p.UpdatedAt,
+		ID:              p.ID,
+		Name:            p.Name,
+		DisplayName:     p.DisplayName,
+		AuthURL:         p.AuthURL,
+		TokenURL:        p.TokenURL,
+		ClientID:        p.ClientID,
+		Scopes:          scopes,
+		IconURL:         p.IconURL,
+		Active:          p.Active,
+		ExtraAuthParams: extra,
+		CreatedAt:       p.CreatedAt,
+		UpdatedAt:       p.UpdatedAt,
 	}
 }
 
@@ -152,15 +158,16 @@ func (s *Server) auditVault(r *http.Request, actorType, action, targetType, targ
 // provider definition. Always requires plaintext client_id + client_secret.
 func (s *Server) handleCreateVaultProvider(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Template     string   `json:"template"`
-		Name         string   `json:"name"`
-		DisplayName  string   `json:"display_name"`
-		AuthURL      string   `json:"auth_url"`
-		TokenURL     string   `json:"token_url"`
-		ClientID     string   `json:"client_id"`
-		ClientSecret string   `json:"client_secret"`
-		Scopes       []string `json:"scopes"`
-		IconURL      string   `json:"icon_url"`
+		Template        string            `json:"template"`
+		Name            string            `json:"name"`
+		DisplayName     string            `json:"display_name"`
+		AuthURL         string            `json:"auth_url"`
+		TokenURL        string            `json:"token_url"`
+		ClientID        string            `json:"client_id"`
+		ClientSecret    string            `json:"client_secret"`
+		Scopes          []string          `json:"scopes"`
+		IconURL         string            `json:"icon_url"`
+		ExtraAuthParams map[string]string `json:"extra_auth_params"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -190,6 +197,17 @@ func (s *Server) handleCreateVaultProvider(w http.ResponseWriter, r *http.Reques
 		if req.IconURL != "" {
 			provider.IconURL = req.IconURL
 		}
+		// Merge request extra_auth_params over template defaults (per-key override).
+		if len(req.ExtraAuthParams) > 0 {
+			if provider.ExtraAuthParams == nil {
+				provider.ExtraAuthParams = map[string]string{}
+			}
+			for k, v := range req.ExtraAuthParams {
+				if v != "" {
+					provider.ExtraAuthParams[k] = v
+				}
+			}
+		}
 	} else {
 		if strings.TrimSpace(req.Name) == "" {
 			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "name is required when template is omitted"))
@@ -211,15 +229,20 @@ func (s *Server) handleCreateVaultProvider(w http.ResponseWriter, r *http.Reques
 		if displayName == "" {
 			displayName = req.Name
 		}
+		extraParams := req.ExtraAuthParams
+		if extraParams == nil {
+			extraParams = map[string]string{}
+		}
 		provider = &storage.VaultProvider{
-			Name:        strings.TrimSpace(req.Name),
-			DisplayName: displayName,
-			AuthURL:     req.AuthURL,
-			TokenURL:    req.TokenURL,
-			ClientID:    req.ClientID,
-			Scopes:      scopes,
-			IconURL:     req.IconURL,
-			Active:      true,
+			Name:            strings.TrimSpace(req.Name),
+			DisplayName:     displayName,
+			AuthURL:         req.AuthURL,
+			TokenURL:        req.TokenURL,
+			ClientID:        req.ClientID,
+			Scopes:          scopes,
+			IconURL:         req.IconURL,
+			Active:          true,
+			ExtraAuthParams: extraParams,
 		}
 	}
 
@@ -241,8 +264,14 @@ func (s *Server) handleCreateVaultProvider(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Audit: log param keys only — values could contain sensitive info.
+	extraKeys := make([]string, 0, len(provider.ExtraAuthParams))
+	for k := range provider.ExtraAuthParams {
+		extraKeys = append(extraKeys, k)
+	}
 	s.auditVault(r, "admin", auditVaultProviderCreated, "vault_provider", provider.ID, map[string]any{
-		"name": provider.Name,
+		"name":                 provider.Name,
+		"extra_auth_param_keys": extraKeys,
 	})
 
 	writeJSON(w, http.StatusCreated, sanitizeVaultProvider(provider))
@@ -301,14 +330,15 @@ func (s *Server) handleUpdateVaultProvider(w http.ResponseWriter, r *http.Reques
 	}
 
 	var req struct {
-		DisplayName  *string  `json:"display_name,omitempty"`
-		Scopes       []string `json:"scopes,omitempty"`
-		IconURL      *string  `json:"icon_url,omitempty"`
-		Active       *bool    `json:"active,omitempty"`
-		ClientSecret *string  `json:"client_secret,omitempty"`
-		AuthURL      *string  `json:"auth_url,omitempty"`
-		TokenURL     *string  `json:"token_url,omitempty"`
-		ClientID     *string  `json:"client_id,omitempty"`
+		DisplayName     *string           `json:"display_name,omitempty"`
+		Scopes          []string          `json:"scopes,omitempty"`
+		IconURL         *string           `json:"icon_url,omitempty"`
+		Active          *bool             `json:"active,omitempty"`
+		ClientSecret    *string           `json:"client_secret,omitempty"`
+		AuthURL         *string           `json:"auth_url,omitempty"`
+		TokenURL        *string           `json:"token_url,omitempty"`
+		ClientID        *string           `json:"client_id,omitempty"`
+		ExtraAuthParams map[string]string `json:"extra_auth_params,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -385,6 +415,11 @@ func (s *Server) handleUpdateVaultProvider(w http.ResponseWriter, r *http.Reques
 		p.ClientID = *req.ClientID
 		changed = true
 	}
+	if req.ExtraAuthParams != nil {
+		// Full replacement — PATCH sends the complete desired map.
+		p.ExtraAuthParams = req.ExtraAuthParams
+		changed = true
+	}
 	if changed {
 		p.UpdatedAt = time.Now().UTC()
 		if err := s.Store.UpdateVaultProvider(r.Context(), p); err != nil {
@@ -393,8 +428,14 @@ func (s *Server) handleUpdateVaultProvider(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	// Audit: log param keys only — values could contain sensitive info.
+	extraKeys := make([]string, 0, len(p.ExtraAuthParams))
+	for k := range p.ExtraAuthParams {
+		extraKeys = append(extraKeys, k)
+	}
 	s.auditVault(r, "admin", auditVaultProviderUpdated, "vault_provider", p.ID, map[string]any{
-		"secret_rotated": req.ClientSecret != nil,
+		"secret_rotated":       req.ClientSecret != nil,
+		"extra_auth_param_keys": extraKeys,
 	})
 	writeJSON(w, http.StatusOK, sanitizeVaultProvider(p))
 }

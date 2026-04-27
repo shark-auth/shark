@@ -601,3 +601,107 @@ func TestVaultRoutePrecedence_ProvidersBeatsWildcard(t *testing.T) {
 	// Discard any body so we don't leak a response.
 	_ = json.NewDecoder(resp.Body).Decode(&struct{}{})
 }
+
+// testVaultProviderRespWithExtra extends the response decoder to include extra_auth_params.
+type testVaultProviderRespWithExtra struct {
+	testVaultProviderResp
+	ExtraAuthParams map[string]string `json:"extra_auth_params"`
+}
+
+func TestCreateVaultProvider_ExtraAuthParams_Manual(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	resp := ts.PostJSONWithAdminKey("/api/v1/vault/providers", map[string]any{
+		"name":              "custom_with_extra",
+		"display_name":      "Custom With Extra",
+		"auth_url":          "https://extra.example.com/authorize",
+		"token_url":         "https://extra.example.com/token",
+		"client_id":         "extra-id",
+		"client_secret":     "extra-secret",
+		"extra_auth_params": map[string]string{"prompt": "consent", "audience": "api.example.com"},
+	})
+	if resp.StatusCode != http.StatusCreated {
+		b := readBody(t, resp)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, b)
+	}
+
+	var got testVaultProviderRespWithExtra
+	ts.DecodeJSON(resp, &got)
+	if got.ExtraAuthParams["prompt"] != "consent" {
+		t.Errorf("extra_auth_params[prompt] in response: got %q, want consent", got.ExtraAuthParams["prompt"])
+	}
+	if got.ExtraAuthParams["audience"] != "api.example.com" {
+		t.Errorf("extra_auth_params[audience] in response: got %q, want api.example.com", got.ExtraAuthParams["audience"])
+	}
+
+	// Verify persisted correctly.
+	row, err := ts.Store.GetVaultProviderByID(context.Background(), got.ID)
+	if err != nil || row == nil {
+		t.Fatalf("provider not persisted: %v", err)
+	}
+	if row.ExtraAuthParams["prompt"] != "consent" {
+		t.Errorf("persisted ExtraAuthParams[prompt]: got %q, want consent", row.ExtraAuthParams["prompt"])
+	}
+	if row.ExtraAuthParams["audience"] != "api.example.com" {
+		t.Errorf("persisted ExtraAuthParams[audience]: got %q, want api.example.com", row.ExtraAuthParams["audience"])
+	}
+}
+
+func TestCreateVaultProvider_ExtraAuthParams_Template(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	// Create a linear provider via template — should inherit prompt=consent from template.
+	resp := ts.PostJSONWithAdminKey("/api/v1/vault/providers", map[string]any{
+		"template":      "linear",
+		"client_id":     "linear-client-id",
+		"client_secret": "linear-client-secret",
+	})
+	if resp.StatusCode != http.StatusCreated {
+		b := readBody(t, resp)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, b)
+	}
+
+	var got testVaultProviderRespWithExtra
+	ts.DecodeJSON(resp, &got)
+	if got.ExtraAuthParams["prompt"] != "consent" {
+		t.Errorf("template-created linear provider: extra_auth_params[prompt] = %q, want consent", got.ExtraAuthParams["prompt"])
+	}
+
+	// Persist confirmed.
+	row, err := ts.Store.GetVaultProviderByID(context.Background(), got.ID)
+	if err != nil || row == nil {
+		t.Fatalf("provider not persisted: %v", err)
+	}
+	if row.ExtraAuthParams["prompt"] != "consent" {
+		t.Errorf("persisted extra_auth_params[prompt] for linear: got %q, want consent", row.ExtraAuthParams["prompt"])
+	}
+}
+
+func TestUpdateVaultProvider_ExtraAuthParams(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	p := seedVaultProvider(t, ts, "patchable_extra", "Patchable Extra")
+
+	patchResp := ts.PatchJSONWithAdminKey("/api/v1/vault/providers/"+p.ID, map[string]any{
+		"extra_auth_params": map[string]string{"prompt": "select_account"},
+	})
+	if patchResp.StatusCode != http.StatusOK {
+		b := readBody(t, patchResp)
+		t.Fatalf("PATCH extra_auth_params: got %d: %s", patchResp.StatusCode, b)
+	}
+
+	var got testVaultProviderRespWithExtra
+	ts.DecodeJSON(patchResp, &got)
+	if got.ExtraAuthParams["prompt"] != "select_account" {
+		t.Errorf("PATCH response extra_auth_params[prompt]: got %q, want select_account", got.ExtraAuthParams["prompt"])
+	}
+
+	// Confirm persisted.
+	row, err := ts.Store.GetVaultProviderByID(context.Background(), p.ID)
+	if err != nil || row == nil {
+		t.Fatalf("provider not found after PATCH: %v", err)
+	}
+	if row.ExtraAuthParams["prompt"] != "select_account" {
+		t.Errorf("persisted after PATCH: got %q, want select_account", row.ExtraAuthParams["prompt"])
+	}
+}

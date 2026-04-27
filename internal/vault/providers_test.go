@@ -255,6 +255,73 @@ func TestExtraAuthParams_LinearAndJira(t *testing.T) {
 	}
 }
 
+// TestApplyTemplate_PropagatesExtraAuthParams verifies that ApplyTemplate
+// copies ExtraAuthParams from the template into the resulting VaultProvider,
+// so template-created providers persist them in storage (fixing silent skip
+// regression on manual providers that share the same name).
+func TestApplyTemplate_PropagatesExtraAuthParams(t *testing.T) {
+	cases := []struct {
+		template string
+		wantKeys []string
+	}{
+		{"linear", []string{"prompt"}},
+		{"jira", []string{"audience", "prompt"}},
+		{"microsoft", []string{"prompt"}},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.template, func(t *testing.T) {
+			tpl, ok := vault.Template(tc.template)
+			if !ok {
+				t.Fatalf("template %q not found", tc.template)
+			}
+			got := vault.ApplyTemplate(tpl, "cid", "", nil)
+			if got == nil {
+				t.Fatal("ApplyTemplate returned nil")
+			}
+			if got.ExtraAuthParams == nil {
+				t.Fatalf("ExtraAuthParams is nil on applied provider for template %q", tc.template)
+			}
+			for _, k := range tc.wantKeys {
+				if _, exists := got.ExtraAuthParams[k]; !exists {
+					t.Errorf("ExtraAuthParams missing key %q for template %q", k, tc.template)
+				}
+			}
+			// Verify values match the template.
+			for k, want := range tpl.ExtraAuthParams {
+				if got.ExtraAuthParams[k] != want {
+					t.Errorf("ExtraAuthParams[%q] = %q, want %q", k, got.ExtraAuthParams[k], want)
+				}
+			}
+		})
+	}
+
+	// Templates with no extra params get an empty (non-nil) map.
+	t.Run("slack_empty_extra", func(t *testing.T) {
+		tpl, _ := vault.Template("slack")
+		got := vault.ApplyTemplate(tpl, "cid", "", nil)
+		if got.ExtraAuthParams == nil {
+			t.Error("ExtraAuthParams should be non-nil empty map for templates with no extra params")
+		}
+		if len(got.ExtraAuthParams) != 0 {
+			t.Errorf("expected empty ExtraAuthParams for slack, got %v", got.ExtraAuthParams)
+		}
+	})
+
+	// Mutations to the returned ExtraAuthParams must not corrupt the template.
+	t.Run("defensive_copy", func(t *testing.T) {
+		tpl, _ := vault.Template("linear")
+		originalPrompt := tpl.ExtraAuthParams["prompt"]
+		got := vault.ApplyTemplate(tpl, "cid", "", nil)
+		got.ExtraAuthParams["prompt"] = "mutated"
+		if tpl.ExtraAuthParams["prompt"] != originalPrompt {
+			t.Errorf("template ExtraAuthParams was mutated via returned provider: got %q, want %q",
+				tpl.ExtraAuthParams["prompt"], originalPrompt)
+		}
+	})
+}
+
 // TestTokenResponseShape_Slack verifies the Slack template carries
 // TokenResponseShape="slack_v2" so the exchange path branches correctly.
 func TestTokenResponseShape_Slack(t *testing.T) {

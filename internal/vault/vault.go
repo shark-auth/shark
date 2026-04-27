@@ -178,13 +178,22 @@ func (m *Manager) BuildAuthURL(ctx context.Context, providerID, state, redirectU
 	// ignore it.
 	opts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
 
-	// Per-template extra authorize-URL params (e.g. prompt=consent for Linear,
-	// audience=api.atlassian.com for Jira). We look up by provider name so
-	// templates drive this without any handler-layer branch.
-	if tpl, ok := Template(provider.Name); ok {
-		for k, v := range tpl.ExtraAuthParams {
-			opts = append(opts, oauth2.SetAuthURLParam(k, v))
+	// Extra authorize-URL params (e.g. prompt=consent for Linear,
+	// audience=api.atlassian.com for Jira).
+	// Primary: read from the persisted ExtraAuthParams on the provider row —
+	// this covers both template-created and manual providers uniformly.
+	// Backward-compat: if the row has no persisted params (pre-migration rows
+	// that defaulted to "{}"), fall back to the built-in template lookup so
+	// existing deployments don't silently lose Wave F behaviour until they
+	// run an update/re-create.
+	extraParams := provider.ExtraAuthParams
+	if len(extraParams) == 0 {
+		if tpl, ok := Template(provider.Name); ok {
+			extraParams = tpl.ExtraAuthParams
 		}
+	}
+	for k, v := range extraParams {
+		opts = append(opts, oauth2.SetAuthURLParam(k, v))
 	}
 
 	return cfg.AuthCodeURL(state, opts...), nil

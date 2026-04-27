@@ -942,3 +942,88 @@ func mustSeedConnection(t *testing.T, store storage.Store, m *vault.Manager, pro
 	_ = m // parameter kept for symmetry with future assertions
 	return conn
 }
+
+// seedProviderWithExtra creates a provider with explicit ExtraAuthParams via the
+// store directly (bypassing Manager.CreateProvider which doesn't set extra params).
+func seedProviderWithExtra(t *testing.T, m *vault.Manager, store storage.Store, enc *auth.FieldEncryptor, authURL, tokenURL string, extra map[string]string) string {
+	t.Helper()
+	p := &storage.VaultProvider{
+		Name:            "mock_extra",
+		DisplayName:     "Mock Extra Provider",
+		AuthURL:         authURL,
+		TokenURL:        tokenURL,
+		ClientID:        "client-extra",
+		Scopes:          []string{"read"},
+		Active:          true,
+		ExtraAuthParams: extra,
+	}
+	if err := m.CreateProvider(context.Background(), p, "super-secret"); err != nil {
+		t.Fatalf("create provider with extra: %v", err)
+	}
+	return p.ID
+}
+
+// TestBuildAuthURL_ManualProviderWithExtraAuthParams verifies that a manual
+// (non-template) provider with persisted ExtraAuthParams produces an authorize
+// URL containing those params — fixing the silent regression where manual
+// providers skipped extras entirely.
+func TestBuildAuthURL_ManualProviderWithExtraAuthParams(t *testing.T) {
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	m, enc, store := setupManager(t, func() time.Time { return now })
+
+	extra := map[string]string{"prompt": "consent"}
+	providerID := seedProviderWithExtra(t, m, store, enc,
+		"https://custom.example.com/authorize",
+		"https://custom.example.com/token",
+		extra,
+	)
+
+	raw, err := m.BuildAuthURL(context.Background(), providerID, "state-xyz", "https://app.test/cb", nil)
+	if err != nil {
+		t.Fatalf("BuildAuthURL: %v", err)
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse authorize URL: %v", err)
+	}
+	q := u.Query()
+	if got := q.Get("prompt"); got != "consent" {
+		t.Errorf("prompt param: got %q, want %q — manual provider ExtraAuthParams not applied", got, "consent")
+	}
+}
+
+// TestBuildAuthURL_TemplateProviderExtraParamsPersisted verifies that a provider
+// created from a template (e.g. linear) has its ExtraAuthParams persisted and
+// reflected in the authorize URL without a template lookup at BuildAuthURL time.
+func TestBuildAuthURL_TemplateProviderExtraParamsPersisted(t *testing.T) {
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	m, _, _ := setupManager(t, func() time.Time { return now })
+
+	// Build a provider from the linear template (has prompt=consent).
+	tpl, ok := vault.Template("linear")
+	if !ok {
+		t.Fatal("linear template missing")
+	}
+	p := vault.ApplyTemplate(tpl, "cid-linear", "", nil)
+	// Override URLs to avoid hitting real endpoints in tests.
+	p.AuthURL = "https://fake.linear.example/auth"
+	p.TokenURL = "https://fake.linear.example/token"
+	if err := m.CreateProvider(context.Background(), p, "linear-secret"); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+
+	raw, err := m.BuildAuthURL(context.Background(), p.ID, "state-lin", "https://app.test/cb", nil)
+	if err != nil {
+		t.Fatalf("BuildAuthURL: %v", err)
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse authorize URL: %v", err)
+	}
+	q := u.Query()
+	if got := q.Get("prompt"); got != "consent" {
+		t.Errorf("prompt param from template-created provider: got %q, want consent", got)
+	}
+}

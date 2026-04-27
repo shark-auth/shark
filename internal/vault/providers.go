@@ -214,6 +214,18 @@ func ApplyTemplate(tpl *ProviderTemplate, clientID, displayName string, scopes [
 		effectiveScopes = []string{}
 	}
 
+	// Copy ExtraAuthParams from the template so template-created providers
+	// persist them and BuildAuthURL can read them directly from storage.
+	var effectiveExtra map[string]string
+	if len(tpl.ExtraAuthParams) > 0 {
+		effectiveExtra = make(map[string]string, len(tpl.ExtraAuthParams))
+		for k, v := range tpl.ExtraAuthParams {
+			effectiveExtra[k] = v
+		}
+	} else {
+		effectiveExtra = map[string]string{}
+	}
+
 	return &storage.VaultProvider{
 		Name:        tpl.Name,
 		DisplayName: effectiveDisplayName,
@@ -222,8 +234,9 @@ func ApplyTemplate(tpl *ProviderTemplate, clientID, displayName string, scopes [
 		ClientID:    clientID,
 		// ClientSecretEnc is intentionally left empty — Manager.CreateProvider
 		// encrypts the plaintext secret the caller supplies separately.
-		Scopes:  effectiveScopes,
-		IconURL: tpl.IconURL,
-		Active:  true,
+		Scopes:          effectiveScopes,
+		IconURL:         tpl.IconURL,
+		Active:          true,
+		ExtraAuthParams: effectiveExtra,
 	}
 }
