@@ -1012,7 +1012,7 @@ function ChainCanvas({
           {/* Back-to-all button */}
           <button
             onClick={() => setSelectedChain(null)}
-            title="All chains"
+            title="← chains (back to all chains)"
             style={{
               width: 32,
               height: 22,
@@ -1087,8 +1087,8 @@ function ChainCanvas({
               color: 'var(--fg)',
               fontWeight: 500,
               flexShrink: 0,
-            }}>
-              {hopCount}-hop
+            }} title={`${hopCount}-hop chain`}>
+              {hopCount}-hop chain
             </span>
             {started && (
               <>

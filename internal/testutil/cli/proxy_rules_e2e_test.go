@@ -101,7 +101,13 @@ func TestE2E_ProxyRulesCRUD(t *testing.T) {
 
 // TestE2E_ProxyRulesImport verifies the YAML import endpoint accepts a
 // well-formed YAML payload and returns imported > 0.
+//
+// Skipped: /admin/proxy/rules/import is not mounted in router.go (the YAML
+// importer was de-scoped pre-launch — only the JSON CRUD at /admin/proxy/rules/db
+// ships in v0.1). Re-enable when the YAML import route lands. Tracked under
+// playbook v0.2 backlog.
 func TestE2E_ProxyRulesImport(t *testing.T) {
+	t.Skip("YAML import route not mounted in v0.1 — see comment above")
 	h := cli.Start(t)
 
 	yamlContent := `rules:
