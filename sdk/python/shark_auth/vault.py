@@ -142,42 +142,33 @@ class VaultClient:
     # ------------------------------------------------------------------
 
     def get_fresh_token(self, connection_id: str) -> VaultToken:
-        """Retrieve a fresh access token for the given stored connection.
+        """REMOVED — there is no admin-key endpoint that returns a fresh
+        3rd-party access token by ``connection_id``.
 
-        .. deprecated::
-            Prefer :meth:`fetch_token` (DPoP-authenticated) for new code.
+        The historical default path ``/admin/vault/connections/{id}/token``
+        was never mounted by the backend; only ``DELETE
+        /api/v1/admin/vault/connections/{id}`` exists for admin scope (see
+        ``internal/api/router.go``).  Token retrieval is intentionally gated
+        behind a DPoP-bound agent token so the vault can validate the
+        ``cnf.jkt`` binding before decrypting the stored credential.
+
+        Migration
+        ---------
+        Use :meth:`fetch_token` instead — request a DPoP-bound bearer via
+        :meth:`OAuthClient.get_token_with_dpop` (scope ``vault:read``), then
+        call ``vault.fetch_token(provider=..., bearer_token=..., prover=...)``
+        to retrieve the decrypted 3rd-party token.
+
+        Raises
+        ------
+        VaultError:
+            Always — this method is intentionally unreachable.
         """
-        if not connection_id:
-            raise VaultError("connection_id is required")
-        url = f"{self._base}{self._connections_path}/{connection_id}/token"
-        resp = _http.request(self._session, "GET", url, headers=self._headers())
-
-        if resp.status_code == 200:
-            body = resp.json()
-            scopes = body.get("scopes") or body.get("scope")
-            if isinstance(scopes, str):
-                scopes = scopes.split()
-            elif scopes is None:
-                scopes = []
-            return VaultToken(
-                access_token=body["access_token"],
-                expires_at=body.get("expires_at"),
-                provider=body.get("provider"),
-                scopes=list(scopes),
-            )
-
-        if resp.status_code == 404:
-            raise VaultError(
-                f"connection not found: {connection_id}", status_code=404
-            )
-        if resp.status_code == 401:
-            raise VaultError("agent not authorized (401)", status_code=401)
-        if resp.status_code == 403:
-            raise VaultError("missing scope for vault access (403)", status_code=403)
-
         raise VaultError(
-            f"vault request failed: HTTP {resp.status_code}: {resp.text[:200]}",
-            status_code=resp.status_code,
+            "VaultClient.get_fresh_token has been removed: no admin-key endpoint "
+            "exists for this operation. Use VaultClient.fetch_token() with a "
+            "DPoP-bound agent token (scope 'vault:read') instead. See the "
+            "method docstring for the migration recipe."
         )
 
     # ------------------------------------------------------------------

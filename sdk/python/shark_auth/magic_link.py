@@ -65,3 +65,27 @@ class MagicLinkClient:
         if resp.status_code == 200:
             return resp.json()
         _raise(resp)
+
+    def verify(self, token: str) -> Dict[str, Any]:
+        """Consume a magic-link token and return the user object.
+
+        Wraps ``GET /api/v1/auth/magic-link/verify?token=...``.  On success
+        the server plants the session cookie on this client's underlying
+        :class:`requests.Session` so follow-up calls are authenticated.
+
+        Parameters
+        ----------
+        token:
+            The opaque token from the emailed link.
+
+        Example
+        -------
+        >>> client = MagicLinkClient(base_url="https://auth.example.com")
+        >>> user = client.verify(token_from_email)
+        >>> print(user["email"])
+        """
+        url = f"{self._base}/api/v1/auth/magic-link/verify"
+        resp = _http.request(self._session, "GET", url, params={"token": token})
+        if resp.status_code == 200:
+            return resp.json()
+        _raise(resp)

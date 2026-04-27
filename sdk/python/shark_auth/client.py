@@ -6,27 +6,56 @@ from typing import Optional
 
 from . import _http
 from .agents import AgentsClient
+from .api_keys import APIKeysClient
+from .apps import AppsClient
+from .audit import AuditClient
+from .auth import AuthClient
 from .branding import BrandingClient
+from .consents import ConsentsClient
+from .dcr import DCRClient
 from .http_client import DPoPHTTPClient
+from .mfa import MFAClient
+from .organizations import OrganizationsClient
 from .paywall import PaywallClient
 from .proxy_lifecycle import ProxyLifecycleClient
 from .proxy_rules import ProxyRulesClient
+from .rbac import RBACClient
+from .sessions import SessionsClient
 from .users import UsersClient
+from .webhooks import WebhooksClient
 
 
 class Client:
     """SharkAuth admin client — unified namespace for all v1.5 admin APIs.
 
-    Exposes sub-clients as namespaced attributes that mirror the TypeScript
-    SDK surface (Lane F):
+    Exposes sub-clients as namespaced attributes:
 
+    Human auth + identity:
+    - ``.auth``            — signup / login / logout / me / password / email-verify
+    - ``.mfa``             — TOTP enroll / verify / challenge / disable
+    - ``.sessions``        — list + revoke (self-service)
+    - ``.consents``        — list + revoke OAuth consents
+
+    OAuth + DCR:
+    - ``.dcr``             — RFC 7591/7592 dynamic client registration
+    - (use ``shark_auth.OAuthClient`` directly for token grants + introspect + revoke)
+
+    Agent platform:
+    - ``.agents``          — agent CRUD + token ops + DPoP rotation + audit
+    - ``.users``           — admin user CRUD + cascade-revoke
+    - ``.organizations``   — org CRUD + members + invitations
+    - ``.apps``            — application CRUD + secret rotate
+    - ``.api_keys``        — admin API key CRUD + rotate
+    - ``.rbac``            — role + permission CRUD + assignment
+    - ``.audit``           — audit log query + export + purge
+
+    Integration:
+    - ``.webhooks``        — webhook CRUD + test + replay + deliveries
     - ``.proxy_rules``     — DB-backed proxy rules CRUD
-    - ``.proxy_lifecycle`` — start / stop / reload / status
+    - ``.proxy_lifecycle`` — proxy start / stop / reload / status
     - ``.branding``        — design tokens
     - ``.paywall``         — paywall URL builder + HTML fetch
-    - ``.users``           — user list / get / tier
-    - ``.agents``          — agent register / list / revoke
-    - ``.http``            — DPoP-protected resource requests (get/post/delete)
+    - ``.http``            — DPoP-protected resource requests
 
     Parameters
     ----------
@@ -58,12 +87,31 @@ class Client:
         # Shared session — all sub-clients reuse the same connection pool.
         _session = session or _http.new_session()
 
+        # Human auth + identity (no admin key needed; uses session cookies)
+        self.auth = AuthClient(base_url, session=_session)
+        self.mfa = MFAClient(base_url, session=_session)
+        self.sessions = SessionsClient(base_url, session=_session)
+        self.consents = ConsentsClient(base_url, session=_session)
+
+        # OAuth dynamic client registration
+        self.dcr = DCRClient(base_url, session=_session)
+
+        # Admin (require admin API key)
+        self.users = UsersClient(base_url, token, session=_session)
+        self.agents = AgentsClient(base_url, token, session=_session)
+        self.organizations = OrganizationsClient(base_url, token, session=_session)
+        self.apps = AppsClient(base_url, token, session=_session)
+        self.api_keys = APIKeysClient(base_url, token, session=_session)
+        self.rbac = RBACClient(base_url, token, session=_session)
+        self.audit = AuditClient(base_url, token, session=_session)
+        self.webhooks = WebhooksClient(base_url, token, session=_session)
+
+        # Proxy + branding + paywall
         self.proxy_rules = ProxyRulesClient(base_url, token, session=_session)
         self.proxy_lifecycle = ProxyLifecycleClient(base_url, token, session=_session)
         self.branding = BrandingClient(base_url, token, session=_session)
         self.paywall = PaywallClient(base_url, token, session=_session)
-        self.users = UsersClient(base_url, token, session=_session)
-        self.agents = AgentsClient(base_url, token, session=_session)
+
         # DPoP-authenticated resource client — shares the same session pool.
         self.http = DPoPHTTPClient(base_url, session=_session)
 

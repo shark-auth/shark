@@ -54,7 +54,10 @@ class DeviceFlow:
         scope: Optional[str] = None,
         *,
         dpop_prover: Optional[DPoPProver] = None,
-        device_authorization_path: str = "/oauth/device_authorization",
+        # Backend mounts the RFC 8628 device-authorization endpoint at
+        # /oauth/device (see internal/api/router.go:784) — NOT the literal
+        # /oauth/device_authorization spec path.  Default updated to match.
+        device_authorization_path: str = "/oauth/device",
         token_path: str = "/oauth/token",
         session: Optional[object] = None,
     ) -> None:

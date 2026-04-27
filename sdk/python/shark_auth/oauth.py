@@ -1,15 +1,46 @@
 """OAuth 2.1 token utilities — revocation (RFC 7009), introspection (RFC 7662),
-and DPoP-bound token requests (RFC 9449)."""
+DPoP-bound token requests (RFC 9449), authorization-code/refresh grants, PKCE."""
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import secrets
 from dataclasses import dataclass, field
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional, Tuple
+from urllib.parse import urlencode
 
 from . import _http
 from .dpop import DPoPProver
 from .errors import OAuthError
 from .proxy_rules import _raise
+
+
+# ---------------------------------------------------------------------------
+# PKCE helpers — RFC 7636
+# ---------------------------------------------------------------------------
+
+
+def pkce_pair() -> Tuple[str, str, str]:
+    """Generate a PKCE (verifier, challenge, method) triple per RFC 7636.
+
+    Returns
+    -------
+    tuple[str, str, str]
+        ``(code_verifier, code_challenge, "S256")``. The verifier is a 43-char
+        URL-safe random string, the challenge is the URL-safe base64 (no
+        padding) of SHA-256(verifier), and the method is always ``"S256"``.
+
+    Example
+    -------
+    >>> verifier, challenge, method = pkce_pair()
+    >>> # Send challenge in /oauth/authorize, then verifier in /oauth/token.
+    """
+    # 32 random bytes -> 43-char base64url verifier (RFC 7636 §4.1).
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode("ascii")
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return verifier, challenge, "S256"
 
 
 @dataclass
@@ -350,6 +381,248 @@ class OAuthClient:
             error_description = err_body.get("error_description") or err_body.get("message")
         except Exception:
             error = "bulk_revoke_failed"
+            error_description = resp.text or None
+        raise OAuthError(
+            error=error,
+            error_description=error_description,
+            status_code=resp.status_code,
+        )
+
+    # ------------------------------------------------------------------
+    # Authorization-code + refresh-token grants (no DPoP required)
+    # ------------------------------------------------------------------
+
+    def get_token_authorization_code(
+        self,
+        code: str,
+        redirect_uri: str,
+        *,
+        code_verifier: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        **extra: Any,
+    ) -> Token:
+        """Exchange an authorization code for tokens (RFC 6749 §4.1.3).
+
+        Wraps ``POST /oauth/token`` with ``grant_type=authorization_code``.
+        Supports PKCE via ``code_verifier`` (RFC 7636).
+
+        Parameters
+        ----------
+        code:
+            Authorization code returned to ``redirect_uri`` by the auth server.
+        redirect_uri:
+            The exact redirect URI used in the authorize request (must match).
+        code_verifier:
+            PKCE verifier matching the challenge sent at /oauth/authorize.
+            Omit for confidential clients not using PKCE.
+        client_id:
+            OAuth client identifier. Required for public clients; optional if
+            HTTP basic auth or instance-level token already identifies caller.
+        client_secret:
+            Client secret for confidential clients.
+        **extra:
+            Additional form fields forwarded verbatim.
+
+        Returns
+        -------
+        Token
+            Populated :class:`Token`. Token type may be ``"Bearer"`` here
+            (no DPoP proof attached).
+
+        Raises
+        ------
+        OAuthError:
+            On any 4xx/5xx response (e.g. ``invalid_grant``).
+
+        Example
+        -------
+        >>> verifier, challenge, _ = pkce_pair()
+        >>> # ... user hits /oauth/authorize with challenge, returns with code ...
+        >>> token = client.get_token_authorization_code(
+        ...     code="auth_xyz",
+        ...     redirect_uri="https://app.example.com/cb",
+        ...     code_verifier=verifier,
+        ...     client_id="my-app",
+        ... )
+        """
+        body: Dict[str, str] = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+        }
+        if code_verifier is not None:
+            body["code_verifier"] = code_verifier
+        if client_id is not None:
+            body["client_id"] = client_id
+        if client_secret is not None:
+            body["client_secret"] = client_secret
+        for k, v in extra.items():
+            body[k] = str(v)
+        return self._post_token_no_dpop(body)
+
+    def refresh_token(
+        self,
+        refresh_token_str: str,
+        *,
+        scope: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        **extra: Any,
+    ) -> Token:
+        """Refresh an access token (RFC 6749 §6).
+
+        Wraps ``POST /oauth/token`` with ``grant_type=refresh_token``.
+
+        Parameters
+        ----------
+        refresh_token_str:
+            The refresh token previously issued by the server.
+        scope:
+            Optional narrower scope. Must be a subset of the original grant.
+        client_id:
+            OAuth client identifier (required for public clients).
+        client_secret:
+            Client secret for confidential clients.
+        **extra:
+            Additional form fields forwarded verbatim.
+
+        Returns
+        -------
+        Token
+            New :class:`Token` (may include a rotated refresh_token).
+
+        Raises
+        ------
+        OAuthError:
+            On any 4xx/5xx response.
+
+        Example
+        -------
+        >>> new_tok = client.refresh_token(
+        ...     old_token.refresh_token,
+        ...     client_id="my-app",
+        ... )
+        """
+        body: Dict[str, str] = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token_str,
+        }
+        if scope is not None:
+            body["scope"] = scope
+        if client_id is not None:
+            body["client_id"] = client_id
+        if client_secret is not None:
+            body["client_secret"] = client_secret
+        for k, v in extra.items():
+            body[k] = str(v)
+        return self._post_token_no_dpop(body)
+
+    @staticmethod
+    def build_authorize_url(
+        *,
+        client_id: str,
+        redirect_uri: str,
+        scope: str | None = None,
+        state: str | None = None,
+        code_challenge: str | None = None,
+        code_challenge_method: str = "S256",
+        response_type: str = "code",
+        base_url: str | None = None,
+        **extra: Any,
+    ) -> str:
+        """Build a ``/oauth/authorize`` redirect URL (no HTTP call).
+
+        Pure URL builder for the user-agent redirect step of the OAuth 2.1
+        authorization-code (with PKCE) flow.
+
+        Parameters
+        ----------
+        client_id:
+            OAuth client identifier.
+        redirect_uri:
+            URI the auth server redirects back to with ``code`` + ``state``.
+        scope:
+            Space-separated scopes (optional).
+        state:
+            Opaque CSRF token round-tripped by the auth server.
+        code_challenge:
+            PKCE challenge (base64url SHA-256 of verifier). Recommended.
+        code_challenge_method:
+            ``"S256"`` (default) or ``"plain"``.
+        response_type:
+            Defaults to ``"code"``.
+        base_url:
+            Base URL of the SharkAuth server. If omitted, the path
+            ``/oauth/authorize?...`` is returned (relative).
+        **extra:
+            Additional query parameters forwarded verbatim.
+
+        Returns
+        -------
+        str
+            Fully formed authorize URL ready to redirect the user-agent to.
+
+        Example
+        -------
+        >>> verifier, challenge, _ = pkce_pair()
+        >>> url = OAuthClient.build_authorize_url(
+        ...     client_id="my-app",
+        ...     redirect_uri="https://app.example.com/cb",
+        ...     scope="openid profile",
+        ...     state="xyz",
+        ...     code_challenge=challenge,
+        ...     base_url="https://auth.example.com",
+        ... )
+        """
+        params: Dict[str, str] = {
+            "response_type": response_type,
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+        }
+        if scope is not None:
+            params["scope"] = scope
+        if state is not None:
+            params["state"] = state
+        if code_challenge is not None:
+            params["code_challenge"] = code_challenge
+            params["code_challenge_method"] = code_challenge_method
+        for k, v in extra.items():
+            params[k] = str(v)
+        prefix = (base_url.rstrip("/") if base_url else "") + "/oauth/authorize"
+        return f"{prefix}?{urlencode(params)}"
+
+    def _post_token_no_dpop(self, form_body: Dict[str, str]) -> Token:
+        """POST to /oauth/token without a DPoP proof header.
+
+        Used by :meth:`get_token_authorization_code` and :meth:`refresh_token`.
+        """
+        token_endpoint = f"{self._base}/oauth/token"
+        resp = _http.request(
+            self._session,
+            "POST",
+            token_endpoint,
+            headers=self._auth(),
+            data=form_body,
+        )
+        if resp.status_code == 200:
+            data: Dict[str, Any] = resp.json()
+            cnf = data.get("cnf") or {}
+            return Token(
+                access_token=data["access_token"],
+                token_type=data.get("token_type", "Bearer"),
+                expires_in=data.get("expires_in"),
+                scope=data.get("scope"),
+                refresh_token=data.get("refresh_token"),
+                cnf_jkt=cnf.get("jkt"),
+                raw=data,
+            )
+        try:
+            err_body = resp.json()
+            error = err_body.get("error", "token_request_failed")
+            error_description = err_body.get("error_description")
+        except Exception:
+            error = "token_request_failed"
             error_description = resp.text or None
         raise OAuthError(
             error=error,

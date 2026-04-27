@@ -24,9 +24,15 @@ Public API
 """
 
 from .agents import AgentCredentials, AgentsClient, AuditEvent, DPoPRotationResult, RevokeResult, TokenInfo
+from .api_keys import APIKeysClient
+from .apps import AppsClient
+from .audit import AuditClient
+from .auth import AuthClient
 from .branding import BrandingClient
 from .claims import ActorClaim, AgentTokenClaims as DelegationTokenClaims
 from .client import Client
+from .consents import ConsentsClient
+from .dcr import DCRClient
 from .device_flow import DeviceFlow, DeviceInit, TokenResponse
 from .dpop import DPoPProver
 from .errors import (
@@ -39,7 +45,11 @@ from .errors import (
 )
 from .http_client import DPoPHTTPClient
 from .magic_link import MagicLinkClient
-from .oauth import BulkRevokeResult, OAuthClient, Token
+from .mfa import MFAClient, compute_totp
+from .oauth import BulkRevokeResult, OAuthClient, Token, pkce_pair
+from .organizations import OrganizationsClient
+from .rbac import RBACClient
+from .sessions import SessionsClient
 from .paywall import PaywallClient
 from .proxy_lifecycle import ProxyLifecycleClient, ProxyStatus
 from .proxy_rules import (
@@ -54,6 +64,7 @@ from .session import AgentSession
 from .tokens import AgentTokenClaims, clear_jwks_cache, decode_agent_token, exchange_token
 from .users import AgentList, CascadeRevokeResult, UsersClient
 from .vault import VaultClient, VaultDisconnectResult, VaultToken, VaultTokenResult
+from .webhooks import WebhooksClient, verify_signature
 
 __version__ = "0.1.0"
 
@@ -116,5 +127,22 @@ __all__ = [
     "VaultTokenResult",
     # W2 Method 10 — DPoP key rotation
     "DPoPRotationResult",
+    # W18 BLOCKER fixes — DCR + Webhooks + PKCE
+    "DCRClient",
+    "WebhooksClient",
+    "verify_signature",
+    "pkce_pair",
+    # W18 BLOCKER fixes — human-auth surface
+    "AuthClient",
+    "MFAClient",
+    "compute_totp",
+    "SessionsClient",
+    "ConsentsClient",
+    # Multi-tenant admin surface
+    "OrganizationsClient",
+    "AppsClient",
+    "APIKeysClient",
+    "AuditClient",
+    "RBACClient",
     "__version__",
 ]
