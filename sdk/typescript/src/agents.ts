@@ -233,7 +233,7 @@ export class AgentsClient {
     const body = resp.json<{ data?: TokenInfo[] } | TokenInfo[]>();
     const items = Array.isArray(body) ? body : (body as { data?: TokenInfo[] }).data ?? [];
     return items.map((t) => ({
-      token_id: (t as Record<string, string>).id ?? t.token_id,
+      token_id: (t as { id?: string }).id ?? t.token_id,
       agent_id: t.agent_id ?? agentId,
       jkt: t.jkt,
       scope: t.scope,
