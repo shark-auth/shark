@@ -111,9 +111,10 @@ The bench client also has a `batched` mode that caches proofs for 30s — overhe
 would be near-zero. Resign mode is the correct measurement for DPoP-strict deployments.
 
 **vault_read_concurrent SKIP:**  
-The vault providers table is missing the `extra_auth_params` column added in a later migration  
-that wasn't run against this binary. Backend gap — not a bench gap. The scenario code is wired  
-and will run when the backend is fixed. Skip reason captured in Extra field.
+Migration `00027_vault_provider_extra_auth_params.sql` exists in `migrations/` root but was NOT  
+copied into `cmd/shark/migrations/` (the embed.FS target), so the column doesn't exist at runtime.  
+Backend gap — not a bench gap. The scenario code is wired and will run when migration is synced.  
+Skip reason captured in Result.Extra field so the bench doesn't crash on this class of backend gap.
 
 **proxy_auth_passthrough_load NOT IMPLEMENTED:**  
 Requires a local echo HTTP server + proxy rule seeding. Deferred to Phase C bench work.  
