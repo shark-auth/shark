@@ -8,7 +8,9 @@ export function Login({ onLogin }) {
   const [key, setKey] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
-  const [hintOpen, setHintOpen] = React.useState(false);
+  const [hintOpen, setHintOpen] = React.useState(
+    () => localStorage.getItem('shark.admin.lastLogin') === null
+  );
   // Bootstrap-consume attempted? Used to suppress the "Invalid token"
   // error turning into a re-try loop on re-renders.
   const bootstrapTried = React.useRef(false);
@@ -70,9 +72,10 @@ export function Login({ onLogin }) {
       });
       if (res.ok) {
         localStorage.setItem('shark_admin_key', trimmed);
+        localStorage.setItem('shark.admin.lastLogin', String(Date.now()));
         onLogin(trimmed);
       } else if (res.status === 401) {
-        setError('Invalid API key.');
+        setError('Invalid API key. Lost your key? Check data/admin.key.firstboot or restart shark serve fresh.');
       } else {
         setError('Error ' + res.status + ': ' + res.statusText);
       }
@@ -170,24 +173,7 @@ export function Login({ onLogin }) {
               color: 'var(--fg-dim)',
               lineHeight: 1.5,
             }}>
-              <div style={{ marginBottom: 4 }}>
-                In the terminal running <code>shark serve</code>, run:
-              </div>
-              <code style={{
-                display: 'block',
-                padding: '6px 8px',
-                borderRadius: 4,
-                background: 'var(--bg)',
-                color: 'var(--fg)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                userSelect: 'all',
-              }}>
-                shark admin-key show
-              </code>
-              <div style={{ marginTop: 6, color: 'var(--fg-faint)' }}>
-                Or restart the server to get a one-time bootstrap URL.
-              </div>
+              Find your admin key in the terminal output where you ran <code>shark serve</code>, or read it from <code>data/admin.key.firstboot</code>.
             </div>
           )}
         </div>
