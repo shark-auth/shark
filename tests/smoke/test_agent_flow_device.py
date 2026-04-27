@@ -2,11 +2,19 @@
 
 Covers: device_authorization request, polling (authorization_pending,
 slow_down), admin approval, token issuance, denial path.
+
+NOTE: All tests in this module are marked xfail — device flow is disabled for
+v0.1. Endpoints return 501 Not Implemented. Re-enable in v0.2.
 """
 import time
 import pytest
 import requests
 import os
+
+pytestmark = pytest.mark.xfail(
+    reason="Device authorization grant (RFC 8628) disabled for v0.1 — coming v0.2",
+    strict=False,
+)
 
 BASE_URL = os.environ.get("BASE", "http://localhost:8080")
 

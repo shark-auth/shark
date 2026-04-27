@@ -101,8 +101,14 @@ type deviceAuthResponse struct {
 }
 
 // HandleDeviceAuthorization handles POST /oauth/device.
-// A headless agent (or any client) calls this to start the device flow.
+// Device Authorization Grant is disabled for v0.1 — returns 501 Not Implemented.
 func (s *Server) HandleDeviceAuthorization(w http.ResponseWriter, r *http.Request) {
+	writeDeviceError(w, http.StatusNotImplemented, "not_implemented",
+		"Device authorization grant (RFC 8628) is not yet supported. Coming in v0.2.")
+}
+
+// handleDeviceAuthorizationImpl is the real implementation, kept for v0.2.
+func (s *Server) handleDeviceAuthorizationImpl(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
@@ -197,10 +203,13 @@ type DeviceVerifyData struct {
 }
 
 // HandleDeviceVerify handles GET /oauth/device/verify.
-// It renders the code-entry page (or pre-fills if ?user_code=... is present).
-// If user_code is already supplied and the user is logged in, it shows the
-// consent decision for that code instead.
+// Device Authorization Grant is disabled for v0.1 — returns 501 Not Implemented.
 func (s *Server) HandleDeviceVerify(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Device authorization grant is not yet supported. Coming in v0.2.", http.StatusNotImplemented)
+}
+
+// handleDeviceVerifyImpl is the real implementation, kept for v0.2.
+func (s *Server) handleDeviceVerifyImpl(w http.ResponseWriter, r *http.Request) {
 	userCode := r.URL.Query().Get("user_code")
 
 	// If user_code provided and user is logged in, render approve/deny page.
@@ -242,8 +251,13 @@ type DeviceApprovalData struct {
 }
 
 // HandleDeviceApprove handles POST /oauth/device/verify.
-// The user submits a decision (approved=true|false) for the device code.
+// Device Authorization Grant is disabled for v0.1 — returns 501 Not Implemented.
 func (s *Server) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Device authorization grant is not yet supported. Coming in v0.2.", http.StatusNotImplemented)
+}
+
+// handleDeviceApproveImpl is the real implementation, kept for v0.2.
+func (s *Server) handleDeviceApproveImpl(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	userID := getUserIDFromRequest(r)

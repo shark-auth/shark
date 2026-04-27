@@ -44,7 +44,7 @@ servers:
 
 tags:
   - name: oauth
-    description: OAuth 2.1 Authorization Server — token issuance, DCR, introspection, revocation, device flow, token exchange.
+    description: OAuth 2.1 Authorization Server — token issuance, DCR, introspection, revocation, token exchange.
   - name: agents
     description: Agent (machine-to-machine OAuth client) lifecycle — register, rotate secrets/DPoP keys, policies, token revocation.
   - name: users
@@ -440,11 +440,10 @@ paths:
                 userinfo_endpoint: http://localhost:8080/oauth/userinfo
                 revocation_endpoint: http://localhost:8080/oauth/revoke
                 introspection_endpoint: http://localhost:8080/oauth/introspect
-                device_authorization_endpoint: http://localhost:8080/oauth/device
+                # device_authorization_endpoint omitted — device flow disabled for v0.1
                 grant_types_supported:
                   - authorization_code
                   - client_credentials
-                  - urn:ietf:params:oauth:grant-type:device_code
                   - urn:ietf:params:oauth:grant-type:token-exchange
                   - refresh_token
                 dpop_signing_alg_values_supported:
@@ -625,7 +624,7 @@ paths:
         - `authorization_code` — Authorization Code + PKCE
         - `refresh_token` — Refresh an access token
         - `urn:ietf:params:oauth:grant-type:token-exchange` — RFC 8693 delegation
-        - `urn:ietf:params:oauth:grant-type:device_code` — Device Authorization
+        - ~~`urn:ietf:params:oauth:grant-type:device_code`~~ — **Coming v0.2** (returns `unsupported_grant_type`)
 
         Attach a `DPoP:` proof header for RFC 9449 DPoP-bound tokens.
         The issued token will contain a `cnf.jkt` claim.
@@ -841,10 +840,14 @@ paths:
   /oauth/device:
     post:
       operationId: deviceAuthorizationRequest
-      summary: Device Authorization Request (RFC 8628)
-      description: Initiate the Device Authorization Flow. Returns `device_code`, `user_code`, and `verification_uri`.
+      summary: Device Authorization Request (RFC 8628) — Coming v0.2
+      description: |
+        **Disabled for v0.1.** Device Authorization Grant (RFC 8628) is not yet
+        supported. This endpoint returns `501 Not Implemented` with
+        `{"error":"not_implemented"}`. Planned for v0.2.
       tags: [oauth]
       security: []
+      deprecated: true
       requestBody:
         required: true
         content:
@@ -858,17 +861,13 @@ paths:
                 scope:
                   type: string
       responses:
-        '200':
-          description: Device authorization response
+        '501':
+          description: Not Implemented — device flow coming v0.2
           content:
             application/json:
               example:
-                device_code: shark_dc_...
-                user_code: ABCD-1234
-                verification_uri: http://localhost:8080/oauth/device/verify
-                verification_uri_complete: http://localhost:8080/oauth/device/verify?user_code=ABCD-1234
-                expires_in: 300
-                interval: 5
+                error: not_implemented
+                error_description: Device authorization grant (RFC 8628) is not yet supported. Coming in v0.2.
 
   # ─────────────────────────────────────────────────────────────────────────
   # HEALTH

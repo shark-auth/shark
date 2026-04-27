@@ -45,9 +45,16 @@ func dpopTokenEndpointURL(r *http.Request) string {
 // Device Authorization Grant (RFC 8628) is intercepted and handled manually
 // before passing to fosite, since fosite v0.49 has no built-in device flow.
 func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
-	// Intercept device_code grant before fosite sees it.
+	// Device Authorization Grant (RFC 8628) is disabled for v0.1 — coming v0.2.
+	// Return unsupported_grant_type so clients get a clear, spec-compliant error.
 	if r.FormValue("grant_type") == "urn:ietf:params:oauth:grant-type:device_code" {
-		s.HandleDeviceTokenRequest(w, r)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNotImplemented)
+		json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
+			"error":             "unsupported_grant_type",
+			"error_description": "Device authorization grant (RFC 8628) is not yet supported. Coming in v0.2.",
+		})
 		return
 	}
 

@@ -136,6 +136,10 @@ def test_refresh_token_rotation_and_reuse(admin_client, smoke_user):
         f"Old refresh token still accepted after rotation (expected 400/401, got {resp.status_code})"
     )
 
+@pytest.mark.xfail(
+    reason="Device authorization grant (RFC 8628) disabled for v0.1 — coming v0.2",
+    strict=False,
+)
 def test_device_flow(admin_client, smoke_user, db_conn):
     """Section 34: Device flow (RFC 8628)."""
     # 1. Create Device Agent

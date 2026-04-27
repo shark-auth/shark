@@ -14,8 +14,8 @@ type authServerMetadata struct {
 	RegistrationEndpoint                       string   `json:"registration_endpoint"`
 	RevocationEndpoint                         string   `json:"revocation_endpoint"`
 	IntrospectionEndpoint                      string   `json:"introspection_endpoint"`
-	DeviceAuthorizationEndpoint                string   `json:"device_authorization_endpoint"`
-	ResponseTypesSupported                     []string `json:"response_types_supported"`
+	// DeviceAuthorizationEndpoint omitted — device flow disabled for v0.1 (coming v0.2)
+	ResponseTypesSupported []string `json:"response_types_supported"`
 	ResponseModesSupported                     []string `json:"response_modes_supported"`
 	GrantTypesSupported                        []string `json:"grant_types_supported"`
 	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported"`
@@ -42,14 +42,14 @@ func MetadataHandler(issuer string) http.HandlerFunc {
 		RegistrationEndpoint:          issuer + "/oauth/register",
 		RevocationEndpoint:            issuer + "/oauth/revoke",
 		IntrospectionEndpoint:         issuer + "/oauth/introspect",
-		DeviceAuthorizationEndpoint:   issuer + "/oauth/device",
-		ResponseTypesSupported:        []string{"code"},
+		// DeviceAuthorizationEndpoint intentionally omitted — device flow coming v0.2
+		ResponseTypesSupported: []string{"code"},
 		ResponseModesSupported:        []string{"query"},
 		GrantTypesSupported: []string{
 			"authorization_code",
 			"client_credentials",
 			"refresh_token",
-			"urn:ietf:params:oauth:grant-type:device_code",
+			// device_code (RFC 8628) omitted — disabled for v0.1, coming v0.2
 			"urn:ietf:params:oauth:grant-type:token-exchange",
 		},
 		CodeChallengeMethodsSupported: []string{"S256"},
