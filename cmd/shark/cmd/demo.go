@@ -17,6 +17,7 @@ var (
 	demoPlain    bool
 	demoNoOpen   bool
 	demoKeep     bool
+	demoFast     bool
 )
 
 var demoCmd = &cobra.Command{
@@ -53,6 +54,7 @@ Examples:
 			Plain:    demoPlain,
 			NoOpen:   demoNoOpen,
 			Keep:     demoKeep,
+			Fast:     demoFast,
 		}
 		if opts.AdminKey == "" {
 			opts.AdminKey = os.Getenv("SHARK_ADMIN_KEY")
@@ -72,6 +74,7 @@ func init() {
 	demoDelegationCmd.Flags().BoolVar(&demoPlain, "plain", false, "force plain stdout output only (skip HTML)")
 	demoDelegationCmd.Flags().BoolVar(&demoNoOpen, "no-open", false, "do not auto-open the report in a browser")
 	demoDelegationCmd.Flags().BoolVar(&demoKeep, "keep", false, "keep temp DB for inspection after run")
+	demoDelegationCmd.Flags().BoolVar(&demoFast, "fast", false, "skip screencast pacing delays (also: SHARK_DEMO_FAST=1)")
 	demoCmd.AddCommand(demoDelegationCmd)
 	root.AddCommand(demoCmd)
 }

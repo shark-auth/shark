@@ -33,6 +33,7 @@ type DelegationOptions struct {
 	Plain    bool
 	NoOpen   bool
 	Keep     bool
+	Fast     bool // skip screencast pacing (for CI / --fast flag)
 }
 
 // VaultResult holds the result of a vault token retrieval.
@@ -76,10 +77,21 @@ type DemoTrace struct {
 	GeneratedAt string
 }
 
+// pace sleeps for d unless opts.Fast is set or SHARK_DEMO_FAST=1 env var.
+func pace(opts DelegationOptions, d time.Duration) {
+	if opts.Fast || os.Getenv("SHARK_DEMO_FAST") == "1" {
+		return
+	}
+	time.Sleep(d)
+}
+
 // RunDelegation runs the 3-hop delegation chain demo and prints structured
 // output to stdout.
 func RunDelegation(ctx context.Context, opts DelegationOptions) error {
 	hc := &http.Client{Timeout: 15 * time.Second}
+
+	// Build a clientID→name map as agents are registered.
+	nameMap := make(map[string]string)
 
 	fmt.Println("[1/3] Registering agents...")
 	agents, err := registerAgents(ctx, hc, opts)
@@ -87,15 +99,22 @@ func RunDelegation(ctx context.Context, opts DelegationOptions) error {
 		return fmt.Errorf("register agents: %w", err)
 	}
 	for i, a := range agents {
+		nameMap[a.ClientID] = a.Name
 		fmt.Printf("  ✓ agent %d: %s (id=%s jkt=%s)\n", i+1, a.Name, a.ID, shortJKT(a.JKT))
+		pace(opts, 600*time.Millisecond)
 	}
+
+	pace(opts, 2000*time.Millisecond)
 
 	fmt.Println("[2/3] Configuring may_act policies...")
 	if err := configurePolicies(ctx, hc, opts, agents); err != nil {
 		return fmt.Errorf("configure policies: %w", err)
 	}
-	fmt.Println("  ✓ user-proxy → email-service (email:*, vault:read)")
+	fmt.Println("  ✓ user-proxy → email-service (email:read, email:write, vault:read)")
+	pace(opts, 800*time.Millisecond)
 	fmt.Println("  ✓ email-service → followup-service (email:read, vault:read)")
+
+	pace(opts, 1500*time.Millisecond)
 
 	fmt.Println("[3/3] Running delegation chain...")
 	tokens, vaultResult, err := runChain(ctx, hc, opts, agents)
@@ -106,28 +125,56 @@ func RunDelegation(ctx context.Context, opts DelegationOptions) error {
 	fmt.Println()
 	fmt.Println("  user → user-proxy → email-service → followup-service")
 	fmt.Println()
+
+	// Verify cnf.jkt is set on every token (honest DPoP binding check).
+	cnfSet := 0
 	for i, t := range tokens {
+		actNames := resolveActChain(t.ActChain, nameMap)
 		fmt.Printf("Token %d: scope=%s cnf.jkt=%s act=%v\n",
-			i+1, t.Scope, shortJKT(t.CNFJKT), t.ActChain)
+			i+1, t.Scope, shortJKT(t.CNFJKT), actNames)
+		pace(opts, 1000*time.Millisecond)
+		if t.CNFJKT != "" {
+			cnfSet++
+		}
 	}
 	fmt.Println()
-	fmt.Println("DPoP proofs: 3/3 verified ✓")
-	fmt.Println("Audit events: 3 written")
+
+	// P0-1: honest DPoP binding report — we verify cnf.jkt is set on every
+	// issued token (the server sets it from the DPoP proof's JWK thumbprint).
+	// Full cryptographic re-verification would require parsing the proof JWTs
+	// we already sent; instead we confirm the server accepted and bound them.
+	if cnfSet == len(tokens) {
+		fmt.Printf("All tokens cryptographically bound (cnf.jkt set on all %d issued tokens)\n", len(tokens))
+	} else {
+		fmt.Printf("DPoP binding: %d/%d tokens have cnf.jkt set\n", cnfSet, len(tokens))
+	}
+
+	// P0-1: real audit log query — sum events across all agents.
+	auditCount := queryAuditEvents(ctx, hc, opts, agents)
+	if auditCount >= 0 {
+		fmt.Printf("Audit events recorded: %d\n", auditCount)
+	}
+
+	pace(opts, 1000*time.Millisecond)
+
 	if vaultResult.AccessToken != "" {
 		fmt.Printf("[4/4] Fetching from vault (google_gmail)... ✓ access_token retrieved\n")
 	}
 
 	// Build trace for HTML report.
+	var auditRows []map[string]any
+	auditRows = append(auditRows,
+		map[string]any{"action": "oauth.token.issued", "actor": "user-proxy", "target": "-", "ts": time.Now().Format(time.RFC3339)},
+		map[string]any{"action": "oauth.token.exchanged", "actor": "email-service", "target": "user-proxy", "ts": time.Now().Format(time.RFC3339)},
+		map[string]any{"action": "oauth.token.exchanged", "actor": "followup-service", "target": "email-service", "ts": time.Now().Format(time.RFC3339)},
+		map[string]any{"action": "vault.token.retrieved", "actor": "followup-service", "target": "gmail-conn", "ts": time.Now().Format(time.RFC3339)},
+	)
+
 	trace := DemoTrace{
-		Agents: agents,
-		Tokens: tokens,
-		Vault:  vaultResult,
-		AuditEvents: []map[string]any{
-			{"action": "oauth.token.issued", "actor": "user-proxy", "target": "-", "ts": time.Now().Format(time.RFC3339)},
-			{"action": "oauth.token.exchanged", "actor": "email-service", "target": "user-proxy", "ts": time.Now().Format(time.RFC3339)},
-			{"action": "oauth.token.exchanged", "actor": "followup-service", "target": "email-service", "ts": time.Now().Format(time.RFC3339)},
-			{"action": "vault.token.retrieved", "actor": "followup-service", "target": "gmail-conn", "ts": time.Now().Format(time.RFC3339)},
-		},
+		Agents:      agents,
+		Tokens:      tokens,
+		Vault:       vaultResult,
+		AuditEvents: auditRows,
 		GeneratedAt: time.Now().Format("2006-01-02 15:04:05"),
 	}
 
@@ -159,6 +206,65 @@ func RunDelegation(ctx context.Context, opts DelegationOptions) error {
 	return nil
 }
 
+// resolveActChain replaces opaque client IDs in the act chain with friendly
+// agent names when available in nameMap.
+func resolveActChain(chain []string, nameMap map[string]string) []string {
+	out := make([]string, len(chain))
+	for i, id := range chain {
+		if name, ok := nameMap[id]; ok {
+			out[i] = name
+		} else {
+			out[i] = id
+		}
+	}
+	return out
+}
+
+// queryAuditEvents fetches audit log events for each agent and returns the
+// total unique-event count, or -1 if the endpoint is unavailable.
+func queryAuditEvents(ctx context.Context, hc *http.Client, opts DelegationOptions, agents []AgentInfo) int {
+	total := 0
+	found := false
+	for _, agent := range agents {
+		u := fmt.Sprintf("%s/api/v1/audit-logs?actor_id=%s&limit=50", opts.BaseURL, url.QueryEscape(agent.ID))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Authorization", "Bearer "+opts.AdminKey)
+		resp, err := hc.Do(req)
+		if err != nil {
+			continue
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusNotImplemented {
+			// Endpoint not yet wired — skip silently.
+			continue
+		}
+		if resp.StatusCode >= 300 {
+			continue
+		}
+		found = true
+		// Try to parse a list response; accept both {"events":[...]} and [...].
+		var listResp struct {
+			Events []map[string]any `json:"events"`
+		}
+		if err := json.Unmarshal(raw, &listResp); err == nil && listResp.Events != nil {
+			total += len(listResp.Events)
+			continue
+		}
+		var arr []map[string]any
+		if err := json.Unmarshal(raw, &arr); err == nil {
+			total += len(arr)
+		}
+	}
+	if !found {
+		return -1
+	}
+	return total
+}
+
 // writeFile writes bytes to a file path.
 func writeFile(path string, data []byte) error {
 	f, err := createFile(path)
@@ -179,9 +285,12 @@ func registerAgents(ctx context.Context, hc *http.Client, opts DelegationOptions
 		name   string
 		scopes []string
 	}{
-		{"demo-user-proxy", []string{"email:*", "vault:read"}},
-		{"demo-email-service", []string{"email:*", "vault:read"}},
-		{"demo-followup-service", []string{"email:read", "vault:read"}},
+		// user-proxy: full delegation scope — can write email and read vault.
+		{"demo-user-proxy", []string{"email:read", "email:write", "vault:read"}},
+		// email-service: drops email:write (narrowed at hop 2).
+		{"demo-email-service", []string{"email:read", "vault:read"}},
+		// followup-service: drops vault:read too (narrowed at hop 3).
+		{"demo-followup-service", []string{"email:read"}},
 	}
 
 	agents := make([]AgentInfo, 0, len(names))
@@ -259,7 +368,7 @@ func configurePolicies(ctx context.Context, hc *http.Client, opts DelegationOpti
 		targetIdx int // the agent it may impersonate
 		scopes    []string
 	}{
-		{0, 1, []string{"email:*", "vault:read"}},
+		{0, 1, []string{"email:read", "email:write", "vault:read"}},
 		{1, 2, []string{"email:read", "vault:read"}},
 	}
 
@@ -311,22 +420,34 @@ func runChain(ctx context.Context, hc *http.Client, opts DelegationOptions, agen
 	tokenURL := opts.BaseURL + "/oauth/token"
 
 	// Token 1: user-proxy authenticates with its own credentials (client_credentials).
-	tok1, err := issueClientCredentials(ctx, hc, opts, agents[0], tokenURL)
+	// Scope: full delegation scope — email:read email:write vault:read.
+	fmt.Print("  → Token 1 (user-proxy, client_credentials, scope=email:read email:write vault:read)... ")
+	tok1, err := issueClientCredentials(ctx, hc, opts, agents[0], "email:read email:write vault:read", tokenURL)
 	if err != nil {
 		return nil, VaultResult{}, fmt.Errorf("token 1 (client_credentials): %w", err)
 	}
+	fmt.Println("✓")
+	pace(opts, 1200*time.Millisecond)
 
-	// Token 2: user-proxy exchanges token 1 to act as email-service.
-	tok2, err := issueTokenExchange(ctx, hc, opts, agents[1], agents[0], tok1.AccessToken, tokenURL)
+	// Token 2: email-service requests token exchange from user-proxy.
+	// Scope NARROWS: drops email:write — email-service only needs to read mail.
+	fmt.Print("  → Token 2 (email-service, token-exchange, scope=email:read vault:read)... ")
+	tok2, err := issueTokenExchange(ctx, hc, opts, agents[1], agents[0], tok1.AccessToken, "email:read vault:read", tokenURL)
 	if err != nil {
 		return nil, VaultResult{}, fmt.Errorf("token 2 (exchange hop 1): %w", err)
 	}
+	fmt.Println("✓")
+	pace(opts, 1200*time.Millisecond)
 
-	// Token 3: email-service exchanges token 2 to act as followup-service.
-	tok3, err := issueTokenExchange(ctx, hc, opts, agents[2], agents[1], tok2.AccessToken, tokenURL)
+	// Token 3: followup-service requests token exchange from email-service.
+	// Scope NARROWS further: drops vault:read — followup only needs to read email.
+	fmt.Print("  → Token 3 (followup-service, token-exchange, scope=email:read)... ")
+	tok3, err := issueTokenExchange(ctx, hc, opts, agents[2], agents[1], tok2.AccessToken, "email:read", tokenURL)
 	if err != nil {
 		return nil, VaultResult{}, fmt.Errorf("token 3 (exchange hop 2): %w", err)
 	}
+	fmt.Println("✓")
+	pace(opts, 1200*time.Millisecond)
 
 	// Vault hop: followup-service fetches Gmail token using tok3.
 	vaultResult, err := fetchVaultToken(ctx, hc, opts, agents[2], tok3.AccessToken, opts.BaseURL)
@@ -384,7 +505,7 @@ func fetchVaultToken(ctx context.Context, hc *http.Client, opts DelegationOption
 }
 
 // issueClientCredentials requests a token via the client_credentials grant with a DPoP proof.
-func issueClientCredentials(ctx context.Context, hc *http.Client, opts DelegationOptions, agent AgentInfo, tokenURL string) (TokenInfo, error) {
+func issueClientCredentials(ctx context.Context, hc *http.Client, opts DelegationOptions, agent AgentInfo, scope string, tokenURL string) (TokenInfo, error) {
 	proof, err := makeDPoPProof(agent.Key, http.MethodPost, tokenURL, "")
 	if err != nil {
 		return TokenInfo{}, fmt.Errorf("dpop proof: %w", err)
@@ -392,7 +513,7 @@ func issueClientCredentials(ctx context.Context, hc *http.Client, opts Delegatio
 
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
-	form.Set("scope", "email:*")
+	form.Set("scope", scope)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL,
 		strings.NewReader(form.Encode()))
@@ -425,7 +546,11 @@ func issueClientCredentials(ctx context.Context, hc *http.Client, opts Delegatio
 }
 
 // issueTokenExchange performs RFC 8693 token exchange with a DPoP proof.
-func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOptions, targetAgent, actorAgent AgentInfo, subjectToken, tokenURL string) (TokenInfo, error) {
+// requestedScope is the narrowed scope the acting agent requests; pass "" to
+// let the server apply its default policy.
+// Per RFC 8693 the actor is identified by the Basic-auth client_credentials of
+// actorAgent — no separate actor_token parameter is needed.
+func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOptions, targetAgent, actorAgent AgentInfo, subjectToken, requestedScope, tokenURL string) (TokenInfo, error) {
 	proof, err := makeDPoPProof(targetAgent.Key, http.MethodPost, tokenURL, "")
 	if err != nil {
 		return TokenInfo{}, fmt.Errorf("dpop proof: %w", err)
@@ -435,9 +560,10 @@ func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOpt
 	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
 	form.Set("subject_token", subjectToken)
 	form.Set("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
-	form.Set("actor_token", subjectToken)
-	form.Set("actor_token_type", "urn:ietf:params:oauth:token-type:access_token")
 	form.Set("requested_token_type", "urn:ietf:params:oauth:token-type:access_token")
+	if requestedScope != "" {
+		form.Set("scope", requestedScope)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL,
 		strings.NewReader(form.Encode()))
@@ -446,6 +572,7 @@ func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOpt
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("DPoP", proof)
+	// Actor identified by client_credentials in Basic auth (RFC 8693 §2.1).
 	req.SetBasicAuth(actorAgent.ClientID, actorAgent.ClientSecret)
 
 	resp, err := hc.Do(req)
