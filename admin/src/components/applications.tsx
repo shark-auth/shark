@@ -7,8 +7,6 @@ import { useToast } from './toast'
 import { usePageActions } from './useKeyboardShortcuts'
 import { TeachEmptyState } from './TeachEmptyState'
 import { useTabParam } from './useURLParams'
-import { ProxyWizard } from './proxy_wizard'
-
 // Applications page — OAuth/OIDC client registrations
 // Table view → slide-over detail → live consent-screen preview
 
@@ -289,7 +287,6 @@ function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) 
       <div className="row" style={{ borderBottom: '1px solid var(--hairline)', padding: '0 10px', gap: 2 }}>
         {[
           ['config', 'Config'],
-          ['rules', 'Proxy rules'],
           ['preview', 'Consent preview'],
           ['tokens', 'Tokens'],
           ['events', 'Events'],
@@ -306,7 +303,6 @@ function AppDetail({ app, tab, setTab, onClose, onRotate, onDelete, onUpdate }) 
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {tab === 'config' && <AppConfig app={app} onUpdate={onUpdate}/>}
-        {tab === 'rules' && <AppProxyRules app={app}/>}
         {tab === 'preview' && <ConsentPreview app={app}/>}
         {tab === 'tokens' && <AppTokens app={app}/>}
         {tab === 'events' && <AppEvents app={app}/>}
@@ -788,85 +784,4 @@ function Section({ label, count, children }) {
   );
 }
 
-function AppProxyRules({ app }) {
-  const { data, loading, refresh } = useAPI('/admin/proxy/rules/db?app_id=' + app.id, [app.id]);
-  const rules = data?.data || [];
-  const [creating, setCreating] = React.useState(false);
-
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this rule?')) return;
-    try {
-      await API.del('/admin/proxy/rules/db/' + id);
-      refresh();
-    } catch (e) { alert(e.message); }
-  };
-
-  return (
-    <div style={{ padding: 16 }}>
-      <div className="row" style={{ marginBottom: 12, gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <h4 style={{ ...sectionLabelStyle, margin: 0 }}>DB-backed route rules</h4>
-          <p className="faint" style={{ fontSize: 11, marginTop: 4 }}>
-            Rules for {app.proxy_public_domain || 'this app'} ordered by priority.
-          </p>
-        </div>
-        <button className="btn primary sm" onClick={() => setCreating(true)}>
-          <Icon.Plus width={11} height={11}/> Add rule
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="faint" style={{ fontSize: 11 }}>Loading rules…</div>
-      ) : rules.length === 0 ? (
-        <div style={{ padding: 32, textAlign: 'center', border: HAIRLINE, borderRadius: 5, background: 'var(--surface-1)' }}>
-          <div className="muted" style={{ fontSize: 13 }}>No custom rules for this app.</div>
-        </div>
-      ) : (
-        <div style={{ border: HAIRLINE, borderRadius: 5, overflow: 'hidden', background: 'var(--surface-1)' }}>
-          <table className="tbl" style={{ width: '100%', fontSize: 11.5 }}>
-            <thead>
-              <tr style={{ background: 'var(--surface-2)' }}>
-                <th style={{ padding: '6px 10px', textAlign: 'left' }}>Pattern</th>
-                <th style={{ padding: '6px 10px', textAlign: 'left' }}>Policy</th>
-                <th style={{ padding: '6px 10px', width: 40 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rules.map(r => (
-                <tr key={r.id} style={{ borderTop: HAIRLINE }}>
-                  <td style={{ padding: '8px 10px' }}>
-                    <div className="mono" style={{ fontWeight: 500 }}>{r.pattern}</div>
-                    <div className="faint" style={{ fontSize: 10, marginTop: 2 }}>
-                      {r.methods?.length > 0 ? r.methods.join(', ') : 'ANY'}
-                    </div>
-                  </td>
-                  <td style={{ padding: '8px 10px' }}>
-                    <span className={"chip " + (r.require ? 'solid' : 'ghost')} style={{ height: 18, fontSize: 10 }}>
-                      {r.require || r.allow}
-                    </span>
-                  </td>
-                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
-                    <button className="btn ghost icon sm" onClick={() => handleDelete(r.id)}>
-                      <Icon.X width={10} height={10}/>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {creating && (
-        <div style={modalBackdrop} onClick={() => setCreating(false)}>
-          <div style={{ width: 500 }} onClick={e => e.stopPropagation()}>
-            <ProxyWizard 
-              appId={app.id} 
-              onComplete={() => { setCreating(false); refresh(); }}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// AppProxyRules removed — proxy cut to v0.2 per playbook/08

@@ -495,7 +495,7 @@ function AgentDetail({ agent, tab, setTab, setPage, onClose, onDeactivate, onUpd
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {tab === 'config' && <AgentConfig agent={agent} onUpdate={onUpdate} onRotateSecret={() => setRotateModalOpen(true)}/>}
+        {tab === 'config' && <AgentConfig agent={agent} onUpdate={onUpdate} onRotateSecret={() => setRotateModalOpen(true)} setPage={setPage}/>}
         {tab === 'tokens' && <AgentTokens agent={agent} tokensVersion={tokensVersion}/>}
         {tab === 'consents' && <AgentConsents agent={agent}/>}
         {tab === 'audit' && <AgentAudit agent={agent}/>}
@@ -514,7 +514,7 @@ function AgentDetail({ agent, tab, setTab, setPage, onClose, onDeactivate, onUpd
   );
 }
 
-function AgentConfig({ agent, onUpdate, onRotateSecret }) {
+function AgentConfig({ agent, onUpdate, onRotateSecret, setPage }) {
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState(null);
   const [saveOk, setSaveOk] = React.useState(false);
@@ -680,6 +680,44 @@ function AgentConfig({ agent, onUpdate, onRotateSecret }) {
           </button>
         </div>
       </Section>
+
+      {/* Identity — linked human user */}
+      {(() => {
+        const uid = agent.created_by_user_id || agent.created_by || agent.user_id;
+        if (!uid) return null;
+        return (
+          <Section label="Identity">
+            <div style={{
+              background: 'var(--surface-1)', border: '1px solid var(--hairline)',
+              borderRadius: 3, padding: '9px 12px',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: '50%', background: 'var(--surface-3)',
+                border: '1px solid var(--hairline-strong)', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontWeight: 600, color: 'var(--fg)',
+              }}>U</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginBottom: 1 }}>Bound to user</div>
+                <span className="mono" style={{ fontSize: 11.5, color: 'var(--fg)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {uid}
+                </span>
+              </div>
+              {setPage && (
+                <button
+                  className="btn ghost sm"
+                  onClick={() => setPage('users', { search: uid })}
+                  style={{ fontSize: 10.5, flexShrink: 0 }}
+                  title="View user in Users tab"
+                >
+                  View user →
+                </button>
+              )}
+            </div>
+          </Section>
+        );
+      })()}
 
       <Section label="Metadata">
         <div style={{display:'grid', gridTemplateColumns:'auto 1fr', gap:'8px 14px', fontSize: 11.5}}>
