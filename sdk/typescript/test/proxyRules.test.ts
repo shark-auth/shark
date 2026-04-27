@@ -177,36 +177,3 @@ describe("ProxyRulesClient.deleteRule()", () => {
     expect((err as SharkAPIError).status).toBe(404);
   });
 });
-
-// ---------------------------------------------------------------------------
-// importRulesYaml
-// ---------------------------------------------------------------------------
-
-describe("ProxyRulesClient.importRulesYaml()", () => {
-  it("returns imported count and empty errors on full success", async () => {
-    installFetch(vi.fn().mockResolvedValueOnce(makeResp(200, { imported: 3, errors: [] })));
-    const result = await client().importRulesYaml("rules:\n  - path: /a\n    require: authenticated\n");
-    expect(result.imported).toBe(3);
-    expect(result.errors).toHaveLength(0);
-  });
-
-  it("returns partial success with per-row errors", async () => {
-    const body = {
-      imported: 1,
-      errors: [{ index: "1", name: "bad-rule", error: "pattern required" }],
-    };
-    installFetch(vi.fn().mockResolvedValueOnce(makeResp(200, body)));
-    const result = await client().importRulesYaml("...");
-    expect(result.imported).toBe(1);
-    expect(result.errors[0].index).toBe("1");
-  });
-
-  it("throws SharkAPIError on 400 (invalid YAML)", async () => {
-    installFetch(
-      vi.fn().mockResolvedValueOnce(makeResp(400, { error: { code: "invalid_yaml", message: "yaml: line 1" } }))
-    );
-    const err = await client().importRulesYaml("!!!").catch((e) => e);
-    expect(err).toBeInstanceOf(SharkAPIError);
-    expect((err as SharkAPIError).code).toBe("invalid_yaml");
-  });
-});

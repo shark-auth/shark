@@ -185,20 +185,4 @@ export class ProxyRulesClient {
     if (resp.status !== 204) await this._throw(resp.status, resp.text);
   }
 
-  /**
-   * Bulk-import rules from a YAML string.
-   *
-   * Accepts either a top-level `rules:` envelope or a bare YAML list.
-   * Per-row failures are collected in `errors`; partial success is the contract.
-   */
-  async importRulesYaml(yaml: string): Promise<ImportResult> {
-    const url = `${this._base}/api/v1/admin/proxy/rules/import`;
-    const resp = await httpRequest(url, {
-      method: "POST",
-      headers: { ...this._auth(), "Content-Type": "application/json" },
-      body: JSON.stringify({ yaml }),
-    });
-    if (resp.status !== 200) await this._throw(resp.status, resp.text);
-    return resp.json<ImportResult>();
-  }
 }

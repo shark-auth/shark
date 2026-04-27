@@ -143,21 +143,3 @@ class AppsClient:
             return resp.text
         _raise(resp)
 
-    def preview_consent_screen(self, app_id: str) -> Dict[str, Any]:
-        """Preview the consent screen for an application.
-
-        Note
-        ----
-        The admin route ``GET /api/v1/admin/apps/{id}/preview`` is not
-        currently mounted in the backend router. This method calls that
-        path for forward compatibility — until the route exists the
-        server will return 404 surfaced as :class:`SharkAPIError`.
-        """
-        url = f"{self._base}{self._PREFIX}/{app_id}/preview"
-        resp = _http.request(self._session, "GET", url, headers=self._auth())
-        if resp.status_code == 200:
-            ctype = (resp.headers.get("Content-Type") or "").lower()
-            if "application/json" in ctype:
-                return self._unwrap(resp.json())
-            return {"html": resp.text}
-        _raise(resp)

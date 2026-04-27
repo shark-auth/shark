@@ -177,25 +177,3 @@ class ProxyRulesClient:
             return
         _raise(resp)
 
-    # ------------------------------------------------------------------
-    # YAML import
-    # ------------------------------------------------------------------
-
-    def import_rules_yaml(self, yaml_text: str) -> ImportResult:
-        """Bulk-import proxy rules from a YAML string.
-
-        Returns an :class:`ImportResult` with the count of imported rules and
-        any per-row errors.  Partial success is possible — inspect ``errors``
-        even when ``imported`` > 0.
-        """
-        url = f"{self._base}/api/v1/admin/proxy/rules/import"
-        resp = _http.request(
-            self._session, "POST", url, headers=self._auth(), json={"yaml": yaml_text}
-        )
-        if resp.status_code == 200:
-            body = resp.json()
-            return ImportResult(  # type: ignore[return-value]
-                imported=body.get("imported", 0),
-                errors=body.get("errors") or [],
-            )
-        _raise(resp)

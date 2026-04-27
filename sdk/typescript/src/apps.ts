@@ -206,15 +206,4 @@ export class AppsClient {
     return resp.text;
   }
 
-  /** Preview the consent screen for an application. */
-  async previewConsentScreen(appId: string): Promise<Record<string, unknown>> {
-    const url = `${this._base}${PREFIX}/${encodeURIComponent(appId)}/preview`;
-    const resp = await httpRequest(url, { headers: this._auth() });
-    if (resp.status !== 200) await this._throw(resp.status, resp.text);
-    const ctype = (resp.headers["content-type"] || "").toLowerCase();
-    if (ctype.includes("application/json")) {
-      return AppsClient._unwrap<Record<string, unknown>>(resp.json());
-    }
-    return { html: resp.text };
-  }
 }

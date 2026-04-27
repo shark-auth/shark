@@ -192,49 +192,6 @@ def test_delete_rule_404():
 
 
 # ---------------------------------------------------------------------------
-# import_rules_yaml
-# ---------------------------------------------------------------------------
-
-
-def test_import_rules_yaml_happy_path():
-    with patch("shark_auth._http.request") as mock_req:
-        mock_req.return_value = _mock_resp(200, {"imported": 2, "errors": []})
-        client = _make_client()
-        result = client.import_rules_yaml("rules:\n  - path: /api/*\n    require: authenticated\n")
-
-    assert result["imported"] == 2
-    assert result["errors"] == []
-
-
-def test_import_rules_yaml_partial_success():
-    with patch("shark_auth._http.request") as mock_req:
-        mock_req.return_value = _mock_resp(
-            200,
-            {
-                "imported": 1,
-                "errors": [{"index": "1", "name": "bad-rule", "error": "pattern must start with '/'"}],
-            },
-        )
-        client = _make_client()
-        result = client.import_rules_yaml("yaml text here")
-
-    assert result["imported"] == 1
-    assert len(result["errors"]) == 1
-
-
-def test_import_rules_yaml_400():
-    with patch("shark_auth._http.request") as mock_req:
-        mock_req.return_value = _mock_resp(
-            400, {"error": {"code": "invalid_yaml", "message": "yaml parse error"}}
-        )
-        client = _make_client()
-        with pytest.raises(SharkAPIError) as exc_info:
-            client.import_rules_yaml("not valid yaml {{{{")
-
-    assert exc_info.value.code == "invalid_yaml"
-
-
-# ---------------------------------------------------------------------------
 # Composition test — Client builds correct URL + auth header
 # ---------------------------------------------------------------------------
 
