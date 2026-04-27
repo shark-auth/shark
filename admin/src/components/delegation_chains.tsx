@@ -325,12 +325,13 @@ function ChainDrawer({
   }, [chain.segments]);
 
   const chainRFEdges = React.useMemo(() => {
+    const now = Date.now();
     const rawEdges = chain.segments.slice(1).map((seg, i) => {
       const prev = chain.segments[i];
       const fromId = prev.sub || prev.label || String(i);
       const toId = seg.sub || seg.label || String(i + 1);
       const ev = chain.events[i];
-      const isActive = i === chain.segments.length - 2;
+      const isActive = !!ev?.created_at && (now - new Date(ev.created_at).getTime()) < 60_000;
       return {
         id: `${fromId}->${toId}`,
         from: fromId,
@@ -859,10 +860,11 @@ function ChainCanvas({
   }, [graphNodes]);
 
   const rfEdges = React.useMemo(() => {
-    const edges = graphEdges.map((e, i) => ({
+    const now = Date.now();
+    const edges = graphEdges.map((e) => ({
       ...e,
       id: e.from + '->' + e.to,
-      isActivHop: i === graphEdges.length - 1,
+      isActivHop: !!e.timestamp && (now - new Date(e.timestamp).getTime()) < 60_000,
     }));
     return toReactFlowEdges(edges);
   }, [graphEdges]);
@@ -887,12 +889,13 @@ function ChainCanvas({
 
   const chainRFEdges = React.useMemo(() => {
     if (!selectedChain) return null;
+    const now = Date.now();
     return selectedChain.segments.slice(1).map((seg, i) => {
       const prev = selectedChain.segments[i];
       const fromId = prev.sub || prev.label || String(i);
       const toId = seg.sub || seg.label || String(i + 1);
       const ev = selectedChain.events[i];
-      const isActive = i === selectedChain.segments.length - 2;
+      const isActive = !!ev?.created_at && (now - new Date(ev.created_at).getTime()) < 60_000;
       return {
         id: `${fromId}->${toId}`,
         from: fromId,
