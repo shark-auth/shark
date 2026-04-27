@@ -190,3 +190,118 @@ Spread Tue-Wed post-launch. Mandatory before YC video Thursday.
 ## Stop conditions
 - If section audit reveals < 30% port faithful, STOP — escalate. Means we ship Monday with mostly hallucinated coverage and need to be honest about it in the launch post.
 - If concurrent test fails fundamentally (token issuance under 20-thread load drops below 95% success), STOP — investigate before any launch claims about scale.
+
+---
+
+# 2026-04-26 EVENING UPDATE — Lessons from F1-F10 Launch-Readiness Wave
+
+**Trigger:** Friday-Sunday F1-F10 work shipped 9 fixes. New tests added (F4/F5/F8/F9/F10) exposed pytest fragilities not previously documented.
+
+## New Smoke Baseline (post-F1-F10)
+
+| Metric | Pre-F1-F10 (2026-04-26 morning) | Post-F1-F10 (2026-04-26 evening) | Delta |
+|---|---|---|---|
+| PASS | 225 | 282 | **+57** |
+| FAIL | 13 | 14 | +1 (F10 install.sh regex too broad — cosmetic) |
+| ERROR | 5 | 5 | 0 |
+| XFAIL | 3 | 6 | +3 (F5 doctor live tests, wiring fix W+1) |
+| SKIPPED | 33 | 37 | +4 |
+
+**Run command:** `python -m pytest tests/smoke --tb=no -q --ignore=tests/smoke/test_f4_serve_rerun_banner.py`
+
+**Why F4 ignored:** F4 spawns shark via subprocess.Popen + uses `signal.CTRL_BREAK_EVENT` historically (now `proc.kill()` since commit `d6527bf`). Even with kill, F4 must run isolated to avoid port conflicts with conftest's shared shark fixture.
+
+## Test Authoring Conventions Discovered (MANDATORY for new pytest)
+
+### 1. Subprocess signal handling (Windows)
+- ❌ NEVER `proc.send_signal(signal.CTRL_BREAK_EVENT)` — kills pytest parent, exit 58 silent
+- ✅ Use `proc.kill()` directly + `proc.wait(timeout=3)` in try/except
+- ✅ For graceful shutdown: `proc.terminate()` first, fall back to `kill()` after timeout
+
+### 2. Test binary refresh
+- `tests/smoke/shark.exe` is a committed binary fixture — gets stale when shark code changes
+- BEFORE running smoke: `go build -o shark.exe ./cmd/shark && cp -f shark.exe tests/smoke/shark.exe`
+- Add to CI: rebuild + copy step BEFORE pytest invocation
+- TODO: replace committed binary with `pytest fixture that rebuilds on demand`
+
+### 3. Live-server test guards
+- Tests calling running shark MUST guard with reachability probe:
+  ```python
+  def _shark_reachable() -> bool:
+      try:
+          parsed = urlparse(BASE_URL)
+          with socket.create_connection((parsed.hostname, parsed.port or 8080), timeout=1):
+              return True
+      except OSError:
+          return False
+  
+  _REQUIRES_LIVE_SERVER = pytest.mark.skipif(not _shark_reachable(), reason="...")
+  ```
+- See `tests/smoke/test_f10_openapi_scalar.py` for canonical pattern
+
+### 4. Config-path conflicts
+- `shark doctor` (and any standalone CLI test) reads default config path
+- Conftest fixture spawns shark with custom DB/port — doctor doesn't see that config
+- Fix options: (a) doctor accepts `--config-path` flag, (b) test sets env vars conftest exports, (c) test fixture writes config to default location
+- F5 chose option (b/c) — pending W+1 wiring fix
+- For new doctor-style tests: prefer env-var override pattern
+
+### 5. Static doc-lint tests are gold
+- F8 (20 PASS), F9 (19 PASS) = pure file-content checks, zero shark dependency
+- Patterns: `assert "five-layer revocation" in content`, `assert not re.search(r"pip install shark-auth(?!.*git\+)", content)`
+- Use these for: README, docs/, generated assets verification
+- ZERO maintenance — survive shark refactors entirely
+
+## Updated Section Audit Priorities (override Part 1 table where conflict)
+
+Failing tests confirmed pre-existing or cut-feature, NOT regressions from F1-F10:
+
+| Test | Status | Reason |
+|---|---|---|
+| `test_admin_mgmt::test_dev_inbox_access` | DEFERRED | PUNCH_LIST §C, 404 dev inbox path |
+| `test_cli_user_sso_agent_session::TestAPIKeyCLI::test_api_key_create_list_revoke` | DEFERRED | PUNCH_LIST §C |
+| `test_cli_user_sso_agent_session::TestAuditExportCLI::test_audit_export_stdout` | DEFERRED | PUNCH_LIST §C |
+| `test_w15_advanced::test_w15_multi_listener_isolation` | DEFERRED | PUNCH_LIST §C, W15 deferred |
+| `test_w15_gateway::test_transparent_gateway_porter` | DEFERRED | PUNCH_LIST §C, W15 deferred |
+| `test_bulk_pattern_revoke::test_bulk_revoke_tokens_marked_revoked_in_token_list` | CUT | Bulk-pattern revoke soft-cut (CUT 2 in playbook/08) |
+| `test_vault_disconnect_cascade::test_vault_disconnect_cascade` | CUT | Vault cascade soft-cut (CUT 2) |
+| `test_w1_edit2_audit_breadcrumb::test_*` (×2) | PRE-EXISTING | W1.7 Edit 2 work — investigate W+1 |
+| `test_w1_edit4_agent_security_card::test_audit_logs_token_exchange_fields` | PRE-EXISTING | W1 work — investigate W+1 |
+| `test_w1_edit5_get_started_agent_track::TestAuditEndpoint::test_audit_page_reachable` | PRE-EXISTING | W1 work — investigate W+1 |
+| `test_w17_get_started_rebuild::test_no_legacy_oauth_step_phrases` | RESOLVED-BY-F3 | F3 get-started rewrite (deferred) removes the offending `npm install @sharkauth/react` strings |
+| `test_w17_identity_settings_cleanup::test_settings_page_http_200` | INVESTIGATE | ERROR — needs root cause |
+| `test_w2_sdk_method_8/9/10::test_*` (×4) | INVESTIGATE | All ERROR on fixture — likely SDK fixture wiring break, not SDK regression |
+| `test_f10::test_no_install_sh_in_public_docs` | F10 TEST BUG | regex matches legit `docs.sharkauth.dev` — tighten pattern |
+
+## Pre-Launch Checklist (Monday morning)
+
+- [ ] `go build -o shark.exe ./cmd/shark`
+- [ ] `cp -f shark.exe tests/smoke/shark.exe`
+- [ ] `python -m pytest tests/smoke --tb=no -q --ignore=tests/smoke/test_f4_serve_rerun_banner.py`
+- [ ] Verify pass count ≥ 282 (current baseline)
+- [ ] Run F4 separately: `python -m pytest tests/smoke/test_f4_serve_rerun_banner.py`
+- [ ] Verify F4 passes 4/4 (or at least the static helper-existence test)
+- [ ] Manual: `shark serve` → `/api/docs` → confirm Scalar UI loads
+- [ ] Manual: `shark doctor` → verify clean exit on configured deployment
+- [ ] Manual: `shark serve` twice → verify re-run banner shows "admin configured" or "setup pending"
+- [ ] Manual: open dashboard → walk Get Started → register agent → see audit log
+
+## Post-Launch W+1 Pytest Backlog (priority order)
+
+1. **F5 doctor wiring fix** — make doctor honor SHARK_DB_PATH + SHARK_BASE_URL env vars set by conftest, then un-xfail the 3 tests
+2. **F10 install.sh regex tighten** — pattern should be `r"sharkauth\.dev/install\.sh"` not bare `r"sharkauth\.dev"`
+3. **F4 conftest integration** — port F4 tests onto shared `server` fixture so they don't need separate ignore flag
+4. **Auto-rebuild fixture** — replace committed `tests/smoke/shark.exe` with session-scoped fixture that runs `go build` if source mtime > binary mtime
+5. **Items 1-5 from playbook/11-pytest-human-auth-coverage.md** — email-verify, password-reset, account-self-delete, logout, failed-login-lockout
+6. **W17 identity_settings + W2 SDK method ERRORs** — root-cause + fix, currently 5 errors total
+7. **F3 get-started rewrite + its tests** — was deferred from launch wave; resolves test_w17_get_started_rebuild fail too
+8. **F1 setup-token DB persistence** — was deferred from launch wave per founder; high UX impact for self-hosters
+
+## Cross-References
+
+- Test authoring conventions inherited from: HANDOFF D4 (impl + test in same diff)
+- Cut-feature test classification: `playbook/08-launch-scope-cuts.md`
+- Deferred test list: `playbook/PUNCH_LIST_W1_FINAL.md` §C
+- F1-F10 plan: `playbook/plans/2026-04-26-launch-readiness-fixes.md`
+- New test files added: `tests/smoke/test_f4_*.py` through `test_f10_*.py`
+- Smoke triage commit: `d6527bf` (xfail wiring + F10 skipif)

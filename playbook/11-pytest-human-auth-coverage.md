@@ -1,6 +1,8 @@
 # Pytest Coverage Audit — Human Auth (2026-04-26)
 
-Smoke baseline: **206 PASS / 12 FAIL / 5 ERROR / 33 SKIPPED**.
+> **2026-04-26 evening update:** Baseline now **282 PASS / 14 FAIL / 5 ERROR / 6 XFAIL / 37 SKIPPED** post-F1-F10 wave (+76 PASS vs morning). Test authoring conventions, failure categorization, and pre-launch checklist consolidated in `playbook/12-pytest-port-and-concurrency-plan.md` "EVENING UPDATE" section. See there for canonical lessons.
+
+Smoke baseline (morning, retained for diff): **206 PASS / 12 FAIL / 5 ERROR / 33 SKIPPED**.
 Audit scope: human-side auth (NOT agent-side; agent flows are exhaustively covered by W1-W3 tests).
 
 ---
