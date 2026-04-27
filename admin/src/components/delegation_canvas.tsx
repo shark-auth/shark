@@ -6,6 +6,7 @@
 //     "via token_exchange · <ts>" edge tooltip (hover-only), active hop animated stroke
 
 import React, { useState } from 'react'
+import dagre from 'dagre'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -669,43 +670,110 @@ const LANE_GAP = 240
 
 export function toReactFlowNodes(nodes: DCanvasNode[]) {
   const rfNodes: any[] = []
+  const NODE_W = 80
+  const NODE_H = 80
 
-  // Track which lanes already have a gutter label rendered
+  // Group nodes by lane (each chain = one horizontal band)
+  const laneGroups = new Map<number, DCanvasNode[]>()
+  for (const n of nodes) {
+    const lane = n.lane ?? 0
+    if (!laneGroups.has(lane)) laneGroups.set(lane, [])
+    laneGroups.get(lane)!.push(n)
+  }
+
+  // Sort lanes to ensure consistent vertical stacking
+  const sortedLanes = Array.from(laneGroups.keys()).sort((a, b) => a - b)
+
+  // Track cumulative y offset (dagre outputs absolute coords; we shift per lane)
+  let cumulativeY = 0
   const labeledLanes = new Set<number>()
 
-  for (const n of nodes) {
-    const laneOffset = (n.lane ?? 0) * LANE_GAP
-    rfNodes.push({
-      id: n.id,
-      type: n.isCenter ? 'centerAgentNode' : n.isUser ? 'humanNode' : 'agentNode',
-      position: {
-        x: n.layer * LAYER_GAP,
-        y: n.slotInLayer * SLOT_GAP + laneOffset,
-      },
-      data: {
-        label: n.label,
-        jkt: n.jkt,
-        isUser: n.isUser,
-        isCenter: n.isCenter,
-        meta: n.meta,
-        chainPos: n.chainPos,
-        chainTotal: n.chainTotal,
-      },
-      selected: false,
+  // We need edges to run dagre — they're not passed here, so we reconstruct
+  // topology from layer/slot (layer = graph depth, adjacent layers = edges).
+  // Build a simple chain: nodes sorted by layer within each lane.
+
+  for (const lane of sortedLanes) {
+    const laneNodes = laneGroups.get(lane)!
+
+    const g = new dagre.graphlib.Graph()
+    g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: 160 })
+    g.setDefaultEdgeLabel(() => ({}))
+
+    // Register all nodes
+    laneNodes.forEach(n => g.setNode(n.id, { width: NODE_W, height: NODE_H }))
+
+    // Add edges based on layer adjacency (layer i → layer i+1 within lane)
+    const byLayer = new Map<number, DCanvasNode[]>()
+    for (const n of laneNodes) {
+      if (!byLayer.has(n.layer)) byLayer.set(n.layer, [])
+      byLayer.get(n.layer)!.push(n)
+    }
+    const layers = Array.from(byLayer.keys()).sort((a, b) => a - b)
+    for (let li = 0; li < layers.length - 1; li++) {
+      const fromLayer = byLayer.get(layers[li])!
+      const toLayer = byLayer.get(layers[li + 1])!
+      // Connect each node in this layer to the next layer's node
+      // (simple chain — enough for dagre to rank correctly)
+      const pairs = Math.max(fromLayer.length, toLayer.length)
+      for (let pi = 0; pi < pairs; pi++) {
+        const src = fromLayer[Math.min(pi, fromLayer.length - 1)]
+        const tgt = toLayer[Math.min(pi, toLayer.length - 1)]
+        g.setEdge(src.id, tgt.id)
+      }
+    }
+
+    dagre.layout(g)
+
+    // Find bounding box height for this lane to compute next lane offset
+    let laneMinY = Infinity
+    let laneMaxY = -Infinity
+    laneNodes.forEach(n => {
+      const pos = g.node(n.id)
+      if (pos) {
+        laneMinY = Math.min(laneMinY, pos.y - NODE_H / 2)
+        laneMaxY = Math.max(laneMaxY, pos.y + NODE_H / 2)
+      }
+    })
+    if (laneMinY === Infinity) { laneMinY = 0; laneMaxY = NODE_H }
+
+    laneNodes.forEach(n => {
+      const pos = g.node(n.id)
+      if (!pos) return
+      rfNodes.push({
+        id: n.id,
+        type: n.isCenter ? 'centerAgentNode' : n.isUser ? 'humanNode' : 'agentNode',
+        position: {
+          x: pos.x - NODE_W / 2,
+          y: cumulativeY + (pos.y - laneMinY),
+        },
+        data: {
+          label: n.label,
+          jkt: n.jkt,
+          isUser: n.isUser,
+          isCenter: n.isCenter,
+          meta: n.meta,
+          chainPos: n.chainPos,
+          chainTotal: n.chainTotal,
+        },
+        selected: false,
+      })
     })
 
-    // Gutter label node: one per lane, pinned to x=-170 at mid-lane y
-    if (n.lane != null && n.laneLabel && !labeledLanes.has(n.lane)) {
-      labeledLanes.add(n.lane)
+    // Gutter label: pinned left at mid-lane y
+    if (lane != null && laneNodes[0]?.laneLabel && !labeledLanes.has(lane)) {
+      labeledLanes.add(lane)
+      const laneHeight = laneMaxY - laneMinY
       rfNodes.push({
-        id: `__lane_label_${n.lane}`,
+        id: `__lane_label_${lane}`,
         type: 'laneLabel',
-        position: { x: -170, y: laneOffset + LANE_GAP / 2 - 10 },
-        data: { label: n.laneLabel },
+        position: { x: -170, y: cumulativeY + laneHeight / 2 - 10 },
+        data: { label: laneNodes[0].laneLabel },
         selectable: false,
         draggable: false,
       })
     }
+
+    cumulativeY += (laneMaxY - laneMinY) + LANE_GAP
   }
 
   return rfNodes
