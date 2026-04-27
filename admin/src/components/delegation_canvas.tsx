@@ -546,11 +546,37 @@ function CenterAgentNode({ data, selected }: { data: any; selected?: boolean }) 
 // UserNode kept as alias for HumanNode (used by agents_manage ego graph)
 const UserNode = HumanNode;
 
+/**
+ * LaneLabelNode — gutter label for swim-lane, no handles, not selectable.
+ * Displays "alice@corp · 3-hop · 14:32" in fg-dim 9.5px monospace.
+ */
+function LaneLabelNode({ data }: { data: any }) {
+  return (
+    <div style={{
+      pointerEvents: 'none',
+      userSelect: 'none',
+      fontFamily: 'ui-monospace, monospace',
+      fontSize: 9.5,
+      color: 'var(--fg-dim)',
+      opacity: 0.55,
+      whiteSpace: 'nowrap',
+      lineHeight: 1.4,
+      borderRight: '1px solid var(--hairline)',
+      paddingRight: 8,
+      textAlign: 'right',
+      minWidth: 140,
+    }}>
+      {data.label}
+    </div>
+  )
+}
+
 const nodeTypes = {
   agentNode: AgentNode,
   userNode: UserNode,
   humanNode: HumanNode,
   centerAgentNode: CenterAgentNode,
+  laneLabel: LaneLabelNode,
 }
 
 const edgeTypes = {
@@ -566,6 +592,8 @@ export interface DCanvasNode {
   isCenter?: boolean
   layer: number
   slotInLayer: number
+  lane?: number          // swim-lane index (0-based); each chain gets its own horizontal band
+  laneLabel?: string     // gutter label, e.g. "alice@corp · 3-hop · 14:32"
   jkt?: string
   meta?: any
   actAsCount?: number
@@ -587,25 +615,50 @@ export interface DCanvasEdge {
 // Generous spacing: nodes have more breathing room
 const LAYER_GAP = 200
 const SLOT_GAP = 120
+// Swim-lane vertical offset per chain (240px bands)
+const LANE_GAP = 240
 
 export function toReactFlowNodes(nodes: DCanvasNode[]) {
-  return nodes.map(n => ({
-    id: n.id,
-    type: n.isCenter ? 'centerAgentNode' : n.isUser ? 'humanNode' : 'agentNode',
-    position: {
-      x: n.layer * LAYER_GAP,
-      y: n.slotInLayer * SLOT_GAP,
-    },
-    data: {
-      label: n.label,
-      jkt: n.jkt,
-      isUser: n.isUser,
-      isCenter: n.isCenter,
-      meta: n.meta,
-      actAsCount: n.actAsCount,
-    },
-    selected: false,
-  }))
+  const rfNodes: any[] = []
+
+  // Track which lanes already have a gutter label rendered
+  const labeledLanes = new Set<number>()
+
+  for (const n of nodes) {
+    const laneOffset = (n.lane ?? 0) * LANE_GAP
+    rfNodes.push({
+      id: n.id,
+      type: n.isCenter ? 'centerAgentNode' : n.isUser ? 'humanNode' : 'agentNode',
+      position: {
+        x: n.layer * LAYER_GAP,
+        y: n.slotInLayer * SLOT_GAP + laneOffset,
+      },
+      data: {
+        label: n.label,
+        jkt: n.jkt,
+        isUser: n.isUser,
+        isCenter: n.isCenter,
+        meta: n.meta,
+        actAsCount: n.actAsCount,
+      },
+      selected: false,
+    })
+
+    // Gutter label node: one per lane, pinned to x=-170 at mid-lane y
+    if (n.lane != null && n.laneLabel && !labeledLanes.has(n.lane)) {
+      labeledLanes.add(n.lane)
+      rfNodes.push({
+        id: `__lane_label_${n.lane}`,
+        type: 'laneLabel',
+        position: { x: -170, y: laneOffset + LANE_GAP / 2 - 10 },
+        data: { label: n.laneLabel },
+        selectable: false,
+        draggable: false,
+      })
+    }
+  }
+
+  return rfNodes
 }
 
 export function toReactFlowEdges(edges: DCanvasEdge[]) {

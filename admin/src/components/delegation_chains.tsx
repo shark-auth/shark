@@ -749,13 +749,6 @@ function ChainSelectorItem({
 
 type ViewMode = 'list' | 'canvas';
 
-interface GraphNode {
-  id: string;
-  label: string;
-  isUser: boolean;
-  layer: number;
-  slotInLayer: number;
-}
 interface GraphEdge {
   from: string;
   to: string;
@@ -764,24 +757,56 @@ interface GraphEdge {
   eventId: string;
 }
 
+interface GraphNode {
+  id: string;
+  label: string;
+  isUser: boolean;
+  layer: number;
+  slotInLayer: number;
+  lane: number;
+  laneLabel: string;
+}
+
 function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  const nodeMap = new Map<string, { label: string; isUser: boolean }>();
+  // Emit per-chain swim lanes — nodes scoped to their own lane so distinct
+  // user→agent chains don't fuse into a tangled shared graph.
+  const nodes: GraphNode[] = [];
   const edgeSet = new Map<string, GraphEdge>();
 
-  for (const chain of chains) {
+  for (let laneIdx = 0; laneIdx < chains.length; laneIdx++) {
+    const chain = chains[laneIdx];
     const segs = chain.segments;
+
+    // Build lane label: "alice@corp · N-hop · HH:MM"
+    const root = chain.rootSub.length > 18 ? chain.rootSub.slice(0, 16) + '…' : chain.rootSub;
+    const hopCount = segs.length;
+    const ts = chain.latestAt
+      ? new Date(chain.latestAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '';
+    const laneLabel = ts
+      ? `${root} · ${hopCount}-hop · ${ts}`
+      : `${root} · ${hopCount}-hop`;
+
     for (let i = 0; i < segs.length; i++) {
       const seg = segs[i];
-      const id = seg.sub || seg.label || String(i);
-      if (!nodeMap.has(id)) {
-        nodeMap.set(id, { label: seg.label || seg.sub, isUser: seg.isUser });
-      }
+      // Scope id to lane to prevent cross-chain node fusion
+      const id = `lane${laneIdx}__${seg.sub || seg.label || String(i)}`;
+      nodes.push({
+        id,
+        label: seg.label || seg.sub,
+        isUser: seg.isUser,
+        layer: i,
+        slotInLayer: 0,
+        lane: laneIdx,
+        laneLabel,
+      });
+
       if (i > 0) {
         const prev = segs[i - 1];
-        const fromId = prev.sub || prev.label || String(i - 1);
+        const fromId = `lane${laneIdx}__${prev.sub || prev.label || String(i - 1)}`;
         const edgeKey = `${fromId}→${id}`;
         if (!edgeSet.has(edgeKey)) {
-          const ev = chain.events[0];
+          const ev = chain.events[i - 1] || chain.events[0];
           edgeSet.set(edgeKey, {
             from: fromId, to: id,
             timestamp: ev?.created_at || '',
@@ -791,49 +816,6 @@ function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] }
         }
       }
     }
-  }
-
-  const inbound = new Map<string, number>();
-  for (const [, edge] of edgeSet) {
-    inbound.set(edge.to, (inbound.get(edge.to) || 0) + 1);
-  }
-
-  const layerMap = new Map<string, number>();
-  const queue: string[] = [];
-  for (const [id] of nodeMap) {
-    if (!inbound.has(id) || inbound.get(id) === 0) {
-      layerMap.set(id, 0);
-      queue.push(id);
-    }
-  }
-  let qi = 0;
-  while (qi < queue.length) {
-    const cur = queue[qi++];
-    const curLayer = layerMap.get(cur) || 0;
-    for (const [, edge] of edgeSet) {
-      if (edge.from === cur && !layerMap.has(edge.to)) {
-        layerMap.set(edge.to, Math.min(curLayer + 1, 4));
-        queue.push(edge.to);
-      }
-    }
-  }
-  for (const [id] of nodeMap) {
-    if (!layerMap.has(id)) layerMap.set(id, 0);
-  }
-
-  const layerSlots = new Map<number, number>();
-  const nodes: GraphNode[] = [];
-  const sortedIds = Array.from(nodeMap.keys()).sort((a, b) => {
-    const la = layerMap.get(a) || 0;
-    const lb = layerMap.get(b) || 0;
-    return la !== lb ? la - lb : a.localeCompare(b);
-  });
-  for (const id of sortedIds) {
-    const layer = layerMap.get(id) || 0;
-    const slot = layerSlots.get(layer) || 0;
-    layerSlots.set(layer, slot + 1);
-    const info = nodeMap.get(id)!;
-    nodes.push({ id, label: info.label, isUser: info.isUser, layer, slotInLayer: slot });
   }
 
   return { nodes, edges: Array.from(edgeSet.values()) };
