@@ -810,6 +810,8 @@ interface GraphEdge {
   timestamp: string;
   action: string;
   eventId: string;
+  scopeFrom?: string[];
+  scopeTo?: string[];
 }
 
 interface GraphNode {
@@ -867,6 +869,8 @@ function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] }
             timestamp: ev?.created_at || '',
             action: ev?.action || '',
             eventId: ev?.id || '',
+            scopeFrom: seg.subjectScope.length > 0 ? seg.subjectScope : prev.grantedScope,
+            scopeTo: seg.grantedScope,
           });
         }
       }
@@ -938,6 +942,8 @@ function ChainCanvas({
         timestamp: ev?.created_at,
         isActivHop: isActive,
         eventId: ev?.id,
+        scopeFrom: seg.subjectScope.length > 0 ? seg.subjectScope : prev.grantedScope,
+        scopeTo: seg.grantedScope,
       };
     });
   }, [selectedChain]);
