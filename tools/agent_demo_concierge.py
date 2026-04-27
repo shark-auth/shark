@@ -19,17 +19,14 @@ Steps 1-13 (Phase B):
  12. Flight Booker fetches Amadeus token via vault retrieval w/ DPoP jkt match
  13. Parallel: Hotel/Calendar/Expense each retrieve their vault token
 
-Steps 14-23 (Phase C):
+Steps 14-20 (Phase C):
  14. Token-exchange Flight Booker -> Payment Processor (depth 3, act-chain)
  15. Payment Processor charges $850 via Stripe vault — success
- 16. Charge $1500 -> 403 step_up_required (LOCAL POLICY — backend gap)
- 17. Maria submits TOTP via /auth/mfa/{enroll,verify,challenge} — session elevated
- 18. Re-attempt $1500 -> succeeds (acr=mfa)
- 19. Audit log -> ASCII tree from /api/v1/audit-logs?actor_id=<maria>
- 20. Rotate Flight Booker DPoP key — old jkt rejected
- 21. Bulk-revoke tc_payment_* via /api/v1/admin/oauth/revoke-by-pattern
- 22. Disconnect Stripe vault — Payment Processor loses access
- 23. Cascade-revoke Maria via /api/v1/users/{id}/revoke-agents + summary
+ 16. Audit log -> ASCII tree from /api/v1/audit-logs?actor_id=<maria>
+ 17. Rotate Flight Booker DPoP key — old jkt rejected
+ 18. Bulk-revoke tc_payment_* via /api/v1/admin/oauth/revoke-by-pattern
+ 19. Disconnect Stripe vault — Payment Processor loses access
+ 20. Cascade-revoke Maria via /api/v1/users/{id}/revoke-agents + summary
 
 Usage:
     python tools/agent_demo_concierge.py            # ENTER between steps
@@ -40,16 +37,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import base64
 import concurrent.futures
 import dataclasses
-import hmac
-import hashlib
 import json
 import os
 import secrets
 import signal
-import struct
 import sys
 import time
 from typing import Any
@@ -110,8 +103,6 @@ class State:
     vaults: dict = dataclasses.field(default_factory=dict)
     fast: bool = False
     # Phase C state
-    mfa_passed: bool = False
-    mfa_secret: str = ""
     audit_event_count: int = 0
     tokens_revoked: int = 0
     started_at: float = 0.0
@@ -794,15 +785,11 @@ def step_14_exchange_to_payment_processor(state: State) -> None:
     pause(state)
 
 
-def _stripe_charge(state: State, amount_usd: int, mfa_passed: bool) -> dict:
-    """Local policy + real vault retrieval for the demo Stripe path.
+def _stripe_charge(state: State, amount_usd: int) -> dict:
+    """Real vault retrieval for the demo Stripe path.
 
-    Returns dict like {"ok": bool, "status": int, "reason": str, "amount": ...}.
+    Returns dict like {"ok": bool, "status": int, "amount": ...}.
     """
-    # Local policy gate (script-side — backend has no per-vault MFA gating yet).
-    if amount_usd > 1000 and not mfa_passed:
-        return {"ok": False, "status": 403, "reason": "step_up_required",
-                "amount": amount_usd}
     # Real vault retrieval (DPoP-bound). 401 from upstream-mock is expected.
     status, _ = _vault_fetch(state, state.payment_processor, "stripe")
     return {"ok": True, "status": status, "amount": amount_usd}
@@ -810,138 +797,17 @@ def _stripe_charge(state: State, amount_usd: int, mfa_passed: bool) -> dict:
 
 def step_15_charge_850_success(state: State) -> None:
     step(15, "Payment Processor charges $850 via Stripe vault — success")
-    res = _stripe_charge(state, 850, state.mfa_passed)
+    res = _stripe_charge(state, 850)
     info(f"vault.retrieve stripe -> status={res['status']}")
     print(f"  {C_GREEN}[mock] Stripe.Charge $850 — succeeded{C_RESET}")
-    ok("$850 charge cleared (under threshold, no MFA required)")
+    ok("$850 charge cleared via depth-3 delegation chain")
     dashboard("/audit?event=vault.token.retrieved",
               "Payment Processor retrieves Stripe token")
     pause(state)
 
 
-def step_16_charge_1500_blocked(state: State) -> None:
-    step(16, "Charge $1500 -> 403 step_up_required (LOCAL POLICY)")
-    info("policy_check(amount=1500, mfa_passed=False)")
-    res = _stripe_charge(state, 1500, state.mfa_passed)
-    if res["ok"]:
-        die("policy gate failed to block $1500 without MFA")
-    print()
-    print(f"  {C_RED}{'=' * 60}{C_RESET}")
-    print(f"  {C_RED}403 FORBIDDEN  ·  step_up_required{C_RESET}")
-    print(f"  {C_RED}{'=' * 60}{C_RESET}")
-    print(f"  amount=$1500  threshold=$1000  mfa_passed={state.mfa_passed}")
-    print(f"  {C_DIM}(Backend gap: no acr/amr emission, no per-vault MFA gating yet —{C_RESET}")
-    print(f"  {C_DIM} demo enforces locally; production would gate at /vault/* or token endpoint){C_RESET}")
-    ok("step-up policy fired — Maria must complete MFA before retry")
-    dashboard("/audit?event=mfa.step_up.required",
-              "(reserved — backend not emitting yet)")
-    pause(state)
-
-
-# ----- TOTP (RFC 6238) — inline, no pyotp dependency -----
-
-def _totp_now(secret_b32: str, step_seconds: int = 30, digits: int = 6) -> str:
-    """RFC 6238 TOTP: HMAC-SHA1, 30s window, 6-digit. Pure stdlib."""
-    # Pad secret to a multiple of 8 (base32 standard).
-    pad = "=" * ((8 - len(secret_b32) % 8) % 8)
-    key = base64.b32decode(secret_b32.upper() + pad)
-    counter = int(time.time() // step_seconds)
-    msg = struct.pack(">Q", counter)
-    h = hmac.new(key, msg, hashlib.sha1).digest()
-    offset = h[-1] & 0x0F
-    code = (struct.unpack(">I", h[offset:offset + 4])[0] & 0x7FFFFFFF) % (10 ** digits)
-    return f"{code:0{digits}d}"
-
-
-def step_17_mfa_enroll_verify_challenge(state: State) -> None:
-    step(17, "Maria enrolls + verifies TOTP -> session elevated (mfa_passed=true)")
-    if not state.maria_session_cookie:
-        die("Maria has no session cookie (step 3 must run first)")
-    sess = requests.Session()
-    sess.cookies.set("shark_session", state.maria_session_cookie)
-
-    # 17a. Enroll — returns secret + qr_uri.
-    info("POST /api/v1/auth/mfa/enroll ...")
-    r = sess.post(f"{BASE}/api/v1/auth/mfa/enroll", timeout=10)
-    if r.status_code != 200:
-        die(f"mfa/enroll failed: {r.status_code} {r.text}")
-    body = r.json()
-    state.mfa_secret = body.get("secret", "")
-    qr = body.get("qr_uri", "")
-    info(f"secret (base32, {len(state.mfa_secret)} chars): {state.mfa_secret[:8]}...")
-    info(f"qr_uri: {qr[:60]}...")
-
-    # 17b. First-time verify — confirms enrollment, sets mfa_enabled=true.
-    code = _totp_now(state.mfa_secret)
-    info(f"locally-derived TOTP (RFC 6238, HMAC-SHA1, 30s, 6-digit): {code}")
-    info("POST /api/v1/auth/mfa/verify ...")
-    r = sess.post(f"{BASE}/api/v1/auth/mfa/verify", json={"code": code}, timeout=10)
-    if r.status_code != 200:
-        die(f"mfa/verify failed: {r.status_code} {r.text}")
-    rb = r.json()
-    info(f"mfa_enabled={rb.get('mfa_enabled')}, recovery_codes={len(rb.get('recovery_codes', []))}")
-
-    # 17c. Re-login to obtain a partial session (mfa_passed=false), then challenge.
-    info("re-login to obtain partial session (mfa_passed=false)...")
-    sess2 = requests.Session()
-    rl = sess2.post(
-        f"{BASE}/api/v1/auth/login",
-        json={"email": state.maria_email, "password": MARIA_PASSWORD},
-        timeout=10,
-    )
-    if rl.status_code != 200:
-        warn(f"login returned {rl.status_code}: {rl.text[:160]}")
-        # Fall through — verify already proves real TOTP works.
-        ok("MFA enrolled + verified (challenge step skipped: re-login non-200)")
-        state.mfa_passed = True
-        pause(state)
-        return
-    new_cookie = sess2.cookies.get("shark_session", "")
-    if new_cookie:
-        info(f"partial session cookie issued (len={len(new_cookie)})")
-        state.maria_session_cookie = new_cookie
-
-    # 17d. Generate FRESH code (different counter window if 30s elapsed).
-    fresh_code = _totp_now(state.mfa_secret)
-    info(f"POST /api/v1/auth/mfa/challenge code={fresh_code} ...")
-    r = sess2.post(
-        f"{BASE}/api/v1/auth/mfa/challenge",
-        json={"code": fresh_code},
-        timeout=10,
-    )
-    if r.status_code == 200:
-        ok("MFA challenge passed — session elevated to mfa_passed=true")
-    elif r.status_code == 400 and "mfa_already_passed" in r.text:
-        # Login may have minted a fully-elevated session if the policy is permissive.
-        ok("session was already mfa_passed — challenge unnecessary")
-    else:
-        warn(f"challenge returned {r.status_code}: {r.text[:160]}")
-        ok("(verify proved real TOTP; challenge endpoint state-dependent)")
-
-    state.mfa_passed = True
-    dashboard("/audit?event=mfa.challenge.verified",
-              "MFA challenge audit row for Maria")
-    pause(state)
-
-
-def step_18_charge_1500_succeeds(state: State) -> None:
-    step(18, "Re-attempt $1500 -> succeeds (acr=mfa)")
-    if not state.mfa_passed:
-        warn("mfa_passed flag not set — step 17 should have set it")
-    res = _stripe_charge(state, 1500, state.mfa_passed)
-    if not res["ok"]:
-        die("policy still blocking after MFA (state.mfa_passed should be True)")
-    info(f"policy_check(amount=1500, mfa_passed={state.mfa_passed}) -> ok")
-    info(f"vault.retrieve stripe -> status={res['status']}")
-    print(f"  {C_GREEN}[mock] Stripe.Charge $1500 — succeeded (acr=mfa){C_RESET}")
-    ok("$1500 charge cleared after step-up — same policy, elevated session")
-    dashboard("/audit?event=vault.token.retrieved",
-              "second Stripe retrieval — same Payment Processor, post-MFA")
-    pause(state)
-
-
-def step_19_audit_tree(state: State) -> None:
-    step(19, "Audit log -> ASCII delegation tree")
+def step_16_audit_tree(state: State) -> None:
+    step(16, "Audit log -> ASCII delegation tree")
     s = admin_session(state.admin_key)
     # Best-effort fetch — try several actor filters; backend filters by actor_id.
     actors = [state.maria_user_id]
@@ -976,10 +842,7 @@ def step_19_audit_tree(state: State) -> None:
     print(f"     ├─ Flight Booker (act_chain depth 2)")
     print(f"     │  ├─ vault.retrieve amadeus")
     print(f"     │  └─ Payment Processor (depth 3)")
-    print(f"     │     ├─ vault.retrieve stripe ($850 ok)")
-    print(f"     │     ├─ {C_RED}step_up_required ($1500){C_RESET}")
-    print(f"     │     ├─ {C_GREEN}mfa.challenge.verified{C_RESET}")
-    print(f"     │     └─ vault.retrieve stripe ($1500 ok, acr=mfa)")
+    print(f"     │     └─ vault.retrieve stripe ($850 ok)")
     print(f"     ├─ Hotel Booker (vault.retrieve booking)")
     print(f"     ├─ Calendar Sync (vault.retrieve google_calendar)")
     print(f"     └─ Expense Filer (vault.retrieve concur)")
@@ -989,8 +852,8 @@ def step_19_audit_tree(state: State) -> None:
     pause(state)
 
 
-def step_20_rotate_dpop_key(state: State) -> None:
-    step(20, "Rotate Flight Booker DPoP key — old jkt rejected")
+def step_17_rotate_dpop_key(state: State) -> None:
+    step(17, "Rotate Flight Booker DPoP key — old jkt rejected")
     s = admin_session(state.admin_key)
     old_prover = state.flight_booker["prover"]
     old_jkt = old_prover.jkt
@@ -1041,8 +904,8 @@ def step_20_rotate_dpop_key(state: State) -> None:
     pause(state)
 
 
-def step_21_bulk_revoke_payment(state: State) -> None:
-    step(21, "Bulk-revoke tc_payment_* via /api/v1/admin/oauth/revoke-by-pattern")
+def step_18_bulk_revoke_payment(state: State) -> None:
+    step(18, "Bulk-revoke tc_payment_* via /api/v1/admin/oauth/revoke-by-pattern")
     s = admin_session(state.admin_key)
     # The Payment Processor's actual client_id was minted by the agents endpoint;
     # demo it by revoking that exact prefix and the conceptual tc_payment_* glob.
@@ -1095,8 +958,8 @@ def step_21_bulk_revoke_payment(state: State) -> None:
     pause(state)
 
 
-def step_22_disconnect_stripe(state: State) -> None:
-    step(22, "Disconnect Stripe vault — Payment Processor loses access")
+def step_19_disconnect_stripe(state: State) -> None:
+    step(19, "Disconnect Stripe vault — Payment Processor loses access")
     s = admin_session(state.admin_key)
     stripe = state.vaults.get("stripe", {})
     cid = stripe.get("connection_id", "")
@@ -1133,8 +996,8 @@ def step_22_disconnect_stripe(state: State) -> None:
     pause(state)
 
 
-def step_23_cascade_revoke_maria(state: State) -> None:
-    step(23, "Cascade-revoke Maria — POST /api/v1/users/{id}/revoke-agents")
+def step_20_cascade_revoke_maria(state: State) -> None:
+    step(20, "Cascade-revoke Maria — POST /api/v1/users/{id}/revoke-agents")
     s = admin_session(state.admin_key)
     if not state.maria_user_id:
         warn("no maria_user_id — cannot cascade")
@@ -1163,7 +1026,7 @@ def step_23_cascade_revoke_maria(state: State) -> None:
     print(C_BOLD + "=" * 72 + C_RESET)
     print(f"  {C_BOLD}DEMO COMPLETE — SUMMARY{C_RESET}")
     print(C_BOLD + "=" * 72 + C_RESET)
-    print(f"  {'Total steps':<28} {C_CYAN}23{C_RESET}")
+    print(f"  {'Total steps':<28} {C_CYAN}20{C_RESET}")
     print(f"  {'Audit events observed':<28} {C_CYAN}{state.audit_event_count}{C_RESET}")
     print(f"  {'Tokens revoked':<28} {C_CYAN}{state.tokens_revoked}{C_RESET}")
     print(f"  {'Wall-clock minutes':<28} {C_CYAN}{elapsed_min:.2f}{C_RESET}")
@@ -1219,7 +1082,7 @@ def resolve_admin_key() -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="SharkAuth Concierge demo (steps 1-23)")
+    parser = argparse.ArgumentParser(description="SharkAuth Concierge demo (steps 1-20)")
     parser.add_argument("--fast", action="store_true", help="auto-advance, no ENTER pauses")
     parser.add_argument("--no-cleanup", action="store_true",
                         help="leave state on natural finish (also default on Ctrl-C)")
@@ -1236,7 +1099,7 @@ def main() -> int:
         return 1
 
     # SIGINT (Ctrl-C) handler — leave state intact for dashboard inspection.
-    # Step 23 already cascade-revokes Maria on natural finish, so a separate
+    # Step 20 already cascade-revokes Maria on natural finish, so a separate
     # cleanup pass is unnecessary. The handler below mirrors the early-exit
     # behavior of the existing KeyboardInterrupt try/except below for users
     # who quit between steps via Ctrl-C.
@@ -1253,7 +1116,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, on_ctrl_c)
 
     print()
-    print(C_BOLD + "Acme Travel — AI Concierge Demo  (steps 1-23)" + C_RESET)
+    print(C_BOLD + "Acme Travel — AI Concierge Demo  (steps 1-20)" + C_RESET)
     print("=" * 72)
     print(f"  Target:    {BASE}")
     print(f"  Dashboard: {DASH}")
@@ -1279,14 +1142,11 @@ def main() -> int:
         step_13_parallel_vault_retrieval(state)
         step_14_exchange_to_payment_processor(state)
         step_15_charge_850_success(state)
-        step_16_charge_1500_blocked(state)
-        step_17_mfa_enroll_verify_challenge(state)
-        step_18_charge_1500_succeeds(state)
-        step_19_audit_tree(state)
-        step_20_rotate_dpop_key(state)
-        step_21_bulk_revoke_payment(state)
-        step_22_disconnect_stripe(state)
-        step_23_cascade_revoke_maria(state)
+        step_16_audit_tree(state)
+        step_17_rotate_dpop_key(state)
+        step_18_bulk_revoke_payment(state)
+        step_19_disconnect_stripe(state)
+        step_20_cascade_revoke_maria(state)
     except KeyboardInterrupt:
         # Funneled here from helpers that re-raise on EOF/Ctrl-C inside input().
         print()
@@ -1297,11 +1157,11 @@ def main() -> int:
             print(f"  Concierge:  agent_id={state.concierge['agent_id']}")
         return 0
 
-    # Natural finish — step 23 already cascade-revoked Maria, so cleanup is a
+    # Natural finish — step 20 already cascade-revoked Maria, so cleanup is a
     # no-op. We just print the final summary banner.
     print()
     print(C_BOLD + "=" * 72 + C_RESET)
-    print(f"  {C_GREEN}DEMO FINISHED{C_RESET}  -  steps 1-23 all green")
+    print(f"  {C_GREEN}DEMO FINISHED{C_RESET}  -  steps 1-20 all green")
     print(C_BOLD + "=" * 72 + C_RESET)
     print(f"  Run suffix:    {state.run_suffix}")
     print(f"  Maria:         {state.maria_email}  ({state.maria_user_id})")

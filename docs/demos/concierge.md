@@ -19,17 +19,17 @@ behind the curtain, a Concierge agent fans out to five specialists:
 - a **Payment Processor** that charges Stripe
 
 Five customer connections. Five upstream tokens. Sub-agents calling sub-agents.
-Step-up authentication when the dollar amount gets serious. Cascade revoke when
-a customer churns. **This is what every AI agent product looks like under the
-hood.** The question is not whether your product needs these primitives. The
-question is whether you've built them yet, and whether they're correct.
+Cascade revoke when a customer churns. **This is what every AI agent product
+looks like under the hood.** The question is not whether your product needs
+these primitives. The question is whether you've built them yet, and whether
+they're correct.
 
 The demo runs end-to-end in about three minutes against a local shark instance.
 It is not a mock. It signs up a real user, mints real OAuth clients via DCR,
 issues real DPoP-bound access tokens, performs real RFC 8693 token exchange to
 build a depth-3 act chain, retrieves real vault credentials with the proof key
-on every request, enrols real TOTP, and produces a real audit trail you can
-inspect in the dashboard.
+on every request, and produces a real audit trail you can inspect in the
+dashboard.
 
 ## What you just saw
 
@@ -73,16 +73,6 @@ fan-outs; shark adds zero serialisation overhead on top of what you'd write by
 hand, and the audit log records the fan-out as one event tree, not three
 unrelated events.
 
-**Step-up authentication that actually steps up.** The Payment Processor
-charges $850 — fine, under the policy threshold. It then tries to charge
-$1500 and is rejected with `step_up_required`. Maria enrols a TOTP
-authenticator (real RFC 6238: HMAC-SHA1, 30-second window, 6 digits — the
-demo computes the codes inline so it has no `pyotp` dependency), confirms
-the first code, then completes a real `/mfa/challenge` round trip. The
-session is now elevated. The same $1500 charge succeeds, identical code
-path, different session state. **The amount is not the gate. The proof of
-human-in-the-loop is.**
-
 **Surgical revocation.** The demo rotates the Flight Booker's DPoP key:
 the old `jkt` is dead, in-flight proofs are rejected, the new keypair takes
 over. It bulk-revokes every token whose `client_id` matches the Payment
@@ -104,25 +94,23 @@ emails to say their employee left.
 > **Your agents are already doing this. They're just not doing it safely.**
 
 Sub-agents calling sub-agents. Connections to upstream SaaS. Delegated tokens
-that need to record who-asked-whom. Step-up auth on high-value operations.
-Cascade revoke when a customer churns. These are not optional features for
-production agents. Every team building real agent products has them, or is
-about to need them, or has shipped a broken version of them and doesn't yet
-know.
+that need to record who-asked-whom. Cascade revoke when a customer churns.
+These are not optional features for production agents. Every team building
+real agent products has them, or is about to need them, or has shipped a
+broken version of them and doesn't yet know.
 
 **Without shark.** You spend three months on OAuth + DPoP + RFC 8693 + audit
 infrastructure + cascade-revoke schema design. Token theft becomes a P0
-incident before you've built the controls to prevent it. You discover that
-"MFA on agent tokens" isn't a thing the day a customer asks why a chatbot
-just charged their card $40,000. The retrofit is not three months. It's a
-rewrite, because the audit log doesn't have the columns you need.
+incident before you've built the controls to prevent it. The retrofit is not
+three months. It's a rewrite, because the audit log doesn't have the columns
+you need.
 
 **With shark.** Your team writes the same product code they would have
 written. They get DPoP binding, act-chain attestation, vault retrieval with
-proof-of-possession, RFC-correct token exchange, real MFA, surgical and
-cascade revocation, and a queryable audit log out of the box. They do not
-get "detection". They get **cryptographic prevention** — a stolen token is
-not a security incident if the attacker also needs the matching private key
+proof-of-possession, RFC-correct token exchange, surgical and cascade
+revocation, and a queryable audit log out of the box. They do not get
+"detection". They get **cryptographic prevention** — a stolen token is not
+a security incident if the attacker also needs the matching private key
 they never had.
 
 The right way. The secure way. **The secure AND fast way.**
@@ -134,7 +122,6 @@ The right way. The secure way. **The secure AND fast way.**
 - **`act.act.sub` chain attestation** → "who asked whom" is a query, not a meeting
 - **Field-encrypted vault** → upstream credentials never touch logs in cleartext
 - **Per-agent DPoP keypairs** → compromise of one specialist contains the blast radius
-- **Real TOTP enrolment + challenge** → step-up auth that actually steps up
 - **Bulk revoke by `client_id` pattern** → kill one specialist, leave the rest alive
 - **Vault disconnect** → revoke data access without revoking the agent
 - **Cascade revoke per user** → one call for the customer-churn case
@@ -159,11 +146,11 @@ row in the dashboard, with the actor, the target, the act-chain, the
 delegated scopes, and the timing.
 
 The demo also runs interactively without `--fast` — it pauses for ENTER
-between each of the 23 steps, so you can talk through the narrative, point
+between each of the 20 steps, so you can talk through the narrative, point
 at the dashboard, and let the room ask "wait, how does *that* work?"
 
 If you Ctrl-C mid-demo, state is left intact for inspection — Maria's
 account, her agents, her vault connections, her audit trail. The terminal
 prints `[LEAVING STATE FOR INSPECTION]` and her `user_id` so you can pick
-up where you stopped. On natural finish, step 23 cascade-revokes everything
+up where you stopped. On natural finish, step 20 cascade-revokes everything
 the demo created, so the next run is clean.
