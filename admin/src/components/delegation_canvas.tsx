@@ -290,8 +290,8 @@ function AnimatedBezierEdge({
 // ─── custom node types ────────────────────────────────────────────────────────
 
 /**
- * HumanNode — 80×80, circular initials avatar + name below.
- * Generous breathing room, whisper shadow, 8px radius (Apple-polish exception).
+ * HumanNode — circular (borderRadius 50%) with accent border, initials chip 32px.
+ * Distinguished from AgentNode (square) at a glance.
  */
 function HumanNode({ data, selected }: { data: any; selected?: boolean }) {
   const initials = getInitials(data.label || '');
@@ -301,8 +301,8 @@ function HumanNode({ data, selected }: { data: any; selected?: boolean }) {
       width: 80,
       height: 80,
       background: selected ? 'var(--surface-2)' : 'var(--surface-1)',
-      border: `1px solid ${selected ? 'var(--fg)' : 'var(--hairline-strong)'}`,
-      borderRadius: 8,
+      border: `2px solid ${selected ? 'var(--fg)' : 'var(--accent, #5eead4)'}`,
+      borderRadius: '50%',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -319,13 +319,13 @@ function HumanNode({ data, selected }: { data: any; selected?: boolean }) {
     }}
       onMouseEnter={e => {
         if (!selected) {
-          (e.currentTarget as HTMLElement).style.borderColor = 'var(--fg-dim)';
+          (e.currentTarget as HTMLElement).style.borderColor = 'var(--fg)';
           (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 12px rgba(0,0,0,0.38)';
         }
       }}
       onMouseLeave={e => {
         if (!selected) {
-          (e.currentTarget as HTMLElement).style.borderColor = 'var(--hairline-strong)';
+          (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent, #5eead4)';
           (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.28)';
         }
       }}
@@ -374,14 +374,15 @@ function HumanNode({ data, selected }: { data: any; selected?: boolean }) {
 }
 
 /**
- * AgentNode — 80×80, square-ish, mono name, act-as count badge, jkt hint.
+ * AgentNode — 80×80, square, 2% teal tint bg, </> glyph top-left, bold AGENT label 9px.
+ * Visually distinct from HumanNode (circular accent border).
  */
 function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
   return (
     <div style={{
       width: 80,
       height: 80,
-      background: selected ? 'var(--surface-2)' : 'var(--surface-1)',
+      background: selected ? 'var(--surface-2)' : 'rgba(94, 234, 212, 0.02)',
       border: `1px solid ${selected ? 'var(--fg)' : 'var(--hairline-strong)'}`,
       borderRadius: 6,
       display: 'flex',
@@ -414,10 +415,24 @@ function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
       <Handle type="target" position={Position.Left} style={{ left: -3 }} />
       <Handle type="source" position={Position.Right} style={{ right: -3 }} />
 
-      {/* "agent" type label */}
+      {/* </> glyph — top-left corner indicator */}
+      <span style={{
+        position: 'absolute',
+        top: 4,
+        left: 5,
+        fontFamily: 'ui-monospace, monospace',
+        fontSize: 8,
+        color: 'var(--fg-dim)',
+        opacity: 0.45,
+        lineHeight: 1,
+        userSelect: 'none',
+      }}>{'</>'}</span>
+
+      {/* "AGENT" type label — 9px bold */}
       <span style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 7,
+        fontSize: 9,
+        fontWeight: 700,
         color: 'var(--fg-dim)',
         textTransform: 'uppercase',
         letterSpacing: '0.1em',
