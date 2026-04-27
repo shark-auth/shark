@@ -950,61 +950,93 @@ function ChainCanvas({
     const started = relTime(selectedChain.latestAt);
     const summary = chainPath(selectedChain.segments);
 
+    // Assign a stable color per hop-count bucket (1-hop grey, 2-hop teal, 3+-hop amber)
+    const dotColor = (c: Chain) => {
+      const h = c.segments.length;
+      if (h <= 1) return 'var(--fg-dim)';
+      if (h === 2) return 'var(--accent, #5eead4)';
+      if (h === 3) return '#f59e0b';
+      return 'var(--danger, #ef4444)';
+    };
+
     return (
       <div style={{ display: 'flex', height: '100%' }}>
-        {/* Chain selector sidebar */}
+        {/* Icon-rail sidebar — 56px, reclaims 164px vs old 220px sidebar */}
         <div style={{
-          width: 220,
+          width: 56,
           borderRight: '1px solid var(--hairline)',
-          overflowY: 'auto',
           flexShrink: 0,
           background: 'var(--surface-0)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          paddingTop: 6,
+          gap: 2,
+          overflowY: 'auto',
         }}>
-          {/* Sidebar header */}
-          <div style={{
-            padding: '8px 14px',
-            borderBottom: '1px solid var(--hairline)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}>
-            <button
-              onClick={() => setSelectedChain(null)}
-              style={{
-                background: 'transparent',
-                border: 0,
-                cursor: 'pointer',
-                color: 'var(--fg-dim)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                flexShrink: 0,
-              }}
-            >
-              ← chains
-            </button>
-            <div style={{ flex: 1 }}/>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--fg-dim)', opacity: 0.45 }}>
-              {chains.length}
-            </span>
-          </div>
+          {/* Back-to-all button */}
+          <button
+            onClick={() => setSelectedChain(null)}
+            title="All chains"
+            style={{
+              width: 32,
+              height: 22,
+              background: 'transparent',
+              border: '1px solid var(--hairline-strong)',
+              borderRadius: 3,
+              cursor: 'pointer',
+              color: 'var(--fg-dim)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              marginBottom: 6,
+              transition: 'color 80ms, border-color 80ms',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--fg)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--fg-dim)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--fg-dim)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--hairline-strong)'; }}
+          >←</button>
 
-          {chains.map(chain => (
-            <ChainSelectorItem
-              key={chain.rootSub}
-              chain={chain}
-              isSelected={chain.rootSub === selectedChain.rootSub}
-              onClick={() => setSelectedChain(chain)}
-            />
-          ))}
+          {/* One colored dot per chain — hover = path tooltip, click = select */}
+          {chains.map((chain, idx) => {
+            const isSelected = chain.rootSub === selectedChain.rootSub;
+            const color = dotColor(chain);
+            const path = chainPath(chain.segments);
+            return (
+              <button
+                key={chain.rootSub}
+                onClick={() => setSelectedChain(chain)}
+                title={`${chain.segments.length}-hop · ${path}`}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  background: isSelected ? color : 'transparent',
+                  border: `2px solid ${color}`,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  opacity: isSelected ? 1 : 0.45,
+                  transition: 'opacity 80ms, background 80ms',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.opacity = '0.85'; }}
+                onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.opacity = '0.45'; }}
+              >
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 7.5, color: isSelected ? 'var(--surface-0)' : color, fontWeight: 600, lineHeight: 1, userSelect: 'none' }}>
+                  {chain.segments.length}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Canvas + header */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* Chain summary header */}
+          {/* Compact chain header — single-line, no path duplication */}
           <div style={{
             padding: '7px 16px',
             borderBottom: '1px solid var(--hairline)',
@@ -1021,13 +1053,13 @@ function ChainCanvas({
               fontWeight: 500,
               flexShrink: 0,
             }}>
-              {hopCount}-hop chain
+              {hopCount}-hop
             </span>
             {started && (
               <>
                 <span style={{ color: 'var(--hairline-strong)', fontSize: 10, flexShrink: 0, opacity: 0.4 }}>·</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-dim)', flexShrink: 0, opacity: 0.65 }}>
-                  started {started}
+                  {started}
                 </span>
               </>
             )}
