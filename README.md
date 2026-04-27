@@ -33,12 +33,16 @@ chmod +x shark
 # Paste the admin key printed in your terminal
 ```
 
-Or with Docker:
-```bash
-docker run -p 8080:8080 -v shark_data:/app/data ghcr.io/sharkauth/sharkauth
-```
+Docker image ships in v0.2.
 
 **That's it.** No YAML. No Postgres. No env vars. First boot creates everything.
+
+```bash
+# Run the concierge demo — full delegation chain end-to-end
+shark demo concierge
+```
+
+Shows user → research-agent → tool-agent with `act` chain + audit trail.
 
 ---
 
@@ -106,7 +110,7 @@ Every line above is something Auth0, Clerk, and WorkOS cannot do today. Not beca
 - **Token exchange (RFC 8693)** — agents delegate to sub-agents with `act` claim chains. Every hop is audited.
 - **Agent identities** — agents are first-class entities, not hacked-on machine clients.
 - **Delegation policies** — `may_act` rules control which agents can delegate to which.
-- **Token vault** — encrypted storage for customer OAuth tokens (Google, Slack, GitHub, Microsoft, Notion, Linear, Jira). Agents retrieve them via DPoP-bound requests scoped to the delegation chain.
+- **Token vault** — encrypted storage for customer OAuth tokens. Verified end-to-end: Google (Gmail/Drive/Calendar), GitHub. Experimental in v0.1: Slack, Microsoft (multi-tenant), Notion. Linear and Jira land in v0.2 with full provider-quirk handling. Custom OAuth 2.0 providers supported for textbook auth-code flows; non-standard token responses, post-exchange steps, and rotating-refresh quirks ship in v0.2 (see `playbook/CUSTOM_VAULT_LIMITATIONS.md`). Agents retrieve tokens via DPoP-bound requests scoped to the delegation chain.
 
 ### Revocation (depth-of-defense)
 
@@ -120,7 +124,9 @@ When something goes wrong, you need the right blast radius:
 | **Pattern** | Buggy agent template v3.2 across all customers | Bulk-revoke by `client_id` pattern |
 | **Vault** | Customer's external OAuth credential compromised | Vault disconnect cascades to every derived agent token |
 
-Five layers. Each independently callable. Layers 1–3 ship today. Layers 4–5 ship within two weeks.
+Five layers. Each independently callable. Layers 1–3 ship in v0.1. Layers 4–5 ship in v0.2.
+
+**Custom OAuth providers (v0.1):** standard auth-code flows with RFC 6749 token responses work via the admin "Add provider" form. Non-standard quirks (custom token parsing, required extra params, post-exchange steps) ship in v0.2 — see `playbook/CUSTOM_VAULT_LIMITATIONS.md`.
 
 ### Audit
 - Every token issuance, exchange, and revocation is logged
@@ -164,6 +170,8 @@ Human ─── OAuth 2.1 + PKCE ──→ Your App
 
 ### Python
 
+_Available on PyPI — install snippet below works once published; tracking ship today._
+
 ```bash
 pip install shark-auth
 ```
@@ -192,7 +200,35 @@ claims = decode_agent_token(
 See [`examples/`](examples/) for runnable scripts.
 
 ### TypeScript
-Coming in v0.2.
+
+```bash
+npm install @sharkauth/node
+```
+
+```typescript
+import { Client, DPoPProver } from "@sharkauth/node";
+
+const client = new Client({ baseUrl: "http://localhost:8080", token: "sk_live_..." });
+const prover = await DPoPProver.generate();
+
+// DPoP-bound token
+const token = await client.oauth.getTokenWithDpop({
+  grantType: "client_credentials",
+  dpopProver: prover,
+  clientId: "agent-123",
+  clientSecret: "secret",
+  scope: "mcp:write",
+});
+
+// Delegate to sub-agent (RFC 8693)
+const subToken = await client.oauth.tokenExchange({
+  subjectToken: token.accessToken,
+  scope: "mcp:read",
+  dpopProver: prover,
+});
+```
+
+Coverage: ~40% of admin surface in v0.1; full parity in v0.2.
 
 ---
 
@@ -239,8 +275,8 @@ SharkAuth is not trying to replace Auth0 for a standard SaaS login page. It's bu
 **v0.2:**
 - Revocation layers 4–5 (pattern + vault cascade)
 - Reverse proxy with identity header injection
-- TypeScript SDK
 - Auth flow builder UI
+- Vault custom-provider quirks (Linear, Jira, Slack quirks, rotating refresh)
 
 **v0.3:**
 - Hosted/cloud tier
