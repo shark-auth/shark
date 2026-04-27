@@ -37,7 +37,7 @@ Any provider with a quirk in the matrix below cannot be onboarded via the custom
 
 | Quirk | Affected providers | Consequence in v0.1 | Fix complexity |
 |---|---|---|---|
-| Required extra authorize-URL params (`prompt=consent`, `audience=...`) | Linear, Jira, some Microsoft tenants | Authorize URL rejected before consent screen, OR refresh_token never issued → connection bricks at first expiry | LOW — needs `extra_auth_params` map on template/provider record |
+| Required extra authorize-URL params (`prompt=consent`, `audience=...`) | Linear, Jira, some Microsoft tenants | **FIXED v0.1** — `extra_auth_params` persisted on `VaultProvider`; templates copy defaults, manual providers accept via API body. Admin UI key/value editor deferred to v0.2 (backend complete). | DONE |
 | Non-standard token response (nested `access_token`, `ok` flag, multi-token) | Slack v2 (`authed_user.access_token`) | Wrong token stored silently, OR empty token stored on `ok:false` 200 OK | MEDIUM — needs custom unmarshaler hook + provider-type discriminator |
 | Post-exchange step required to make token usable | Atlassian (`accessible-resources` lookup for cloud ID) | Token retrieved but unusable; caller cannot construct API URLs | MEDIUM — needs `post_exchange_call` config + storage column for derived metadata |
 | Required headers on every API call (not OAuth, but downstream) | Notion (`Notion-Version`) | Out of vault scope; consumers must add header themselves. Document only. | DOC ONLY |
@@ -61,7 +61,7 @@ Add JSON columns to `storage.VaultProvider`:
 ```go
 type VaultProvider struct {
     // existing fields...
-    ExtraAuthParams    map[string]string // {"prompt": "consent", "audience": "api.atlassian.com"}
+    ExtraAuthParams    map[string]string // SHIPPED v0.1 — {"prompt": "consent", "audience": "api.atlassian.com"}
     TokenResponseShape string            // "rfc6749" | "slack_v2" | "atlassian_3lo"
     PostExchangeCall   *PostExchangeSpec // optional URL + token-substitution
     ScopeDelimiter     string            // " " (default) | ","
@@ -71,7 +71,10 @@ type VaultProvider struct {
 }
 ```
 
-Backend dispatches on `TokenResponseShape` to a switch of unmarshalers. `BuildAuthURL` applies `ExtraAuthParams` via `oauth2.SetAuthURLParam`. Atlassian's `accessible-resources` becomes a generic `PostExchangeSpec` runner.
+**`ExtraAuthParams` SHIPPED in v0.1** (migration 00027, 2026-04-27). Backend persists per-provider; API accepts in POST + PATCH bodies; `BuildAuthURL` reads from storage first.
+Admin UI key/value editor for `extra_auth_params` on the Config tab is deferred to v0.2 — backend fully supports it, UI lands later. Workaround: use the admin API directly.
+
+Backend dispatches on `TokenResponseShape` to a switch of unmarshalers. Atlassian's `accessible-resources` becomes a generic `PostExchangeSpec` runner.
 
 Covers ~70% of real providers. Solves Linear, Jira, Slack, Microsoft single-tenant, Notion (header docs), most enterprise SaaS. Does NOT solve fundamentally non-OAuth-2.0 providers (e.g., Atlassian server with custom token format).
 
