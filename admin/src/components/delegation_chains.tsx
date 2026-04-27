@@ -309,6 +309,7 @@ function ChainDrawer({
     });
 
   const chainRFNodes = React.useMemo(() => {
+    const total = chain.segments.length;
     return chain.segments.map((seg, i) => ({
       id: seg.sub || seg.label || String(i),
       type: seg.isUser ? 'humanNode' : 'agentNode',
@@ -317,7 +318,8 @@ function ChainDrawer({
         label: seg.label || seg.sub,
         jkt: seg.jkt,
         isUser: seg.isUser,
-        actAsCount: chain.segments.length > 1 ? chain.segments.length : undefined,
+        chainPos: i + 1,
+        chainTotal: total > 1 ? total : undefined,
       },
     }));
   }, [chain.segments]);
@@ -868,6 +870,7 @@ function ChainCanvas({
   // Per-chain nodes/edges for focused view
   const chainRFNodes = React.useMemo(() => {
     if (!selectedChain) return null;
+    const total = selectedChain.segments.length;
     return selectedChain.segments.map((seg, i) => ({
       id: seg.sub || seg.label || String(i),
       type: seg.isUser ? 'humanNode' : 'agentNode',
@@ -876,7 +879,8 @@ function ChainCanvas({
         label: seg.label || seg.sub,
         jkt: seg.jkt,
         isUser: seg.isUser,
-        actAsCount: selectedChain.segments.length > 1 ? selectedChain.segments.length : undefined,
+        chainPos: i + 1,
+        chainTotal: total > 1 ? total : undefined,
       },
     }));
   }, [selectedChain]);

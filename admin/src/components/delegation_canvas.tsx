@@ -485,19 +485,18 @@ function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
         transition: 'color 100ms',
       }} title={data.label}>{data.label}</span>
 
-      {/* jkt hint */}
+      {/* DPoP-bound shield icon — replaces jkt text */}
       {data.jkt && (
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 7.5,
-          color: 'var(--fg-dim)',
-          lineHeight: 1,
-          opacity: 0.55,
-        }}>jkt:{data.jkt.slice(0, 6)}</span>
+        <div title="DPoP-bound" style={{ lineHeight: 1, display: 'flex', alignItems: 'center' }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent, #5eead4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.75 }}>
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+        </div>
       )}
 
-      {/* act-as count badge — bottom-right */}
-      {data.actAsCount != null && data.actAsCount > 1 && (
+      {/* Chain position chip — bottom-right: "2/4" style */}
+      {data.chainPos != null && data.chainTotal != null && data.chainTotal > 1 && (
         <div style={{
           position: 'absolute',
           bottom: 4,
@@ -518,7 +517,7 @@ function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
             color: 'var(--fg-dim)',
             fontWeight: 600,
             lineHeight: 1,
-          }}>{data.actAsCount}</span>
+          }}>{data.chainPos}/{data.chainTotal}</span>
         </div>
       )}
     </div>
@@ -641,7 +640,9 @@ export interface DCanvasNode {
   laneLabel?: string     // gutter label, e.g. "alice@corp · 3-hop · 14:32"
   jkt?: string
   meta?: any
-  actAsCount?: number
+  actAsCount?: number    // legacy — ignored; use chainPos/chainTotal
+  chainPos?: number      // 1-based position in chain (1 = first actor)
+  chainTotal?: number    // total nodes in this chain
 }
 
 export interface DCanvasEdge {
@@ -687,7 +688,8 @@ export function toReactFlowNodes(nodes: DCanvasNode[]) {
         isUser: n.isUser,
         isCenter: n.isCenter,
         meta: n.meta,
-        actAsCount: n.actAsCount,
+        chainPos: n.chainPos,
+        chainTotal: n.chainTotal,
       },
       selected: false,
     })
@@ -781,7 +783,7 @@ export function toEgoLayout(
         x: (i - (items.length - 1) / 2) * COL_GAP,
         y,
       },
-      data: { label: n.label, jkt: n.jkt, isUser: n.isUser, actAsCount: n.actAsCount },
+      data: { label: n.label, jkt: n.jkt, isUser: n.isUser },
     }))
 
   const rfNodes = [
