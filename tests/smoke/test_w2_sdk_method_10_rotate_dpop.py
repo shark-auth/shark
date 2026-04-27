@@ -26,16 +26,6 @@ from shark_auth import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def base_url(shark_base_url: str) -> str:
-    return shark_base_url
-
-
-@pytest.fixture(scope="module")
-def admin_key(shark_admin_key: str) -> str:
-    return shark_admin_key
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -84,7 +74,7 @@ def test_rotate_dpop_key(base_url: str, admin_key: str) -> None:
         scopes=["read"],
         # Embed the initial DPoP public key in metadata so the backend
         # can derive old_jkt on rotation.
-        metadata={"dpop_public_jwk": prover_old.public_key_jwk()},
+        metadata={"dpop_public_jwk": prover_old.public_jwk},
     )
     client_id = agent["client_id"]
     client_secret = agent.get("client_secret", "")
@@ -101,7 +91,7 @@ def test_rotate_dpop_key(base_url: str, admin_key: str) -> None:
 
         # 3. Generate a new keypair.
         prover_new = DPoPProver.generate()
-        new_pub_jwk = prover_new.public_key_jwk()
+        new_pub_jwk = prover_new.public_jwk
 
         # 4. Rotate the DPoP key.
         result = agents.rotate_dpop_key(

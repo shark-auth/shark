@@ -23,16 +23,6 @@ from shark_auth import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def base_url(shark_base_url: str) -> str:
-    return shark_base_url
-
-
-@pytest.fixture(scope="module")
-def admin_key(shark_admin_key: str) -> str:
-    return shark_admin_key
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

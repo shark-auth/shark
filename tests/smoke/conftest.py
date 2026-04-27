@@ -108,6 +108,14 @@ def shark_base_url():
     return BASE_URL
 
 @pytest.fixture(scope="session")
+def shark_admin_key(admin_key):
+    return admin_key
+
+@pytest.fixture(scope="session")
+def base_url():
+    return BASE_URL
+
+@pytest.fixture(scope="session")
 def api_session():
     return requests.Session()
 
