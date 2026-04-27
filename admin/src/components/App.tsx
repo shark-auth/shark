@@ -23,6 +23,7 @@ import { Consents } from './consents_manage'
 import { Vault } from './vault_manage'
 import { Tokens, APIExplorer, EventSchemas, SessionDebugger, OIDCProvider, Impersonation, Migrations } from './empty_shell'
 import { Branding } from './branding'
+import { EmailSettings } from './email_settings'
 import { CompliancePage } from './compliance'
 import { Proxy as ProxyPlaceholder } from './proxy_config'
 import { Proxy as ProxyReal } from './proxy_config_real'
@@ -226,6 +227,7 @@ export function App() {
     impersonation: Impersonation,
     compliance: CompliancePage,
     migrations: Migrations,
+    email: EmailSettings,
     branding: Branding,
     'get-started': GetStarted,
     'delegation-chains': DelegationChains,

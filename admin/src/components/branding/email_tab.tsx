@@ -35,6 +35,7 @@ function EmailRedirectConfig() {
     verify_redirect_url: '',
     reset_redirect_url: '',
     magic_link_redirect_url: '',
+    invite_redirect_url: '',
   })
   const [saving, setSaving] = React.useState(false)
   const toast = useToast()
@@ -46,6 +47,7 @@ function EmailRedirectConfig() {
           verify_redirect_url: r.verify_redirect_url || '',
           reset_redirect_url: r.reset_redirect_url || '',
           magic_link_redirect_url: r.magic_link_redirect_url || '',
+          invite_redirect_url: r.invite_redirect_url || '',
         })
       })
       .catch(() => {}) // 404 on fresh install is fine — defaults to empty
@@ -152,6 +154,29 @@ function EmailRedirectConfig() {
         />
         <div style={{ fontSize: 10, color: 'var(--fg-faint)', marginTop: 3 }}>
           Where to redirect after magic-link login. Per-request override via <code style={{ fontSize: 10 }}>redirect_uri</code> param.
+        </div>
+      </div>
+
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+          <label style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 500, margin: 0 }}>
+            Org-invite redirect
+          </label>
+          <span
+            title="Base URL for org-invitation accept links. Shark appends /organizations/invitations/{token}/accept. Leave blank to use server.base_url."
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', border: '1px solid var(--fg-dim)', fontSize: 9, color: 'var(--fg-dim)', cursor: 'default', flexShrink: 0, lineHeight: 1 }}
+          >?</span>
+        </div>
+        <input
+          type="url"
+          value={cfg.invite_redirect_url}
+          onChange={(e) => setCfg(c => ({ ...c, invite_redirect_url: e.target.value }))}
+          placeholder="https://yourapp.com"
+          style={redirectInputStyle}
+          spellCheck={false}
+        />
+        <div style={{ fontSize: 10, color: 'var(--fg-faint)', marginTop: 3 }}>
+          Overrides <code style={{ fontSize: 10 }}>server.base_url</code> for org invitation accept links.
         </div>
       </div>
 

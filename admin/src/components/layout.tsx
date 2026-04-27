@@ -52,6 +52,7 @@ export const NAV = [
     { id: 'impersonation', label: 'Impersonation', icon: 'Impersonate', ph: 9 },
     { id: 'compliance', label: 'Exporting logs', icon: 'Compliance' },
     { id: 'migrations', label: 'Migrations', icon: 'Migration', ph: 9 },
+    { id: 'email', label: 'Email', icon: 'Mail' },
     { id: 'branding', label: 'Branding', icon: 'Brand' },
   ]},
 ];
@@ -243,6 +244,7 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
     impersonation: 'Impersonation',
     compliance: 'Exporting logs',
     migrations: 'Migrations',
+    email: 'Email',
     branding: 'Branding',
     flow: 'Flow Builder',
   }[page] || page;
