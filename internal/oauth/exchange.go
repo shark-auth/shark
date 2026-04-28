@@ -139,6 +139,23 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// --- Step 4c: enforce max_hops and scopes on matchedGrant ---
+	if matchedGrant != nil {
+		// enforce max_hops
+		currentHops := countHops(subjectAct)
+		if currentHops >= matchedGrant.MaxHops {
+			writeExchangeError(w, http.StatusForbidden, "access_denied", "delegation chain exceeds maximum allowed hops")
+			return
+		}
+		// enforce scopes narrowing
+		if len(matchedGrant.Scopes) > 0 {
+			if !scopesSubset(grantedScopes, matchedGrant.Scopes) {
+				writeExchangeError(w, http.StatusBadRequest, "invalid_scope", "requested scope exceeds may_act_grants scopes")
+				return
+			}
+		}
+	}
+
 	// --- Step 5: Build delegation chain ---
 	actClaim := buildActClaim(actingAgent.ClientID, subjectAct)
 
@@ -390,6 +407,24 @@ func scopesSubset(requested, available []string) bool {
 		}
 	}
 	return true
+}
+
+// countHops counts the depth of the act chain.
+func countHops(subjectAct map[string]interface{}) int {
+	if subjectAct == nil {
+		return 0
+	}
+	hops := 1
+	current := subjectAct
+	for {
+		if next, ok := current["act"].(map[string]interface{}); ok && next != nil {
+			hops++
+			current = next
+		} else {
+			break
+		}
+	}
+	return hops
 }
 
 // buildActClaim constructs the RFC 8693 act claim for the delegation chain.
