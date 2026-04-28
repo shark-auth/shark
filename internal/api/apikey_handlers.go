@@ -380,6 +380,75 @@ func (s *Server) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toAPIKeyResponse(key))
 }
 
+// handleHardDeleteAPIKey permanently deletes an API key.
+func (s *Server) handleHardDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	key, err := s.Store.GetAPIKeyByID(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			writeJSON(w, http.StatusNotFound, map[string]string{
+				"error":   "not_found",
+				"message": "API key not found",
+			})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Failed to get API key",
+		})
+		return
+	}
+
+	// Prevent deleting the last admin key (scope "*")
+	var scopes []string
+	_ = json.Unmarshal([]byte(key.Scopes), &scopes)
+	if auth.CheckScope(scopes, "*") {
+		count, err := s.Store.CountActiveAPIKeysByScope(r.Context(), "*")
+		if err == nil && count <= 1 {
+			// Even if revoked, if it's somehow the last one returned by CountActive (unlikely if revoked, but safe to check)
+			// Wait, CountActiveAPIKeysByScope only counts NON-revoked keys. So if THIS key is revoked, count is already not including it.
+			// But just in case this key is NOT revoked, we shouldn't let them hard delete it if it's the last active one.
+			if key.RevokedAt == nil && count <= 1 {
+				writeJSON(w, http.StatusConflict, map[string]string{
+					"error":   "last_admin_key",
+					"message": "Cannot delete the last active admin API key.",
+				})
+				return
+			}
+		}
+	}
+
+	if err := s.Store.DeleteAPIKey(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Failed to delete API key",
+		})
+		return
+	}
+
+	if s.AuditLogger != nil {
+		actorID := "admin_key"
+		metaBytes, _ := json.Marshal(map[string]any{
+			"key_name":       key.Name,
+			"deleted_by_kid": actorID,
+		})
+		_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+			ActorType:  "admin",
+			ActorID:    actorID,
+			Action:     "api_key.deleted",
+			TargetType: "api_key",
+			TargetID:   id,
+			Metadata:   string(metaBytes),
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Status:     "success",
+		})
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleRotateAPIKey rotates an API key.
 func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")

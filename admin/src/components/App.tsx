@@ -36,28 +36,9 @@ import { CommandPalette } from './CommandPalette'
 import { HelpButton } from './HelpButton'
 import { DelegationChains } from './delegation_chains'
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "sidebarCollapsed": false,
-  "font": "manrope",
-  "showPreview": false
-}/*EDITMODE-END*/;
-
-function useTweaks() {
-  const [t, setT] = React.useState(() => {
-    try { return { ...TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('tweaks') || '{}')) }; }
-    catch { return TWEAK_DEFAULTS; }
-  });
-  const set = (k, v) => setT(prev => {
-    const next = { ...prev, [k]: v };
-    try { localStorage.setItem('tweaks', JSON.stringify(next)); } catch {}
-    try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [k]: v } }, '*'); } catch {}
-    return next;
-  });
-  return [t, set];
-}
-
 export function App() {
   const [apiKey, setApiKey] = React.useState(() => localStorage.getItem('shark_admin_key') || '');
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
 
   const getPageFromURL = () => {
     const path = window.location.pathname.replace(/^\/admin\/?/, '').replace(/\/$/, '');
@@ -91,28 +72,10 @@ export function App() {
     }
   }, [apiKey]);
 
-  const [tweaks, setTweak] = useTweaks();
-  const [tweaksOpen, setTweaksOpen] = React.useState(false);
-  const [editMode, setEditMode] = React.useState(false);
-
-  React.useEffect(() => {
-    document.body.className = 'font-' + tweaks.font;
-  }, [tweaks.font]);
-
   React.useEffect(() => {
     const handler = () => setApiKey('');
     window.addEventListener('shark-auth-expired', handler);
     return () => window.removeEventListener('shark-auth-expired', handler);
-  }, []);
-
-  React.useEffect(() => {
-    const handler = (e) => {
-      if (e.data?.type === '__activate_edit_mode') { setEditMode(true); setTweaksOpen(true); }
-      if (e.data?.type === '__deactivate_edit_mode') { setEditMode(false); setTweaksOpen(false); }
-    };
-    window.addEventListener('message', handler);
-    try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch {}
-    return () => window.removeEventListener('message', handler);
   }, []);
 
   const { cheatsheetOpen, setCheatsheetOpen } = useKeyboardShortcuts(setPage);
@@ -236,11 +199,11 @@ export function App() {
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)' }}>
       <Sidebar page={page} setPage={setPage}
-        collapsed={tweaks.sidebarCollapsed}
-        setCollapsed={(v) => setTweak('sidebarCollapsed', v)}
+        collapsed={sidebarCollapsed}
+        setCollapsed={setSidebarCollapsed}
         devMode={devMode}
         emailProvider={emailProvider}
-        showPreview={tweaks.showPreview}/>
+        showPreview={false}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}
            data-screen-label={'01 ' + page}>
         {firstBootKey && (
@@ -298,7 +261,7 @@ export function App() {
             </div>
           </div>
         )}
-        <TopBar page={page} setTweaksOpen={setTweaksOpen} onOpenPalette={() => setPaletteOpen(true)} setPage={setPage}/>
+        <TopBar page={page} onOpenPalette={() => setPaletteOpen(true)} setPage={setPage}/>
         <div style={{ flex: 1, overflow: 'hidden', animation: 'fadeIn 160ms ease-out' }}>
           <Page setPage={setPage}/>
         </div>
@@ -314,37 +277,6 @@ export function App() {
         }}/>
       )}
 
-      {tweaksOpen && (
-        <div className="tweaks-panel">
-          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-            <h3 style={{margin:0}}>Tweaks</h3>
-            <button className="btn ghost icon sm" onClick={() => setTweaksOpen(false)}><Icon.X width={11} height={11}/></button>
-          </div>
-          <div className="tweak-row">
-            <label>Sidebar</label>
-            <div className="seg">
-              <button className={!tweaks.sidebarCollapsed ? 'on' : ''} onClick={() => setTweak('sidebarCollapsed', false)}>Expanded</button>
-              <button className={tweaks.sidebarCollapsed ? 'on' : ''} onClick={() => setTweak('sidebarCollapsed', true)}>Collapsed</button>
-            </div>
-          </div>
-          <div className="tweak-row">
-            <label>Font</label>
-            <div className="seg">
-              <button className={tweaks.font === 'manrope' ? 'on' : ''} onClick={() => setTweak('font', 'manrope')}>Manrope</button>
-              <button className={tweaks.font === 'inter' ? 'on' : ''} onClick={() => setTweak('font', 'inter')}>Inter</button>
-              <button className={tweaks.font === 'ibm' ? 'on' : ''} onClick={() => setTweak('font', 'ibm')}>IBM</button>
-              <button className={tweaks.font === 'space' ? 'on' : ''} onClick={() => setTweak('font', 'space')}>Space</button>
-            </div>
-          </div>
-          <div className="tweak-row">
-            <label>Preview features</label>
-            <div className="seg">
-              <button className={!tweaks.showPreview ? 'on' : ''} onClick={() => setTweak('showPreview', false)}>Hidden</button>
-              <button className={tweaks.showPreview ? 'on' : ''} onClick={() => setTweak('showPreview', true)}>Shown</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

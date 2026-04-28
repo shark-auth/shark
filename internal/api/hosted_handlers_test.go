@@ -229,7 +229,7 @@ func TestHandleHostedAssets_ServesBundle(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 	defer ts.Server.Close()
 
-	resp := ts.Get("/admin/hosted/assets/hosted-CzpeAm29.js")
+	resp := ts.Get("/admin/hosted/assets/hosted-BDnwMcaL.js")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

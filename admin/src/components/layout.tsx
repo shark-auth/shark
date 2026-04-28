@@ -214,7 +214,7 @@ export function Sidebar({ page, setPage, collapsed, setCollapsed, devMode, email
   );
 }
 
-export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
+export function TopBar({ page, onOpenPalette, setPage }) {
   const [quickOpen, setQuickOpen] = React.useState(false);
   const quickRef = React.useRef(null);
   const pageTitle = {
@@ -297,13 +297,6 @@ export function TopBar({ page, setTweaksOpen, onOpenPalette, setPage }) {
       <NotificationBell setPage={setPage}/>
 
       <div style={{ width: 1, height: 18, background: 'var(--hairline-strong)' }}/>
-
-      <button
-        onClick={() => setTweaksOpen(v => !v)}
-        className="btn ghost icon"
-        title="Tweaks">
-        <Icon.Sparkle width={13} height={13}/>
-      </button>
 
       <button
         className="btn ghost sm"

@@ -37,18 +37,14 @@ class TestDeviceFlowDisabled:
             f"got: {grant_types}"
         )
 
-    def test_device_authorization_endpoint_returns_501(self):
-        """POST /oauth/device must return 501 Not Implemented."""
+    def test_device_authorization_endpoint_returns_404(self):
+        """POST /oauth/device must return 404 Not Found since it is fully removed."""
         resp = requests.post(
             f"{BASE_URL}/oauth/device",
             data={"client_id": "any-client", "scope": "read"},
         )
-        assert resp.status_code == 501, (
-            f"Expected 501 from /oauth/device (device flow disabled), got {resp.status_code}: {resp.text}"
-        )
-        body = resp.json()
-        assert body.get("error") == "not_implemented", (
-            f"Expected error=not_implemented, got: {body}"
+        assert resp.status_code == 404, (
+            f"Expected 404 from /oauth/device (device flow disabled), got {resp.status_code}: {resp.text}"
         )
 
     def test_token_endpoint_device_code_grant_returns_unsupported(self):
@@ -70,10 +66,10 @@ class TestDeviceFlowDisabled:
             f"Expected error=unsupported_grant_type, got: {body}"
         )
 
-    def test_device_verify_page_returns_501(self):
-        """GET /oauth/device/verify must return 501 Not Implemented."""
+    def test_device_verify_page_returns_404(self):
+        """GET /oauth/device/verify must return 404 Not Found."""
         resp = requests.get(f"{BASE_URL}/oauth/device/verify")
-        assert resp.status_code == 501, (
-            f"Expected 501 from /oauth/device/verify (device flow disabled), "
+        assert resp.status_code == 404, (
+            f"Expected 404 from /oauth/device/verify (device flow disabled), "
             f"got {resp.status_code}"
         )

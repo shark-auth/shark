@@ -105,10 +105,8 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
-	// W17 Phase D: honor SHARK_PORT / SHARK_DB_PATH env vars when EXPLICITLY
-	// set (not via bootstrap's fall-through defaults — those would clobber
-	// the system_config defaults we just loaded). Tests in tests/smoke/ rely
-	// on this for per-test port + DB isolation.
+	// W17 Phase D: honor SHARK_PORT / SHARK_DB_PATH env vars.
+	// We'll also check flags in opts below.
 	if v := os.Getenv("SHARK_PORT"); v != "" {
 		if p, perr := strconv.Atoi(v); perr == nil && p > 0 {
 			cfg.Server.Port = p
@@ -175,6 +173,20 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		cfg.Storage.Path = opts.StoragePathOverride
 	}
 
+	// W17 Phase E: interactive prompt (TTY only) — asks for defaults if
+	// no state file exists AND no explicit overrides were provided via
+	// flags or env vars. This ensures headless/scripted boots remain
+	// 100% unattended while giving local users a nice setup flow.
+	hasOverrides := opts.StoragePathOverride != "" ||
+		os.Getenv("SHARK_DB_PATH") != "" ||
+		os.Getenv("SHARK_PORT") != ""
+
+	if !hasOverrides {
+		if err := PromptBootstrapConfig(cfg, opts); err != nil {
+			return nil, fmt.Errorf("bootstrap prompt: %w", err)
+		}
+	}
+
 	dataDir := filepath.Dir(cfg.Storage.Path)
 	if dataDir != "" && dataDir != "." {
 		// 0o700 (owner rwx only) — the dir holds sharkauth.db + WAL/SHM which
@@ -190,12 +202,11 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	slog.Info("running database migrations")
 	if err := storage.RunMigrations(store.DB(), opts.MigrationsFS, opts.MigrationsDir); err != nil {
 		store.Close() //#nosec G104 -- cleanup after migration failure; primary error returned
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
-	slog.Info("migrations complete")
+	slog.Info("database schema up to date")
 
 	// W17 Phase B: first-boot bootstrap — detects empty system_config + secrets
 	// tables, generates server.secret + JWT signing key + admin API key,

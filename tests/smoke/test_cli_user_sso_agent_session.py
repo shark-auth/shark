@@ -328,7 +328,7 @@ class TestAuditExportCLI:
         token = admin_client.headers.get("Authorization", "").replace("Bearer ", "")
         env = {**os.environ, "SHARK_ADMIN_TOKEN": token, "SHARK_URL": BASE_URL}
         r = subprocess.run(
-            [BIN_PATH, "audit", "export", "--since", "2026-01-01"],
+            [BIN_PATH, "audit", "export", "--since", "2026-01-01T00:00:00Z", "--until", "2027-01-01T00:00:00Z"],
             capture_output=True, text=True, env=env,
         )
         # May be empty CSV but should not error.

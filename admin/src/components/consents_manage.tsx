@@ -6,13 +6,8 @@ import { useToast } from './toast'
 import { usePageActions } from './useKeyboardShortcuts'
 import { CLIFooter } from './CLIFooter'
 
-// Consents page — per-user OAuth consent grants
-// Self-service consent view (session-authenticated endpoint). Admin-wide consent
-// listing would require a separate admin endpoint not yet implemented — fallback
-// empty state covers that case.
-// NOTE: backend endpoint /auth/consents is SESSION-authenticated, not admin-key
-// authenticated. When called from the admin UI (Bearer sk_live_*), it will
-// typically 401. We degrade gracefully into an explanatory empty state.
+// Consents page — admin view of active OAuth consent grants across all users.
+// Allows operators to audit and revoke grants that link agents to user identities.
 
 const appThStyle = { textAlign: 'left', padding: '8px 14px', fontSize: 10, fontWeight: 500, color: 'var(--fg-dim)', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-0)', position: 'sticky', top: 0, textTransform: 'uppercase', letterSpacing: '0.05em' };
 const appTdStyle = { padding: '9px 14px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'middle' };
@@ -30,8 +25,7 @@ export function Consents() {
 
   usePageActions({ onRefresh: refresh });
 
-  const authMismatch = !!error && /unauthorized|forbidden|401|403/i.test(error);
-  const showFallback = authMismatch || (!loading && !error && consents.length === 0);
+  const showFallback = !loading && !error && consents.length === 0;
 
   // Distinct scopes across all consents, for the scope filter dropdown.
   const allScopes = React.useMemo(() => {
@@ -117,7 +111,7 @@ export function Consents() {
         {loading ? (
           <div className="faint" style={{padding: 20, fontSize: 12}}>Loading consents…</div>
         ) : showFallback ? (
-          <FallbackEmptyState authMismatch={authMismatch}/>
+          <FallbackEmptyState/>
         ) : filtered.length === 0 ? (
           <div className="faint" style={{padding: 40, fontSize: 12, textAlign: 'center'}}>
             No consents match your filters.
@@ -126,6 +120,7 @@ export function Consents() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr>
+                <th style={appThStyle}>User ID</th>
                 <th style={appThStyle}>Agent Name</th>
                 <th style={appThStyle}>Client ID</th>
                 <th style={appThStyle}>Scopes</th>
@@ -139,6 +134,11 @@ export function Consents() {
                 const scopes = splitScope(c.scope);
                 return (
                   <tr key={c.id}>
+                    <td style={appTdStyle}>
+                      <span className="mono" style={{fontSize: 11, fontWeight: 500, color: 'var(--fg)'}}>
+                        {c.user_id}
+                      </span>
+                    </td>
                     <td style={appTdStyle}>
                       <div style={{fontWeight: 500}}>{c.agent_name || '—'}</div>
                     </td>
@@ -199,7 +199,7 @@ export function Consents() {
   );
 }
 
-function FallbackEmptyState({ authMismatch }) {
+function FallbackEmptyState() {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -215,27 +215,13 @@ function FallbackEmptyState({ authMismatch }) {
         }}>
           <Icon.Consent width={22} height={22}/>
         </div>
-        {authMismatch ? (
-          <>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
-              Consent management endpoint is session-authenticated
-            </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--fg-dim)', lineHeight: 1.6 }}>
-              Self-service UI for users can be found at their account dashboard.
-              Admin-wide consent viewing is not yet available — track via Audit Log
-              (<span className="mono">action=consent.granted</span> / <span className="mono">consent.revoked</span>).
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
-              No consents granted yet
-            </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--fg-dim)', lineHeight: 1.6 }}>
-              Users will authorize agents via the OAuth flow.
-            </div>
-          </>
-        )}
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
+          No consents granted yet
+        </div>
+        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--fg-dim)', lineHeight: 1.6 }}>
+          Users will authorize agents via the OAuth flow. When they do,
+          those grants will appear here for management and revocation.
+        </div>
       </div>
     </div>
   );

@@ -43,7 +43,7 @@ def _spawn_shark(data_dir: Path, port: int, timeout: float = 6.0) -> tuple[str, 
     so the re-run banner has time to land.
     """
     env = os.environ.copy()
-    env["SHARK_DATA_DIR"] = str(data_dir)
+    env["SHARK_DB_PATH"] = str(data_dir / "shark.db")
     env["SHARK_PORT"] = str(port)
     env["SHARK_BASE_URL"] = f"http://localhost:{port}"
     env["SHARK_DEV"] = "true"
@@ -52,6 +52,7 @@ def _spawn_shark(data_dir: Path, port: int, timeout: float = 6.0) -> tuple[str, 
         [str(SHARK_BIN), "serve"],
         cwd=str(REPO_ROOT),
         env=env,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -109,20 +110,20 @@ def test_setup_pending_banner_when_key_file_only(isolated_data_dir: Path):
     """Scenario 2: key file exists but no admin user → 'setup pending' banner."""
     # First boot to create DB + key file
     port = _free_port()
-    _spawn_shark(isolated_data_dir, port)
-    assert (isolated_data_dir / "admin.key.firstboot").exists(), "first boot must write key file"
-    # Second boot — admin not yet created via /admin/setup, so banner should be 'setup pending'
+    out, _ = _spawn_shark(isolated_data_dir, port)
+    assert (isolated_data_dir / "admin.key.firstboot").exists(), f"first boot must write key file. output:\n{out}"
+    # Second boot — admin not yet logged in, so banner should be '?bootstrap='
     out, _ = _spawn_shark(isolated_data_dir, _free_port())
-    assert "setup pending" in out.lower() or "key in:" in out.lower(), (
-        f"expected 'setup pending' banner on second boot with no admin user, got:\n{out}"
+    assert "?bootstrap=" in out.lower(), (
+        f"expected '?bootstrap=' URL on second boot with no admin activity, got:\n{out}"
     )
 
 
 @pytest.mark.skipif(not SHARK_BIN.exists(), reason="shark binary not built")
 def test_admin_configured_banner_when_user_exists(isolated_data_dir: Path):
-    """Scenario 1: admin user exists in DB → 'admin configured' banner.
+    """Scenario 1: admin activity exists in DB → no banner (quiet).
 
-    We simulate by creating an admin via /admin/setup after first boot, then re-running.
+    We simulate by making an admin API call after first boot, then re-running.
     """
     # First boot
     port1 = _free_port()
@@ -131,42 +132,33 @@ def test_admin_configured_banner_when_user_exists(isolated_data_dir: Path):
     if not key_file.exists():
         pytest.skip("first boot did not produce admin.key.firstboot — skipping")
 
-    # Spawn shark again to be live, then call /admin/setup to mint admin user
+    admin_key = key_file.read_text().strip()
+
+    # Spawn shark again to be live, then make an admin API call
     port2 = _free_port()
     env = os.environ.copy()
-    env["SHARK_DATA_DIR"] = str(isolated_data_dir)
+    env["SHARK_DB_PATH"] = str(isolated_data_dir / "shark.db")
     env["SHARK_PORT"] = str(port2)
     env["SHARK_BASE_URL"] = f"http://localhost:{port2}"
     env["SHARK_DEV"] = "true"
     proc = subprocess.Popen(
         [str(SHARK_BIN), "serve"], cwd=str(REPO_ROOT), env=env,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     try:
         time.sleep(2.5)
-        import urllib.request, urllib.error, json
-        admin_key = key_file.read_text().strip()
-        try:
-            req = urllib.request.Request(
-                f"http://localhost:{port2}/admin/setup",
-                data=json.dumps({"email": "admin@example.com", "password": "F4TestPass!23"}).encode(),
-                headers={"Authorization": f"Bearer {admin_key}", "Content-Type": "application/json"},
-                method="POST",
-            )
-            urllib.request.urlopen(req, timeout=4)
-        except urllib.error.URLError:
-            pytest.skip("could not reach /admin/setup — skipping configured-banner check")
+        subprocess.run(
+            [str(SHARK_BIN), "api-key", "create", "--name", "test-key-for-audit", "--token", admin_key, "--url", f"http://localhost:{port2}"],
+            capture_output=True, text=True, env=env, check=True
+        )
     finally:
         proc.terminate()
-        try:
-            proc.wait(timeout=3)
-        except Exception:
-            proc.kill()
+        proc.wait(timeout=5)
 
-    # Third boot — admin user now exists
+    # Third boot — admin activity now exists
     out, _ = _spawn_shark(isolated_data_dir, _free_port())
-    assert "admin configured" in out.lower() or "sign in with your admin key" in out.lower(), (
-        f"expected 'admin configured' banner with admin user present, got:\n{out}"
+    assert "?bootstrap=" not in out.lower(), (
+        f"expected NO '?bootstrap=' URL on third boot with admin activity present, got:\n{out}"
     )
 
 

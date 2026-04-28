@@ -23,8 +23,8 @@ func sharkStateDir() (string, error) {
 	return filepath.Join(home, ".shark"), nil
 }
 
-// sharkStatePath returns the full path to ~/.shark/state.
-func sharkStatePath() (string, error) {
+// SharkStatePath returns the full path to ~/.shark/state.
+func SharkStatePath() (string, error) {
 	dir, err := sharkStateDir()
 	if err != nil {
 		return "", err
@@ -35,7 +35,7 @@ func sharkStatePath() (string, error) {
 // ReadModeState reads the current mode from ~/.shark/state.
 // Returns "prod" as the default when the file is absent or unreadable.
 func ReadModeState() (string, error) {
-	path, err := sharkStatePath()
+	path, err := SharkStatePath()
 	if err != nil {
 		return "prod", err
 	}

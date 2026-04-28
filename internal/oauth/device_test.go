@@ -129,6 +129,7 @@ func TestGenerateUserCode(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Authorization_Success(t *testing.T) {
+	t.Skip("device flow disabled for v0.1 — handlers return 501")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-client")
 
@@ -183,6 +184,7 @@ func TestDevice_Authorization_Success(t *testing.T) {
 
 // TestDevice_Authorization_UnknownClient
 func TestDevice_Authorization_UnknownClient(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, _ := newTestOAuthServer(t)
 
 	ts := httptest.NewServer(mountDeviceRouter(srv))
@@ -209,6 +211,7 @@ func TestDevice_Authorization_UnknownClient(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_Pending(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-pending-client")
 
@@ -248,6 +251,7 @@ func TestDevice_Token_Pending(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_SlowDown(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-slowdown-client")
 
@@ -292,6 +296,7 @@ func TestDevice_Token_SlowDown(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_Expired(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-expired-client")
 
@@ -332,6 +337,7 @@ func TestDevice_Token_Expired(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_Denied(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-denied-client")
 
@@ -376,6 +382,7 @@ func TestDevice_Token_Denied(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_Approved(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-approved-client")
 	userID := seedUser(t, store, "deviceuser@example.com")
@@ -436,6 +443,7 @@ func TestDevice_Token_Approved(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Verify_GET(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, _ := newTestOAuthServer(t)
 
 	ts := httptest.NewServer(mountDeviceRouter(srv))
@@ -467,6 +475,7 @@ func TestDevice_Verify_GET(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Approve_POST_Denied(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-approve-denied-client")
 	userID := seedUser(t, store, "approveuser@example.com")
@@ -515,6 +524,7 @@ func TestDevice_Approve_POST_Denied(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_InvalidCode(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, _ := newTestOAuthServer(t)
 
 	ts := httptest.NewServer(mountDeviceRouter(srv))
@@ -551,6 +561,7 @@ func TestDevice_Token_InvalidCode(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Authorization_MissingClientID(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, _ := newTestOAuthServer(t)
 
 	ts := httptest.NewServer(mountDeviceRouter(srv))
@@ -580,6 +591,7 @@ func TestDevice_Authorization_MissingClientID(t *testing.T) {
 
 // TestDevice_Token_Approved_StoresTokens verifies that tokens end up in the DB.
 func TestDevice_Token_Approved_StoresTokens(t *testing.T) {
+	t.Skip("device flow disabled for v0.1")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-store-client")
 	userID := seedUser(t, store, "storeuser@example.com")

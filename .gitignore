@@ -11,6 +11,7 @@ data/
 *.db
 *.db-shm
 *.db-wal
+dpop_cache.json
 
 # Config files (REMOVED in Phase H — source of truth is SQLite)
 sharkauth.yaml

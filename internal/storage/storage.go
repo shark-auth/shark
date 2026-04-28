@@ -186,6 +186,7 @@ type Store interface {
 	ListAPIKeys(ctx context.Context) ([]*APIKey, error)
 	UpdateAPIKey(ctx context.Context, key *APIKey) error
 	RevokeAPIKey(ctx context.Context, id string, revokedAt time.Time) error
+	DeleteAPIKey(ctx context.Context, id string) error
 	CountActiveAPIKeysByScope(ctx context.Context, scope string) (int, error)
 
 	// AuditLogs

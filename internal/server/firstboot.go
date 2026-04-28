@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,17 +59,62 @@ func isFirstBoot(ctx context.Context, store *storage.SQLiteStore) (bool, error) 
 	return true, nil
 }
 
+// PromptBootstrapConfig optionally asks the operator for DB path and port
+// before the storage is opened. Only runs on first boot (no state file)
+// and TTY.
+func PromptBootstrapConfig(cfg *config.Config, opts Options) error {
+	if opts.NoPrompt || !isatty.IsTerminal(os.Stdin.Fd()) {
+		return nil
+	}
+
+	// If ~/.shark/state exists, we've already bootstrapped.
+	path, _ := config.SharkStatePath()
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+
+	// ---- Step 3: Interactive prompt (TTY only) ----
+	dbPath := cfg.Storage.Path
+	if dbPath == "" {
+		dbPath = "./shark.db"
+	}
+	port := fmt.Sprintf("%d", cfg.Server.Port)
+	if cfg.Server.Port == 0 {
+		port = "8080"
+	}
+	bind := "0.0.0.0"
+
+	fmt.Printf("  Use defaults? (db=%s, port=%s, bind=%s) [Y/n]: ", dbPath, port, bind)
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	answer = strings.ToLower(strings.TrimSpace(answer))
+
+	if answer == "n" || answer == "no" {
+		newDB := prompt(reader, "  db path", dbPath)
+		newPort := prompt(reader, "  port", port)
+		newBind := prompt(reader, "  bind address", bind)
+		if newDB != "" && newDB != dbPath {
+			cfg.Storage.Path = newDB
+		}
+		if newPort != "" && newPort != port {
+			if p, err := strconv.Atoi(newPort); err == nil && p > 0 {
+				cfg.Server.Port = p
+			}
+		}
+		_ = newBind // bind address is noted for operator reference
+	}
+	return nil
+}
+
 // RunFirstBoot performs all first-boot secret generation and DB seeding.
 // It is idempotent: if called on a non-first-boot store it returns nil,nil.
 //
 // Steps:
 //  1. Detect first boot via isFirstBoot
-//  2. Print branded ASCII header
-//  3. Prompt for db_path/port/bind if TTY (unless NoPrompt)
-//  4. Generate server.secret, jwt.signing_key.bootstrap, admin.api_key
-//  5. Store secrets in DB
-//  6. Write ~/.shark/state
-//  7. Print generated values
+//  2. Generate server.secret, jwt.signing_key.bootstrap, admin.api_key
+//  3. Store secrets in DB
+//  4. Write ~/.shark/state
+//  5. Print generated values
 func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.Config, opts Options) (*FirstBootResult, error) {
 	first, err := isFirstBoot(ctx, store)
 	if err != nil {
@@ -85,44 +131,8 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 		return nil, nil
 	}
 
-	// ---- Step 2: Branded header ----
-	fmt.Println()
-	fmt.Println("==== SharkAuth — Open Source Auth for Agents and Humans ====")
-	fmt.Println()
-
-	// ---- Step 3: Interactive prompt (TTY only) ----
-	if !opts.NoPrompt && isatty.IsTerminal(os.Stdin.Fd()) {
-		dbPath := cfg.Storage.Path
-		if dbPath == "" {
-			dbPath = "./shark.db"
-		}
-		port := fmt.Sprintf("%d", cfg.Server.Port)
-		if cfg.Server.Port == 0 {
-			port = "8080"
-		}
-		bind := "0.0.0.0"
-
-		fmt.Printf("  Use defaults? (db=%s, port=%s, bind=%s) [Y/n]: ", dbPath, port, bind)
-		reader := bufio.NewReader(os.Stdin)
-		answer, _ := reader.ReadString('\n')
-		answer = strings.ToLower(strings.TrimSpace(answer))
-
-		if answer == "n" || answer == "no" {
-			newDB := prompt(reader, "  db path", dbPath)
-			newPort := prompt(reader, "  port", port)
-			newBind := prompt(reader, "  bind address", bind)
-			if newDB != "" && newDB != dbPath {
-				cfg.Storage.Path = newDB
-			}
-			if newPort != "" && newPort != port {
-				// Note: port is used for display; the actual listen port comes from cfg
-				_ = newPort // stored in cfg.Server.Port by serve.go flags
-			}
-			_ = newBind // bind address is set via flags; noted for operator reference
-		}
-	} else {
-		slog.Info("first boot: non-TTY detected, using defaults silently")
-	}
+	// Branded header moved to server startup or PromptBootstrapConfig.
+	// Prompt logic moved to PromptBootstrapConfig.
 
 	// ---- Step 4: Generate secrets ----
 

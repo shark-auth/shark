@@ -1,6 +1,6 @@
 .PHONY: build test lint vet run clean docker verify frontend-build
 
-BINARY := sharkauth
+BINARY := shark
 PKG    := ./cmd/shark
 
 frontend-build:

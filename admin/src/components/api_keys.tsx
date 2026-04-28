@@ -100,6 +100,17 @@ export function ApiKeys() {
     }
   };
 
+  const handleHardDelete = async (keyId) => {
+    try {
+      await API.del(`/api-keys/${keyId}/hard`);
+      if (selected?.id === keyId) setSelected(null);
+      toast?.success?.('API key deleted permanently');
+      refresh();
+    } catch (e) {
+      toast?.error?.(`Delete failed: ${e?.message || e}`);
+    }
+  };
+
   const handleUpdate = async (keyId, updates) => {
     await API.patch(`/api-keys/${keyId}`, updates);
     refresh();
@@ -305,6 +316,7 @@ export function ApiKeys() {
             onClose={() => setSelected(null)}
             onRotate={() => setRotateModal(selected)}
             onRevoke={handleRevoke}
+            onHardDelete={handleHardDelete}
             onUpdate={handleUpdate}
           />
         )}
@@ -358,7 +370,7 @@ function ReqSparkline({ count }) {
   );
 }
 
-function KeyDetail({ k, onClose, onRotate, onRevoke, onUpdate }) {
+function KeyDetail({ k, onClose, onRotate, onRevoke, onHardDelete, onUpdate }) {
   const allScopes = ['users:read', 'users:write', 'orgs:read', 'orgs:write', 'audit:export', 'webhooks:manage', 'agents:manage', 'billing:write', 'billing:read', 'metrics:read'];
   const status = k.revoked_at ? 'revoked' : 'active';
   const isMaster = (k.scopes || []).includes('*');
@@ -390,10 +402,17 @@ function KeyDetail({ k, onClose, onRotate, onRevoke, onUpdate }) {
           <button className="btn ghost sm" onClick={onRotate} disabled={status === 'revoked'}>
             <Icon.Signing width={11} height={11}/> Rotate
           </button>
-          <button className="btn ghost sm" style={{color:'var(--danger)'}} disabled={status === 'revoked'}
-            onClick={() => onRevoke(k.id)}>
-            Revoke
-          </button>
+          {status === 'active' ? (
+            <button className="btn ghost sm" style={{color:'var(--danger)'}}
+              onClick={() => onRevoke(k.id)}>
+              Revoke
+            </button>
+          ) : (
+            <button className="btn ghost sm" style={{color:'var(--danger)'}}
+              onClick={() => onHardDelete(k.id)}>
+              Delete permanently
+            </button>
+          )}
           <div style={{flex:1}}/>
           {status === 'active' ? (
             <span className="chip success" style={{height:18, fontSize:10}}><span className="dot success"/>active</span>

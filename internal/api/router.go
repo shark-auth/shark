@@ -496,6 +496,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/{id}", s.handleGetAPIKey)
 			r.Patch("/{id}", s.handleUpdateAPIKey)
 			r.Delete("/{id}", s.handleRevokeAPIKey)
+			r.Delete("/{id}/hard", s.handleHardDeleteAPIKey)
 			r.Post("/{id}/rotate", s.handleRotateAPIKey)
 		})
 
@@ -597,6 +598,16 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		r.Post("/admin/bootstrap/consume", s.handleBootstrapConsume)
 		// First-boot key display — public, returns 404 once admin is bootstrapped.
 		r.Get("/admin/firstboot/key", s.handleFirstbootKey)
+
+		// First-boot setup endpoints (Phase T15). setup/status is public;
+		// setup/info and setup/admin-user require the one-time setup token.
+		// Mounted BEFORE the /admin group so AdminAPIKeyFromStore doesn't gate them.
+		r.Get("/admin/setup/status", s.handleSetupStatus)
+		r.Group(func(r chi.Router) {
+			r.Use(s.SetupTokenMiddleware)
+			r.Get("/admin/setup/info", s.handleSetupInfo)
+			r.Post("/admin/setup/admin-user", s.handleSetupAdminUser)
+		})
 
 		// Admin (stats + sessions + dev-mode inbox)
 		r.Route("/admin", func(r chi.Router) {

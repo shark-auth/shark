@@ -17,7 +17,10 @@ var apiKeyCreateCmd = &cobra.Command{
 			return maybeJSONErr(cmd, "invalid_args", fmt.Errorf("--name is required"))
 		}
 
-		payload := map[string]any{"name": name}
+		payload := map[string]any{
+			"name":   name,
+			"scopes": []string{"*"},
+		}
 
 		body, code, err := adminDo(cmd, "POST", "/api/v1/api-keys", payload)
 		if err != nil {

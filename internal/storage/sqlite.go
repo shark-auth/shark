@@ -1124,6 +1124,11 @@ func (s *SQLiteStore) RevokeAPIKey(ctx context.Context, id string, revokedAt tim
 	return err
 }
 
+func (s *SQLiteStore) DeleteAPIKey(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ?`, id)
+	return err
+}
+
 func (s *SQLiteStore) scanAPIKey(row *sql.Row) (*APIKey, error) {
 	var k APIKey
 	err := row.Scan(&k.ID, &k.Name, &k.KeyHash, &k.KeyPrefix, &k.KeySuffix, &k.Scopes, &k.RateLimit,

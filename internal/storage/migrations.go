@@ -13,6 +13,7 @@ import (
 // The dirPath is the path within the embed.FS where migrations are located.
 func RunMigrations(db *sql.DB, migrationsFS embed.FS, dirPath string) error {
 	goose.SetBaseFS(migrationsFS)
+	goose.SetLogger(goose.NopLogger())
 
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return fmt.Errorf("setting goose dialect: %w", err)
