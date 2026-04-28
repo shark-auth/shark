@@ -113,7 +113,7 @@ export class VaultClient {
     connectionId: string,
     attempt: number
   ): Promise<VaultToken> {
-    const url = `${this._authUrl}${this._connectionsPath}/${connectionId}/token`;
+    const url = `${this._authUrl}/api/v1/vault/${connectionId}/token`;
     const resp = await httpRequest(url, {
       method: "GET",
       headers: { Authorization: `Bearer ${this._accessToken}` },
@@ -243,7 +243,7 @@ export class VaultClient {
     // For DPoP-less requests delegate to the retry-capable private helper.
     if (!dpop) return this._exchangeWithRetry(referenceToken, 0);
     // DPoP path — single attempt (caller manages token refresh for DPoP flows).
-    const url = `${this._authUrl}${this._connectionsPath}/${referenceToken}/token`;
+    const url = `${this._authUrl}/api/v1/vault/${referenceToken}/token`;
     const resp = await httpRequest(url, {
       method: "GET",
       headers: { Authorization: `Bearer ${this._accessToken}`, DPoP: dpop },
