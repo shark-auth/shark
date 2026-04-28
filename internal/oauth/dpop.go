@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -48,11 +49,19 @@ var allowedDPoPAlgs = map[string]bool{
 type DPoPJTICache struct {
 	mu   sync.Mutex
 	seen map[string]time.Time
+	path string
 }
 
 // NewDPoPJTICache returns an initialised JTI cache.
 func NewDPoPJTICache() *DPoPJTICache {
-	return &DPoPJTICache{seen: make(map[string]time.Time)}
+	c := &DPoPJTICache{
+		seen: make(map[string]time.Time),
+		path: "dpop_cache.json",
+	}
+	if data, err := os.ReadFile(c.path); err == nil {
+		json.Unmarshal(data, &c.seen)
+	}
+	return c
 }
 
 // MarkSeen records jti as seen. Returns an error if jti was already seen
@@ -75,6 +84,12 @@ func (c *DPoPJTICache) MarkSeen(jti string, window time.Duration) error {
 		return errors.New("dpop: jti already seen (replay detected)")
 	}
 	c.seen[jti] = now
+
+	// Persist
+	if data, err := json.Marshal(c.seen); err == nil {
+		os.WriteFile(c.path, data, 0600)
+	}
+
 	return nil
 }
 
