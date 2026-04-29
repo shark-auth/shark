@@ -32,11 +32,7 @@ print(user["id"])
 ```
 
 ```typescript
-const user = await auth.signup({
-  email: "alice@example.com",
-  password: "Strong-Pwd-2026",
-  name: "Alice",
-});
+const user = await auth.signup("alice@example.com", "Strong-Pwd-2026", { name: "Alice" });
 ```
 
 | Param      | Type   | Required | Notes                                |
@@ -55,7 +51,7 @@ result = auth.login("alice@example.com", "Strong-Pwd-2026")
 ```
 
 ```typescript
-const result = await auth.login({ email: "alice@example.com", password: "Strong-Pwd-2026" });
+const result = await auth.login("alice@example.com", "Strong-Pwd-2026");
 if (result.mfaRequired) {
   // see ./mfa.md — call mfa.challenge(code) to upgrade the session
 }
@@ -99,9 +95,9 @@ auth.confirm_password_reset(token=token_from_email, new_password="...")
 ```
 
 ```typescript
-await auth.changePassword({ oldPassword: "...", newPassword: "..." });
+await auth.changePassword("old_password", "new_password");
 await auth.requestPasswordReset("alice@example.com");
-await auth.confirmPasswordReset({ token, newPassword: "..." });
+await auth.confirmPasswordReset("token_from_email", "new_password");
 ```
 
 `request_password_reset` always returns success — the server intentionally does not leak whether the email exists.
@@ -138,8 +134,8 @@ user = auth.verify_magic_link(token)
 ```typescript
 import { MagicLinkClient } from "@sharkauth/sdk";
 
-const ml = new MagicLinkClient("https://auth.example.com");
-await ml.send({ email: "alice@example.com", redirectUri: "https://app.example.com/cb" });
+const ml = new MagicLinkClient({ baseUrl: "https://auth.example.com" });
+await ml.sendMagicLink("alice@example.com", { redirectUri: "https://app.example.com/cb" });
 const user = await auth.verifyMagicLink(token);
 ```
 
@@ -153,7 +149,7 @@ result = auth.check(action="read", resource="documents:123")
 ```
 
 ```typescript
-const result = await auth.check({ action: "read", resource: "documents:123" });
+const result = await auth.check("read", "documents:123");
 ```
 
 Wraps `POST /api/v1/auth/check`. Requires a valid session or bearer token.

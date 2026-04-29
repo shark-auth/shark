@@ -48,8 +48,8 @@ const c = new SharkClient({
   adminKey: process.env.SHARK_ADMIN_KEY!,
 });
 
-const users = await c.users.list();
-console.log(users.length, "users");
+const users = await c.users.listUsers();
+console.log(users.total, "users");
 ```
 
 ## First call — public auth
@@ -69,8 +69,8 @@ me = auth.get_me()
 import { AuthClient } from "@sharkauth/sdk";
 
 const auth = new AuthClient("https://auth.example.com");
-await auth.signup({ email: "alice@example.com", password: "Strong-Pwd-2026", name: "Alice" });
-await auth.login({ email: "alice@example.com", password: "Strong-Pwd-2026" });
+await auth.signup("alice@example.com", "Strong-Pwd-2026", { name: "Alice" });
+await auth.login("alice@example.com", "Strong-Pwd-2026");
 const me = await auth.getMe();
 ```
 

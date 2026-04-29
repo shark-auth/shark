@@ -59,7 +59,7 @@ print(agent["client_secret"])  # ONE-TIME — store now
 import { SharkClient } from "@sharkauth/sdk";
 
 const c = new SharkClient({ baseUrl: "https://auth.example.com", adminKey: "sk_live_admin" });
-const agent = await c.agents.register({
+const agent = await c.agents.registerAgent({
   name: "alice-calendar-agent",
   scopes: ["calendar:read", "calendar:write", "vault:read"],
   metadata: { app_id: "app_calendar" },
@@ -204,7 +204,7 @@ Defense-in-depth. Five SDK methods you'll reach for on the bad day:
 | ----- | --------------------------------------- | ------------------------------------------------------------ |
 | 1     | Revoke a single token                   | `OAuthClient.revoke_token()`                                 |
 | 2     | Revoke all tokens for one agent         | `AgentsClient.revoke_all(agent_id)`                          |
-| 3     | Cascade-revoke all agents owned by user | `UsersClient.revoke_agents(user_id)` (also kills consents)   |
+| 3     | Cascade-revoke all agents owned by user | `UsersClient.revokeUserAgents(user_id)` (TS) / `revoke_agents()` (Py) |
 | 4     | Bulk revoke by client_id GLOB pattern   | `OAuthClient.bulk_revoke_by_pattern("shark_agent_v3.2_*")`   |
 | 5     | Disconnect vault → cascade agent tokens | `VaultClient.disconnect(connection_id, cascade_to_agents=True)` |
 
@@ -212,7 +212,12 @@ Defense-in-depth. Five SDK methods you'll reach for on the bad day:
 # Layer 3 — user lost their device
 result = c.users.revoke_agents("usr_alice", reason="device-lost")
 print(result.revoked_agent_ids, result.revoked_consent_count, result.audit_event_id)
+```
 
+```typescript
+// Layer 3 — user lost their device
+const result = await c.users.revokeUserAgents("usr_alice", { reason: "device-lost" });
+```
 # Layer 4 — emergency rollback of a buggy agent version
 result = c.oauth.bulk_revoke_by_pattern(
     client_id_pattern="shark_agent_v3.2_*",
@@ -242,10 +247,11 @@ print(result.revoked_token_count, result.audit_event_id)
 
 ```typescript
 const newProver = await DPoPProver.generate();
-const result = await c.agents.rotateDpopKey("agent_abc", {
-  newPublicKeyJwk: newProver.publicJwk,
-  reason: "scheduled rotation",
-});
+const result = await c.agents.rotateDpopKey(
+  "agent_abc",
+  newProver.publicJwk,
+  "scheduled rotation"
+);
 ```
 
 The agent must reacquire tokens with the new prover — old tokens are dead.
@@ -274,7 +280,7 @@ for a in result.data:
 ```
 
 ```typescript
-const result = await c.users.listAgents("usr_alice", { filter: "created", limit: 100 });
+const result = await c.users.listUserAgents("usr_alice");
 ```
 
 `filter` accepts `"created"` (agents the user created), `"authorized"` (agents the user has consented to), or `"all"`.

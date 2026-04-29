@@ -48,7 +48,7 @@ for conn in result.items:
 ```
 
 ```typescript
-const result = await vault.listConnections({ provider_id: "google_gmail", limit: 50 });
+const result = await vault.listConnections({ limit: 50 });
 ```
 
 `VaultConnectionRecord` carries `id`, `user_id`, `provider_id`, `provider_name`, `created_at`, `updated_at`, `needs_reauth`.
@@ -118,7 +118,7 @@ print(result.cascade_audit_event_id)
 ```
 
 ```typescript
-const result = await vault.disconnect("conn_abc123", { cascadeToAgents: true });
+const result = await vault.disconnect("conn_abc123", true);
 ```
 
 Pass `cascade_to_agents=False` to silently disconnect without revoking agent tokens.

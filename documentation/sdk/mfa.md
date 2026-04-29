@@ -20,7 +20,7 @@ mfa = MFAClient("https://auth.example.com", session=auth._session)
 import { AuthClient, MfaClient, computeTotp } from "@sharkauth/sdk";
 
 const auth = new AuthClient("https://auth.example.com");
-await auth.login({ email: "alice@example.com", password: "Strong-Pwd-2026" });
+await auth.login("alice@example.com", "Strong-Pwd-2026");
 const mfa = new MfaClient("https://auth.example.com", { session: auth.session });
 ```
 
@@ -66,7 +66,7 @@ me = auth.get_me()  # now succeeds
 ```
 
 ```typescript
-await auth.login({ email: "alice@example.com", password: "Strong-Pwd-2026" });
+await auth.login("alice@example.com", "Strong-Pwd-2026");
 await mfa.challenge("123456");
 const me = await auth.getMe();
 ```

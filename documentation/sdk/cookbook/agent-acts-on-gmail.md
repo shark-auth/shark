@@ -36,7 +36,7 @@ client_secret = agent["client_secret"]
 import { SharkClient } from "@sharkauth/sdk";
 
 const c = new SharkClient({ baseUrl: "https://auth.example.com", adminKey: "sk_live_admin" });
-const agent = await c.agents.register({
+const agent = await c.agents.registerAgent({
   name: "alice-inbox-summarizer",
   scopes: ["vault:read", "gmail:read"],
   metadata: { app_id: "app_inbox" },
@@ -94,8 +94,8 @@ print(google.expires_at)
 ```
 
 ```typescript
-// TS fetchToken signature: see vault.ts. Currently exchange(referenceToken).
-const google = await vault.exchange(connectionId);
+// TS fetchToken signature: see vault.ts.
+const google = await vault.fetchToken("google_gmail");
 ```
 
 ## Step 5 — call Gmail

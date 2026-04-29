@@ -20,7 +20,7 @@ sessions = SessionsClient("https://auth.example.com", session=auth._session)
 import { AuthClient, SessionsClient } from "@sharkauth/sdk";
 
 const auth = new AuthClient("https://auth.example.com");
-await auth.login({ email: "alice@example.com", password: "..." });
+await auth.login("alice@example.com", "...");
 const sessions = new SessionsClient("https://auth.example.com", { session: auth.session });
 ```
 

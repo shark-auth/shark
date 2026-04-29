@@ -1,4 +1,4 @@
-﻿package server
+package server
 
 import (
 	"bufio"
@@ -160,9 +160,16 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 	jwtKid := activeKey.KID
 
 	// 4c: admin API key
-	fullKey, keyHash, keyPrefix, keySuffix, err := auth.GenerateAPIKey()
-	if err != nil {
-		return nil, fmt.Errorf("firstboot: generate admin API key: %w", err)
+	var fullKey, keyHash, keyPrefix, keySuffix string
+	if bootstrapKey := os.Getenv("SHARKAUTH_BOOTSTRAP_ADMIN_KEY"); bootstrapKey != "" {
+		fullKey = bootstrapKey
+		keyHash, keyPrefix, keySuffix = auth.DeriveKeyMetadata(fullKey)
+	} else {
+		var err error
+		fullKey, keyHash, keyPrefix, keySuffix, err = auth.GenerateAPIKey()
+		if err != nil {
+			return nil, fmt.Errorf("firstboot: generate admin API key: %w", err)
+		}
 	}
 
 	// ---- Step 5: Store secrets in DB ----

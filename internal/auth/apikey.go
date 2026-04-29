@@ -38,11 +38,29 @@ func GenerateAPIKey() (fullKey string, keyHash string, keyPrefix string, keySuff
 
 	encoded := base62Encode(randomBytes)
 	fullKey = apiKeyPrefix + encoded
-	keyHash = HashAPIKey(fullKey)
-	keyPrefix = encoded[:keyPrefixLen]
-	keySuffix = encoded[len(encoded)-keySuffixLen:]
+	keyHash, keyPrefix, keySuffix = DeriveKeyMetadata(fullKey)
 
 	return fullKey, keyHash, keyPrefix, keySuffix, nil
+}
+
+// DeriveKeyMetadata extracts hash, prefix, and suffix from an existing API key.
+func DeriveKeyMetadata(fullKey string) (keyHash string, keyPrefix string, keySuffix string) {
+	keyHash = HashAPIKey(fullKey)
+
+	// If it doesn't match the standard prefix, use the whole key (up to limits) for metadata
+	// but normally we expect sk_live_...
+	content := fullKey
+	if strings.HasPrefix(fullKey, apiKeyPrefix) {
+		content = fullKey[len(apiKeyPrefix):]
+	}
+
+	if len(content) <= keyPrefixLen+keySuffixLen {
+		return keyHash, content, content
+	}
+
+	keyPrefix = content[:keyPrefixLen]
+	keySuffix = content[len(content)-keySuffixLen:]
+	return keyHash, keyPrefix, keySuffix
 }
 
 // HashAPIKey returns the hex-encoded SHA-256 hash of the given API key.

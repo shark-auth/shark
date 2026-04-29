@@ -51,7 +51,7 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 			"PRAGMA synchronous=NORMAL",
 			"PRAGMA mmap_size=268435456", // 256MB
 			"PRAGMA temp_store=MEMORY",
-			"PRAGMA cache_size=-2000", // 2MB
+			"PRAGMA cache_size=-64000", // 64MB
 			"PRAGMA busy_timeout=30000",
 			"PRAGMA foreign_keys=ON",
 		}
@@ -96,6 +96,7 @@ func (s *SQLiteStore) Close() error {
 	}
 	return errR
 }
+
 // WipeAllData truncates all user-data tables while preserving goose migration
 // metadata. Used by POST /admin/system/reset to start fresh without
 // dropping and re-creating the schema.
@@ -1986,6 +1987,7 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
+
 // --- DPoP JTIs ---
 
 func (s *SQLiteStore) InsertDPoPJTI(ctx context.Context, jti string, expiresAt time.Time) error {

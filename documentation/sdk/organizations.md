@@ -25,7 +25,7 @@ orgs.delete(org["id"])
 ```
 
 ```typescript
-const org = await orgs.create({ name: "Acme Co", slug: "acme", metadata: { plan: "enterprise" } });
+const org = await orgs.create("Acme Co", "acme", { metadata: { plan: "enterprise" } });
 await orgs.list();
 await orgs.get(org.id);
 await orgs.update(org.id, { name: "Acme Inc" });
@@ -37,15 +37,15 @@ await orgs.delete(org.id);
 ## Members
 
 ```python
-orgs.add_member(org["id"], user_id="usr_alice", role="admin")
+orgs.add_member(org["id"], "usr_alice", "admin")
 orgs.list_members(org["id"])
-orgs.remove_member(org["id"], user_id="usr_alice")
+orgs.remove_member(org["id"], "mem_alice")
 ```
 
 ```typescript
-await orgs.addMember(org.id, { userId: "usr_alice", role: "admin" });
+await orgs.addMember(org.id, "usr_alice", "admin");
 await orgs.listMembers(org.id);
-await orgs.removeMember(org.id, "usr_alice");
+await orgs.removeMember(org.id, "mem_alice");
 ```
 
 ## Invitations
@@ -59,7 +59,7 @@ orgs.delete_invitation(org["id"], inv["id"])
 ```
 
 ```typescript
-const inv = await orgs.createInvitation(org.id, { email: "bob@example.com", role: "member" });
+const inv = await orgs.createInvitation(org.id, "bob@example.com", "member");
 await orgs.acceptInvitation(tokenFromLink);
 await orgs.deleteInvitation(org.id, inv.id);
 ```
