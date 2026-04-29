@@ -57,7 +57,7 @@ for hop in claims.delegation_chain():
 
 ### Notes
 
-- Import from `shark_auth.claims` directly, or via `from shark_auth import DelegationTokenClaims`
+- Import from `shark_auth.claims` directly, or via `from shark_auth import AgentTokenClaims`
 - Chain ordering: index 0 is the outermost (most recent) actor; last index is the innermost
 - Safe to call on tokens without an `act` claim — returns an empty list
 
@@ -268,7 +268,7 @@ Wraps `DELETE /api/v1/vault/connections/{id}`. When `cascade_to_agents=True` (de
 ```python
 from shark_auth import VaultClient
 
-vault = VaultClient(base_url="https://auth.example.com", admin_key="sk_live_...")
+vault = VaultClient(base_url="https://auth.example.com", admin_api_key="sk_live_...")
 result = vault.disconnect("conn_abc123", cascade_to_agents=True)
 print(result.revoked_agent_ids)    # ["agent_x", "agent_y"]
 print(result.revoked_token_count)  # 5
@@ -301,7 +301,7 @@ token = oauth.get_token_with_dpop(
     scope="vault:read",
 )
 
-vault = VaultClient(base_url="https://auth.example.com", admin_key="sk_live_...")
+vault = VaultClient(base_url="https://auth.example.com", admin_api_key="sk_live_...")
 result = vault.fetch_token(
     provider="google_gmail",
     bearer_token=token.access_token,

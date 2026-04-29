@@ -72,7 +72,8 @@ def _spawn_shark(data_dir: Path, port: int, timeout: float = 6.0) -> tuple[str, 
                 time.sleep(0.05)
                 continue
             captured.append(line)
-            if "listening" in line.lower() or "http server" in line.lower():
+            lower_line = line.lower()
+            if "listening" in lower_line or "http server" in lower_line or "starting" in lower_line:
                 saw_listening = True
                 grace_until = time.time() + 2.0
             if grace_until and time.time() >= grace_until:

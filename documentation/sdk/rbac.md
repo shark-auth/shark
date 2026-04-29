@@ -36,13 +36,13 @@ Backend `update_role` uses `PUT /api/v1/roles/{id}` (NOT PATCH).
 ## Permissions
 
 ```python
-perm = rbac.create_permission(name="documents:write", description="Edit documents")
+perm = rbac.create_permission("documents:write", "folder_123")
 rbac.list_permissions()
 rbac.delete_permission(perm["id"])
 ```
 
 ```typescript
-const perm = await rbac.createPermission({ name: "documents:write" });
+const perm = await rbac.createPermission("documents:write", "folder_123");
 await rbac.listPermissions();
 await rbac.deletePermission(perm.id);
 ```
@@ -55,8 +55,8 @@ rbac.detach_permission_from_role(role["id"], perm["id"])
 ```
 
 ```typescript
-await rbac.attachPermission(role.id, perm.id);
-await rbac.detachPermission(role.id, perm.id);
+await rbac.attachPermissionToRole(role.id, perm.id);
+await rbac.detachPermissionFromRole(role.id, perm.id);
 ```
 
 ## Assign roles to users
@@ -87,7 +87,7 @@ result = auth.check(action="write", resource="documents:123")
 ```
 
 ```typescript
-const result = await auth.check({ action: "write", resource: "documents:123" });
+const result = await auth.check("write", "documents:123");
 ```
 
 The check evaluates against the user's current roles + attached permissions.

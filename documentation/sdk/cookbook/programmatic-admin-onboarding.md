@@ -78,11 +78,11 @@ const ciKey = await c.apiKeys.create({
 });
 console.log("CI_KEY=", ciKey.key);
 
-const org = await c.organizations.create({
-  name: "Acme Co",
-  slug: "acme",
-  metadata: { plan: "enterprise", billing_id: "cus_abc" },
-});
+const org = await c.organizations.create(
+  "Acme Co",
+  "acme",
+  { metadata: { plan: "enterprise", billing_id: "cus_abc" } }
+);
 
 const app = await c.apps.create({
   name: "acme-inbox",
@@ -90,7 +90,7 @@ const app = await c.apps.create({
   redirectUris: ["https://app.example.com/cb"],
 });
 
-const agent = await c.agents.register({
+const agent = await c.agents.registerAgent({
   name: "acme-inbox-summarizer",
   scopes: ["vault:read", "gmail:read"],
   metadata: { app_id: app.id },

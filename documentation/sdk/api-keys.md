@@ -8,7 +8,7 @@ Admin API key CRUD + rotation. Wraps `/api/v1/api-keys`. Used to mint the `sk_li
 
 ```python
 from shark_auth import APIKeysClient
-keys = APIKeysClient("https://auth.example.com", admin_api_key="sk_live_bootstrap")
+keys = APIKeysClient("https://auth.example.com", "sk_live_bootstrap")
 ```
 
 ```typescript
@@ -52,7 +52,7 @@ console.log(created.key);
 | Param        | Type      | Required | Notes                                   |
 | ------------ | --------- | -------- | --------------------------------------- |
 | `name`       | string    | yes      | Human-readable label                    |
-| `scopes`     | string[]  | no       | Empty array means "all admin scopes"    |
+| `scopes`     | string[]  | no       | Empty array means "no admin scopes"     |
 | `expires_at` | ISO 8601  | no       | Defaults to no expiry                   |
 
 Response: `{ id, key, name, scopes, expires_at, created_at }`. The `key` field is the bearer to pass to subsequent clients.

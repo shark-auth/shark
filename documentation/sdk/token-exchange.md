@@ -119,9 +119,9 @@ Python raises `OAuthError(error, error_description, status_code)`. TypeScript ra
 Once a child token exists, any party with the JWT can walk the chain:
 
 ```python
-from shark_auth import DelegationTokenClaims
+from shark_auth.claims import AgentTokenClaims
 
-claims = DelegationTokenClaims.parse(child.access_token)
+claims = AgentTokenClaims.parse(child.access_token)
 print(claims.sub)              # original user
 for hop in claims.delegation_chain():
     print(hop.sub, hop.scope, hop.jkt, hop.iat)

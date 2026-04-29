@@ -64,10 +64,9 @@ try:
 except SharkAPIError as e:
     print(e.code, e.status, str(e))
 ```
-
 ```typescript
 try {
-  await c.organizations.create({ name: "..." });
+  await c.organizations.create("...");
 } catch (e) {
   if (e instanceof SharkAPIError) {
     console.log(e.code, e.status);

@@ -125,7 +125,7 @@ oauth.revoke_token("eyJhbGci...", token_type_hint="access_token")
 ```
 
 ```typescript
-await oauth.revokeToken({ token: "eyJhbGci...", tokenTypeHint: "access_token" });
+await oauth.revokeToken("eyJhbGci...", "access_token");
 ```
 
 Always returns 200, regardless of whether the token existed.
@@ -142,7 +142,7 @@ if info["active"]:
 
 ```typescript
 const info = await oauthAdmin.introspectToken("eyJhbGci...");
-if (info.active) console.log(info.sub, info.scope, info.exp);
+if (info.active) console.log(info.active, info.sub, info.scope);
 ```
 
 For invalid/expired tokens the server returns `{"active": false}` — not an error.

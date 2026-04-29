@@ -13,7 +13,7 @@ from shark_auth import AuthClient, MFAClient, compute_totp
 
 auth = AuthClient("https://auth.example.com")
 auth.login("alice@example.com", "Strong-Pwd-2026")
-mfa = MFAClient("https://auth.example.com", session=auth._session)
+mfa = MFAClient("https://auth.example.com", session=auth.session)
 ```
 
 ```typescript
@@ -78,7 +78,7 @@ mfa.disable(current_code="123456")
 ```
 
 ```typescript
-await mfa.disable({ code: "123456" });
+await mfa.disable("123456");
 ```
 
 Wraps `DELETE /api/v1/auth/mfa` (the SDK adapts the unusual verb-with-body shape).
@@ -118,7 +118,7 @@ c.users.reset_mfa(user_id="usr_abc")
 ```
 
 ```typescript
-await c.users.resetMfa("usr_abc");
+await c.users.resetUserMfa("usr_abc");
 ```
 
 ## Limitations (pre-launch)

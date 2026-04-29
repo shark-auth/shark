@@ -127,9 +127,11 @@ print(result.revoked_token_count)  # tokens bound to old key are killed
 ```
 
 ```typescript
-const result = await c.agents.rotateDpopKey("agent_abc", {
-  newPublicKeyJwk: newProver.publicJwk,
-});
+const result = await c.agents.rotateDpopKey(
+  "agent_abc",
+  newProver.publicJwk,
+  "key compromise 2026-04-26"
+);
 ```
 
 After rotation, the agent must request fresh tokens with `new_prover`.

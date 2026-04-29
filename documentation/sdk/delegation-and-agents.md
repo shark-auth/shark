@@ -171,9 +171,9 @@ Server raises `OAuthError` (Python) / `TokenError` (TS) on `invalid_scope` (aske
 Pure JWT — no signature verification. Use this in middleware that has already verified the signature out-of-band.
 
 ```python
-from shark_auth import DelegationTokenClaims
+from shark_auth import AgentTokenClaims
 
-claims = DelegationTokenClaims.parse(child.access_token)
+claims = AgentTokenClaims.parse(child.access_token)
 print(claims.sub)            # the original subject (e.g. usr_alice)
 print(claims.scope)          # current narrowed scope
 print(claims.jkt)            # current cnf.jkt

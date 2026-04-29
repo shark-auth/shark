@@ -137,9 +137,9 @@ resp = http.get("/v1/search", params={"q": "from:vendor"})
 ## Step 7 — resource server walks the chain
 
 ```python
-from shark_auth import DelegationTokenClaims
+from shark_auth import AgentTokenClaims
 
-claims = DelegationTokenClaims.parse(search_token.access_token)
+claims = AgentTokenClaims.parse(search_token.access_token)
 print(claims.sub)         # usr_alice
 print(claims.scope)       # search:query
 print(claims.is_delegated())  # True
