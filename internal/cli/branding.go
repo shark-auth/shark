@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime/debug"
 
+	"github.com/shark-auth/shark/internal/version"
 	"golang.org/x/term"
 )
 
@@ -48,15 +48,9 @@ func PrintHeader(out io.Writer) {
 	fmt.Fprintf(out, "Repo:   https://github.com/shark-auth/shark\n")
 }
 
-// resolveVersion reads the build version from ldflags or debug.ReadBuildInfo.
-// Returns "dev" as a fallback.
+// resolveVersion returns the version from internal/version.
 func resolveVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok &&
-		info.Main.Version != "" &&
-		info.Main.Version != "(devel)" {
-		return info.Main.Version
-	}
-	return "dev"
+	return version.Version
 }
 
 // binarySize returns the size of the running binary formatted as "XX MB".

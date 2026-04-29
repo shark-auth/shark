@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -8,14 +8,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"runtime/debug"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/email"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/version"
 )
 
 // adminHealthResponse is the response shape for GET /admin/health.
@@ -147,10 +147,7 @@ type adminOAuthCreds struct {
 
 // resolveAppVersion returns the build-time or module version.
 func resolveAppVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
-	}
-	return "dev"
+	return version.Version
 }
 
 // dbSizeBytes queries SQLite PRAGMA page_count * page_size.
