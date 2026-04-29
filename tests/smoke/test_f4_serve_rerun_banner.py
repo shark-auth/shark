@@ -58,6 +58,12 @@ def _spawn_shark(data_dir: Path, port: int, timeout: float = 6.0) -> tuple[str, 
         text=True,
     )
 
+    # Make stdout non-blocking
+    import fcntl
+    fd = proc.stdout.fileno()
+    fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
     captured: list[str] = []
     deadline = time.time() + timeout
     saw_listening = False
@@ -65,7 +71,11 @@ def _spawn_shark(data_dir: Path, port: int, timeout: float = 6.0) -> tuple[str, 
 
     try:
         while time.time() < deadline:
-            line = proc.stdout.readline() if proc.stdout else ""
+            try:
+                line = proc.stdout.readline() if proc.stdout else ""
+            except IOError:
+                line = ""
+
             if not line:
                 if proc.poll() is not None:
                     break
