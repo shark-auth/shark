@@ -1,4 +1,4 @@
-﻿package oauth
+package oauth
 
 import (
 	"context"
@@ -71,7 +71,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	var dpopJKT string
 	if proofJWT := r.Header.Get("DPoP"); proofJWT != "" {
 		htu := dpopTokenEndpointURL(r)
-		jkt, dpopErr := ValidateDPoPProof(proofJWT, r.Method, htu, "", s.DPoPCache)
+		jkt, dpopErr := ValidateDPoPProof(r.Context(), proofJWT, r.Method, htu, "", s.DPoPCache)
 		if dpopErr != nil {
 			slog.Debug("oauth: DPoP proof invalid", "error", dpopErr)
 			w.Header().Set("Content-Type", "application/json")

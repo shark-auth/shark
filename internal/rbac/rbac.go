@@ -1,4 +1,4 @@
-﻿package rbac
+package rbac
 
 import (
 	"context"
@@ -47,30 +47,8 @@ func (r *RBACManager) HasPermission(ctx context.Context, userID, action, resourc
 }
 
 // GetEffectivePermissions resolves all permissions for a user through their roles.
-// Permissions are de-duplicated by ID.
 func (r *RBACManager) GetEffectivePermissions(ctx context.Context, userID string) ([]*storage.Permission, error) {
-	roles, err := r.store.GetRolesByUserID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]bool)
-	var result []*storage.Permission
-
-	for _, role := range roles {
-		perms, err := r.store.GetPermissionsByRoleID(ctx, role.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, p := range perms {
-			if !seen[p.ID] {
-				seen[p.ID] = true
-				result = append(result, p)
-			}
-		}
-	}
-
-	return result, nil
+	return r.store.GetPermissionsByUserID(ctx, userID)
 }
 
 // SeedDefaultRoles creates the admin and member roles with default permissions

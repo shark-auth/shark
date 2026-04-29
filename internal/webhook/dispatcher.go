@@ -1,4 +1,4 @@
-﻿// Package webhook handles outbound event delivery: HMAC-signed payloads,
+// Package webhook handles outbound event delivery: HMAC-signed payloads,
 // exponential retry, durable delivery log.
 //
 // Design choices:
@@ -65,6 +65,12 @@ type Dispatcher struct {
 
 	subsMu sync.RWMutex
 	subs   []chan EventEnvelope
+
+	// Memory pooling to reduce GC pressure
+	envelopePool sync.Pool
+
+	// Delivery persistence batching
+	persistQueue chan *storage.WebhookDelivery
 }
 
 // EventEnvelope is the wrapper for real-time broadcast.
@@ -138,6 +144,12 @@ func New(store storage.Store, opts ...Option) *Dispatcher {
 		workers: 4,
 		jobs:    make(chan string, 256),
 		http:    &http.Client{Timeout: deliveryTimeout},
+		envelopePool: sync.Pool{
+			New: func() interface{} {
+				return &EventEnvelope{}
+			},
+		},
+		persistQueue: make(chan *storage.WebhookDelivery, 1024),
 	}
 	for _, o := range opts {
 		o(d)
@@ -155,6 +167,8 @@ func (d *Dispatcher) Start(ctx context.Context) {
 	}
 	d.wg.Add(1)
 	go d.retryLoop()
+	d.wg.Add(1)
+	go d.persistWorker()
 }
 
 // Stop waits for in-flight deliveries to finish (bounded by deliveryTimeout).
@@ -163,18 +177,20 @@ func (d *Dispatcher) Stop() {
 		d.cancel()
 	}
 	close(d.jobs)
+	close(d.persistQueue)
 	d.wg.Wait()
 }
 
 // Emit records a pending delivery per matching webhook and enqueues immediate
-// delivery. Non-blocking â€” all I/O happens on workers.
+// delivery. Non-blocking.
 func (d *Dispatcher) Emit(ctx context.Context, event string, payload any) error {
-	env := EventEnvelope{
-		Event:     event,
-		CreatedAt: time.Now().UTC(),
-		Data:      payload,
-	}
-	d.broadcast(env)
+	env := d.envelopePool.Get().(*EventEnvelope)
+	env.Event = event
+	env.CreatedAt = time.Now().UTC()
+	env.Data = payload
+	defer d.envelopePool.Put(env)
+
+	d.broadcast(*env)
 
 	hooks, err := d.store.ListEnabledWebhooksByEvent(ctx, event)
 	if err != nil {
@@ -197,13 +213,50 @@ func (d *Dispatcher) Emit(ctx context.Context, event string, payload any) error 
 			Payload: string(body), Status: storage.WebhookStatusPending,
 			Attempt: 0, CreatedAt: now, UpdatedAt: now,
 		}
-		if err := d.store.CreateWebhookDelivery(ctx, del); err != nil {
-			slog.Error("webhook: persist delivery", "error", err, "webhook_id", w.ID)
-			continue
+
+		// Non-blocking enqueue for persistence
+		select {
+		case d.persistQueue <- del:
+			// Enqueued for persistence
+			d.schedule(del.ID)
+		default:
+			slog.Warn("webhook: persist queue full, dropping delivery record", "id", del.ID)
 		}
-		d.schedule(del.ID)
 	}
 	return nil
+}
+
+func (d *Dispatcher) persistWorker() {
+	defer d.wg.Done()
+	for {
+		var batch []*storage.WebhookDelivery
+		del, ok := <-d.persistQueue
+		if !ok {
+			return
+		}
+		batch = append(batch, del)
+
+		// Drain up to 50
+		draining := true
+		for draining && len(batch) < 50 {
+			select {
+			case next, ok := <-d.persistQueue:
+				if !ok {
+					draining = false
+				} else {
+					batch = append(batch, next)
+				}
+			default:
+				draining = false
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := d.store.CreateWebhookDeliveriesBatch(ctx, batch); err != nil {
+			slog.Error("webhook: batch persist failed", "error", err, "count", len(batch))
+		}
+		cancel()
+	}
 }
 
 // Redeliver is the /webhooks/{id}/test handler's entry point. Returns the

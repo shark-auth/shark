@@ -2,6 +2,7 @@
 package oauth
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -13,11 +14,10 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/shark-auth/shark/internal/storage"
 	gojwt "github.com/golang-jwt/jwt/v5"
 )
 
@@ -43,51 +43,32 @@ var allowedDPoPAlgs = map[string]bool{
 // JTI replay cache
 // ---------------------------------------------------------------------------
 
-// DPoPJTICache is a simple in-memory replay-protection store.
-// It records JTIs that have been seen within the replay window and prunes
-// stale entries on every MarkSeen call.
+// DPoPJTICache is a replay-protection store backed by the main database.
 type DPoPJTICache struct {
-	mu   sync.Mutex
-	seen map[string]time.Time
-	path string
+	store storage.Store
 }
 
 // NewDPoPJTICache returns an initialised JTI cache.
-func NewDPoPJTICache() *DPoPJTICache {
-	c := &DPoPJTICache{
-		seen: make(map[string]time.Time),
-		path: "dpop_cache.json",
+func NewDPoPJTICache(store storage.Store) *DPoPJTICache {
+	return &DPoPJTICache{
+		store: store,
 	}
-	if data, err := os.ReadFile(c.path); err == nil {
-		json.Unmarshal(data, &c.seen)
-	}
-	return c
 }
 
 // MarkSeen records jti as seen. Returns an error if jti was already seen
-// within window. Prunes expired entries on every call.
-func (c *DPoPJTICache) MarkSeen(jti string, window time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	now := time.Now()
-	cutoff := now.Add(-window)
-
-	// Prune stale entries.
-	for k, t := range c.seen {
-		if t.Before(cutoff) {
-			delete(c.seen, k)
-		}
+// within window.
+func (c *DPoPJTICache) MarkSeen(ctx context.Context, jti string, window time.Duration) error {
+	seen, err := c.store.IsDPoPJTISeen(ctx, jti)
+	if err != nil {
+		return fmt.Errorf("dpop: check jti: %w", err)
 	}
-
-	if _, exists := c.seen[jti]; exists {
+	if seen {
 		return errors.New("dpop: jti already seen (replay detected)")
 	}
-	c.seen[jti] = now
 
-	// Persist
-	if data, err := json.Marshal(c.seen); err == nil {
-		os.WriteFile(c.path, data, 0600)
+	expiresAt := time.Now().Add(window)
+	if err := c.store.InsertDPoPJTI(ctx, jti, expiresAt); err != nil {
+		return fmt.Errorf("dpop: store jti: %w", err)
 	}
 
 	return nil
@@ -99,6 +80,7 @@ func (c *DPoPJTICache) MarkSeen(jti string, window time.Duration) error {
 
 // ValidateDPoPProof validates a DPoP proof JWT (RFC 9449 §4.3).
 //
+//   - ctx           — request context
 //   - proofJWT      — raw DPoP header value
 //   - method        — HTTP method of the protected request (upper-case)
 //   - htu           — HTTP URL of the protected endpoint (no query/fragment)
@@ -106,7 +88,7 @@ func (c *DPoPJTICache) MarkSeen(jti string, window time.Duration) error {
 //   - cache         — replay-protection cache (must not be nil)
 //
 // Returns the JWK thumbprint (jkt) of the embedded public key on success.
-func ValidateDPoPProof(proofJWT, method, htu, accessTokenHash string, cache *DPoPJTICache) (jkt string, err error) {
+func ValidateDPoPProof(ctx context.Context, proofJWT, method, htu, accessTokenHash string, cache *DPoPJTICache) (jkt string, err error) {
 	if proofJWT == "" {
 		return "", errors.New("dpop: missing proof JWT")
 	}
@@ -219,7 +201,7 @@ func ValidateDPoPProof(proofJWT, method, htu, accessTokenHash string, cache *DPo
 	if jtiClaim == "" {
 		return "", errors.New("dpop: missing jti claim")
 	}
-	if err := cache.MarkSeen(jtiClaim, dpopWindow); err != nil {
+	if err := cache.MarkSeen(ctx, jtiClaim, dpopWindow); err != nil {
 		return "", err
 	}
 
@@ -330,7 +312,7 @@ func RequireDPoPMiddleware(cache *DPoPJTICache) func(http.Handler) http.Handler 
 			}
 
 			ath := HashAccessTokenForDPoP(accessToken)
-			_, err := ValidateDPoPProof(proofJWT, r.Method, htu, ath, cache)
+			_, err := ValidateDPoPProof(r.Context(), proofJWT, r.Method, htu, ath, cache)
 			if err != nil {
 				WriteOAuthError(w, http.StatusUnauthorized,
 					NewOAuthError(ErrInvalidDPoPProof, err.Error()))

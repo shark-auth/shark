@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -16,6 +17,9 @@ type SQLiteStore struct {
 	writer *sql.DB // Single writer connection
 	reader *sql.DB // Concurrent reader pool
 	path   string  // DSN / file path passed to NewSQLiteStore
+
+	// DPoP JTI cache (hot path)
+	dpopSeen sync.Map
 }
 
 // NewSQLiteStore opens a SQLite database at the given path and configures it
@@ -754,6 +758,32 @@ func (s *SQLiteStore) GetPermissionsByRoleID(ctx context.Context, roleID string)
 		 INNER JOIN role_permissions rp ON rp.permission_id = p.id
 		 WHERE rp.role_id = ?
 		 ORDER BY p.resource, p.action`, roleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var perms []*Permission
+	for rows.Next() {
+		var p Permission
+		if err := rows.Scan(&p.ID, &p.Action, &p.Resource, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		perms = append(perms, &p)
+	}
+	return perms, rows.Err()
+}
+
+// GetPermissionsByUserID resolves all permissions for a user across all roles
+// in a single optimized JOIN query. (Optimization for RBAC hot-path).
+func (s *SQLiteStore) GetPermissionsByUserID(ctx context.Context, userID string) ([]*Permission, error) {
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT DISTINCT p.id, p.action, p.resource, p.created_at
+		 FROM permissions p
+		 INNER JOIN role_permissions rp ON rp.permission_id = p.id
+		 INNER JOIN user_roles ur ON ur.role_id = rp.role_id
+		 WHERE ur.user_id = ?
+		 ORDER BY p.resource, p.action`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1955,4 +1985,42 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+// --- DPoP JTIs ---
+
+func (s *SQLiteStore) InsertDPoPJTI(ctx context.Context, jti string, expiresAt time.Time) error {
+	// Update hot cache
+	s.dpopSeen.Store(jti, expiresAt)
+
+	_, err := s.writer.ExecContext(ctx,
+		`INSERT INTO dpop_jtis (jti, expires_at) VALUES (?, ?)`,
+		jti, expiresAt.Format(time.RFC3339))
+	return err
+}
+
+func (s *SQLiteStore) IsDPoPJTISeen(ctx context.Context, jti string) (bool, error) {
+	// Check hot cache first
+	if val, ok := s.dpopSeen.Load(jti); ok {
+		if exp, ok := val.(time.Time); ok && exp.After(time.Now()) {
+			return true, nil
+		}
+		// Expired in cache; cleanup
+		s.dpopSeen.Delete(jti)
+	}
+
+	// Fallback to DB
+	var count int
+	err := s.reader.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM dpop_jtis WHERE jti = ? AND expires_at > ?`,
+		jti, time.Now().Format(time.RFC3339)).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s *SQLiteStore) PruneExpiredDPoPJTIs(ctx context.Context) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM dpop_jtis WHERE expires_at < ?`, now)
+	return err
 }

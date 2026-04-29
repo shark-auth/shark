@@ -113,6 +113,39 @@ func (s *SQLiteStore) CreateWebhookDelivery(ctx context.Context, d *WebhookDeliv
 	return err
 }
 
+func (s *SQLiteStore) CreateWebhookDeliveriesBatch(ctx context.Context, ds []*WebhookDelivery) error {
+	if len(ds) == 0 {
+		return nil
+	}
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO webhook_deliveries
+		 (id, webhook_id, event, payload, signature_header, status, status_code,
+		  response_body, error, attempt, next_retry_at, delivered_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, d := range ds {
+		if _, err := stmt.ExecContext(ctx,
+			d.ID, d.WebhookID, d.Event, d.Payload, d.SignatureHeader,
+			d.Status, d.StatusCode, d.ResponseBody, d.Error, d.Attempt,
+			d.NextRetryAt, d.DeliveredAt, d.CreatedAt, d.UpdatedAt,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (s *SQLiteStore) UpdateWebhookDelivery(ctx context.Context, d *WebhookDelivery) error {
 	_, err := s.writer.ExecContext(ctx,
 		`UPDATE webhook_deliveries SET

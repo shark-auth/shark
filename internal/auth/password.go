@@ -1,6 +1,7 @@
-﻿package auth
+package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -21,6 +22,7 @@ import (
 var (
 	ErrInvalidHash         = errors.New("invalid encoded hash format")
 	ErrIncompatibleVersion = errors.New("incompatible argon2 version")
+	ErrRateLimit           = errors.New("hashing queue full")
 )
 
 // Hasher manages password hashing and verification with a concurrency limit
@@ -39,7 +41,11 @@ type Hasher struct {
 // CPU cores (or the provided limit if > 0).
 func NewHasher(limit int) *Hasher {
 	if limit <= 0 {
-		limit = runtime.NumCPU()
+		// Balanced concurrency: allow some burst queuing but prevent OOM
+		limit = runtime.NumCPU() * 4
+		if limit < 16 {
+			limit = 16
+		}
 	}
 	h := &Hasher{
 		sem:   make(chan struct{}, limit),
@@ -70,15 +76,23 @@ func cacheKey(password, encodedHash string) string {
 }
 
 // Hash hashes a password using Argon2id, respecting the concurrency limit.
-func (h *Hasher) Hash(password string, cfg config.Argon2idConfig) (string, error) {
-	h.sem <- struct{}{}
-	defer func() { <-h.sem }()
-	return HashPassword(password, cfg)
+// Returns ErrRateLimit if the semaphore is full.
+func (h *Hasher) Hash(ctx context.Context, password string, cfg config.Argon2idConfig) (string, error) {
+	select {
+	case h.sem <- struct{}{}:
+		defer func() { <-h.sem }()
+		return HashPassword(password, cfg)
+	case <-time.After(30 * time.Second):
+		return "", ErrRateLimit
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
 
 // Verify checks a password against a hash, respecting the concurrency limit
-// and leveraging a 60-second success cache.
-func (h *Hasher) Verify(password, encodedHash string) (bool, error) {
+// and leveraging a 60-second success cache. Returns ErrRateLimit if the
+// semaphore is full.
+func (h *Hasher) Verify(ctx context.Context, password, encodedHash string) (bool, error) {
 	ck := cacheKey(password, encodedHash)
 
 	// Check cache (fast path)
@@ -90,18 +104,23 @@ func (h *Hasher) Verify(password, encodedHash string) (bool, error) {
 	}
 
 	// Wait for CPU capacity
-	h.sem <- struct{}{}
-	match, err := VerifyPassword(password, encodedHash)
-	<-h.sem
+	select {
+	case h.sem <- struct{}{}:
+		match, err := VerifyPassword(password, encodedHash)
+		<-h.sem
 
-	// On success, cache for 60 seconds
-	if match && err == nil {
-		h.cacheMu.Lock()
-		h.cache[ck] = time.Now().Add(60 * time.Second)
-		h.cacheMu.Unlock()
+		// On success, cache for 60 seconds
+		if match && err == nil {
+			h.cacheMu.Lock()
+			h.cache[ck] = time.Now().Add(60 * time.Second)
+			h.cacheMu.Unlock()
+		}
+		return match, err
+	case <-time.After(30 * time.Second):
+		return false, ErrRateLimit
+	case <-ctx.Done():
+		return false, ctx.Err()
 	}
-
-	return match, err
 }
 
 // HashPassword hashes a password using Argon2id with the given config params.

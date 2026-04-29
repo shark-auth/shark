@@ -1,4 +1,4 @@
-﻿// Package oauth provides the OAuth 2.1 Authorization Server backed by fosite.
+// Package oauth provides the OAuth 2.1 Authorization Server backed by fosite.
 package oauth
 
 import (
@@ -124,7 +124,7 @@ func NewServer(store storage.Store, cfg *config.Config) (*Server, error) {
 		RawStore:       store,
 		SigningKeyID:   kid,
 		signingPrivKey: signingKey,
-		DPoPCache:      NewDPoPJTICache(),
+		DPoPCache:      NewDPoPJTICache(store),
 	}, nil
 }
 

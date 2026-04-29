@@ -103,6 +103,7 @@ type Store interface {
 
 	// WebhookDeliveries
 	CreateWebhookDelivery(ctx context.Context, d *WebhookDelivery) error
+	CreateWebhookDeliveriesBatch(ctx context.Context, ds []*WebhookDelivery) error
 	UpdateWebhookDelivery(ctx context.Context, d *WebhookDelivery) error
 	GetWebhookDeliveryByID(ctx context.Context, id string) (*WebhookDelivery, error)
 	ListWebhookDeliveriesByWebhookID(ctx context.Context, webhookID string, limit int, cursor string) ([]*WebhookDelivery, error)
@@ -153,6 +154,7 @@ type Store interface {
 	AttachPermissionToRole(ctx context.Context, roleID, permissionID string) error
 	DetachPermissionFromRole(ctx context.Context, roleID, permissionID string) error
 	GetPermissionsByRoleID(ctx context.Context, roleID string) ([]*Permission, error)
+	GetPermissionsByUserID(ctx context.Context, userID string) ([]*Permission, error)
 	GetRolesByPermissionID(ctx context.Context, permissionID string) ([]*Role, error)
 	GetUsersByPermissionID(ctx context.Context, permissionID string) ([]*User, error)
 	// Batch variants return permission_id → count maps so the dashboard
@@ -237,6 +239,11 @@ type Store interface {
 	InsertRevokedJTI(ctx context.Context, jti string, expiresAt time.Time) error
 	IsRevokedJTI(ctx context.Context, jti string) (bool, error)
 	PruneExpiredRevokedJTI(ctx context.Context) error
+
+	// DPoP JTIs
+	InsertDPoPJTI(ctx context.Context, jti string, expiresAt time.Time) error
+	IsDPoPJTISeen(ctx context.Context, jti string) (bool, error)
+	PruneExpiredDPoPJTIs(ctx context.Context) error
 
 	// Applications
 	CreateApplication(ctx context.Context, app *Application) error

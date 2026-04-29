@@ -1,4 +1,4 @@
-﻿package proxy
+package proxy
 
 import (
 	"context"
@@ -472,7 +472,7 @@ func (p *ReverseProxy) validateDPoPProof(r *http.Request) error {
 	htu := scheme + "://" + r.Host + r.URL.Path
 
 	ath := oauth.HashAccessTokenForDPoP(bearer)
-	if _, err := oauth.ValidateDPoPProof(proof, r.Method, htu, ath, p.dpopCache); err != nil {
+	if _, err := oauth.ValidateDPoPProof(r.Context(), proof, r.Method, htu, ath, p.dpopCache); err != nil {
 		return fmt.Errorf("dpop proof invalid")
 	}
 	return nil

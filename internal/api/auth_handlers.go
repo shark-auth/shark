@@ -1,6 +1,7 @@
-﻿package api
+package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -125,10 +126,77 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hash password
-	passwordHash, err := s.PasswordHasher.Hash(req.Password, s.Config.Auth.Argon2id)
+	// Use singleflight to deduplicate concurrent signups for the same email.
+	// This prevents redundant CPU-heavy Argon2 hashing.
+	type signupResult struct {
+		user *storage.User
+		sess *storage.Session
+	}
+
+	res, err, _ := s.SignupSF.Do(req.Email, func() (interface{}, error) {
+		// Use a decoupled context for hashing to prevent cascading failures if the
+		// initiating request is cancelled while in singleflight.
+		hashCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
+		defer cancel()
+
+		// Hash password
+		passwordHash, err := s.PasswordHasher.Hash(hashCtx, req.Password, s.Config.Auth.Argon2id)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create user object
+		now := time.Now().UTC().Format(time.RFC3339)
+		id, _ := gonanoid.New()
+		user := &storage.User{
+			ID:           "usr_" + id,
+			Email:        req.Email,
+			PasswordHash: &passwordHash,
+			HashType:     "argon2id",
+			Metadata:     "{}",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if req.Name != "" {
+			user.Name = &req.Name
+		}
+
+		// Prepare session object
+		sess := s.SessionManager.PrepareSession(user.ID, r.RemoteAddr, r.UserAgent(), "password")
+
+		// Prepare audit log
+		audID, _ := gonanoid.New()
+		aud := &storage.AuditLog{
+			ID:         "aud_" + audID,
+			ActorID:    user.ID,
+			ActorType:  "user",
+			Action:     "user.signup",
+			TargetType: "user",
+			TargetID:   user.ID,
+			IP:         r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Metadata:   "{}",
+			Status:     "success",
+			CreatedAt:  now,
+		}
+
+		// Atomic signup: User + Session + Audit Log
+		if err := s.Store.SignupAtomic(r.Context(), user, sess, aud); err != nil {
+			return nil, err
+		}
+
+		return &signupResult{user: user, sess: sess}, nil
+	})
+
 	if err != nil {
-		slog.Error("signup: hash password failed", "error", err)
+		if errors.Is(err, auth.ErrRateLimit) {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error":   "server_busy",
+				"message": "Server is currently busy. Please try again in a few seconds.",
+			})
+			return
+		}
+		slog.Error("signup: process failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
 			"message": "Internal server error",
@@ -136,47 +204,12 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create user
-	now := time.Now().UTC().Format(time.RFC3339)
-	id, _ := gonanoid.New()
-	user := &storage.User{
-		ID:           "usr_" + id,
-		Email:        req.Email,
-		PasswordHash: &passwordHash,
-		HashType:     "argon2id",
-		Metadata:     "{}",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if req.Name != "" {
-		user.Name = &req.Name
-	}
+	result := res.(*signupResult)
+	user := result.user
+	sess := result.sess
 
-	if err := s.Store.CreateUser(r.Context(), user); err != nil {
-		slog.Error("signup: create user failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error":   "internal_error",
-			"message": "Internal server error",
-		})
-		return
-	}
-
-	// Phase 6 F3: fire auth flow hook. Runs AFTER the user row lands so
-	// block/redirect outcomes leave the account in place but withhold the
-	// session â€” matches the documented "user created but login gated"
-	// semantics admins rely on.
+	// Phase 6 F3: fire auth flow hook.
 	if s.runAuthFlow(w, r, storage.AuthFlowTriggerSignup, user, req.Password) {
-		return
-	}
-
-	// Create session
-	sess, err := s.SessionManager.CreateSession(r.Context(), user.ID, r.RemoteAddr, r.UserAgent(), "password")
-	if err != nil {
-		slog.Error("signup: create session failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error":   "internal_error",
-			"message": "Internal server error",
-		})
 		return
 	}
 
@@ -251,8 +284,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify password
-	match, err := s.PasswordHasher.Verify(req.Password, *user.PasswordHash)
+	match, err := s.PasswordHasher.Verify(r.Context(), req.Password, *user.PasswordHash)
 	if err != nil || !match {
+		if errors.Is(err, auth.ErrRateLimit) {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error":   "server_busy",
+				"message": "Server is currently busy. Please try again in a few seconds.",
+			})
+			return
+		}
 		s.LockoutManager.RecordFailure(req.Email)
 		s.recordLoginFailure(r, user.ID, req.Email)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
@@ -271,7 +311,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// If password needs rehash (e.g. bcrypt from Auth0 migration), rehash to argon2id
 	if auth.NeedsRehash(*user.PasswordHash) {
-		newHash, err := s.PasswordHasher.Hash(req.Password, s.Config.Auth.Argon2id)
+		newHash, err := s.PasswordHasher.Hash(r.Context(), req.Password, s.Config.Auth.Argon2id)
 		if err == nil {
 			user.PasswordHash = &newHash
 			user.HashType = "argon2id"

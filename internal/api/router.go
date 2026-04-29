@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/shark-auth/shark/internal/storage"
 	"github.com/shark-auth/shark/internal/vault"
 	"github.com/shark-auth/shark/internal/webhook"
+	"golang.org/x/sync/singleflight"
 
 	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
@@ -76,6 +77,7 @@ type Server struct {
 	AppResolver proxy.AppResolver
 
 	magicLinkRL *magicLinkRateLimiter
+	SignupSF    singleflight.Group
 	startTime   time.Time
 }
 
@@ -149,6 +151,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		startTime:      time.Now().UTC(),
 		AppResolver:    &DBAppResolver{Store: store},
 		AuthCache:      cache.New(5 * time.Minute),
+		SignupSF:       singleflight.Group{},
 	}
 
 	// Apply options
