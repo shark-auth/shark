@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 type consentResponse struct {

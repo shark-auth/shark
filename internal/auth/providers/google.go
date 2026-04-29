@@ -1,4 +1,4 @@
-package providers
+﻿package providers
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/config"
 )
 
 const googleUserInfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"

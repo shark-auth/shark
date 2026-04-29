@@ -1,4 +1,4 @@
-package proxy
+﻿package proxy
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/sharkauth/sharkauth/internal/identity"
+	"github.com/shark-auth/shark/internal/identity"
 )
 
 // RuleSpec is the raw, pre-compile shape of a rule. It mirrors the
@@ -36,7 +36,7 @@ type RuleSpec struct {
 type RequirementKind int
 
 const (
-	// ReqAnonymous matches any caller — authenticated or not. Use for
+	// ReqAnonymous matches any caller â€” authenticated or not. Use for
 	// genuinely public paths. Does NOT require the caller to be anonymous;
 	// it simply waives the auth check.
 	ReqAnonymous RequirementKind = iota
@@ -107,7 +107,7 @@ type Requirement struct {
 // patternSegment is one URL path segment in a compiled pattern.
 // A segment is either a literal (exact string match) or a wildcard
 // (matches any single segment). Trailing "/*" is represented separately
-// on pathPattern — not as a segment — because it matches zero or more
+// on pathPattern â€” not as a segment â€” because it matches zero or more
 // segments rather than exactly one.
 type patternSegment struct {
 	literal  string
@@ -116,7 +116,7 @@ type patternSegment struct {
 
 // pathPattern is a compiled rule path. trailing==true means the pattern
 // ended with "/*" and therefore matches the prefix formed by segments
-// plus any number of additional segments (including zero — so "/api/*"
+// plus any number of additional segments (including zero â€” so "/api/*"
 // matches "/api").
 type pathPattern struct {
 	segments []patternSegment
@@ -136,7 +136,7 @@ type Rule struct {
 	Require Requirement
 	Scopes  []string
 	// M2M is the compiled mirror of RuleSpec.M2M. Evaluate checks it
-	// up-front — before evaluating Require — so a phished human session
+	// up-front â€” before evaluating Require â€” so a phished human session
 	// carrying every other required attribute still fails with a clear
 	// "rule requires agent (m2m)" reason rather than slipping through.
 	M2M bool
@@ -179,17 +179,17 @@ func (r *Rule) MethodMatches(method string) bool {
 type DecisionKind int
 
 const (
-	// DecisionAllow — rule matched and all predicates passed. Forward to
+	// DecisionAllow â€” rule matched and all predicates passed. Forward to
 	// upstream.
 	DecisionAllow DecisionKind = iota
-	// DecisionDenyAnonymous — rule matched but caller carried no
+	// DecisionDenyAnonymous â€” rule matched but caller carried no
 	// authenticated principal. Proxy replies 401 (or redirects browsers
 	// to the hosted login page when configured).
 	DecisionDenyAnonymous
-	// DecisionDenyForbidden — caller was authenticated but lacked the
+	// DecisionDenyForbidden â€” caller was authenticated but lacked the
 	// required role, scope, agent flag, etc. Proxy replies 403.
 	DecisionDenyForbidden
-	// DecisionPaywallRedirect — caller was authenticated but on the wrong
+	// DecisionPaywallRedirect â€” caller was authenticated but on the wrong
 	// tier for this rule (e.g. rule requires tier:pro, caller is on
 	// "free"). Proxy redirects to PaywallApp when set; otherwise 403.
 	DecisionPaywallRedirect
@@ -201,7 +201,7 @@ const (
 // operators via the X-Shark-Deny-Reason response header and logs.
 //
 // PaywallApp and RequiredTier are populated only when Kind ==
-// DecisionPaywallRedirect — PaywallApp is the app slug to redirect to
+// DecisionPaywallRedirect â€” PaywallApp is the app slug to redirect to
 // (empty string means "no paywall configured, fall back to 403"), and
 // RequiredTier is the tier name the rule required, surfaced so the
 // paywall page can tailor its copy.
@@ -217,7 +217,7 @@ type Decision struct {
 // Engine is the compiled rule set. Rules are stored behind an
 // atomic.Pointer so SetRules can replace the entire slice with a single
 // word-sized atomic store and Evaluate can load the snapshot with a
-// single atomic load — no locks on the request hot path. The pointed-to
+// single atomic load â€” no locks on the request hot path. The pointed-to
 // slice is treated as immutable post-compile; SetRules publishes a
 // freshly compiled slice by overwriting the pointer rather than mutating
 // the previous contents.
@@ -229,7 +229,7 @@ type Engine struct {
 // NewEngine compiles raw rule specs into an Engine. Every spec is
 // validated individually; the first error aborts compilation so
 // operators see the earliest configuration problem rather than a
-// cascade. defaultDeny is always true in the MVP — kept as a field so
+// cascade. defaultDeny is always true in the MVP â€” kept as a field so
 // future work can expose it if a truly permissive mode is ever needed.
 func NewEngine(raw []RuleSpec) (*Engine, error) {
 	compiled, err := compileSpecs(raw)
@@ -245,10 +245,10 @@ func NewEngine(raw []RuleSpec) (*Engine, error) {
 // the admin proxy-rules CRUD endpoints (Wave D) after every mutation so
 // DB rows take effect without restarting the server. The compile step
 // runs before the pointer swap so a partially-compiled set is never
-// visible to concurrent Evaluate calls — readers either see the old
+// visible to concurrent Evaluate calls â€” readers either see the old
 // snapshot in full or the new one in full.
 //
-// On compile failure the previous rule set remains in place — the caller
+// On compile failure the previous rule set remains in place â€” the caller
 // gets the error and is expected to surface it; the proxy keeps serving
 // the last-known-good configuration rather than returning blanket denies.
 func (e *Engine) SetRules(raw []RuleSpec) error {
@@ -307,7 +307,7 @@ func (e *Engine) Rules() []*Rule {
 // DecisionPaywallRedirect when a ReqTier predicate mismatched, and
 // DecisionDenyForbidden for every other deny.
 func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
-	// Single atomic load — no lock contention on the request hot path.
+	// Single atomic load â€” no lock contention on the request hot path.
 	rules := e.loadRules()
 
 	// Extract AppID header if present
@@ -321,7 +321,7 @@ func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
 		// agent-typed callers still returns its characteristic reason
 		// ("rule requires agent (m2m)") even when the caller also
 		// lacks the Require-side predicate. The two checks are
-		// semantically AND, not OR — both must pass for Allow.
+		// semantically AND, not OR â€” both must pass for Allow.
 		if rule.M2M && id.ActorType != identity.ActorTypeAgent {
 			return Decision{
 				Allow:       false,
@@ -335,7 +335,7 @@ func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
 		return d
 	}
 
-	// No rule matched — default deny. An anonymous caller gets 401 so
+	// No rule matched â€” default deny. An anonymous caller gets 401 so
 	// the proxy can redirect browsers to the hosted login page; an
 	// authenticated caller gets 403.
 	kind := DecisionDenyForbidden
@@ -356,7 +356,7 @@ func (e *Engine) Evaluate(r *http.Request, id Identity) Decision {
 // in MatchedRule.
 func (e *Engine) evaluateRequirement(req Requirement, extraScopes []string, id Identity) Decision {
 	// Primary requirement first. If it fails, skip extra-scope evaluation
-	// — the reason the operator cares about is the primary one.
+	// â€” the reason the operator cares about is the primary one.
 	if d, ok := evaluatePrimary(req, id); !ok {
 		return d
 	}
@@ -404,7 +404,7 @@ func evaluatePrimary(req Requirement, id Identity) (Decision, bool) {
 			Kind:   DecisionDenyAnonymous,
 		}, false
 	case ReqRole, ReqGlobalRole:
-		// ReqRole is an alias for ReqGlobalRole — both test membership
+		// ReqRole is an alias for ReqGlobalRole â€” both test membership
 		// in id.Roles. The diagnostic reason uses the literal predicate
 		// string so YAML authors see "role" vs "global_role" reflected
 		// back when they pick one.
@@ -417,7 +417,7 @@ func evaluatePrimary(req Requirement, id Identity) (Decision, bool) {
 		}, false
 	case ReqPermission:
 		// Phase 6.5 will wire in the RBAC permission store. Until then
-		// we fail closed — better a visible deny in dev than a silent
+		// we fail closed â€” better a visible deny in dev than a silent
 		// allow in prod.
 		return Decision{
 			Reason: fmt.Sprintf("permission %q required (permission-based rules not yet implemented)", req.Value),
@@ -444,7 +444,7 @@ func evaluatePrimary(req Requirement, id Identity) (Decision, bool) {
 			return Decision{Allow: true, Kind: DecisionAllow}, true
 		}
 		// Tier mismatch is semantically "wrong plan, not wrong
-		// person" — surface PaywallRedirect so the proxy can route to
+		// person" â€” surface PaywallRedirect so the proxy can route to
 		// an upgrade page instead of a generic 403. If the caller is
 		// anonymous, they need to sign in first, so override to
 		// DenyAnonymous regardless of the tier mismatch.
@@ -467,7 +467,7 @@ func evaluatePrimary(req Requirement, id Identity) (Decision, bool) {
 
 // containsString is a tiny helper for slice-membership checks on the
 // few string slices we care about (roles, scopes). Linear scan is fine
-// — these slices are tiny and run in request-critical paths where an
+// â€” these slices are tiny and run in request-critical paths where an
 // allocation-free implementation beats a map build-up.
 func containsString(haystack []string, needle string) bool {
 	for _, v := range haystack {
@@ -584,7 +584,7 @@ func parseRequirement(require, allow string) (Requirement, error) {
 //   - single-segment wildcard: /api/*/deep
 //   - {param} placeholder: /api/{id} (treated same as /api/*)
 //
-// The leading "/" is required — patterns without it are rejected so
+// The leading "/" is required â€” patterns without it are rejected so
 // typos like "api/foo" don't silently not match anything.
 func compilePath(p string) (pathPattern, error) {
 	p = strings.TrimSpace(p)
@@ -601,7 +601,7 @@ func compilePath(p string) (pathPattern, error) {
 
 	// Trailing /* is prefix-match sugar. Strip it and set the trailing
 	// flag. The edge case "/*" alone becomes an empty-segments pattern
-	// with trailing=true, which matches everything — intentional.
+	// with trailing=true, which matches everything â€” intentional.
 	trailing := false
 	if trimmed == "*" {
 		return pathPattern{segments: nil, trailing: true, raw: p}, nil
@@ -624,7 +624,7 @@ func compilePath(p string) (pathPattern, error) {
 				segments = append(segments, patternSegment{wildcard: true})
 			case strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}"):
 				// {id}-style placeholder: treat as single-segment wildcard.
-				// MVP does not capture the value — rules engine only needs
+				// MVP does not capture the value â€” rules engine only needs
 				// match/no-match, not extraction.
 				segments = append(segments, patternSegment{wildcard: true})
 			default:
@@ -637,7 +637,7 @@ func compilePath(p string) (pathPattern, error) {
 }
 
 // match reports whether urlPath satisfies p. Matching is case-sensitive
-// (HTTP convention — /API/foo is a different resource from /api/foo).
+// (HTTP convention â€” /API/foo is a different resource from /api/foo).
 func (p pathPattern) match(urlPath string) bool {
 	if !strings.HasPrefix(urlPath, "/") {
 		// Every normalized http.Request.URL.Path starts with "/"; be
@@ -646,13 +646,13 @@ func (p pathPattern) match(urlPath string) bool {
 	}
 	trimmed := strings.TrimPrefix(urlPath, "/")
 
-	// "/*" — trailing wildcard, zero segments — matches every path.
+	// "/*" â€” trailing wildcard, zero segments â€” matches every path.
 	if len(p.segments) == 0 && p.trailing {
 		return true
 	}
 
 	// Root or empty-trimmed edge. An empty segments+non-trailing
-	// pattern means the rule path was "/" alone — match exact root.
+	// pattern means the rule path was "/" alone â€” match exact root.
 	if trimmed == "" {
 		return len(p.segments) == 0 && !p.trailing
 	}

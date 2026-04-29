@@ -1,4 +1,4 @@
-package cli_test
+﻿package cli_test
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
+	"github.com/shark-auth/shark/internal/cli"
 )
 
 // TestIsColorEnabled_NoColor verifies that NO_COLOR env var disables color.

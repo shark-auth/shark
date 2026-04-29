@@ -59,7 +59,7 @@ func (s *SQLiteStore) CreateApplication(ctx context.Context, app *Application) e
 		slugVal = sql.NullString{String: app.Slug, Valid: true}
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`INSERT INTO applications
 		 (id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		  allowed_callback_urls, allowed_logout_urls, allowed_origins,
@@ -79,7 +79,7 @@ func (s *SQLiteStore) CreateApplication(ctx context.Context, app *Application) e
 }
 
 func (s *SQLiteStore) GetApplicationByID(ctx context.Context, id string) (*Application, error) {
-	return s.scanApplication(s.db.QueryRowContext(ctx,
+	return s.scanApplication(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
 		        is_default, metadata, created_at, updated_at,
@@ -89,7 +89,7 @@ func (s *SQLiteStore) GetApplicationByID(ctx context.Context, id string) (*Appli
 }
 
 func (s *SQLiteStore) GetApplicationByClientID(ctx context.Context, clientID string) (*Application, error) {
-	return s.scanApplication(s.db.QueryRowContext(ctx,
+	return s.scanApplication(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
 		        is_default, metadata, created_at, updated_at,
@@ -101,7 +101,7 @@ func (s *SQLiteStore) GetApplicationByClientID(ctx context.Context, clientID str
 // GetApplicationBySlug returns the application with the given slug.
 // Returns sql.ErrNoRows when no matching row exists.
 func (s *SQLiteStore) GetApplicationBySlug(ctx context.Context, slug string) (*Application, error) {
-	return s.scanApplication(s.db.QueryRowContext(ctx,
+	return s.scanApplication(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
 		        is_default, metadata, created_at, updated_at,
@@ -112,7 +112,7 @@ func (s *SQLiteStore) GetApplicationBySlug(ctx context.Context, slug string) (*A
 
 // GetApplicationByProxyDomain returns the application with the given public domain.
 func (s *SQLiteStore) GetApplicationByProxyDomain(ctx context.Context, domain string) (*Application, error) {
-	return s.scanApplication(s.db.QueryRowContext(ctx,
+	return s.scanApplication(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
 		        is_default, metadata, created_at, updated_at,
@@ -122,7 +122,7 @@ func (s *SQLiteStore) GetApplicationByProxyDomain(ctx context.Context, domain st
 }
 
 func (s *SQLiteStore) GetDefaultApplication(ctx context.Context) (*Application, error) {
-	return s.scanApplication(s.db.QueryRowContext(ctx,
+	return s.scanApplication(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
 		        is_default, metadata, created_at, updated_at,
@@ -138,7 +138,7 @@ func (s *SQLiteStore) ListApplications(ctx context.Context, limit, offset int) (
 	if limit > 200 {
 		limit = 200
 	}
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, name, slug, client_id, client_secret_hash, client_secret_prefix,
 		        allowed_callback_urls, allowed_logout_urls, allowed_origins,
 		        is_default, metadata, created_at, updated_at,
@@ -210,7 +210,7 @@ func (s *SQLiteStore) UpdateApplication(ctx context.Context, app *Application) e
 		slugVal = sql.NullString{String: app.Slug, Valid: true}
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`UPDATE applications SET
 		   name = ?, slug = ?, allowed_callback_urls = ?, allowed_logout_urls = ?,
 		   allowed_origins = ?, is_default = ?, metadata = ?,
@@ -229,7 +229,7 @@ func (s *SQLiteStore) UpdateApplication(ctx context.Context, app *Application) e
 }
 
 func (s *SQLiteStore) RotateApplicationSecret(ctx context.Context, id, newHash, newPrefix string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE applications SET
 		   client_secret_hash = ?, client_secret_prefix = ?,
 		   updated_at = CURRENT_TIMESTAMP
@@ -240,7 +240,7 @@ func (s *SQLiteStore) RotateApplicationSecret(ctx context.Context, id, newHash, 
 }
 
 func (s *SQLiteStore) DeleteApplication(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM applications WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM applications WHERE id = ?`, id)
 	return err
 }
 

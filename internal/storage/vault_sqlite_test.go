@@ -1,4 +1,4 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // newTestVaultProvider returns a minimal VaultProvider for testing.
@@ -362,7 +362,7 @@ func TestVaultConnectionUpdateTokens(t *testing.T) {
 	}
 	u := testutil.CreateUser(t, store, "tokens@example.com", nil)
 	c := newTestVaultConnection(t, p.ID, u.ID)
-	c.NeedsReauth = true // seed as needs_reauth — refresh should clear it
+	c.NeedsReauth = true // seed as needs_reauth â€” refresh should clear it
 	if err := store.CreateVaultConnection(ctx, c); err != nil {
 		t.Fatalf("seed connection: %v", err)
 	}

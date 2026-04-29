@@ -120,3 +120,8 @@ admin.key.firstboot
 .git-rewrite/
 free-claude-code/
 shark.new
+
+# Internal release cleanup
+playbook/
+gstack/
+.impeccable.md

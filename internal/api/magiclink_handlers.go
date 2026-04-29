@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/auth/redirect"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/auth/redirect"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // Re-export magic link errors for convenience.
@@ -177,8 +177,8 @@ func (s *Server) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
-	// Redirect to the configured redirect URL — JWT is additive but not embedded in redirect.
-	// Validate redirect_uri against the default application's allowlist (OAuth 2.1 §3.1.2).
+	// Redirect to the configured redirect URL â€” JWT is additive but not embedded in redirect.
+	// Validate redirect_uri against the default application's allowlist (OAuth 2.1 Â§3.1.2).
 	{
 		requestedRedirect := r.URL.Query().Get("redirect_uri")
 		if requestedRedirect == "" {
@@ -213,7 +213,7 @@ func (s *Server) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Issue JWT alongside cookie if enabled (§1.4). Magic links set mfaPassed=true.
+	// Issue JWT alongside cookie if enabled (Â§1.4). Magic links set mfaPassed=true.
 	resp := map[string]interface{}{}
 	for k, v := range userResponseMap(userToResponse(user)) {
 		resp[k] = v

@@ -1,4 +1,4 @@
-// Package api_test — integration tests for application slug handling
+﻿// Package api_test â€” integration tests for application slug handling
 // (auto-generation, explicit validation, conflict detection).
 package api_test
 
@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // createAppPayload is a minimal POST /api/v1/admin/apps request body.
@@ -87,7 +87,7 @@ func TestCreateApp_InvalidSlugReturns400(t *testing.T) {
 func TestCreateApp_DuplicateSlugReturns409(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// First creation — must succeed.
+	// First creation â€” must succeed.
 	resp1 := ts.PostJSONWithAdminKey("/api/v1/admin/apps", createAppPayload{
 		Name: "First App",
 		Slug: "colliding-slug",
@@ -97,7 +97,7 @@ func TestCreateApp_DuplicateSlugReturns409(t *testing.T) {
 		t.Fatalf("first create: expected 201, got %d", resp1.StatusCode)
 	}
 
-	// Second creation with the same slug — must conflict.
+	// Second creation with the same slug â€” must conflict.
 	resp2 := ts.PostJSONWithAdminKey("/api/v1/admin/apps", createAppPayload{
 		Name: "Second App",
 		Slug: "colliding-slug",
@@ -128,7 +128,7 @@ func TestSlugReturnedInListAndGet(t *testing.T) {
 		t.Fatalf("create: expected 201, got %d", resp.StatusCode)
 	}
 
-	// List — slug must appear.
+	// List â€” slug must appear.
 	listResp := ts.GetWithAdminKey("/api/v1/admin/apps")
 	defer listResp.Body.Close()
 	var listBody struct {

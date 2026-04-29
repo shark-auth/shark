@@ -13,7 +13,7 @@ import (
 
 func (s *SQLiteStore) CreateOrgRole(ctx context.Context, orgID, id, name, description string, isBuiltin bool) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO org_roles (id, organization_id, name, description, is_builtin, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		id, orgID, name, description, boolToInt(isBuiltin), now, now,
@@ -26,7 +26,7 @@ func (s *SQLiteStore) GetOrgRoleByID(ctx context.Context, roleID string) (*OrgRo
 	var isBuiltin int
 	var description *string
 	var createdAt, updatedAt string
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, organization_id, name, description, is_builtin, created_at, updated_at
 		 FROM org_roles WHERE id = ?`, roleID,
 	).Scan(&r.ID, &r.OrganizationID, &r.Name, &description, &isBuiltin, &createdAt, &updatedAt)
@@ -43,7 +43,7 @@ func (s *SQLiteStore) GetOrgRoleByID(ctx context.Context, roleID string) (*OrgRo
 }
 
 func (s *SQLiteStore) GetOrgRolesByOrgID(ctx context.Context, orgID string) ([]*OrgRole, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, organization_id, name, description, is_builtin, created_at, updated_at
 		 FROM org_roles WHERE organization_id = ? ORDER BY name`, orgID)
 	if err != nil {
@@ -63,7 +63,7 @@ func (s *SQLiteStore) GetOrgRolesByOrgID(ctx context.Context, orgID string) ([]*
 }
 
 func (s *SQLiteStore) GetOrgRolesByUserID(ctx context.Context, userID, orgID string) ([]*OrgRole, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT r.id, r.organization_id, r.name, r.description, r.is_builtin, r.created_at, r.updated_at
 		 FROM org_roles r
 		 INNER JOIN org_user_roles ur ON ur.org_role_id = r.id
@@ -90,7 +90,7 @@ func (s *SQLiteStore) GetOrgRoleByName(ctx context.Context, orgID, name string) 
 	var isBuiltin int
 	var description *string
 	var createdAt, updatedAt string
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, organization_id, name, description, is_builtin, created_at, updated_at
 		 FROM org_roles WHERE organization_id = ? AND name = ?`, orgID, name,
 	).Scan(&r.ID, &r.OrganizationID, &r.Name, &description, &isBuiltin, &createdAt, &updatedAt)
@@ -108,7 +108,7 @@ func (s *SQLiteStore) GetOrgRoleByName(ctx context.Context, orgID, name string) 
 
 func (s *SQLiteStore) UpdateOrgRole(ctx context.Context, roleID, name, description string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE org_roles SET name = ?, description = ?, updated_at = ? WHERE id = ?`,
 		name, description, now, roleID,
 	)
@@ -116,12 +116,12 @@ func (s *SQLiteStore) UpdateOrgRole(ctx context.Context, roleID, name, descripti
 }
 
 func (s *SQLiteStore) DeleteOrgRole(ctx context.Context, roleID string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM org_roles WHERE id = ?`, roleID)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM org_roles WHERE id = ?`, roleID)
 	return err
 }
 
 func (s *SQLiteStore) AttachOrgPermission(ctx context.Context, orgRoleID, action, resource string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT OR IGNORE INTO org_role_permissions (org_role_id, action, resource) VALUES (?, ?, ?)`,
 		orgRoleID, action, resource,
 	)
@@ -129,7 +129,7 @@ func (s *SQLiteStore) AttachOrgPermission(ctx context.Context, orgRoleID, action
 }
 
 func (s *SQLiteStore) DetachOrgPermission(ctx context.Context, orgRoleID, action, resource string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`DELETE FROM org_role_permissions WHERE org_role_id = ? AND action = ? AND resource = ?`,
 		orgRoleID, action, resource,
 	)
@@ -137,7 +137,7 @@ func (s *SQLiteStore) DetachOrgPermission(ctx context.Context, orgRoleID, action
 }
 
 func (s *SQLiteStore) GetOrgRolePermissions(ctx context.Context, orgRoleID string) ([]Permission, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT action, resource FROM org_role_permissions WHERE org_role_id = ? ORDER BY resource, action`,
 		orgRoleID)
 	if err != nil {
@@ -157,7 +157,7 @@ func (s *SQLiteStore) GetOrgRolePermissions(ctx context.Context, orgRoleID strin
 }
 
 func (s *SQLiteStore) GrantOrgRole(ctx context.Context, orgID, userID, orgRoleID, grantedBy string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT OR IGNORE INTO org_user_roles (organization_id, user_id, org_role_id, granted_by)
 		 VALUES (?, ?, ?, ?)`,
 		orgID, userID, orgRoleID, grantedBy,
@@ -166,7 +166,7 @@ func (s *SQLiteStore) GrantOrgRole(ctx context.Context, orgID, userID, orgRoleID
 }
 
 func (s *SQLiteStore) RevokeOrgRole(ctx context.Context, orgID, userID, orgRoleID string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`DELETE FROM org_user_roles WHERE organization_id = ? AND user_id = ? AND org_role_id = ?`,
 		orgID, userID, orgRoleID,
 	)

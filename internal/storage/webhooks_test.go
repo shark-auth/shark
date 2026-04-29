@@ -1,12 +1,12 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func seedWebhook(t *testing.T, store *storage.SQLiteStore, id, url, events string, enabled bool) {
@@ -139,7 +139,7 @@ func TestListPendingWebhookDeliveries(t *testing.T) {
 	mk("whd_due", storage.WebhookStatusRetrying, past)
 	mk("whd_not_due", storage.WebhookStatusRetrying, future)
 	mk("whd_delivered", storage.WebhookStatusDelivered, past) // wrong status
-	mk("whd_failed", storage.WebhookStatusFailed, past)       // terminal — skip
+	mk("whd_failed", storage.WebhookStatusFailed, past)       // terminal â€” skip
 
 	pending, err := store.ListPendingWebhookDeliveries(ctx, now, 100)
 	if err != nil {

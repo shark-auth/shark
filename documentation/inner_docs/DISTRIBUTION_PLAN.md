@@ -1,4 +1,4 @@
-# Distribution Plan — v0.9.0 launch
+﻿# Distribution Plan â€” v0.9.0 launch
 
 **Status:** plan, not yet executed.
 **Decision date:** 2026-04-25.
@@ -11,11 +11,11 @@
 
 | # | Decision | Why blocking |
 |---|---|---|
-| 1 | GitHub org slug — `sharkauth` or other? | All goreleaser image refs (`ghcr.io/<org>/shark`) and binary download URLs |
-| 2 | PyPI package name — `sharkauth` or `shark-auth`? | Python SDK publish + README install command |
+| 1 | GitHub org slug â€” `sharkauth` or other? | All goreleaser image refs (`ghcr.io/<org>/shark`) and binary download URLs |
+| 2 | PyPI package name â€” `sharkauth` or `shark-auth`? | Python SDK publish + README install command |
 | 3 | npm scope confirmed `@sharkauth` for both `node` and `react`? | After W-C lands |
-| 4 | Initial tag — `v0.9.0` or `v0.9.0-rc.0` first then `v0.9.0`? | Goreleaser dry-run vs final |
-| 5 | Container registry — GHCR only, or also Docker Hub? | Extra goreleaser block |
+| 4 | Initial tag â€” `v0.9.0` or `v0.9.0-rc.0` first then `v0.9.0`? | Goreleaser dry-run vs final |
+| 5 | Container registry â€” GHCR only, or also Docker Hub? | Extra goreleaser block |
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Channel | Artifact | Surface |
 |---|---|---|
-| GitHub Releases | `shark_<os>_<arch>` binaries (linux/darwin/windows × amd64/arm64) | `gh release` + `goreleaser` |
+| GitHub Releases | `shark_<os>_<arch>` binaries (linux/darwin/windows Ã— amd64/arm64) | `gh release` + `goreleaser` |
 | GHCR | `ghcr.io/<org>/shark:v0.9.0`, `:latest` | goreleaser docker block |
 | PyPI | `<py-name>` for python SDK | `twine upload` via GitHub Actions |
 | npm | `@sharkauth/node`, `@sharkauth/react` | `pnpm publish` via GitHub Actions |
@@ -52,9 +52,9 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X github.com/sharkauth/sharkauth/internal/version.Version={{.Version}}
-      - -X github.com/sharkauth/sharkauth/internal/version.Commit={{.ShortCommit}}
-      - -X github.com/sharkauth/sharkauth/internal/version.Date={{.Date}}
+      - -X github.com/shark-auth/shark/internal/version.Version={{.Version}}
+      - -X github.com/shark-auth/shark/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/shark-auth/shark/internal/version.Date={{.Date}}
 archives:
   - name_template: "shark_{{.Os}}_{{.Arch}}"
     format_overrides:
@@ -80,7 +80,7 @@ release:
 - **A:** Drop `mattn/go-sqlite3`, switch to `modernc.org/sqlite` (pure Go). One-line driver swap. Recommended.
 - **B:** Use `goreleaser` with separate matrix builds per OS (slower, more YAML).
 
-Recommend **A** — unblocks single-host goreleaser runs, faster CI.
+Recommend **A** â€” unblocks single-host goreleaser runs, faster CI.
 
 **Workflow file:** `.github/workflows/release.yml`. Triggers on tag `v*`. Steps:
 1. Setup Go 1.22 + pnpm + Node 20
@@ -97,10 +97,10 @@ Estimated effort: 4-6 hrs (incl. modernc.org/sqlite swap, dry-run cycles).
 Path: `sdk/python/`.
 
 Tasks:
-1. Confirm package name (`sharkauth` preferred — matches `@sharkauth/*` scope).
-2. Add `pyproject.toml` if missing — `setuptools` or `hatch` build backend.
+1. Confirm package name (`sharkauth` preferred â€” matches `@sharkauth/*` scope).
+2. Add `pyproject.toml` if missing â€” `setuptools` or `hatch` build backend.
 3. Add `[project.urls]` linking GitHub repo.
-4. Workflow: `.github/workflows/publish-python.yml` — triggers on tag `v*`. Builds wheel + sdist, uploads via `pypa/gh-action-pypi-publish` with trusted publishers (no API token in repo).
+4. Workflow: `.github/workflows/publish-python.yml` â€” triggers on tag `v*`. Builds wheel + sdist, uploads via `pypa/gh-action-pypi-publish` with trusted publishers (no API token in repo).
 5. Set up trusted publisher in PyPI account (manual, one-time).
 
 Effort: 2-3 hrs once PyPI trusted publisher configured.
@@ -110,13 +110,13 @@ Effort: 2-3 hrs once PyPI trusted publisher configured.
 ## TypeScript SDK (npm)
 
 Two packages:
-- `sdk/typescript/` → `@sharkauth/node` (already correct name)
-- `packages/sharkauth-react/` → `@sharkauth/react` (rename in worktree W-C)
+- `sdk/typescript/` â†’ `@sharkauth/node` (already correct name)
+- `packages/sharkauth-react/` â†’ `@sharkauth/react` (rename in worktree W-C)
 
 Tasks (after W-C merges):
 1. Set `"publishConfig": { "access": "public" }` in both `package.json`.
-2. Bump version in both — coordinated via `pnpm changeset` or manual.
-3. Workflow: `.github/workflows/publish-npm.yml` — triggers on tag `v*`. Steps:
+2. Bump version in both â€” coordinated via `pnpm changeset` or manual.
+3. Workflow: `.github/workflows/publish-npm.yml` â€” triggers on tag `v*`. Steps:
    - `pnpm install --frozen-lockfile`
    - `pnpm -F @sharkauth/node build`
    - `pnpm -F @sharkauth/react build`
@@ -179,12 +179,12 @@ Effort: 30 min once release artifacts exist.
 
 ## Sequence on launch day
 
-1. Tag `v0.9.0` → push.
-2. CI runs goreleaser → release published with 6 archives + checksums.
+1. Tag `v0.9.0` â†’ push.
+2. CI runs goreleaser â†’ release published with 6 archives + checksums.
 3. CI publishes PyPI + npm packages.
 4. GHCR image latest pointer updated.
 5. Verify install one-liner pulls v0.9.0.
-6. README install section already says `curl -sSL https://shark.sh/install | sh` — works.
+6. README install section already says `curl -sSL https://shark.sh/install | sh` â€” works.
 7. HN post.
 
 ---
@@ -195,4 +195,4 @@ Effort: 30 min once release artifacts exist.
 - Windows installer (.msi) (post-launch).
 - Linux distro packages (.deb/.rpm) (post-launch).
 - Auto-updater in shark CLI (post-launch).
-- Signed binaries / cosign attestations (post-launch — security hardening).
+- Signed binaries / cosign attestations (post-launch â€” security hardening).

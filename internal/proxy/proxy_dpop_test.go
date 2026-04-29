@@ -1,4 +1,4 @@
-package proxy
+﻿package proxy
 
 import (
 	"crypto/ecdsa"
@@ -14,8 +14,8 @@ import (
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 
-	"github.com/sharkauth/sharkauth/internal/identity"
-	"github.com/sharkauth/sharkauth/internal/oauth"
+	"github.com/shark-auth/shark/internal/identity"
+	"github.com/shark-auth/shark/internal/oauth"
 )
 
 // The DPoP tests live in their own file so the crypto + JWK helpers they
@@ -24,7 +24,7 @@ import (
 // a valid proof is assembled).
 
 // dpopKey generates a fresh P-256 keypair for each test. Reusing keys
-// across tests would make the JTI cache leak between them — each test
+// across tests would make the JTI cache leak between them â€” each test
 // gets its own fresh key + cache.
 func dpopKey(t *testing.T) *ecdsa.PrivateKey {
 	t.Helper()
@@ -36,7 +36,7 @@ func dpopKey(t *testing.T) *ecdsa.PrivateKey {
 }
 
 // dpopJWK renders the P-256 public key as a JWK. Values are left-padded
-// to the curve's byte length per RFC 7518 §6.2.
+// to the curve's byte length per RFC 7518 Â§6.2.
 func dpopJWK(pub *ecdsa.PublicKey) map[string]interface{} {
 	byteLen := (pub.Curve.Params().BitSize + 7) / 8
 	pad := func(b []byte) []byte {
@@ -135,7 +135,7 @@ func dpopRequest(t *testing.T, proxyURL, method, path, bearer, proof string, id 
 }
 
 // TestReverseProxy_DPoP_ValidProofPasses verifies the happy path: valid
-// proof + identity.AuthMethod=DPoP → upstream receives the request.
+// proof + identity.AuthMethod=DPoP â†’ upstream receives the request.
 func TestReverseProxy_DPoP_ValidProofPasses(t *testing.T) {
 	var hits int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +282,7 @@ func TestReverseProxy_DPoP_ReplayRejects(t *testing.T) {
 	htu := "http://example.test/api/resource"
 	proof := buildDPoPProof(t, priv, http.MethodGet, htu, ath)
 
-	// First submission — should pass.
+	// First submission â€” should pass.
 	rec1 := httptest.NewRecorder()
 	req1 := httptest.NewRequest(http.MethodGet, "/api/resource", nil)
 	req1.Host = "example.test"
@@ -296,7 +296,7 @@ func TestReverseProxy_DPoP_ReplayRejects(t *testing.T) {
 		t.Fatalf("first submission should pass: got %d reason=%q", rec1.Code, rec1.Header().Get(HeaderDenyReason))
 	}
 
-	// Replay — should be rejected.
+	// Replay â€” should be rejected.
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, "/api/resource", nil)
 	req2.Host = "example.test"
@@ -335,7 +335,7 @@ func TestReverseProxy_DPoP_NonDPoPBearerSkipped(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/resource", nil)
 	req.Host = "example.test"
 	req.Header.Set("Authorization", "Bearer plain")
-	// No DPoP header — but identity says JWT, so enforcement is skipped.
+	// No DPoP header â€” but identity says JWT, so enforcement is skipped.
 	req = req.WithContext(identity.WithIdentity(req.Context(), identity.Identity{
 		UserID:     "u1",
 		AuthMethod: identity.AuthMethodJWT,

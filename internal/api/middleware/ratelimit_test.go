@@ -1,11 +1,11 @@
-package middleware_test
+﻿package middleware_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 func TestRateLimit_AllowsBurst(t *testing.T) {

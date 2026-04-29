@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // createMayActGrantRequest is the POST body for /api/v1/admin/may-act.
@@ -23,7 +23,7 @@ type createMayActGrantRequest struct {
 	ExpiresAt string   `json:"expires_at,omitempty"`
 }
 
-// handleListMayActGrants — GET /api/v1/admin/may-act
+// handleListMayActGrants â€” GET /api/v1/admin/may-act
 //
 // Query params: from_id, to_id, include_revoked.
 // Response: { "grants": [ ...MayActGrant ] }.
@@ -45,7 +45,7 @@ func (s *Server) handleListMayActGrants(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"grants": grants})
 }
 
-// handleCreateMayActGrant — POST /api/v1/admin/may-act
+// handleCreateMayActGrant â€” POST /api/v1/admin/may-act
 // Operator-issued grant insertion. Used by tests + future admin UI.
 func (s *Server) handleCreateMayActGrant(w http.ResponseWriter, r *http.Request) {
 	var req createMayActGrantRequest
@@ -85,7 +85,7 @@ func (s *Server) handleCreateMayActGrant(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, grant)
 }
 
-// handleRevokeMayActGrant — DELETE /api/v1/admin/may-act/{id}
+// handleRevokeMayActGrant â€” DELETE /api/v1/admin/may-act/{id}
 // Sets revoked_at; idempotent (already-revoked grants return the current row).
 func (s *Server) handleRevokeMayActGrant(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")

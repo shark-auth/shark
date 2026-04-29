@@ -1,4 +1,4 @@
-package middleware
+﻿package middleware
 
 import (
 	"context"
@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/auth"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/cache"
 )
 
 type contextKey string
@@ -66,15 +67,15 @@ func GetClaims(ctx context.Context) *jwtpkg.Claims {
 }
 
 // RequireSessionFunc returns a middleware that accepts Bearer JWT (when jwtMgr is
-// non-nil) or a shark_session cookie. Decision tree per PHASE3.md §2.1:
+// non-nil) or a shark_session cookie. Decision tree per PHASE3.md Â§2.1:
 //
-//  1. Authorization: Bearer <token> present → validate with jwtMgr.
+//  1. Authorization: Bearer <token> present â†’ validate with jwtMgr.
 //     Success: set context keys, AuthMethod="jwt". DO NOT fall through on failure.
-//  2. No Bearer header → try cookie. AuthMethod="cookie" on success.
+//  2. No Bearer header â†’ try cookie. AuthMethod="cookie" on success.
 //  3. Neither: 401 with WWW-Authenticate: Bearer.
 //
-// Token type enforcement (§2.3): refresh tokens are rejected as bearer credential.
-func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(http.Handler) http.Handler {
+// Token type enforcement (Â§2.3): refresh tokens are rejected as bearer credential.
+func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager, authCache *cache.Cache) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -89,7 +90,7 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(ht
 				}
 				claims, err := jwtMgr.Validate(r.Context(), token)
 				if err != nil {
-					// Refresh token used as bearer credential — return actionable error (§2.3).
+					// Refresh token used as bearer credential â€” return actionable error (Â§2.3).
 					if errors.Is(err, jwtpkg.ErrRefreshToken) {
 						w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token",error_description="refresh token cannot be used as access credential"`)
 						writeJSONError(w, http.StatusUnauthorized, "unauthorized", "refresh token cannot be used as access credential")
@@ -129,11 +130,34 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(ht
 				return
 			}
 
+			// Try cache first
+			if authCache != nil {
+				decision, found := authCache.Get("session:" + sessionID)
+				if found {
+					ctx := r.Context()
+					ctx = context.WithValue(ctx, UserIDKey, decision.UserID)
+					ctx = context.WithValue(ctx, SessionIDKey, decision.SessionID)
+					ctx = context.WithValue(ctx, MFAPassedKey, decision.MFAPassed)
+					ctx = context.WithValue(ctx, AuthMethodKey, "cookie")
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
 			sess, err := sm.ValidateSession(r.Context(), sessionID)
 			if err != nil {
 				w.Header().Set("WWW-Authenticate", "Bearer")
 				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "No valid session")
 				return
+			}
+
+			// Save to cache
+			if authCache != nil {
+				authCache.Set("session:"+sessionID, cache.AuthDecision{
+					UserID:    sess.UserID,
+					SessionID: sess.ID,
+					MFAPassed: sess.MFAPassed,
+				})
 			}
 
 			ctx := r.Context()
@@ -152,7 +176,7 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(ht
 // does NOT reject unauthenticated requests. Use this for endpoints where
 // authentication is helpful but not required (e.g. /oauth/authorize which
 // handles the not-logged-in case itself).
-func OptionalSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(http.Handler) http.Handler {
+func OptionalSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager, authCache *cache.Cache) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -182,8 +206,30 @@ func OptionalSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(h
 			if sm != nil {
 				sessionID, err := sm.GetSessionFromRequest(r)
 				if err == nil {
+					// Try cache first
+					if authCache != nil {
+						decision, found := authCache.Get("session:" + sessionID)
+						if found {
+							ctx := r.Context()
+							ctx = context.WithValue(ctx, UserIDKey, decision.UserID)
+							ctx = context.WithValue(ctx, SessionIDKey, decision.SessionID)
+							ctx = context.WithValue(ctx, MFAPassedKey, decision.MFAPassed)
+							ctx = context.WithValue(ctx, AuthMethodKey, "cookie")
+							next.ServeHTTP(w, r.WithContext(ctx))
+							return
+						}
+					}
+
 					sess, err := sm.ValidateSession(r.Context(), sessionID)
 					if err == nil {
+						if authCache != nil {
+							authCache.Set("session:"+sessionID, cache.AuthDecision{
+								UserID:    sess.UserID,
+								SessionID: sess.ID,
+								MFAPassed: sess.MFAPassed,
+							})
+						}
+
 						ctx := r.Context()
 						ctx = context.WithValue(ctx, UserIDKey, sess.UserID)
 						ctx = context.WithValue(ctx, SessionIDKey, sess.ID)
@@ -195,7 +241,7 @@ func OptionalSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(h
 				}
 			}
 
-			// No valid session — proceed unauthenticated.
+			// No valid session â€” proceed unauthenticated.
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -1,6 +1,6 @@
-package api
+﻿package api
 
-// user_agents_handlers.go — Wave 1.5 Edit 1 + Edit 2
+// user_agents_handlers.go â€” Wave 1.5 Edit 1 + Edit 2
 //
 // Edit 1: GET /api/v1/users/{id}/agents?filter=created|authorized
 //         GET /api/v1/me/agents?filter=created|authorized
@@ -14,8 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 const auditEventCascadeRevokedAgents = "user.cascade_revoked_agents"
@@ -100,7 +100,7 @@ func (s *Server) handleCascadeRevokeAgents(w http.ResponseWriter, r *http.Reques
 		AgentIDs []string `json:"agent_ids"`
 		Reason   string   `json:"reason"`
 	}
-	// Body is optional — ignore decode errors (empty body is fine)
+	// Body is optional â€” ignore decode errors (empty body is fine)
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	// 1. Resolve agents to revoke.
@@ -114,7 +114,7 @@ func (s *Server) handleCascadeRevokeAgents(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	} else {
-		// Specific agents — fetch each and verify created_by.
+		// Specific agents â€” fetch each and verify created_by.
 		for _, aid := range req.AgentIDs {
 			a, err := s.Store.GetAgentByID(r.Context(), aid)
 			if err != nil {
@@ -147,7 +147,7 @@ func (s *Server) handleCascadeRevokeAgents(w http.ResponseWriter, r *http.Reques
 	// 4. Write single audit event.
 	auditEventID, _ := gonanoid.New(21)
 
-	// Determine by_actor (the admin key holder's identity — best-effort from request context).
+	// Determine by_actor (the admin key holder's identity â€” best-effort from request context).
 	byActor := "admin"
 	if callerID := mw.GetUserID(r.Context()); callerID != "" {
 		byActor = callerID

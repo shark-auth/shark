@@ -1,7 +1,7 @@
-package testutil
+﻿package testutil
 
 import (
-	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/shark-auth/shark/internal/config"
 )
 
 // TestConfig returns a Config with safe defaults suitable for testing.

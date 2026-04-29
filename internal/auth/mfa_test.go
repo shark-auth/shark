@@ -1,4 +1,4 @@
-package auth_test
+﻿package auth_test
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func newMFAManager(t *testing.T) (*auth.MFAManager, *testutil.TestServer) {
@@ -97,7 +97,7 @@ func TestTOTPRejectsOldCode(t *testing.T) {
 		t.Fatalf("GenerateCode failed: %v", err)
 	}
 
-	// Validate should fail — code is too old (skew=1 allows +/- 1 step = 30s)
+	// Validate should fail â€” code is too old (skew=1 allows +/- 1 step = 30s)
 	if m.ValidateTOTP(secret, oldCode) {
 		t.Fatal("expected TOTP validation to reject 5-minute-old code")
 	}
@@ -117,7 +117,7 @@ func TestRecoveryCodeOneTimeUse(t *testing.T) {
 		t.Fatalf("expected 10 codes, got %d", len(codes))
 	}
 
-	// Use the first code — should succeed
+	// Use the first code â€” should succeed
 	ok, err := m.VerifyRecoveryCode(ctx, userID, codes[0])
 	if err != nil {
 		t.Fatalf("VerifyRecoveryCode failed: %v", err)
@@ -126,7 +126,7 @@ func TestRecoveryCodeOneTimeUse(t *testing.T) {
 		t.Fatal("expected first use of recovery code to succeed")
 	}
 
-	// Use the same code again — should fail (one-time use)
+	// Use the same code again â€” should fail (one-time use)
 	ok, err = m.VerifyRecoveryCode(ctx, userID, codes[0])
 	if err != nil {
 		t.Fatalf("VerifyRecoveryCode failed on second use: %v", err)

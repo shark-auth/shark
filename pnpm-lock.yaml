@@ -6,8 +6,6 @@ settings:
 
 importers:
 
-  .: {}
-
   admin:
     dependencies:
       '@types/dagre':

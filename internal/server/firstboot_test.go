@@ -1,11 +1,11 @@
-package server
+﻿package server
 
 import (
 	"context"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestFirstBootGeneratesSecrets verifies that RunFirstBoot on a fresh DB
@@ -26,7 +26,7 @@ func TestFirstBootGeneratesSecrets(t *testing.T) {
 		t.Fatalf("RunFirstBoot: %v", err)
 	}
 	if result == nil {
-		t.Fatal("RunFirstBoot returned nil result on a fresh DB — expected first-boot secrets")
+		t.Fatal("RunFirstBoot returned nil result on a fresh DB â€” expected first-boot secrets")
 	}
 	if result.AdminKey == "" {
 		t.Error("AdminKey is empty after first boot")
@@ -72,7 +72,7 @@ func TestFirstBootIdempotent(t *testing.T) {
 	cfg := testutil.TestConfig()
 	opts := Options{NoPrompt: true}
 
-	// First call — should succeed.
+	// First call â€” should succeed.
 	result1, err := RunFirstBoot(ctx, store, cfg, opts)
 	if err != nil {
 		t.Fatalf("first RunFirstBoot: %v", err)
@@ -87,7 +87,7 @@ func TestFirstBootIdempotent(t *testing.T) {
 		t.Fatalf("read server.secret after first boot: %v", err)
 	}
 
-	// Second call — must be a no-op.
+	// Second call â€” must be a no-op.
 	result2, err := RunFirstBoot(ctx, store, cfg, opts)
 	if err != nil {
 		t.Fatalf("second RunFirstBoot: %v", err)
@@ -102,7 +102,7 @@ func TestFirstBootIdempotent(t *testing.T) {
 		t.Fatalf("read server.secret after second boot: %v", err)
 	}
 	if secretAfterFirst != secretAfterSecond {
-		t.Error("server.secret changed between first and second boot — idempotency broken")
+		t.Error("server.secret changed between first and second boot â€” idempotency broken")
 	}
 }
 
@@ -113,7 +113,7 @@ func TestFirstBootNonTTY(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	ctx := context.Background()
 
-	// Build a minimal config — similar to what a non-interactive operator would have.
+	// Build a minimal config â€” similar to what a non-interactive operator would have.
 	cfg := &config.Config{}
 	cfg.Server.Port = 8080
 	cfg.Storage.Path = ":memory:"

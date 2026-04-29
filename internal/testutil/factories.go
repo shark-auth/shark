@@ -1,4 +1,4 @@
-package testutil
+﻿package testutil
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // CreateUser creates a test user with the given email and password hash.

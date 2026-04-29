@@ -1,4 +1,4 @@
-package webhook_test
+﻿package webhook_test
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
-	"github.com/sharkauth/sharkauth/internal/webhook"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
+	"github.com/shark-auth/shark/internal/webhook"
 )
 
 func newDispatcherForTest(t *testing.T, store storage.Store, handler http.Handler) (*webhook.Dispatcher, *httptest.Server) {
@@ -107,7 +107,7 @@ func TestDispatcherRetriesOn500(t *testing.T) {
 	seedWebhook(t, store, srv.URL)
 
 	// Dispatcher instance already created by helper; Emit via the store-driven
-	// path requires we reuse it. Grab it from context — pattern is to construct
+	// path requires we reuse it. Grab it from context â€” pattern is to construct
 	// separately here:
 	d := webhook.New(store, webhook.WithWorkers(1), webhook.WithHTTPClient(srv.Client()))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -124,7 +124,7 @@ func TestDispatcherRetriesOn500(t *testing.T) {
 		if len(dels) == 0 {
 			return false
 		}
-		// First failure → status=retrying, attempt=1, next_retry_at set.
+		// First failure â†’ status=retrying, attempt=1, next_retry_at set.
 		return dels[0].Status == storage.WebhookStatusRetrying &&
 			dels[0].Attempt == 1 && dels[0].NextRetryAt != nil
 	})

@@ -1,4 +1,4 @@
-package sso
+﻿package sso
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 	"golang.org/x/oauth2"
 )
 

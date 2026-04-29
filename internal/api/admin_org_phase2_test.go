@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // ---- GET /admin/organizations/{id}/roles ----
@@ -59,7 +59,7 @@ func TestAdminListOrgRoles_Populated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Org B: 1 custom role — should not bleed into org A results.
+	// Org B: 1 custom role â€” should not bleed into org A results.
 	if err := ts.Store.CreateOrganization(ctx, &storage.Organization{
 		ID: "org_rb", Name: "OrgB", Slug: "org-roles-b", Metadata: "{}",
 		CreatedAt: now, UpdatedAt: now,
@@ -160,7 +160,7 @@ func TestAdminListOrgInvitations_FiltersExpired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Pending invitation — should appear.
+	// Pending invitation â€” should appear.
 	if err := ts.Store.CreateOrganizationInvitation(ctx, &storage.OrganizationInvitation{
 		ID: "inv_pending", OrganizationID: "org_if",
 		Email: "pending@x.io", Role: storage.OrgRoleMember,
@@ -171,7 +171,7 @@ func TestAdminListOrgInvitations_FiltersExpired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Expired invitation — should be filtered out.
+	// Expired invitation â€” should be filtered out.
 	if err := ts.Store.CreateOrganizationInvitation(ctx, &storage.OrganizationInvitation{
 		ID: "inv_expired", OrganizationID: "org_if",
 		Email: "expired@x.io", Role: storage.OrgRoleMember,
@@ -182,7 +182,7 @@ func TestAdminListOrgInvitations_FiltersExpired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Accepted invitation — should be filtered out.
+	// Accepted invitation â€” should be filtered out.
 	if err := ts.Store.CreateOrganizationInvitation(ctx, &storage.OrganizationInvitation{
 		ID: "inv_accepted", OrganizationID: "org_if",
 		Email: "accepted@x.io", Role: storage.OrgRoleMember,

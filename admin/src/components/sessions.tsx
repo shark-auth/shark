@@ -74,8 +74,6 @@ export function Sessions() {
   const [selected, setSelected] = React.useState(null);
   const [query, setQuery] = React.useState('');
   const [clientFilter, setClientFilter] = useURLParam('client', 'all');
-  const [riskFilter, setRiskFilter] = React.useState('all');
-  const [view, setView] = React.useState('table'); // table | geo
   const [liveTail, setLiveTail] = React.useState(true);
   const [pulse, setPulse] = React.useState(0);
   const [jtiInput, setJtiInput] = React.useState('');
@@ -139,7 +137,6 @@ export function Sessions() {
     const cityStr = (s.city || '').toLowerCase();
     if (query && !(userStr.includes(query.toLowerCase()) || ipStr.includes(query) || cityStr.includes(query.toLowerCase()))) return false;
     if (clientFilter !== 'all' && s.client !== clientFilter) return false;
-    if (riskFilter !== 'all' && s.risk !== riskFilter) return false;
     return true;
   });
 
@@ -149,7 +146,7 @@ export function Sessions() {
   all.forEach(s => { byAuthMethod[s.method] = (byAuthMethod[s.method] || 0) + 1; });
   const mfaCount = all.filter(s => s.mfa).length;
   const mfaRate = totalActive > 0 ? Math.round((mfaCount / totalActive) * 100) : 0;
-  const suspicious = all.filter(s => s.risk === 'high' || s.suspicious || s.blocked).length;
+  const suspicious = all.filter(s => s.suspicious || s.blocked).length;
   const clientCounts = { web: 0, mobile: 0, api: 0, agent: 0 };
   all.forEach(s => { if (clientCounts[s.client] != null) clientCounts[s.client]++; });
   const regionCounts = {};
@@ -208,14 +205,6 @@ export function Sessions() {
               { v: 'agent', l: 'Agent' },
             ]}/>
 
-          <Segment value={riskFilter} setValue={setRiskFilter}
-            options={[
-              { v: 'all', l: 'Any risk' },
-              { v: 'low', l: 'Low' },
-              { v: 'medium', l: 'Med' },
-              { v: 'high', l: 'High' },
-            ]}/>
-
           {/* Revoke by JTI */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 4,
@@ -242,23 +231,9 @@ export function Sessions() {
             {filtered.length.toLocaleString()} of {all.length.toLocaleString()}
           </span>
 
-          {/* View toggle — matches Segment height */}
-          <div className="seg" style={{ display: 'inline-flex', border: '1px solid var(--hairline-strong)', borderRadius: 5, overflow: 'hidden', height: 28 }}>
-            <button
-              onClick={() => setView('table')}
-              style={{ padding: '0 10px', height: 28, fontSize: 11, background: view === 'table' ? 'var(--surface-3)' : 'var(--surface-1)', color: view === 'table' ? 'var(--fg)' : 'var(--fg-muted)', borderRight: '1px solid var(--hairline)' }}>
-              Table
-            </button>
-            <button
-              onClick={() => setView('geo')}
-              style={{ padding: '0 10px', height: 28, fontSize: 11, background: view === 'geo' ? 'var(--surface-3)' : 'var(--surface-1)', color: view === 'geo' ? 'var(--fg)' : 'var(--fg-muted)' }}>
-              Geo
-            </button>
-          </div>
-
           <button className="btn sm" onClick={() => {
-            const rows = filtered.map(s => [s.id, s.user, s.ip, s.city, s.client, s.risk, s.current ? 'current' : '', s.blocked ? 'blocked' : ''].join(','));
-            const csv = ['id,user,ip,city,client,risk,current,blocked', ...rows].join('\n');
+            const rows = filtered.map(s => [s.id, s.user, s.ip, s.city, s.client, s.current ? 'current' : '', s.blocked ? 'blocked' : ''].join(','));
+            const csv = ['id,user,ip,city,client,current,blocked', ...rows].join('\n');
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
             a.download = 'sessions.csv';
@@ -269,9 +244,7 @@ export function Sessions() {
 
         {/* Content */}
         <div style={{ flex: 1, overflow: 'auto' }}>
-          {view === 'table'
-            ? <SessionsTable sessions={filtered} selected={selected} setSelected={setSelected} pulse={pulse} onRevoke={handleRevoke}/>
-            : <GeoView sessions={filtered} setSelected={setSelected} selected={selected} pulse={pulse}/>}
+          <SessionsTable sessions={filtered} selected={selected} setSelected={setSelected} pulse={pulse} onRevoke={handleRevoke}/>
         </div>
       </div>
 
@@ -319,8 +292,8 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
             <span className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{totalActive - suspicious}</span>
           </span>
           <span className="row" style={{ gap: 4 }}>
-            <span className="dot danger"/>
-            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>risk</span>
+            <span className={"dot " + (suspicious > 0 ? 'danger pulse' : 'muted')}/>
+            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>suspicious</span>
             <span className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: suspicious > 0 ? 'var(--danger)' : 'var(--fg)' }}>{suspicious}</span>
           </span>
         </div>
@@ -363,7 +336,7 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
               );
             })}
           {totalActive > 0 && (
-            <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginTop: 4 }}>MFA enrolled: {mfaRate}%</div>
+            <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginTop: 4 }}>MFA coverage: {mfaRate}%</div>
           )}
         </div>
       </div>
@@ -449,7 +422,6 @@ export function SessionsTable({ sessions, selected, setSelected, pulse, onRevoke
           <th style={{ width: 80, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Client</th>
           <th style={{ width: 150, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>IP · Location</th>
           <th style={{ width: 80, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>MFA</th>
-          <th style={{ width: 90, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Risk</th>
           <th style={{ width: 90, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Started</th>
           <th style={{ width: 110, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>Last seen</th>
           <th style={{ width: 80, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg-muted)', position: 'sticky', top: 0, background: 'var(--surface-0)', zIndex: 1 }}>JTI</th>
@@ -460,8 +432,8 @@ export function SessionsTable({ sessions, selected, setSelected, pulse, onRevoke
         {sessions.map(s => {
           const recent = Date.now() - s.last < 60 * 1000; // < 1m
           const veryRecent = Date.now() - s.last < 15 * 1000;
-          // Risk dot color: danger=blocked/high, warn=medium/suspicious, success=clean
-          const dotClass = s.blocked ? 'danger' : (recent && !s.risk || s.risk === 'low') ? (recent ? 'success pulse' : '') : s.risk === 'high' ? 'danger' : s.risk === 'medium' ? 'warn' : s.suspicious ? 'warn' : '';
+          // Status dot color: danger=blocked, warn=suspicious, success=active
+          const dotClass = s.blocked ? 'danger' : s.suspicious ? 'warn' : recent ? 'success pulse' : '';
           return (
             <tr key={s.id}
                 className={selected?.id === s.id ? 'active' : ''}
@@ -469,7 +441,7 @@ export function SessionsTable({ sessions, selected, setSelected, pulse, onRevoke
                 style={{ cursor: 'pointer' }}>
               <td style={{ paddingLeft: 16 }}>
                 <span
-                  className={"dot " + (s.blocked ? 'danger' : s.suspicious ? 'warn' : recent ? 'success pulse' : s.risk === 'high' ? 'danger' : s.risk === 'medium' ? 'warn' : '')}
+                  className={"dot " + dotClass}
                   style={{ display: 'inline-block' }}/>
               </td>
               <td>
@@ -501,9 +473,6 @@ export function SessionsTable({ sessions, selected, setSelected, pulse, onRevoke
                   </span>
                 ) : <span className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>none</span>}
               </td>
-              <td>
-                <RiskChip risk={s.risk} suspicious={s.suspicious} blocked={s.blocked}/>
-              </td>
               <td className="mono faint" style={{ fontSize: 11, lineHeight: 1.5 }}>{relTime(s.created)}</td>
               <td className="mono" style={{ fontSize: 11, lineHeight: 1.5, color: veryRecent ? 'var(--success)' : recent ? 'var(--fg)' : 'var(--fg-muted)' }}>
                 {veryRecent ? <span className="row" style={{gap:4}}><span className="dot success pulse"/>now</span> : relTime(s.last)}
@@ -527,196 +496,6 @@ export function SessionsTable({ sessions, selected, setSelected, pulse, onRevoke
         })}
       </tbody>
     </table>
-  );
-}
-
-function RiskChip({ risk, suspicious, blocked }) {
-  // Color = status only. danger=blocked, warn=suspicious/medium, success implied by absence
-  if (blocked) return <span className="chip danger" style={{ height: 18 }}><Icon.X width={9} height={9}/>blocked</span>;
-  if (suspicious) return <span className="chip warn" style={{ height: 18 }}><Icon.Warn width={9} height={9}/>{suspicious}</span>;
-  if (risk === 'high')   return <span className="chip danger" style={{ height: 18 }}>high</span>;
-  if (risk === 'medium') return <span className="chip warn" style={{ height: 18 }}>medium</span>;
-  return <span className="chip" style={{ height: 18, color: 'var(--fg-muted)' }}>low</span>;
-}
-
-/* ---------------- GEO VIEW ---------------- */
-
-function GeoView({ sessions, selected, setSelected, pulse }) {
-  // Group by region
-  const byRegion = {};
-  sessions.forEach(s => {
-    const key = s.region || 'unknown';
-    if (!byRegion[key]) byRegion[key] = [];
-    byRegion[key].push(s);
-  });
-  const regions = Object.entries(byRegion).sort((a, b) => b[1].length - a[1].length);
-
-  return (
-    <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-      {/* Hero: abstract globe/map with clustered dots */}
-      <div style={{ gridColumn: '1 / -1' }}>
-        <AbstractMap sessions={sessions} pulse={pulse} setSelected={setSelected}/>
-      </div>
-
-      {regions.map(([reg, sess]) => (
-        <div key={reg} style={{
-          border: '1px solid var(--hairline)',
-          background: 'var(--surface-1)',
-          borderRadius: 6, overflow: 'hidden',
-        }}>
-          <div style={{
-            padding: '8px 12px',
-            borderBottom: '1px solid var(--hairline)',
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: reg === 'tor' ? 'color-mix(in oklch, var(--danger) 12%, var(--surface-2))' : 'var(--surface-2)',
-          }}>
-            <Icon.Globe width={13} height={13} style={{ opacity: 0.6 }}/>
-            <span className="mono" style={{ fontSize: 13, fontWeight: 500, color: reg === 'tor' ? 'var(--danger)' : 'var(--fg)' }}>{reg}</span>
-            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginLeft: 'auto' }}>{sess.length} {sess.length === 1 ? 'session' : 'sessions'}</span>
-          </div>
-          <div className="col" style={{ gap: 0 }}>
-            {sess.map((s, i) => {
-              const recent = Date.now() - s.last < 60 * 1000;
-              return (
-                <div key={s.id}
-                  onClick={() => setSelected(s)}
-                  style={{
-                    padding: '7px 12px',
-                    borderBottom: i < sess.length - 1 ? '1px solid var(--hairline)' : 'none',
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    cursor: 'pointer',
-                    background: selected?.id === s.id ? 'var(--surface-3)' : 'transparent',
-                  }}>
-                  <span className={"dot " + (s.blocked ? 'danger' : s.suspicious ? 'warn' : recent ? 'success pulse' : s.risk === 'high' ? 'danger' : s.risk === 'medium' ? 'warn' : '')}/>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13 }}>{s.name}</div>
-                    <div className="faint mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{s.city} · {s.ip}</div>
-                  </div>
-                  <span className={'chip' + (s.client === 'agent' ? ' agent' : '')} style={{ height: 17, fontSize: 11 }}>{s.client}</span>
-                  <span className="mono faint" style={{ fontSize: 11, lineHeight: 1.5, width: 60, textAlign: 'right' }}>{relTime(s.last)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AbstractMap({ sessions, pulse, setSelected }) {
-  // Project lat/lng onto a rectangular world strip
-  const W = 1000, H = 280;
-  const proj = (lat, lng) => {
-    const x = ((lng + 180) / 360) * W;
-    // Mercator-ish clamp for a simple equal-rect projection
-    const y = ((90 - lat) / 180) * H;
-    return [x, y];
-  };
-  // Group by rounded coord
-  const clusters = {};
-  sessions.forEach(s => {
-    if (s.lat === 0 && s.lng === 0) return; // tor / unknown
-    const key = `${Math.round(s.lat/3)*3}_${Math.round(s.lng/3)*3}`;
-    if (!clusters[key]) clusters[key] = { lat: s.lat, lng: s.lng, sess: [], risk: 'low' };
-    clusters[key].sess.push(s);
-    if (s.risk === 'high' || s.blocked) clusters[key].risk = 'high';
-    else if (s.risk === 'medium' && clusters[key].risk !== 'high') clusters[key].risk = 'medium';
-  });
-
-  return (
-    <div style={{
-      border: '1px solid var(--hairline)',
-      background: 'var(--surface-1)',
-      borderRadius: 6, overflow: 'hidden', position: 'relative',
-    }}>
-      <div style={{
-        padding: '8px 12px',
-        borderBottom: '1px solid var(--hairline)',
-        display: 'flex', alignItems: 'center', gap: 8,
-        background: 'var(--surface-2)',
-      }}>
-        <Icon.Globe width={13} height={13} style={{ opacity: 0.6 }}/>
-        <span style={{ fontSize: 11, lineHeight: 1.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)', fontWeight: 500 }}>Live session map</span>
-        <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginLeft: 'auto' }}>{sessions.length} points · clustered within 3°</span>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 280, display: 'block' }}>
-        <defs>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1a1a" strokeWidth="0.5"/>
-          </pattern>
-          <radialGradient id="glowG" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="oklch(0.74 0.14 150)" stopOpacity="0.9"/>
-            <stop offset="100%" stopColor="oklch(0.74 0.14 150)" stopOpacity="0"/>
-          </radialGradient>
-          <radialGradient id="glowR" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="oklch(0.7 0.2 25)" stopOpacity="0.9"/>
-            <stop offset="100%" stopColor="oklch(0.7 0.2 25)" stopOpacity="0"/>
-          </radialGradient>
-          <radialGradient id="glowY" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="oklch(0.82 0.14 80)" stopOpacity="0.9"/>
-            <stop offset="100%" stopColor="oklch(0.82 0.14 80)" stopOpacity="0"/>
-          </radialGradient>
-        </defs>
-        <rect width={W} height={H} fill="url(#grid)"/>
-        {/* Latitude hints */}
-        {[0, 23.5, -23.5, 45, -45].map(lat => {
-          const [, y] = proj(lat, 0);
-          return <line key={lat} x1="0" y1={y} x2={W} y2={y} stroke="#191919" strokeDasharray="2 4" strokeWidth="0.7"/>;
-        })}
-        {/* Rough continent blobs — super stylized */}
-        <g fill="#121212" stroke="#222" strokeWidth="0.5">
-          {/* N America */}
-          <path d="M 90 70 Q 140 55 210 70 Q 240 85 250 130 Q 240 170 200 180 Q 160 170 130 160 Q 100 130 90 100 Z"/>
-          {/* S America */}
-          <path d="M 240 185 Q 260 185 270 210 Q 275 250 260 270 Q 240 270 235 230 Q 235 210 240 185 Z"/>
-          {/* Europe */}
-          <path d="M 475 75 Q 510 70 540 80 Q 550 100 530 115 Q 490 120 475 100 Z"/>
-          {/* Africa */}
-          <path d="M 490 130 Q 530 125 555 155 Q 555 200 530 225 Q 500 220 490 190 Q 480 160 490 130 Z"/>
-          {/* Asia */}
-          <path d="M 555 75 Q 680 60 760 85 Q 800 105 790 140 Q 720 150 650 135 Q 580 125 555 100 Z"/>
-          {/* Oceania */}
-          <path d="M 790 195 Q 830 185 860 205 Q 855 220 820 220 Q 795 215 790 195 Z"/>
-        </g>
-
-        {/* Session dots — color = risk status only */}
-        {Object.values(clusters).map((c, i) => {
-          const [x, y] = proj(c.lat, c.lng);
-          const r = Math.max(5, Math.min(18, 4 + c.sess.length * 2.5));
-          const glow = c.risk === 'high' ? '#glowR' : c.risk === 'medium' ? '#glowY' : '#glowG';
-          // --danger for high/blocked, --warn for medium/suspicious, --success for clean
-          const color = c.risk === 'high' ? 'oklch(0.7 0.2 25)' : c.risk === 'medium' ? 'oklch(0.82 0.14 80)' : 'oklch(0.74 0.14 150)';
-          return (
-            <g key={i} style={{ cursor: 'pointer' }} onClick={() => setSelected(c.sess[0])}>
-              <circle cx={x} cy={y} r={r * 2.4} fill={`url(${glow})`} opacity="0.6">
-                <animate attributeName="r" values={`${r*1.2};${r*2.8};${r*1.2}`} dur="2.2s" repeatCount="indefinite"/>
-                <animate attributeName="opacity" values="0.8;0.1;0.8" dur="2.2s" repeatCount="indefinite"/>
-              </circle>
-              <circle cx={x} cy={y} r={r} fill={color} opacity="0.9"/>
-              <circle cx={x} cy={y} r={r - 2} fill="#000"/>
-              <text x={x} y={y + 3} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill={color} style={{ fontWeight: 600 }}>
-                {c.sess.length}
-              </text>
-              <text x={x} y={y + r + 11} textAnchor="middle" fontSize="8.5" fontFamily="var(--font-mono)" fill="var(--fg-dim)">
-                {c.sess[0].city}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Tor / unknown badge */}
-        {sessions.some(s => s.region === 'tor') && (
-          <g transform={`translate(20 ${H - 40})`}>
-            <rect width="180" height="24" rx="3" fill="color-mix(in oklch, var(--danger) 15%, #0a0a0a)" stroke="var(--danger)" strokeWidth="0.6"/>
-            <circle cx="12" cy="12" r="3" fill="var(--danger)">
-              <animate attributeName="opacity" values="0.3;1;0.3" dur="1.2s" repeatCount="indefinite"/>
-            </circle>
-            <text x="22" y="16" fontSize="10" fontFamily="var(--font-mono)" fill="var(--danger)">{sessions.filter(s => s.region === 'tor').length} · tor exit node</text>
-          </g>
-        )}
-      </svg>
-    </div>
   );
 }
 
@@ -803,7 +582,8 @@ function SessionSlideover({ session, onClose, onRevoke }) {
         {/* Status chips */}
         <div className="row" style={{ gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
           <span className={'chip' + (session.client === 'agent' ? ' agent' : '')}>{session.client}</span>
-          <RiskChip risk={session.risk} suspicious={session.suspicious} blocked={session.blocked}/>
+          {session.blocked && <span className="chip danger"><Icon.X width={9} height={9}/>blocked</span>}
+          {session.suspicious && <span className="chip warn"><Icon.Warn width={9} height={9}/>suspicious</span>}
           {session.mfa && <span className="chip"><Icon.Shield width={10} height={10}/>mfa · {session.mfa}</span>}
           <span className="chip">{session.method}</span>
           {session.current && <span className="chip success">you</span>}
@@ -818,7 +598,7 @@ function SessionSlideover({ session, onClose, onRevoke }) {
             fontSize: 11, lineHeight: 1.5, color: 'var(--danger)',
           }}>
             <Icon.Warn width={11} height={11} style={{ verticalAlign: 'middle', marginRight: 6 }}/>
-            {session.suspicious === 'impossible-travel' && 'Impossible travel — last seen in SF 8m ago; now Berlin.'}
+            {session.suspicious === 'impossible-travel' ? 'Impossible travel — last seen in SF 8m ago; now Berlin.' : 'Unusual activity detected.'}
           </div>
         )}
       </div>
@@ -915,13 +695,11 @@ function SessionOverviewTab({ s }) {
 
       {/* ── Security ── */}
       <FieldGroup title="Security">
-        <SessionField label="Risk score">
+        <SessionField label="Status">
           <div className="row" style={{ gap: 8 }}>
-            <RiskChip risk={s.risk} suspicious={s.suspicious} blocked={s.blocked}/>
+            <span className={"dot " + (s.blocked ? 'danger' : s.suspicious ? 'warn' : 'success')}/>
             <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>
-              {s.risk === 'high' && 'Unusual geography, no MFA'}
-              {s.risk === 'medium' && 'No MFA enrolled'}
-              {s.risk === 'low' && 'Passed all signals'}
+              {s.blocked ? 'Account blocked' : s.suspicious ? 'Flagged for review' : 'Active and healthy'}
             </span>
           </div>
         </SessionField>

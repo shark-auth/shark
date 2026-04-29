@@ -1,4 +1,4 @@
-package rbac_test
+﻿package rbac_test
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/rbac"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/rbac"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // createOrg creates a test organization directly via the store.
@@ -252,7 +252,7 @@ func TestDeleteOrgRole_Custom_OK(t *testing.T) {
 	}
 }
 
-// TestGrantRevokeOrgRole_RoundTrip verifies the grant → check → revoke → check cycle.
+// TestGrantRevokeOrgRole_RoundTrip verifies the grant â†’ check â†’ revoke â†’ check cycle.
 func TestGrantRevokeOrgRole_RoundTrip(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	mgr := rbac.NewRBACManager(store)

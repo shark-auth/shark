@@ -1,11 +1,11 @@
-package proxy
+﻿package proxy
 
 import (
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/identity"
+	"github.com/shark-auth/shark/internal/identity"
 )
 
 func TestStripIdentityHeaders_RemovesPrefixed(t *testing.T) {
@@ -111,7 +111,7 @@ func TestInjectIdentity_EmitsSetFields(t *testing.T) {
 
 func TestInjectIdentity_OmitsEmptyFields(t *testing.T) {
 	h := http.Header{}
-	// Pre-populate with values that should be cleared — Inject must
+	// Pre-populate with values that should be cleared â€” Inject must
 	// overwrite (not leave stale data behind) for defense in depth.
 	h.Set(HeaderUserEmail, "stale@example.com")
 	h.Set(HeaderUserRoles, "stale-role")

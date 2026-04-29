@@ -1,4 +1,4 @@
-// Package cli provides a test harness that spins up a real HTTP listener via
+﻿// Package cli provides a test harness that spins up a real HTTP listener via
 // server.Build on an ephemeral port so CLI subcommands and end-to-end flows
 // can be exercised without a hand-rolled chi.ServeHTTP tree.
 //
@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/cmd/shark/migrations"
-	"github.com/sharkauth/sharkauth/internal/server"
+	"github.com/shark-auth/shark/cmd/shark/migrations"
+	"github.com/shark-auth/shark/internal/server"
 )
 
 // Harness runs a fully wired shark server against a temp dev.db on a random

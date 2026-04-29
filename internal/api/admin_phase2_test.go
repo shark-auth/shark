@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // ---- /admin/stats ----
@@ -19,7 +19,7 @@ func TestAdminStatsBasicCounts(t *testing.T) {
 
 	// Seed 3 users, 2 with MFA enrolled AND verified. CountMFAEnabled
 	// requires mfa_enabled=1 AND mfa_verified=1 (tightened in Wave 2 so
-	// pending enrollments don't inflate adoption) — seed both flags.
+	// pending enrollments don't inflate adoption) â€” seed both flags.
 	for i, mfa := range []bool{false, true, true} {
 		u := &storage.User{
 			ID: "usr_s" + string(rune('a'+i)), Email: "s" + string(rune('a'+i)) + "@x.io",
@@ -354,7 +354,7 @@ func TestDevInboxEndpointsRequireDevMode(t *testing.T) {
 func TestDevInboxCaptureAndListing(t *testing.T) {
 	ts := testutil.NewTestServerDev(t)
 
-	// Trigger magic link send — uses the wired DevInboxSender.
+	// Trigger magic link send â€” uses the wired DevInboxSender.
 	resp := ts.PostJSON("/api/v1/auth/magic-link/send", map[string]string{
 		"email": "devuser@x.io",
 	})

@@ -1,4 +1,4 @@
-package providers
+﻿package providers
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/config"
 )
 
 //#nosec G101 -- public OAuth 2.0 endpoint URLs, not credentials

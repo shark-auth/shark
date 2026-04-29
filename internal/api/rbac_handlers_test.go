@@ -1,24 +1,24 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestAuthCheckIDORPrevention is the regression suite for the cross-tenant IDOR
 // fix in handleAuthCheck. Three cases:
 //
-//  1. Session caller supplies a foreign user_id in the body → silently clamped to
+//  1. Session caller supplies a foreign user_id in the body â†’ silently clamped to
 //     caller's own ID (silent-ignore behaviour). The response reflects the caller's
 //     permissions, not the victim's.
 //
-//  2. Admin key caller supplies a foreign user_id → accepted as-is (legit
+//  2. Admin key caller supplies a foreign user_id â†’ accepted as-is (legit
 //     backend-to-backend cross-user check).
 //
-//  3. Session caller omits user_id → evaluates caller's own permissions.
+//  3. Session caller omits user_id â†’ evaluates caller's own permissions.
 func TestAuthCheckIDORPrevention(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 	ctx := context.Background()
@@ -50,7 +50,7 @@ func TestAuthCheckIDORPrevention(t *testing.T) {
 	// --- Case 1: Session caller cannot probe another user's permissions ---------
 	t.Run("session_path_user_id_clamped_to_caller", func(t *testing.T) {
 		// userA is logged in and supplies userB's ID in the body.
-		// Handler must silently clamp to userA — result is allowed=true (userA HAS
+		// Handler must silently clamp to userA â€” result is allowed=true (userA HAS
 		// the perm), NOT whatever userB would return (userB does NOT have the perm).
 		// If IDOR were present the result for userB would be allowed=false, which is
 		// the wrong result evaluated for the wrong user.
@@ -67,13 +67,13 @@ func TestAuthCheckIDORPrevention(t *testing.T) {
 		ts.DecodeJSON(resp, &result)
 		// Must return userA's result (allowed=true), not userB's (allowed=false).
 		if result["allowed"] != true {
-			t.Fatalf("IDOR: expected allowed=true (userA's result), got %v — body user_id was not clamped", result["allowed"])
+			t.Fatalf("IDOR: expected allowed=true (userA's result), got %v â€” body user_id was not clamped", result["allowed"])
 		}
 	})
 
 	// --- Case 2: Admin key can still query any user ----------------------------
 	t.Run("admin_path_cross_user_check_still_works", func(t *testing.T) {
-		// Admin checks userA's permissions — should be allowed=true.
+		// Admin checks userA's permissions â€” should be allowed=true.
 		resp := ts.PostJSONWithAdminKey("/api/v1/auth/check", map[string]string{
 			"user_id":  userA.ID,
 			"action":   "read",
@@ -89,7 +89,7 @@ func TestAuthCheckIDORPrevention(t *testing.T) {
 			t.Fatalf("admin cross-user check broken: expected allowed=true for userA, got %v", result["allowed"])
 		}
 
-		// Admin checks userB's permissions — should be allowed=false.
+		// Admin checks userB's permissions â€” should be allowed=false.
 		resp2 := ts.PostJSONWithAdminKey("/api/v1/auth/check", map[string]string{
 			"user_id":  userB.ID,
 			"action":   "read",

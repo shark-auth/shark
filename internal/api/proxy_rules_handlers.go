@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -13,12 +13,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/sharkauth/sharkauth/internal/proxy"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/proxy"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // proxyRuleResponse is the JSON projection of storage.ProxyRule. Mirrors the
-// DB row shape one-to-one — the wire layer doesn't hide any field, since the
+// DB row shape one-to-one â€” the wire layer doesn't hide any field, since the
 // dashboard's edit form needs every column to round-trip cleanly.
 type proxyRuleResponse struct {
 	ID        string    `json:"id"`
@@ -191,7 +191,7 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 
 	if s.AuditLogger != nil {
 		// target_upstream is captured from rule.Allow as the closest
-		// available analog — ProxyRule has no dedicated upstream URL
+		// available analog â€” ProxyRule has no dedicated upstream URL
 		// field. Spec doc lists this name for cross-system parity.
 		metaBytes, _ := json.Marshal(map[string]any{
 			"rule_name":       rule.Name,
@@ -212,7 +212,7 @@ func (s *Server) handleCreateProxyRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Push the new rule set into the live engine. A refresh failure is
-	// non-fatal for the create (the row is already persisted) — surface it
+	// non-fatal for the create (the row is already persisted) â€” surface it
 	// in the response so the operator can investigate, but keep the 201.
 	refreshErr := s.refreshProxyEngineFromDB(r.Context())
 
@@ -340,7 +340,7 @@ func (s *Server) handleUpdateProxyRule(w http.ResponseWriter, r *http.Request) {
 		changedFields = append(changedFields, "m2m")
 	}
 
-	// Re-validate the full row before persisting — partial PATCH could land
+	// Re-validate the full row before persisting â€” partial PATCH could land
 	// us in a state Create would have rejected (e.g. Require + Allow both
 	// set). Fail closed: the row stays unmodified.
 	if err := validateProxyRulePayload(rule.Name, rule.Pattern, rule.Methods, rule.Require, rule.Allow); err != nil {
@@ -429,7 +429,7 @@ func (s *Server) handleDeleteProxyRule(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Refresh the engine. Best-effort — the row is already gone; failing to
+	// Refresh the engine. Best-effort â€” the row is already gone; failing to
 	// refresh just means the live engine still has the stale rule until the
 	// next mutation or restart.
 	_ = s.refreshProxyEngineFromDB(r.Context())
@@ -482,7 +482,7 @@ func (s *Server) refreshProxyEngineFromDB(ctx context.Context) error {
 
 // validateProxyRulePayload runs the create-time ruleset against the supplied
 // fields. Mirrors proxy.compileRule's invariants so a row that passes here
-// will compile cleanly during Engine.SetRules — keeps the dashboard's
+// will compile cleanly during Engine.SetRules â€” keeps the dashboard's
 // validation feedback synchronous and accurate.
 func validateProxyRulePayload(name, pattern string, methods []string, require, allow string) error {
 	if strings.TrimSpace(name) == "" {
@@ -519,7 +519,7 @@ func validateProxyRulePayload(name, pattern string, methods []string, require, a
 // validRequireString accepts the same require strings that
 // proxy.parseRequirement accepts. Keeping a slim duplicate here lets us
 // surface a 400 with a helpful message before the row is even persisted.
-// Parity with internal/proxy/rules.go parseRequirement — keep the two in
+// Parity with internal/proxy/rules.go parseRequirement â€” keep the two in
 // sync; docs/proxy_v1_5/contracts/require_grammar.md is the public spec.
 func validRequireString(require string) bool {
 	switch {

@@ -1,11 +1,11 @@
-package cmd
+﻿package cmd
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/shark-auth/shark/internal/config"
 )
 
 func TestModeReadWrite(t *testing.T) {

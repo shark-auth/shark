@@ -1,4 +1,4 @@
-package middleware
+﻿package middleware
 
 import (
 	"encoding/json"
@@ -6,22 +6,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/cache"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // AdminOrSessionFunc returns a middleware that accepts either an admin API key
 // (sk_live_ Bearer token validated against the store) OR a session/JWT credential
 // validated by RequireSessionFunc. Admin key takes priority; if the Authorization
 // header looks like a session JWT (no sk_live_ prefix) the request is handed to the
-// session path. Either path must succeed — both failing returns 401.
+// session path. Either path must succeed â€” both failing returns 401.
 //
 // Use this on endpoints that need to serve both backend-to-backend admin calls and
 // end-user session calls (e.g. POST /auth/check).
-func AdminOrSessionFunc(store storage.Store, rateLimiter *auth.TokenBucket, sm *auth.SessionManager, jwtMgr *jwtpkg.Manager) func(http.Handler) http.Handler {
+func AdminOrSessionFunc(store storage.Store, rateLimiter *auth.TokenBucket, sm *auth.SessionManager, jwtMgr *jwtpkg.Manager, authCache *cache.Cache) func(http.Handler) http.Handler {
 	adminMW := AdminAPIKeyFromStore(store, rateLimiter)
-	sessionMW := RequireSessionFunc(sm, jwtMgr)
+	sessionMW := RequireSessionFunc(sm, jwtMgr, authCache)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -100,7 +101,7 @@ func AdminAPIKeyFromStore(store storage.Store, rateLimiter *auth.TokenBucket) fu
 				}
 			}
 
-			// Check scope — admin requires "*"
+			// Check scope â€” admin requires "*"
 			var scopes []string
 			if err := json.Unmarshal([]byte(apiKey.Scopes), &scopes); err != nil {
 				writeJSONError(w, http.StatusInternalServerError, "internal_error", "Invalid key scopes")

@@ -1,9 +1,9 @@
-package api_test
+﻿package api_test
 
 // Tests for queue #19 P2 cleanup items:
-//   - TestAdminListConsentsByUser   — ?user_id filter on /admin/oauth/consents
-//   - TestUserEffectivePermissions  — GET /users/{id}/permissions returns deduped flat list
-//   - TestDeleteOrgMemberAsAdmin    — DELETE /admin/organizations/{id}/members/{uid}
+//   - TestAdminListConsentsByUser   â€” ?user_id filter on /admin/oauth/consents
+//   - TestUserEffectivePermissions  â€” GET /users/{id}/permissions returns deduped flat list
+//   - TestDeleteOrgMemberAsAdmin    â€” DELETE /admin/organizations/{id}/members/{uid}
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 
@@ -53,7 +53,7 @@ func TestAdminListConsentsByUser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Query with ?user_id=usr_consent_a — should only return consentA.
+	// Query with ?user_id=usr_consent_a â€” should only return consentA.
 	resp := ts.GetWithAdminKey("/api/v1/admin/oauth/consents?user_id=usr_consent_a")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
@@ -84,7 +84,7 @@ func TestAdminListConsentsByUser(t *testing.T) {
 		t.Errorf("expected id=consent_test_a, got %q", consent.ID)
 	}
 
-	// Without filter — both consents returned.
+	// Without filter â€” both consents returned.
 	resp2 := ts.GetWithAdminKey("/api/v1/admin/oauth/consents")
 	if resp2.StatusCode != http.StatusOK {
 		t.Fatalf("unfiltered: expected 200, got %d", resp2.StatusCode)
@@ -134,7 +134,7 @@ func TestUserEffectivePermissions(t *testing.T) {
 		}
 	}
 
-	// Attach: roleA → shared + permA; roleB → shared + permB.
+	// Attach: roleA â†’ shared + permA; roleB â†’ shared + permB.
 	for _, pair := range [][2]string{
 		{"role_ep_a", "perm_ep_shared"},
 		{"role_ep_a", "perm_ep_a"},
@@ -153,7 +153,7 @@ func TestUserEffectivePermissions(t *testing.T) {
 		}
 	}
 
-	// GET /users/{id}/permissions — should return 3 unique permissions.
+	// GET /users/{id}/permissions â€” should return 3 unique permissions.
 	resp := ts.GetWithAdminKey("/api/v1/users/" + userID + "/permissions")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)

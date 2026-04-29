@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // secretRotationGrace is the duration the old secret remains valid after rotation.
@@ -47,7 +47,7 @@ type dcrMetadata struct {
 	Contacts                []string `json:"contacts"`
 }
 
-// dcrResponse is the RFC 7591 §3.2.1 registration response.
+// dcrResponse is the RFC 7591 Â§3.2.1 registration response.
 type dcrResponse struct {
 	ClientID                string   `json:"client_id"`
 	ClientSecret            string   `json:"client_secret,omitempty"`
@@ -317,7 +317,7 @@ func (s *Server) logDCRAudit(ctx context.Context, r *http.Request, action, clien
 }
 
 // HandleDCRRegister handles POST /oauth/register (RFC 7591).
-// No authentication required — open registration endpoint.
+// No authentication required â€” open registration endpoint.
 func (s *Server) HandleDCRRegister(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/rand"
@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // applicationResponse is the JSON shape returned by all app endpoints.
@@ -175,7 +175,7 @@ func apiDivmod(n []byte, d byte) byte {
 	var rem uint64
 	for i := range n {
 		cur := rem*256 + uint64(n[i])
-		n[i] = byte(cur / uint64(d)) //#nosec G115 -- base-62 long division: d is a byte (≤255) and cur/d fits in a byte by construction
+		n[i] = byte(cur / uint64(d)) //#nosec G115 -- base-62 long division: d is a byte (â‰¤255) and cur/d fits in a byte by construction
 		rem = cur % uint64(d)
 	}
 	return byte(rem)

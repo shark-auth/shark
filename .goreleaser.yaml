@@ -1,0 +1,64 @@
+# goreleaser.yaml — SharkAuth binary distribution
+# https://goreleaser.com
+
+version: 2
+
+project_name: shark
+
+before:
+  hooks:
+    - go mod tidy
+    - pnpm --prefix admin install
+    - pnpm --prefix admin build
+
+builds:
+  - id: shark
+    main: ./cmd/shark
+    binary: shark
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/shark-auth/shark/internal/version.Version={{.Version}}
+      - -X github.com/shark-auth/shark/internal/version.Commit={{.Commit}}
+      - -X github.com/shark-auth/shark/internal/version.BuildTime={{.Date}}
+
+archives:
+  - format: tar.gz
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+      - documentation/**/*
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - Merge pull request
+      - Merge branch

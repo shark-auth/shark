@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"bufio"
@@ -11,8 +11,8 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // seedAuditLog inserts a single audit log entry directly into the store.
@@ -113,7 +113,7 @@ func TestAuditLogsFiltersBySession(t *testing.T) {
 func TestAuditExportRequiresDates(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// POST with empty body → 400
+	// POST with empty body â†’ 400
 	resp := ts.PostJSONWithAdminKey("/api/v1/audit-logs/export", map[string]string{})
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400 for empty export body, got %d", resp.StatusCode)

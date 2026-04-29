@@ -22,7 +22,7 @@ import (
 // handler can 404 cleanly).
 func (s *SQLiteStore) SetUserTier(ctx context.Context, userID, tier string) error {
 	var metaStr string
-	row := s.db.QueryRowContext(ctx, `SELECT metadata FROM users WHERE id = ?`, userID)
+	row := s.reader.QueryRowContext(ctx, `SELECT metadata FROM users WHERE id = ?`, userID)
 	if err := row.Scan(&metaStr); err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func (s *SQLiteStore) SetUserTier(ctx context.Context, userID, tier string) erro
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.writer.ExecContext(ctx,
 		`UPDATE users SET metadata = ?, updated_at = ? WHERE id = ?`,
 		string(out), time.Now().UTC().Format(time.RFC3339), userID,
 	)
@@ -62,7 +62,7 @@ func (s *SQLiteStore) SetUserTier(ctx context.Context, userID, tier string) erro
 // user itself is missing.
 func (s *SQLiteStore) GetUserTier(ctx context.Context, userID string) (string, error) {
 	var metaStr string
-	row := s.db.QueryRowContext(ctx, `SELECT metadata FROM users WHERE id = ?`, userID)
+	row := s.reader.QueryRowContext(ctx, `SELECT metadata FROM users WHERE id = ?`, userID)
 	if err := row.Scan(&metaStr); err != nil {
 		return "", err
 	}

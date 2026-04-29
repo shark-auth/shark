@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 import (
 	"context"
@@ -16,9 +16,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ory/fosite"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // testServerSecret used for all handler tests. Must be >= 32 bytes.
@@ -254,7 +254,7 @@ func TestTokenEndpoint_AuthCode_MissingPKCE(t *testing.T) {
 // getUserIDFromRequest returns "", we resolve the app by client_id
 // and redirect to /hosted/<slug>/login?...&return_to=<orig>). Replaces
 // the earlier 401 JSON expectation which pre-dates the hosted-login
-// UX. See LANE_D_SCOPE.md §D8.
+// UX. See LANE_D_SCOPE.md Â§D8.
 func TestAuthorizeEndpoint_NotLoggedIn(t *testing.T) {
 	srv, store := newTestOAuthServer(t)
 	seedAgent(t, store, "test-auth-client", false)
@@ -302,7 +302,7 @@ func TestAuthorizeEndpoint_NotLoggedIn(t *testing.T) {
 	}
 	// The authorize URL should be embedded (URL-encoded) in return_to so the
 	// login page can bounce the caller back. Cheap substring check on the
-	// client_id is enough — if return_to is correctly populated, this
+	// client_id is enough â€” if return_to is correctly populated, this
 	// substring will appear (URL-encoded form of the original query).
 	if !strings.Contains(loc, "test-auth-client") {
 		t.Errorf("expected return_to to carry original authorize URL params (client_id), got %q", loc)
@@ -445,7 +445,7 @@ func TestDPoPTokenEndpointURL(t *testing.T) {
 		t.Errorf("https path: got %q", got2)
 	}
 
-	// Fallback when r.Host is empty — should pull from r.URL.Host.
+	// Fallback when r.Host is empty â€” should pull from r.URL.Host.
 	r3 := httptest.NewRequest(http.MethodPost, "http://fallback.example.com/oauth/token", nil)
 	r3.Host = ""
 	got3 := dpopTokenEndpointURL(r3)
@@ -487,7 +487,7 @@ func TestHandleAuthorizeDecision_Approved(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-Test-Auth-User", userID)
 
-	// Don't follow redirects — we want the 302 itself.
+	// Don't follow redirects â€” we want the 302 itself.
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -758,7 +758,7 @@ func TestStoreDPoPJKT(t *testing.T) {
 		t.Errorf("expected DPoPJKT to be set, got %q", got.DPoPJKT)
 	}
 
-	// Also cover the "no tokens" branch — a second clientID with no rows.
+	// Also cover the "no tokens" branch â€” a second clientID with no rows.
 	seedAgent(t, store, "dpop-jkt-empty", false)
 	emptyClient, _ := srv.Store.GetClient(ctx, "dpop-jkt-empty")
 	emptyAR := &fositeAccessRequest{

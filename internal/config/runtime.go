@@ -1,11 +1,11 @@
-package config
+﻿package config
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // LoadRuntime reads the system_config row from the DB, JSON-unmarshals the
@@ -13,7 +13,7 @@ import (
 // fully-resolved *Config. When the DB row is empty or contains '{}' the
 // returned config is all-defaults (same as calling Load("")).
 //
-// The yaml loader is NOT called here — yaml is still the fallback handled by
+// The yaml loader is NOT called here â€” yaml is still the fallback handled by
 // Build() in internal/server. This function is the DB-only path.
 func LoadRuntime(ctx context.Context, store storage.Store) (*Config, error) {
 	payload, err := store.GetSystemConfig(ctx)

@@ -1,6 +1,6 @@
-# Self-Hosted vs Cloud
+﻿# Self-Hosted vs Cloud
 
-SharkAuth ships as a single Go binary. Everything in this doc works on self-hosted today. Cloud is not yet available — this doc captures the decision matrix so you can plan your deployment path.
+SharkAuth ships as a single Go binary. Everything in this doc works on self-hosted today. Cloud is not yet available â€” this doc captures the decision matrix so you can plan your deployment path.
 
 **Audience:** Technical evaluators choosing a deployment model.
 
@@ -18,18 +18,18 @@ Self-hosted is not a "lite" version. It runs the same OAuth 2.1 stack, the same 
 
 | | Self-Hosted | Cloud (planned) |
 |---|---|---|
-| **Auth features** | All (OAuth 2.1, OIDC, SSO, MFA, passkeys, magic links, RBAC, M2M keys, agent/MCP auth, token exchange) | Identical — same binary |
-| **Audit logs** | Full — filterable, exportable, CSV | Full + managed retention |
+| **Auth features** | All (OAuth 2.1, OIDC, SSO, MFA, passkeys, magic links, RBAC, M2M keys, agent/MCP auth, token exchange) | Identical â€” same binary |
+| **Audit logs** | Full â€” filterable, exportable, CSV | Full + managed retention |
 | **Admin dashboard** | Svelte, embedded in binary | Next.js, hosted |
 | **Database** | SQLite (default) or Postgres | Managed Postgres, multi-tenant |
 | **Email** | Self-configured (Resend, SMTP, SES, Postmark, Mailgun) or `shark.email` (dev) | Preconfigured per tenant |
 | **OAuth configuration** | Dashboard Settings or `shark admin config` CLI | Dashboard UI |
-| **Scaling** | Single instance (SQLite) → horizontal (Postgres + Redis, post-v0.1) | Multi-instance behind LB |
+| **Scaling** | Single instance (SQLite) â†’ horizontal (Postgres + Redis, post-v0.1) | Multi-instance behind LB |
 | **High availability** | You operate it | Managed (SLA tiers, see below) |
 | **Multi-tenancy** | Single tenant | Multi-tenant, isolated |
 | **Data residency** | Your infrastructure, your region | Cloud chooses region (custom domain available on paid tiers) |
 | **Uptime SLA** | None (you own it) | 99.5% (Pro) / 99.9% (Business) / 99.99% (Enterprise) |
-| **Support** | Community (Discord + GitHub) | Email → Priority → Dedicated |
+| **Support** | Community (Discord + GitHub) | Email â†’ Priority â†’ Dedicated |
 | **Price** | $0 forever | Free tier + paid tiers (see below) |
 
 ---
@@ -62,7 +62,7 @@ Use Cloud when:
 
 ### SQLite (default self-hosted)
 
-SQLite is embedded in the binary — zero config, zero external dependency. It handles single-instance workloads well.
+SQLite is embedded in the binary â€” zero config, zero external dependency. It handles single-instance workloads well.
 
 Practical limits:
 - Write throughput: ~500 concurrent writes/sec on commodity hardware (WAL mode)
@@ -76,7 +76,7 @@ SQLite is appropriate for most self-hosted deployments. If you're running auth f
 
 Postgres support is on the [Q3 2026 roadmap](../../SCALE.md). Once available:
 
-Configure via `shark admin config` or the dashboard Settings → Database:
+Configure via `shark admin config` or the dashboard Settings â†’ Database:
 
 ```
 storage.driver = postgres
@@ -92,28 +92,28 @@ Postgres unlocks:
 
 Five in-memory stores (rate limit buckets, DPoP nonce cache, device flow state, SSO state, proxy circuit breaker) are currently process-local. For horizontal scale these need shared state. The roadmap targets either Postgres tables with time-windowed indexes or an optional Redis driver. Decision not yet finalized.
 
-Until shared cache lands, running multiple Shark instances with a shared Postgres backend is possible but the in-memory stores are not shared — DPoP replay protection and device flow state will be per-instance.
+Until shared cache lands, running multiple Shark instances with a shared Postgres backend is possible but the in-memory stores are not shared â€” DPoP replay protection and device flow state will be per-instance.
 
 ### HA topology (self-hosted Postgres path)
 
 ```
-              ┌─────────────────┐
-              │  Load Balancer  │
-              └────────┬────────┘
-              ┌────────┴────────┐
-         ┌────▼────┐       ┌────▼────┐
-         │  shark  │       │  shark  │
-         │  :8080  │       │  :8081  │
-         └────┬────┘       └────┬────┘
-              └────────┬────────┘
-              ┌────────▼────────┐
-              │    Postgres     │
-              │  (primary +     │
-              │   read replica) │
-              └─────────────────┘
+              â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+              â”‚  Load Balancer  â”‚
+              â””â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+              â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”
+         â”Œâ”€â”€â”€â”€â–¼â”€â”€â”€â”€â”       â”Œâ”€â”€â”€â”€â–¼â”€â”€â”€â”€â”
+         â”‚  shark  â”‚       â”‚  shark  â”‚
+         â”‚  :8080  â”‚       â”‚  :8081  â”‚
+         â””â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”˜       â””â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”˜
+              â””â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+              â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”
+              â”‚    Postgres     â”‚
+              â”‚  (primary +     â”‚
+              â”‚   read replica) â”‚
+              â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
-`SHARKAUTH_STORAGE__DSN=postgres://...` on each instance. No distributed lock manager needed — the storage interface handles atomic operations.
+`SHARKAUTH_STORAGE__DSN=postgres://...` on each instance. No distributed lock manager needed â€” the storage interface handles atomic operations.
 
 ---
 
@@ -125,21 +125,21 @@ Cloud is not yet available. Expected tiers based on [`STRATEGY.md`](../../STRATE
 |---|---|---|---|---|
 | **Price** | Free | $49/mo | $249/mo | Custom |
 | **MAU** | 5,000 | 50,000 | 500,000 | Unlimited |
-| **Overage** | — | $0.005/MAU | $0.003/MAU | Negotiated |
+| **Overage** | â€” | $0.005/MAU | $0.003/MAU | Negotiated |
 | **SSO Connections** | 1 OIDC | 3 (SAML+OIDC) | Unlimited | Unlimited |
 | **Organizations** | 3 | 50 | Unlimited | Unlimited |
 | **Webhooks** | 1 endpoint | 10 endpoints | Unlimited | Unlimited |
 | **Audit Retention** | 7 days | 90 days | 1 year | Custom |
 | **Agent/MCP Auth** | 5 agents | 100 agents | Unlimited | Unlimited |
-| **Edge Bundles** | — | 1 region | Multi-region | Global |
+| **Edge Bundles** | â€” | 1 region | Multi-region | Global |
 | **Support** | Community | Email (48h) | Priority (4h) + Slack | Dedicated + SLA |
 | **Dashboard Seats** | 1 | 5 | 20 | Unlimited |
-| **Compliance Reports** | — | — | SOC2 evidence | Full compliance |
-| **Uptime SLA** | — | 99.5% | 99.9% | 99.99% |
-| **Impersonation** | — | — | Yes | Yes |
-| **Custom Domain** | — | Yes | Yes | Yes |
+| **Compliance Reports** | â€” | â€” | SOC2 evidence | Full compliance |
+| **Uptime SLA** | â€” | 99.5% | 99.9% | 99.99% |
+| **Impersonation** | â€” | â€” | Yes | Yes |
+| **Custom Domain** | â€” | Yes | Yes | Yes |
 
-Note: Self-hosted has no limits on any of the above — organizations, agents, webhooks, audit retention are all configuration, not gating.
+Note: Self-hosted has no limits on any of the above â€” organizations, agents, webhooks, audit retention are all configuration, not gating.
 
 ---
 
@@ -171,7 +171,7 @@ If you have strict data residency requirements and Cloud does not yet support yo
 
 You can start on self-hosted and migrate to Cloud later (or vice versa). The data model is the same binary. Migration tooling is planned but not yet available.
 
-Self-hosted → Cloud migration will require:
+Self-hosted â†’ Cloud migration will require:
 1. Export users (the Auth0 export format is already supported for import)
 2. Migrate OAuth client registrations
 3. Migrate audit logs if retention is required
@@ -198,16 +198,16 @@ Self-hosted → Cloud migration will require:
 
 ```bash
 # 1. Install
-go install github.com/sharkauth/sharkauth/cmd/shark@latest
+go install github.com/shark-auth/shark/cmd/shark@latest
 # or download a prebuilt binary from GitHub Releases
 
-# 2. Dev mode (no config needed — ephemeral SQLite, built-in email inbox)
+# 2. Dev mode (no config needed â€” ephemeral SQLite, built-in email inbox)
 shark serve --dev
 
-# 3. Production — run once, complete setup via dashboard at /admin
+# 3. Production â€” run once, complete setup via dashboard at /admin
 shark serve
 # First-boot wizard at http://localhost:8080/admin sets base_url, email provider, etc.
-# Config stored in DB — manage via dashboard Settings or: shark admin config
+# Config stored in DB â€” manage via dashboard Settings or: shark admin config
 ```
 
 Production checklist before exposing to users:

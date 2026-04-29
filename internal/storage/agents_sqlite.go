@@ -22,7 +22,7 @@ func (s *SQLiteStore) CreateAgent(ctx context.Context, agent *Agent) error {
 		createdBy = agent.CreatedBy
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT INTO agents (id, name, description, client_id, client_secret_hash,
 			client_type, auth_method, jwks, jwks_uri, redirect_uris, grant_types,
 			response_types, scopes, token_lifetime, metadata, logo_uri, homepage_uri,
@@ -40,12 +40,12 @@ func (s *SQLiteStore) CreateAgent(ctx context.Context, agent *Agent) error {
 
 // GetAgentByID retrieves an agent by its internal ID.
 func (s *SQLiteStore) GetAgentByID(ctx context.Context, id string) (*Agent, error) {
-	return s.scanAgent(s.db.QueryRowContext(ctx, `SELECT * FROM agents WHERE id = ?`, id))
+	return s.scanAgent(s.reader.QueryRowContext(ctx, `SELECT * FROM agents WHERE id = ?`, id))
 }
 
 // GetAgentByClientID retrieves an agent by its OAuth client_id.
 func (s *SQLiteStore) GetAgentByClientID(ctx context.Context, clientID string) (*Agent, error) {
-	return s.scanAgent(s.db.QueryRowContext(ctx, `SELECT * FROM agents WHERE client_id = ?`, clientID))
+	return s.scanAgent(s.reader.QueryRowContext(ctx, `SELECT * FROM agents WHERE client_id = ?`, clientID))
 }
 
 // ListAgents returns agents with optional filtering and pagination.
@@ -85,7 +85,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 
 	// Count
 	var total int
-	err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	err := s.reader.QueryRowContext(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -96,7 +96,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 		limit = 50
 	}
 	queryArgs := append(args, limit, opts.Offset)
-	rows, err := s.db.QueryContext(ctx, selectQuery, queryArgs...)
+	rows, err := s.reader.QueryContext(ctx, selectQuery, queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -115,7 +115,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, opts ListAgentsOpts) ([]*A
 
 // ListAgentsByUserID returns all agents created by the given user.
 func (s *SQLiteStore) ListAgentsByUserID(ctx context.Context, userID string) ([]*Agent, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT * FROM agents WHERE created_by = ? ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -141,7 +141,7 @@ func (s *SQLiteStore) UpdateAgent(ctx context.Context, agent *Agent) error {
 	scopes, _ := json.Marshal(agent.Scopes)
 	metadata, _ := json.Marshal(agent.Metadata)
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		UPDATE agents SET name=?, description=?, client_secret_hash=?,
 			client_type=?, auth_method=?, jwks=?, jwks_uri=?, redirect_uris=?,
 			grant_types=?, response_types=?, scopes=?, token_lifetime=?,
@@ -160,7 +160,7 @@ func (s *SQLiteStore) UpdateAgent(ctx context.Context, agent *Agent) error {
 
 // UpdateAgentSecret replaces the client_secret_hash for an agent.
 func (s *SQLiteStore) UpdateAgentSecret(ctx context.Context, id, secretHash string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE agents SET client_secret_hash=?, updated_at=? WHERE id=?`,
 		secretHash, time.Now().UTC().Format(time.RFC3339), id,
 	)
@@ -169,7 +169,7 @@ func (s *SQLiteStore) UpdateAgentSecret(ctx context.Context, id, secretHash stri
 
 // DeactivateAgent sets active=0 for an agent.
 func (s *SQLiteStore) DeactivateAgent(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE agents SET active=0, updated_at=? WHERE id=?`,
+	_, err := s.writer.ExecContext(ctx, `UPDATE agents SET active=0, updated_at=? WHERE id=?`,
 		time.Now().UTC().Format(time.RFC3339), id)
 	return err
 }
@@ -179,7 +179,7 @@ func (s *SQLiteStore) DeactivateAgent(ctx context.Context, id string) error {
 // Uses a targeted UPDATE so no SELECT * re-scan is needed.
 func (s *SQLiteStore) RotateDCRClientSecret(ctx context.Context, agentID, newSecretHash, oldSecretHash string, oldSecretExpiresAt time.Time) error {
 	expiresAtStr := oldSecretExpiresAt.UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		UPDATE agents SET
 			client_secret_hash    = ?,
 			old_secret_hash       = ?,

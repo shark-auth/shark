@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -10,12 +10,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // sessionResponse is the wire representation of a session. Hides IP on
-// self-service endpoints by default — admin response embeds this + extras.
+// self-service endpoints by default â€” admin response embeds this + extras.
 type sessionResponse struct {
 	ID             string `json:"id"`
 	UserID         string `json:"user_id"`

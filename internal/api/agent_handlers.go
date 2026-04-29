@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/rand"
@@ -17,7 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // agentCreateResponse wraps an Agent and includes the one-time client_secret.
@@ -39,7 +39,7 @@ func generateAgentSecret() (secret, secretHash string, err error) {
 }
 
 // auditAgentWithMeta logs an agent audit event with structured metadata.
-// ActorID is hardcoded to "admin_key" — admin-key auth doesn't carry a
+// ActorID is hardcoded to "admin_key" â€” admin-key auth doesn't carry a
 // per-user identity, but tagging it explicitly lets dashboard filters
 // distinguish admin-driven events from user/session/agent actor types.
 func (s *Server) auditAgentWithMeta(r *http.Request, action, targetID string, meta map[string]any) {
@@ -475,7 +475,7 @@ func (s *Server) handleAgentRotateSecret(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Capture the existing secret hash prefix so the audit log can render
-	// `diff.old_kid` → `diff.new_kid` in the dashboard's audit view. The
+	// `diff.old_kid` â†’ `diff.new_kid` in the dashboard's audit view. The
 	// secret itself is never logged; only the first 12 hex chars of the
 	// SHA-256 hash, which behaves like a stable, redacted key id.
 	oldKID := ""
@@ -511,7 +511,7 @@ func (s *Server) handleAgentRotateSecret(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"client_id":     agent.ClientID,
 		"client_secret": secret,
-		"message":       "Secret rotated. Copy it now — it will not be shown again.",
+		"message":       "Secret rotated. Copy it now â€” it will not be shown again.",
 	})
 }
 
@@ -617,7 +617,7 @@ func (s *Server) getAgentByIDOrClientID(r *http.Request, idParam string) (*stora
 // computeJWKThumbprint computes an RFC 7638 SHA-256 JWK thumbprint and returns
 // it as a base64url-encoded string.  Only EC P-256 keys are supported (the
 // only curve SharkAuth agents use).  The canonical member set is {crv, kty, x, y}
-// sorted lexicographically per RFC 7638 §3.3.
+// sorted lexicographically per RFC 7638 Â§3.3.
 func computeJWKThumbprint(jwk map[string]any) (string, error) {
 	kty, _ := jwk["kty"].(string)
 	switch kty {
@@ -741,7 +741,7 @@ func (s *Server) handleRotateAgentDPoPKey(w http.ResponseWriter, r *http.Request
 	// Revoke all current tokens for this agent (old key is no longer valid).
 	revokedCount, err := s.Store.RevokeOAuthTokensByClientID(r.Context(), agent.ClientID)
 	if err != nil {
-		// Non-fatal; log but continue — JWK is already updated.
+		// Non-fatal; log but continue â€” JWK is already updated.
 		revokedCount = 0
 	}
 

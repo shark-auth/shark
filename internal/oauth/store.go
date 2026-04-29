@@ -1,4 +1,4 @@
-// Package oauth provides the fosite storage adapter that bridges fosite's
+﻿// Package oauth provides the fosite storage adapter that bridges fosite's
 // storage interfaces to SharkAuth's SQLite-backed storage.Store.
 package oauth
 
@@ -17,7 +17,7 @@ import (
 	"github.com/ory/fosite/handler/oauth2"
 	"github.com/ory/fosite/handler/pkce"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // Compile-time interface assertions.
@@ -39,7 +39,7 @@ func NewFositeStore(store storage.Store) *FositeStore {
 }
 
 // ---------------------------------------------------------------------------
-// SHA256Hasher — fosite.Hasher that uses SHA-256 hex comparison instead of
+// SHA256Hasher â€” fosite.Hasher that uses SHA-256 hex comparison instead of
 // bcrypt. SharkAuth stores client secrets as SHA-256 hex hashes.
 // ---------------------------------------------------------------------------
 
@@ -64,7 +64,7 @@ func (h *SHA256Hasher) Hash(_ context.Context, data []byte) ([]byte, error) {
 }
 
 // ---------------------------------------------------------------------------
-// ClientManager — GetClient, ClientAssertionJWTValid, SetClientAssertionJWT
+// ClientManager â€” GetClient, ClientAssertionJWTValid, SetClientAssertionJWT
 // ---------------------------------------------------------------------------
 
 // GetClient looks up an agent by its OAuth client_id and maps it to a
@@ -265,7 +265,7 @@ func (s *FositeStore) RotateRefreshToken(ctx context.Context, requestID string, 
 }
 
 // ---------------------------------------------------------------------------
-// TokenRevocationStorage — RevokeAccessToken / RevokeRefreshToken
+// TokenRevocationStorage â€” RevokeAccessToken / RevokeRefreshToken
 // ---------------------------------------------------------------------------
 
 // RevokeAccessToken revokes the active access token for a fosite request ID.
@@ -298,7 +298,7 @@ func (s *FositeStore) RevokeRefreshToken(ctx context.Context, requestID string) 
 func (s *FositeStore) CreatePKCERequestSession(ctx context.Context, signature string, req fosite.Requester) error {
 	codeChallenge := req.GetRequestForm().Get("code_challenge")
 	if codeChallenge == "" {
-		// No challenge → public client without PKCE. fosite's PKCE handler
+		// No challenge â†’ public client without PKCE. fosite's PKCE handler
 		// enforces requirement at validation time; nothing to persist here.
 		return nil
 	}
@@ -404,7 +404,7 @@ func (s *FositeStore) createTokenSession(ctx context.Context, signature, tokenTy
 	// fosite's Rotate/Revoke lookups.
 	//
 	// DX1: for JWT access tokens the handler pre-populates a JTI on the
-	// SharkSession so the on-the-wire `jti` claim matches the DB row —
+	// SharkSession so the on-the-wire `jti` claim matches the DB row â€”
 	// introspection can then look up by JTI directly.
 	jti := "jti_" + uuid.New().String()
 	if tokenType == "access" {

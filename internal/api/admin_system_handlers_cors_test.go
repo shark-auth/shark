@@ -1,11 +1,11 @@
-package api_test
+﻿package api_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestCORSRelaxedPersisted verifies that PATCHing server.cors_relaxed=true

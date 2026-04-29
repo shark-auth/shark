@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // setupHeader returns an "Authorization: Setup <token>" header value.
@@ -57,7 +57,7 @@ func TestSetupStatusPublic(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode status body: %v", err)
 	}
-	// No token minted yet — pending must be false.
+	// No token minted yet â€” pending must be false.
 	if out["pending"] != false {
 		t.Errorf("expected pending=false before any token is minted, got %v", out["pending"])
 	}
@@ -99,8 +99,8 @@ func TestSetupTokenMissingAuthHeader(t *testing.T) {
 
 // TestSetupAdminUserValidToken verifies the full happy-path:
 //  1. Mint a setup token (simulating first-boot).
-//  2. GET /admin/setup/info with the valid token → 200 with api_key.
-//  3. POST /admin/setup/admin-user with valid token + email → 200 with sent:true.
+//  2. GET /admin/setup/info with the valid token â†’ 200 with api_key.
+//  3. POST /admin/setup/admin-user with valid token + email â†’ 200 with sent:true.
 //  4. Subsequent POST returns 410 (token consumed).
 func TestSetupAdminUserValidToken(t *testing.T) {
 	ts := testutil.NewTestServerDev(t)
@@ -115,7 +115,7 @@ func TestSetupAdminUserValidToken(t *testing.T) {
 		t.Fatal("MintSetupToken returned empty token")
 	}
 
-	// 2. GET /admin/setup/info — should return the api_key once.
+	// 2. GET /admin/setup/info â€” should return the api_key once.
 	resp := doSetupRequest(t, ts, http.MethodGet, "/api/v1/admin/setup/info", token, nil)
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
@@ -131,7 +131,7 @@ func TestSetupAdminUserValidToken(t *testing.T) {
 		t.Errorf("api_key mismatch: want %q, got %q", fakeAdminKey, infoResp["api_key"])
 	}
 
-	// 3. POST /admin/setup/admin-user — should create user + return sent:true.
+	// 3. POST /admin/setup/admin-user â€” should create user + return sent:true.
 	resp2 := doSetupRequest(t, ts, http.MethodPost, "/api/v1/admin/setup/admin-user",
 		token,
 		map[string]string{"email": "admin@example.com"})
@@ -149,10 +149,10 @@ func TestSetupAdminUserValidToken(t *testing.T) {
 		t.Errorf("expected sent:true, got %v", setupResp["sent"])
 	}
 
-	// 4. Second POST after consumption → 401 (token consumed, middleware rejects).
+	// 4. Second POST after consumption â†’ 401 (token consumed, middleware rejects).
 	// The SetupTokenMiddleware validates the token before the handler runs;
 	// a consumed token fails validation and returns 401. This is the expected
-	// behavior — 410 is returned only by the handler when the middleware somehow
+	// behavior â€” 410 is returned only by the handler when the middleware somehow
 	// passes a consumed state, but in practice the middleware fires first.
 	resp3 := doSetupRequest(t, ts, http.MethodPost, "/api/v1/admin/setup/admin-user",
 		token,

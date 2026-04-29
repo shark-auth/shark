@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 // HandleTokenExchange implements RFC 8693 Token Exchange for agent-to-agent
 // delegation. Grant type: urn:ietf:params:oauth:grant-type:token-exchange
@@ -24,7 +24,7 @@ import (
 	gojwt "github.com/golang-jwt/jwt/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 const (
@@ -128,7 +128,7 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 	// --- Step 4b: correlate to a may_act_grants row (best-effort) ---
 	// Look up a live grant matching (acting -> subject). Try client_id first, then
 	// agent ID; the table is operator-managed and either form may be canonical.
-	// Absence is fine — JWT may_act path stays authoritative.
+	// Absence is fine â€” JWT may_act path stays authoritative.
 	var matchedGrant *storage.MayActGrant
 	if subjectSub != "" {
 		now := time.Now().UTC()
@@ -203,7 +203,7 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 	// Resolve the subject to a real user ID only if it exists in the users
 	// table. When the subject token was a client_credentials token the sub
 	// claim holds a client_id (not a user ID), and the oauth_tokens.user_id
-	// column has a FK → users(id). Setting it to a non-existent ID triggers a
+	// column has a FK â†’ users(id). Setting it to a non-existent ID triggers a
 	// FK violation, so we leave it NULL for agent-to-agent delegation.
 	resolvedUserID := ""
 	if subjectSub != "" {
@@ -282,7 +282,7 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 			"requested_scope":  requestedScopeOut,
 		}
 		// Only populate grant_* keys when a real grants-table row matched.
-		// Absent fields stay absent — keeps backwards compat with audit rows
+		// Absent fields stay absent â€” keeps backwards compat with audit rows
 		// emitted before grants existed.
 		if matchedGrant != nil {
 			metaMap["grant_id"] = matchedGrant.ID
@@ -352,7 +352,7 @@ func (s *Server) parseSubjectJWT(ctx context.Context, tokenStr string) (gojwt.Ma
 			if lookupErr == nil {
 				return parseECPublicKeyPEM(key.PublicKeyPEM)
 			}
-			// KID not in DB — fall through to active-key lookup.
+			// KID not in DB â€” fall through to active-key lookup.
 		}
 		// No kid or kid not found: try the current active ES256 key.
 		key, err := s.RawStore.GetActiveSigningKeyByAlgorithm(ctx, "ES256")

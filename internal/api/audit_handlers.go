@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/csv"
@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sharkauth/sharkauth/internal/audit"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/audit"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // auditListResponse is the response for GET /api/v1/audit-logs.

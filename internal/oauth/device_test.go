@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // mountDeviceRouter adds device flow routes to a chi router.
@@ -84,7 +84,7 @@ func createPendingDeviceCode(t *testing.T, store storage.Store, clientID, scope 
 }
 
 // ---------------------------------------------------------------------------
-// TestGenerateUserCode — validates format and charset
+// TestGenerateUserCode â€” validates format and charset
 // ---------------------------------------------------------------------------
 
 func TestGenerateUserCode(t *testing.T) {
@@ -129,7 +129,7 @@ func TestGenerateUserCode(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDevice_Authorization_Success(t *testing.T) {
-	t.Skip("device flow disabled for v0.1 — handlers return 501")
+	t.Skip("device flow disabled for v0.1 â€” handlers return 501")
 	srv, store := newTestOAuthServer(t)
 	seedDeviceAgent(t, store, "device-client")
 
@@ -207,7 +207,7 @@ func TestDevice_Authorization_UnknownClient(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestDevice_Token_Pending — poll before user approves
+// TestDevice_Token_Pending â€” poll before user approves
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_Pending(t *testing.T) {
@@ -247,7 +247,7 @@ func TestDevice_Token_Pending(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestDevice_Token_SlowDown — rapid polling triggers slow_down
+// TestDevice_Token_SlowDown â€” rapid polling triggers slow_down
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_SlowDown(t *testing.T) {
@@ -333,7 +333,7 @@ func TestDevice_Token_Expired(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestDevice_Token_Denied — user denied
+// TestDevice_Token_Denied â€” user denied
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_Denied(t *testing.T) {
@@ -378,7 +378,7 @@ func TestDevice_Token_Denied(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestDevice_Token_Approved — full happy path
+// TestDevice_Token_Approved â€” full happy path
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_Approved(t *testing.T) {
@@ -439,7 +439,7 @@ func TestDevice_Token_Approved(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestDevice_Verify_GET — renders code entry form
+// TestDevice_Verify_GET â€” renders code entry form
 // ---------------------------------------------------------------------------
 
 func TestDevice_Verify_GET(t *testing.T) {
@@ -471,7 +471,7 @@ func TestDevice_Verify_GET(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestDevice_Approve_POST_Denied — user submits denied decision via POST
+// TestDevice_Approve_POST_Denied â€” user submits denied decision via POST
 // ---------------------------------------------------------------------------
 
 func TestDevice_Approve_POST_Denied(t *testing.T) {
@@ -520,7 +520,7 @@ func TestDevice_Approve_POST_Denied(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestDevice_Token_InvalidCode — unknown device code returns error
+// TestDevice_Token_InvalidCode â€” unknown device code returns error
 // ---------------------------------------------------------------------------
 
 func TestDevice_Token_InvalidCode(t *testing.T) {

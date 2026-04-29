@@ -1,11 +1,11 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
 	"net/http"
 	"time"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 // revokeRequest is the request body for POST /api/v1/auth/revoke.
@@ -25,7 +25,7 @@ type adminRevokeJTIRequest struct {
 // or a token passed explicitly in the body. Cookie sessions are unaffected unless
 // the caller also holds a JWT.
 //
-// Per §1.7: if auth method is "jwt", revoke the claims.ID from context.
+// Per Â§1.7: if auth method is "jwt", revoke the claims.ID from context.
 // If body provides a token, validate it first then revoke its JTI.
 func (s *Server) handleUserRevoke(w http.ResponseWriter, r *http.Request) {
 	if s.JWTManager == nil {
@@ -39,13 +39,13 @@ func (s *Server) handleUserRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req revokeRequest
-	// Ignore decode errors — body is optional
+	// Ignore decode errors â€” body is optional
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	ctx := r.Context()
 
 	if req.Token != "" {
-		// Caller supplied an explicit token to revoke — validate it then revoke its JTI.
+		// Caller supplied an explicit token to revoke â€” validate it then revoke its JTI.
 		claims, err := s.JWTManager.Validate(ctx, req.Token)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{

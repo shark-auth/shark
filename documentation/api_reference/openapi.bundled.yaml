@@ -1,11 +1,11 @@
-openapi: 3.1.0
+﻿openapi: 3.1.0
 info:
   title: SharkAuth API
   version: 0.9.0
   summary: Open-source OAuth 2.1 authorization server with native agent delegation.
   description: "SharkAuth is a single-binary, open-source authentication platform purpose-built\nfor the agent era. It ships\
-    \ every primitive a modern auth product needs —\nSSO (SAML + OIDC), passkeys (WebAuthn), TOTP MFA, magic links, social\
-    \ login,\norganizations + RBAC, audit log, webhooks, reverse-proxy mode — plus\nnative RFC 8693 token-exchange with full\
+    \ every primitive a modern auth product needs â€”\nSSO (SAML + OIDC), passkeys (WebAuthn), TOTP MFA, magic links, social\
+    \ login,\norganizations + RBAC, audit log, webhooks, reverse-proxy mode â€” plus\nnative RFC 8693 token-exchange with full\
     \ agent delegation chains.\n\n### Surfaces\n\nThe API is partitioned into five surfaces. Each lives in its own file under\n\
     `sections/` for readability and tooling. The full spec is the union of the\nfive sections plus this master file's components.\n\
     \n| Section | Path prefix | What |\n|---|---|---|\n| OAuth 2.1 Authorization Server | `/oauth/*`, `/.well-known/*` | Token\
@@ -18,8 +18,8 @@ info:
     \ require either a session cookie (`shark_session`) or a bearer\ntoken (session JWT or admin API key). OAuth endpoints\
     \ follow RFC 6749 +\nRFC 7591 + RFC 9449 client authentication rules.\n\nPublic endpoints (signup, login, password reset\
     \ send, magic link send +\nverify, social login start, paywall, healthz, hosted pages, branding assets)\nrequire no authentication.\n\
-    \n### Errors\n\nTwo error envelopes coexist by surface:\n\n1. **OAuth surface** (`/oauth/*`) — RFC 6749 §5.2 shape:\n\
-    \   `{error, error_description, error_uri}`.\n2. **Auth + Platform + Admin surfaces** — extended shape:\n   `{error, code,\
+    \n### Errors\n\nTwo error envelopes coexist by surface:\n\n1. **OAuth surface** (`/oauth/*`) â€” RFC 6749 Â§5.2 shape:\n\
+    \   `{error, error_description, error_uri}`.\n2. **Auth + Platform + Admin surfaces** â€” extended shape:\n   `{error, code,\
     \ message, docs_url, details}`.\n\nSee the per-section files and `docs/errors.md` in the repo for the full\nerror catalog.\n\
     \n### Versioning\n\n`info.version` tracks the SharkAuth release. v0.9.x is the launch line;\nv1.0.0 is gated on two weeks\
     \ of partner usage without breaking changes.\nBreaking schema changes will bump the major version and ship a migration\n\
@@ -31,7 +31,7 @@ info:
     email: support@sharkauth.com
   license:
     name: MIT
-    url: https://github.com/sharkauth/sharkauth/blob/main/LICENSE
+    url: https://github.com/shark-auth/shark/blob/main/LICENSE
 servers:
 - url: https://sharkauth.example.com
   description: Your SharkAuth deployment (replace with your hostname)
@@ -360,7 +360,7 @@ components:
       description: OAuth client credentials in form-encoded body (`client_id` + `client_secret` fields).
     privateKeyJwt:
       type: oauth2
-      description: RFC 7521 client_assertion via signed JWT — for high-assurance clients.
+      description: RFC 7521 client_assertion via signed JWT â€” for high-assurance clients.
       flows:
         clientCredentials:
           tokenUrl: /oauth/token
@@ -417,15 +417,15 @@ components:
         Required claims in the proof JWT:
 
 
-        - `htm` — HTTP method (upper-case)
+        - `htm` â€” HTTP method (upper-case)
 
-        - `htu` — fully-qualified request URL (no query/fragment)
+        - `htu` â€” fully-qualified request URL (no query/fragment)
 
-        - `iat` — issued-at within a 60-second window
+        - `iat` â€” issued-at within a 60-second window
 
-        - `jti` — unique identifier (replay-checked in-memory)
+        - `jti` â€” unique identifier (replay-checked in-memory)
 
-        - `ath` — base64url(sha256(access_token)) on resource requests
+        - `ath` â€” base64url(sha256(access_token)) on resource requests
 
 
         Permitted algorithms: ES256, ES384, ES512, RS256, RS384, RS512,
@@ -436,7 +436,7 @@ components:
     client_secret_basic:
       type: http
       scheme: basic
-      description: 'RFC 6749 §2.3.1 HTTP Basic authentication using `client_id`
+      description: 'RFC 6749 Â§2.3.1 HTTP Basic authentication using `client_id`
 
         as the username and `client_secret` as the password.
 
@@ -445,7 +445,7 @@ components:
       type: apiKey
       in: query
       name: client_secret
-      description: 'RFC 6749 §2.3.1 — `client_id` and `client_secret` submitted as
+      description: 'RFC 6749 Â§2.3.1 â€” `client_id` and `client_secret` submitted as
 
         `application/x-www-form-urlencoded` body parameters. Shown here as
 
@@ -458,7 +458,7 @@ components:
       type: apiKey
       in: query
       name: client_assertion
-      description: 'RFC 7521 + RFC 7523 — client authentication via a signed JWT
+      description: 'RFC 7521 + RFC 7523 â€” client authentication via a signed JWT
 
         assertion. Set `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`
 
@@ -489,7 +489,7 @@ components:
   schemas:
     OAuthError:
       type: object
-      description: RFC 6749 §5.2 standard error envelope used by all `/oauth/*` endpoints.
+      description: RFC 6749 Â§5.2 standard error envelope used by all `/oauth/*` endpoints.
       required:
       - error
       properties:
@@ -729,7 +729,7 @@ components:
           - P-256
         x:
           type: string
-          description: EC x coordinate (base64url, RFC 7518 §6.2).
+          description: EC x coordinate (base64url, RFC 7518 Â§6.2).
         y:
           type: string
           description: EC y coordinate (base64url).
@@ -953,7 +953,7 @@ components:
             '
         audience:
           type: string
-          description: Target audience for the issued token (RFC 8693 §2.1).
+          description: Target audience for the issued token (RFC 8693 Â§2.1).
         resource:
           type: string
           format: uri
@@ -964,7 +964,7 @@ components:
           type: string
     TokenResponse:
       type: object
-      description: RFC 6749 §5.1 successful token response.
+      description: RFC 6749 Â§5.1 successful token response.
       required:
       - access_token
       - token_type
@@ -983,7 +983,7 @@ components:
           - DPoP
           description: '`Bearer` for standard tokens, `DPoP` if the request included a
 
-            valid DPoP proof (RFC 9449 §5).
+            valid DPoP proof (RFC 9449 Â§5).
 
             '
         expires_in:
@@ -1001,7 +1001,7 @@ components:
           - mcp:tools:read mcp:tools:invoke
         issued_token_type:
           type: string
-          description: RFC 8693 — present only on token-exchange responses.
+          description: RFC 8693 â€” present only on token-exchange responses.
           enum:
           - urn:ietf:params:oauth:token-type:access_token
     RevokeRequest:
@@ -1032,11 +1032,11 @@ components:
           - refresh_token
     IntrospectResponse:
       type: object
-      description: 'RFC 7662 §2.2 introspection response. When `active` is false the
+      description: 'RFC 7662 Â§2.2 introspection response. When `active` is false the
 
         server returns only the `active` field (all other claims are
 
-        omitted — do NOT rely on their absence meaning anything else).
+        omitted â€” do NOT rely on their absence meaning anything else).
 
         '
       required:
@@ -1091,7 +1091,7 @@ components:
           - Bearer
         agent_id:
           type: string
-          description: SharkAuth-specific — internal agent identifier for the client.
+          description: SharkAuth-specific â€” internal agent identifier for the client.
           examples:
           - agent_yfWkz7Lp
         username:
@@ -1185,7 +1185,7 @@ components:
             type: string
             description: 'Only returned on initial registration (POST) and on secret
 
-              rotation. Store it immediately — it is never re-issued.
+              rotation. Store it immediately â€” it is never re-issued.
 
               '
             examples:
@@ -1219,7 +1219,7 @@ components:
             - https://sharkauth.example.com/oauth/register/shark_dcr_yfWkz7LpQaXbNe9RsJc2m
     DCRError:
       type: object
-      description: RFC 7591 §3.2.2 error response.
+      description: RFC 7591 Â§3.2.2 error response.
       required:
       - error
       properties:
@@ -1249,7 +1249,7 @@ components:
           description: RFC 8707 resource indicator.
     DeviceAuthResponse:
       type: object
-      description: RFC 8628 §3.2 device authorization response.
+      description: RFC 8628 Â§3.2 device authorization response.
       required:
       - device_code
       - user_code
@@ -1440,7 +1440,7 @@ components:
           description: Server-side challenge lookup key. Echo back via the `X-Challenge-Key` header on `/register/finish`.
           example: chk_7b4f1e0c3a9d2...
     WebAuthnRegistrationCompletion:
-      description: 'Raw `PublicKeyCredential` from `navigator.credentials.create()` —
+      description: 'Raw `PublicKeyCredential` from `navigator.credentials.create()` â€”
 
         shape defined by the WebAuthn Level 2 spec. Forwarded as-is to the
 
@@ -1809,7 +1809,7 @@ components:
         properties:
           secret:
             type: string
-            description: Plaintext API key — shown once at creation, never returned again.
+            description: Plaintext API key â€” shown once at creation, never returned again.
             example: sk_live_abc12_d7f...6e4
     AuditLog:
       type: object
@@ -2494,7 +2494,7 @@ paths:
 
         endpoint auth methods, signing algorithms, scopes, and DPoP
 
-        capabilities. This is the MCP discovery entrypoint — MCP clients
+        capabilities. This is the MCP discovery entrypoint â€” MCP clients
 
         start here, then use `registration_endpoint` (for DCR) and
 
@@ -2612,11 +2612,11 @@ paths:
       tags:
       - oauth-flow
       summary: Begin the authorization-code flow.
-      description: "RFC 6749 §3.1 + RFC 7636 PKCE authorization endpoint. The client\nnavigates the end-user's browser here.\
+      description: "RFC 6749 Â§3.1 + RFC 7636 PKCE authorization endpoint. The client\nnavigates the end-user's browser here.\
         \ Behavior:\n\n1. If the user is not logged in, the server redirects to the\n   hosted login page for the application\n\
         \   (`/hosted/{app_slug}/login?...&return_to=<this-request>`).\n2. If logged in with an existing consent that covers\
         \ all requested\n   scopes, the server redirects straight back to `redirect_uri`\n   with `code` and `state`.\n3.\
-        \ Otherwise the server renders the HTML consent page.\n\nPKCE is mandatory for public clients — omitting `code_challenge`\n\
+        \ Otherwise the server renders the HTML consent page.\n\nPKCE is mandatory for public clients â€” omitting `code_challenge`\n\
         with `token_endpoint_auth_method=none` will be rejected at the\ntoken step. RFC 8707 `resource` is supported; SharkAuth\
         \ stamps it\ninto the issued token's `aud` claim.\n"
       security:
@@ -2686,7 +2686,7 @@ paths:
 
             `redirect_uri` with `error`, `error_description` per RFC 6749
 
-            §4.1.2.1.
+            Â§4.1.2.1.
 
             '
           headers:
@@ -2752,14 +2752,14 @@ paths:
       - oauth-tokens
       summary: Exchange an authorization grant for tokens.
       description: "Unified token endpoint supporting five grant types (selected via\nthe `grant_type` field):\n\n- `authorization_code`\
-        \ — standard code flow (RFC 6749 §4.1).\n- `client_credentials` — machine-to-machine (RFC 6749 §4.4).\n- `refresh_token`\
-        \ — token refresh (RFC 6749 §6). Rotating.\n- `urn:ietf:params:oauth:grant-type:device_code` — device flow\n  polling\
+        \ â€” standard code flow (RFC 6749 Â§4.1).\n- `client_credentials` â€” machine-to-machine (RFC 6749 Â§4.4).\n- `refresh_token`\
+        \ â€” token refresh (RFC 6749 Â§6). Rotating.\n- `urn:ietf:params:oauth:grant-type:device_code` â€” device flow\n  polling\
         \ (RFC 8628). Returns `authorization_pending`, `slow_down`,\n  `access_denied`, or `expired_token` until the user\
-        \ approves.\n- `urn:ietf:params:oauth:grant-type:token-exchange` — RFC 8693\n  delegation. Acting agent presents a\
+        \ approves.\n- `urn:ietf:params:oauth:grant-type:token-exchange` â€” RFC 8693\n  delegation. Acting agent presents a\
         \ `subject_token`; receives a\n  new JWT with an `act` claim recording the full delegation chain.\n  Scope narrowing\
         \ enforced: requested scopes MUST be a subset of\n  the subject token's scopes. Optional `may_act` claim on the\n\
         \  subject token gates which clients can act as delegates.\n\n**DPoP**: if a valid `DPoP` header is present, the proof's\
-        \ JWK\nthumbprint is stamped into the issued JWT as `cnf.jkt` and the\ntoken type becomes `DPoP` (RFC 9449 §5).\n\n\
+        \ JWK\nthumbprint is stamped into the issued JWT as `cnf.jkt` and the\ntoken type becomes `DPoP` (RFC 9449 Â§5).\n\n\
         Issued access tokens are signed ES256 JWTs with at minimum\n`iss`, `sub`, `aud`, `client_id`, `scope`, `jti`, `iat`,\
         \ `exp`.\n"
       x-source: internal/oauth/handlers.go:47
@@ -2857,7 +2857,7 @@ paths:
                     expires_in: 3600
                     scope: mcp:tools:read
                 device_code_pending:
-                  summary: (Error envelope shown on device_code polling — see 400.)
+                  summary: (Error envelope shown on device_code polling â€” see 400.)
                   value: {}
         '400':
           description: Invalid request, bad grant, DPoP proof failure, or (for device flow) polling state.
@@ -2920,9 +2920,9 @@ paths:
         family also cascades to sibling refresh tokens.
 
 
-        Per RFC 7009 §2.2, returns 200 OK even for unknown / invalid /
+        Per RFC 7009 Â§2.2, returns 200 OK even for unknown / invalid /
 
-        already-revoked tokens — the response is effectively idempotent
+        already-revoked tokens â€” the response is effectively idempotent
 
         and carries no body.
 
@@ -2971,7 +2971,7 @@ paths:
 
         servers) call this to authoritatively validate a bearer token
 
-        against the database — cheaper and more correct than parsing the
+        against the database â€” cheaper and more correct than parsing the
 
         JWT locally when you need to know whether the token has been
 
@@ -2982,7 +2982,7 @@ paths:
 
         Bearer `sk_live_*`. Missing/unknown/revoked/expired tokens return
 
-        `{"active": false}` with HTTP 200 (per RFC 7662 §2.2).
+        `{"active": false}` with HTTP 200 (per RFC 7662 Â§2.2).
 
 
         Internally, SharkAuth looks tokens up three ways in order:
@@ -3063,7 +3063,7 @@ paths:
 
         `response_types=["code"]`, `token_endpoint_auth_method=client_secret_basic`.
 
-        Redirect URIs MUST be absolute `https://` — `http://` is allowed
+        Redirect URIs MUST be absolute `https://` â€” `http://` is allowed
 
         only for `localhost`, `127.0.0.1`, `::1`.
 
@@ -3138,7 +3138,7 @@ paths:
 
         The `client_secret` and `registration_access_token` are NOT
 
-        returned on read — those are only issued at registration time or
+        returned on read â€” those are only issued at registration time or
 
         on explicit rotation.
 
@@ -3175,7 +3175,7 @@ paths:
       summary: Update a registered client's metadata (RFC 7592).
       description: 'Replaces the client''s metadata. All fields in the request body
 
-        overwrite the existing values — pass the full metadata, not a
+        overwrite the existing values â€” pass the full metadata, not a
 
         partial patch. Grants and redirect URIs are re-validated.
 
@@ -3215,7 +3215,7 @@ paths:
       summary: Deregister a client (RFC 7592).
       description: 'Deactivates the client record and revokes all outstanding tokens
 
-        issued to it. Non-reversible — a fresh registration creates a new
+        issued to it. Non-reversible â€” a fresh registration creates a new
 
         `client_id`.
 
@@ -3283,7 +3283,7 @@ paths:
 
         and issues a new one. Unlike secret rotation there is no grace
 
-        window — use this when you suspect the registration token was
+        window â€” use this when you suspect the registration token was
 
         leaked.
 
@@ -3392,7 +3392,7 @@ paths:
         renders a plain code-entry form.
 
 
-        Machine clients do NOT call this endpoint — they poll `/oauth/token`
+        Machine clients do NOT call this endpoint â€” they poll `/oauth/token`
 
         with the `device_code` grant.
 
@@ -3471,7 +3471,7 @@ paths:
 
         cookie, and optionally returns a JWT (when JWT is enabled in server
 
-        config). Public — no authentication required.
+        config). Public â€” no authentication required.
 
         '
       operationId: signup
@@ -3545,7 +3545,7 @@ paths:
 
         response is `{mfaRequired: true}` and the session cookie is partial
 
-        (`mfa_passed=false`) — the caller must complete `/auth/mfa/challenge`
+        (`mfa_passed=false`) â€” the caller must complete `/auth/mfa/challenge`
 
         or `/auth/mfa/recovery` before using the session.
 
@@ -3599,7 +3599,7 @@ paths:
                     code: invalid_credentials
                     message: Invalid email or password
         '429':
-          description: Account locked — too many failed attempts.
+          description: Account locked â€” too many failed attempts.
           content:
             application/json:
               schema:
@@ -3628,7 +3628,7 @@ paths:
       x-source: internal/api/auth_handlers.go:336
       responses:
         '200':
-          description: Session terminated (idempotent — returns 200 even without a session).
+          description: Session terminated (idempotent â€” returns 200 even without a session).
           content:
             application/json:
               schema:
@@ -3713,7 +3713,7 @@ paths:
       summary: Send an email-verification link
       description: 'Sends the signed verification link to the currently authenticated
 
-        user''s email address. Idempotent — returns 200 even if the email is
+        user''s email address. Idempotent â€” returns 200 even if the email is
 
         already verified or sending failed (to avoid leaking delivery state).
 
@@ -3801,7 +3801,7 @@ paths:
 
         cookie, and 302-redirects to the provider''s authorization URL.
 
-        Public endpoint — the state cookie is the only session state between
+        Public endpoint â€” the state cookie is the only session state between
 
         start and callback.
 
@@ -4007,7 +4007,7 @@ paths:
       summary: Begin passkey login (public)
       description: 'Returns a WebAuthn `PublicKeyCredentialRequestOptions`. `email` is
 
-        optional — when omitted, the server returns a discoverable-credential
+        optional â€” when omitted, the server returns a discoverable-credential
 
         (usernameless) challenge.
 
@@ -4055,7 +4055,7 @@ paths:
       tags:
       - auth-passkey
       summary: Finish passkey login (public)
-      description: 'Verifies the assertion, creates a session (mfa_passed=true — passkeys
+      description: 'Verifies the assertion, creates a session (mfa_passed=true â€” passkeys
 
         are multi-factor), and returns the user. Requires `X-Challenge-Key`
 
@@ -4658,7 +4658,7 @@ paths:
       summary: Regenerate recovery codes
       description: 'Invalidates previously-issued recovery codes and returns a fresh set.
 
-        Despite using `GET`, this mutates — that is by design so the codes can
+        Despite using `GET`, this mutates â€” that is by design so the codes can
 
         be fetched via a browser redirect.
 
@@ -4696,7 +4696,7 @@ paths:
       summary: Verify MFA during a paused auth flow
       description: 'Called when an auth flow step returned `{outcome: "awaiting_mfa",
 
-        challenge_id: "mfac_..."}`. The endpoint is public — the challenge
+        challenge_id: "mfac_..."}`. The endpoint is public â€” the challenge
 
         ID is the proof of prior auth. Single-use; the challenge is consumed
 
@@ -4960,9 +4960,9 @@ paths:
       tags:
       - auth-signup-login
       summary: Revoke a JWT (self-service)
-      description: 'Revokes the JTI of the current JWT, or — if `token` is supplied in the
+      description: 'Revokes the JTI of the current JWT, or â€” if `token` is supplied in the
 
-        body — validates that token and revokes its JTI (only if it belongs to
+        body â€” validates that token and revokes its JTI (only if it belongs to
 
         the authenticated user). Cookie sessions are unaffected unless the
 
@@ -5795,7 +5795,7 @@ paths:
       tags:
       - saml
       operationId: samlACS
-      summary: SAML Assertion Consumer Service — receive POST'd assertion from IdP
+      summary: SAML Assertion Consumer Service â€” receive POST'd assertion from IdP
       x-source: internal/api/router.go:461
       parameters:
       - name: connection_id
@@ -5947,7 +5947,7 @@ paths:
       tags:
       - api-keys
       operationId: rotateAPIKey
-      summary: Rotate API key — issues a new plaintext, marks old grace-revoked
+      summary: Rotate API key â€” issues a new plaintext, marks old grace-revoked
       x-source: internal/api/router.go:474
       parameters:
       - name: id
@@ -6084,7 +6084,7 @@ paths:
       x-status: not-implemented
       responses:
         '501':
-          description: Not implemented in v0.9 — planned for post-launch.
+          description: Not implemented in v0.9 â€” planned for post-launch.
   /api/v1/migrate/{id}:
     get:
       tags:
@@ -6675,7 +6675,7 @@ paths:
       tags:
       - admin-vault
       operationId: vaultCallback
-      summary: Vault OAuth callback — exchange code for tokens, store in Vault
+      summary: Vault OAuth callback â€” exchange code for tokens, store in Vault
       x-source: internal/api/router.go:560
       parameters:
       - name: provider
@@ -7574,7 +7574,7 @@ paths:
       tags:
       - admin-proxy
       operationId: adminProxySimulate
-      summary: Dry-run a request through the rule engine — see which rule fires and the action
+      summary: Dry-run a request through the rule engine â€” see which rule fires and the action
       x-source: internal/api/router.go:678
       requestBody:
         required: true
@@ -7868,7 +7868,7 @@ paths:
       tags:
       - system-health
       operationId: healthz
-      summary: Liveness probe — returns 200 if server can respond
+      summary: Liveness probe â€” returns 200 if server can respond
       description: Cheap probe used by Docker healthcheck and orchestrators. Does not check downstream dependencies (DB, SMTP);
         use `/api/v1/admin/health` for that.
       x-source: internal/api/router.go:219

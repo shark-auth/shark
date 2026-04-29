@@ -1,11 +1,11 @@
-package user
+﻿package user
 
 import (
 	"context"
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 const idPrefix = "usr_"

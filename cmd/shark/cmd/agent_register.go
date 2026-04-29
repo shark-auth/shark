@@ -1,4 +1,4 @@
-// Package cmd — `shark agent register` subcommand (Lane E, E5).
+﻿// Package cmd â€” `shark agent register` subcommand (Lane E, E5).
 //
 // Uses the existing POST /api/v1/agents admin endpoint (handleCreateAgent).
 // Spec directive: if no agent endpoints exist, scope-check with operator.
@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
+	"github.com/shark-auth/shark/internal/cli"
 )
 
 var agentCmd = &cobra.Command{
@@ -23,7 +23,7 @@ var agentRegisterCmd = &cobra.Command{
 	Use:   "register",
 	Short: "Register a new agent identity",
 	Long: `Creates a new agent identity via POST /api/v1/agents.
-Returns the agent ID and client secret — the secret is shown only once.`,
+Returns the agent ID and client secret â€” the secret is shown only once.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		app, _ := cmd.Flags().GetString("app")
 		name, _ := cmd.Flags().GetString("name")
@@ -74,7 +74,7 @@ Returns the agent ID and client secret — the secret is shown only once.`,
 			fmt.Sprintf("client_id: %s", clientID),
 		}
 		if secret != "" {
-			lines = append(lines, fmt.Sprintf("secret:    %s  (shown once — save it now)", secret))
+			lines = append(lines, fmt.Sprintf("secret:    %s  (shown once â€” save it now)", secret))
 		}
 		cli.PrintBox(out, "Agent Credentials", lines)
 		return nil

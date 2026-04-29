@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 
-	"github.com/sharkauth/sharkauth/internal/audit"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/audit"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // ---------------------------------------------------------------------------
@@ -524,7 +524,7 @@ func TestExchange_AuditMetadata_ScopeFields(t *testing.T) {
 	seedAgentWithScopes(t, store, "audit-actor", []string{"openid", "read", "write"})
 	_ = seedUser(t, store, "audit-user@example.com")
 
-	// Subject has "openid read write"; request only "read" → should drop "openid" + "write".
+	// Subject has "openid read write"; request only "read" â†’ should drop "openid" + "write".
 	subjectToken := mintSubjectJWT(t, srv, "audit-user@example.com", "openid read write", nil)
 
 	form := url.Values{
@@ -615,7 +615,7 @@ func TestExchange_AuditMetadata_EmptyArrays(t *testing.T) {
 	seedAgentWithScopes(t, store, "empty-arr-actor", []string{"openid", "read"})
 	_ = seedUser(t, store, "empty-arr-user@example.com")
 
-	// No "scope" param → full pass-through; dropped_scope and requested_scope should be [].
+	// No "scope" param â†’ full pass-through; dropped_scope and requested_scope should be [].
 	subjectToken := mintSubjectJWT(t, srv, "empty-arr-user@example.com", "openid read", nil)
 
 	form := url.Values{
@@ -672,7 +672,7 @@ func TestExchange_AuditMetadata_EmptyArrays(t *testing.T) {
 	}
 }
 
-// TestExchange_AuditMetadata_GrantID — when a may_act_grants row matches
+// TestExchange_AuditMetadata_GrantID â€” when a may_act_grants row matches
 // (acting_client_id, subject), the audit row's metadata.grant_id is populated.
 // Proves Phase A: token-exchange correlates to an operator-issued grant.
 func TestExchange_AuditMetadata_GrantID(t *testing.T) {
@@ -744,7 +744,7 @@ func TestExchange_AuditMetadata_GrantID(t *testing.T) {
 	}
 }
 
-// TestExchange_AuditMetadata_NoGrant — when no may_act_grants row exists,
+// TestExchange_AuditMetadata_NoGrant â€” when no may_act_grants row exists,
 // grant_* keys are absent (not empty/null). Proves backwards-compat.
 func TestExchange_AuditMetadata_NoGrant(t *testing.T) {
 	_, srv, store := mountExchangeServer(t)

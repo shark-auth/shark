@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -10,11 +10,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/proxy"
-	rbacpkg "github.com/sharkauth/sharkauth/internal/rbac"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/proxy"
+	rbacpkg "github.com/shark-auth/shark/internal/rbac"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // Shared session cookie name. Keep in sync with internal/auth/session.go
@@ -31,7 +31,7 @@ var ErrNoCredentials = errors.New("proxy: no credentials on request")
 
 // JWTResolver verifies Bearer JWTs locally via the JWT Manager (which has
 // cached JWKS). Never reaches the DB and is never blocked by the circuit
-// breaker — JWTs are stateless and decoupled from auth-server health.
+// breaker â€” JWTs are stateless and decoupled from auth-server health.
 type JWTResolver struct {
 	JWT   *jwtpkg.Manager
 	Store storage.Store // reserved for future role expansion on the hot path
@@ -44,7 +44,7 @@ type JWTResolver struct {
 func (r *JWTResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 	bearer := extractBearer(req)
 	if bearer == "" {
-		// No credential is not an error — the composite resolver falls
+		// No credential is not an error â€” the composite resolver falls
 		// through to session-cookie auth. Keep this distinct from
 		// ErrNoCredentials which callers may choose to surface as 401.
 		return proxy.Identity{}, nil
@@ -78,7 +78,7 @@ func (r *JWTResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 	}
 
 	// Best-effort email + role expansion. If the store round-trip fails we
-	// still return the identity — denying a request because the DB hiccuped
+	// still return the identity â€” denying a request because the DB hiccuped
 	// during role lookup is a bad trade (the JWT already proved identity).
 	if r.Store != nil && claims.Subject != "" {
 		if u, err := r.Store.GetUserByID(req.Context(), claims.Subject); err == nil && u != nil {
@@ -92,7 +92,7 @@ func (r *JWTResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 			}
 		}
 	}
-	// Fall back to claims.Roles if the store returned nothing — the
+	// Fall back to claims.Roles if the store returned nothing â€” the
 	// JWT is the authoritative copy for tokens minted with enrichment.
 	if len(id.Roles) == 0 && len(claims.Roles) > 0 {
 		id.Roles = append([]string(nil), claims.Roles...)
@@ -103,7 +103,7 @@ func (r *JWTResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 
 // LiveResolver validates a session cookie by calling the auth stack
 // directly (in-process, not HTTP). Used by the circuit breaker when
-// closed/half-open. Called by BreakerResolver — never wired as the JWT
+// closed/half-open. Called by BreakerResolver â€” never wired as the JWT
 // path.
 type LiveResolver struct {
 	Sessions *auth.SessionManager
@@ -167,7 +167,7 @@ func (r *LiveResolver) Resolve(req *http.Request) (proxy.Identity, error) {
 }
 
 // tierFromMetadata pulls the "tier" key out of the user's metadata JSON
-// blob. Mirrors the shape the JWT manager bakes in on issuance — see
+// blob. Mirrors the shape the JWT manager bakes in on issuance â€” see
 // internal/auth/jwt/manager.go userTierFromMetadata. Duplicated here
 // (rather than imported) so the proxy-resolvers file stays decoupled
 // from jwt.*, and the one-liner cost is negligible.
@@ -178,7 +178,7 @@ func tierFromMetadata(metadataJSON string) string {
 	var md struct {
 		Tier string `json:"tier"`
 	}
-	// Best-effort: corrupted JSON → empty tier (the engine's ReqTier
+	// Best-effort: corrupted JSON â†’ empty tier (the engine's ReqTier
 	// compares strings equal, so empty just fails the predicate).
 	_ = json.Unmarshal([]byte(metadataJSON), &md)
 	return md.Tier

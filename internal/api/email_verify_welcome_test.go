@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // seedUnverifiedUser inserts a user with email_verified=0 so the verify
@@ -47,7 +47,7 @@ func countWelcomeMessages(ts *testutil.TestServer, to string) int {
 
 // waitForWelcome polls the captured inbox for up to 2s waiting on the
 // welcome email. The handler dispatches the send in a goroutine so the
-// HTTP response returns before the message is captured — a short poll is
+// HTTP response returns before the message is captured â€” a short poll is
 // cheaper and less flaky than a fixed sleep.
 func waitForWelcome(t *testing.T, ts *testutil.TestServer, to string, want int) {
 	t.Helper()
@@ -62,7 +62,7 @@ func waitForWelcome(t *testing.T, ts *testutil.TestServer, to string, want int) 
 }
 
 // TestWelcomeEmail_FiredOnFirstVerification drives the verify endpoint end
-// to end: send verification → click token → assert welcome email landed
+// to end: send verification â†’ click token â†’ assert welcome email landed
 // in the mock inbox + welcome_email_sent flipped to 1 in the DB.
 func TestWelcomeEmail_FiredOnFirstVerification(t *testing.T) {
 	ts := testutil.NewTestServer(t)
@@ -70,7 +70,7 @@ func TestWelcomeEmail_FiredOnFirstVerification(t *testing.T) {
 	userEmail := "welcome-first@example.com"
 	u := seedUnverifiedUser(t, ts, "usr_welcome_first", userEmail)
 
-	// Generate a verify token via the manager directly — mirrors what the
+	// Generate a verify token via the manager directly â€” mirrors what the
 	// /verify/send handler does, without needing an authenticated session.
 	if err := ts.APIServer.MagicLinkManager.SendEmailVerification(context.Background(), userEmail); err != nil {
 		t.Fatalf("SendEmailVerification: %v", err)
@@ -92,10 +92,10 @@ func TestWelcomeEmail_FiredOnFirstVerification(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// Welcome email fires in a goroutine — poll.
+	// Welcome email fires in a goroutine â€” poll.
 	waitForWelcome(t, ts, userEmail, 1)
 
-	// DB flag should now be 1 — a second MarkWelcomeEmailSent returns
+	// DB flag should now be 1 â€” a second MarkWelcomeEmailSent returns
 	// sql.ErrNoRows (tested exhaustively in storage unit test).
 	if err := ts.Store.MarkWelcomeEmailSent(context.Background(), u.ID); err == nil {
 		t.Fatalf("expected welcome_email_sent already=1 after verify, but second Mark succeeded")
@@ -103,7 +103,7 @@ func TestWelcomeEmail_FiredOnFirstVerification(t *testing.T) {
 }
 
 // TestWelcomeEmail_NotFiredOnSecondVerification pre-sets welcome_email_sent=1
-// so the UPDATE guard matches zero rows — handler must NOT dispatch a
+// so the UPDATE guard matches zero rows â€” handler must NOT dispatch a
 // second welcome email even though the verify endpoint ran successfully.
 func TestWelcomeEmail_NotFiredOnSecondVerification(t *testing.T) {
 	ts := testutil.NewTestServer(t)
@@ -111,7 +111,7 @@ func TestWelcomeEmail_NotFiredOnSecondVerification(t *testing.T) {
 	userEmail := "welcome-second@example.com"
 	u := seedUnverifiedUser(t, ts, "usr_welcome_second", userEmail)
 
-	// Pre-flip the flag — simulates a prior verification that already
+	// Pre-flip the flag â€” simulates a prior verification that already
 	// triggered the welcome email.
 	if err := ts.Store.MarkWelcomeEmailSent(context.Background(), u.ID); err != nil {
 		t.Fatalf("pre-seed MarkWelcomeEmailSent: %v", err)
@@ -134,7 +134,7 @@ func TestWelcomeEmail_NotFiredOnSecondVerification(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// Give the handler a chance to (incorrectly) dispatch — even if the
+	// Give the handler a chance to (incorrectly) dispatch â€” even if the
 	// goroutine ran, the flag was already 1 so no welcome must land.
 	time.Sleep(100 * time.Millisecond)
 

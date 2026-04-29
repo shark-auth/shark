@@ -1,12 +1,12 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func seedUserForOrg(t *testing.T, store *storage.SQLiteStore, id, email string) {

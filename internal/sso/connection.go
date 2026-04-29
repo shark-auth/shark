@@ -1,4 +1,4 @@
-// Package sso implements SSO connection management, OIDC client, and SAML SP
+﻿// Package sso implements SSO connection management, OIDC client, and SAML SP
 // functionality for SharkAuth.
 package sso
 
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // SessionCreator abstracts session creation so the SSO package does not depend
@@ -171,7 +171,7 @@ func (s *SSOManager) findOrCreateUser(ctx context.Context, connectionID, provide
 		return user, nil
 	}
 
-	// Check if user exists by email — if so, link the SSO identity
+	// Check if user exists by email â€” if so, link the SSO identity
 	user, err := s.store.GetUserByEmail(ctx, email)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("lookup user by email: %w", err)

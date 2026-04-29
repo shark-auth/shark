@@ -1,10 +1,10 @@
-# SharkAuth Security Audit & Bug Fixes
+﻿# SharkAuth Security Audit & Bug Fixes
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the silent email failure, patch all security vulnerabilities found during audit, and repair broken features (OAuth, env var config) that appear functional but silently fail.
 
-**Architecture:** 13 targeted fixes across config loading, middleware, session management, OAuth wiring, and email error handling. Each task is a self-contained fix with its own commit. No structural refactors — surgical changes only.
+**Architecture:** 13 targeted fixes across config loading, middleware, session management, OAuth wiring, and email error handling. Each task is a self-contained fix with its own commit. No structural refactors â€” surgical changes only.
 
 **Tech Stack:** Go 1.25, Chi v5, gorilla/securecookie, koanf v2, SQLite, crypto/sha256, crypto/subtle
 
@@ -12,7 +12,7 @@
 
 ## Task 1: Fix env var interpolation in YAML config
 
-The root cause of the email bug. Koanf does NOT resolve `${VAR_NAME}` syntax in YAML values — the literal string `"${RESEND_API_KEY}"` is used as the SMTP password. This also breaks `server.secret`, `admin.api_key`, and all OAuth credentials.
+The root cause of the email bug. Koanf does NOT resolve `${VAR_NAME}` syntax in YAML values â€” the literal string `"${RESEND_API_KEY}"` is used as the SMTP password. This also breaks `server.secret`, `admin.api_key`, and all OAuth credentials.
 
 **Files:**
 - Modify: `internal/config/config.go:210-214`
@@ -191,7 +191,7 @@ In `router.go`, remove line 111 (`r.Post("/check", s.handleAuthCheck)`) from the
 With nothing (delete the line). Then add a new admin-protected route block right after the existing `/permissions` route block (after line 185):
 
 ```go
-		// Auth check (admin) — validates if a user has a specific permission
+		// Auth check (admin) â€” validates if a user has a specific permission
 		r.Group(func(r chi.Router) {
 			r.Use(mw.AdminAPIKey(cfg.Admin.APIKey))
 			r.Post("/auth/check", s.handleAuthCheck)
@@ -230,7 +230,7 @@ Add the providers import and replace `initOAuthManager`:
 ```go
 import (
 	// ... existing imports
-	"github.com/sharkauth/sharkauth/internal/auth/providers"
+	"github.com/shark-auth/shark/internal/auth/providers"
 )
 ```
 
@@ -412,7 +412,7 @@ func NewSessionManager(store storage.Store, secret string, lifetime time.Duratio
 }
 ```
 
-Note: this changes the block key derivation, which will invalidate all existing session cookies. Users will need to log in again after this deploy — which is acceptable for a pre-alpha security fix.
+Note: this changes the block key derivation, which will invalidate all existing session cookies. Users will need to log in again after this deploy â€” which is acceptable for a pre-alpha security fix.
 
 - [ ] **Step 2: Run the build**
 
@@ -473,7 +473,7 @@ Prevents timing-based side channel on the OAuth state parameter."
 
 ## Task 9: Fix MFA session upgrade race condition
 
-`UpgradeMFA` deletes then recreates the session — not atomic. Concurrent requests between delete and create get 401. Add an `UpdateSessionMFAPassed` method to the store instead.
+`UpgradeMFA` deletes then recreates the session â€” not atomic. Concurrent requests between delete and create get 401. Add an `UpdateSessionMFAPassed` method to the store instead.
 
 **Files:**
 - Modify: `internal/storage/storage.go` (add interface method)
@@ -533,7 +533,7 @@ condition where concurrent requests between the two operations got
 
 ## Task 10: Fix magic link rate limiter memory leak
 
-The per-email `lastSent` map grows unbounded — no cleanup goroutine. Add one.
+The per-email `lastSent` map grows unbounded â€” no cleanup goroutine. Add one.
 
 **Files:**
 - Modify: `internal/api/magiclink_handlers.go:26-50`
@@ -749,7 +749,7 @@ In `internal/api/router.go`, add CORS middleware right after the global middlewa
 
 - [ ] **Step 4: Add default CORS config in config defaults**
 
-In `internal/config/config.go`, the `CORSOrigins` field is a slice, so no default needed — it's `nil` by default (CORS disabled). Users opt in via config:
+In `internal/config/config.go`, the `CORSOrigins` field is a slice, so no default needed â€” it's `nil` by default (CORS disabled). Users opt in via config:
 
 ```yaml
 server:
@@ -778,7 +778,7 @@ with explicit origin allowlist. Disabled by default."
 
 ## Task 13: Add cleanup to SSO OIDC state store
 
-The OIDC state store is an in-memory map with no TTL or cleanup — unbounded memory growth.
+The OIDC state store is an in-memory map with no TTL or cleanup â€” unbounded memory growth.
 
 **Files:**
 - Modify: `internal/api/sso_handlers.go:14-27`

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -16,11 +16,11 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
-// Bootstrap token (T15) — one-time URL that mints a short-lived admin API key
-// so a fresh install doesn't force the operator to paste sk_live_… from the
+// Bootstrap token (T15) â€” one-time URL that mints a short-lived admin API key
+// so a fresh install doesn't force the operator to paste sk_live_â€¦ from the
 // server log. Flow:
 //   1. On `shark serve` startup, if no admin audit events exist, the caller
 //      (server.Serve) invokes Server.MintBootstrapToken and prints the URL to
@@ -32,7 +32,7 @@ import (
 //      sessionStorage and reloads the dashboard.
 //
 // Security:
-//   - crypto/rand, 32 bytes → base16 (64 chars)
+//   - crypto/rand, 32 bytes â†’ base16 (64 chars)
 //   - only the SHA-256 hash is kept in memory; the raw token exists for one
 //     stdout line and one HTTP request
 //   - single-use (consumed=true flips on first match)
@@ -54,7 +54,7 @@ var (
 )
 
 // bootstrapTokenTTL is the window in which the printed URL is valid. Kept
-// short because the token grants full admin — if the operator doesn't click
+// short because the token grants full admin â€” if the operator doesn't click
 // within 10 minutes, they can restart the server to get a fresh URL.
 const bootstrapTokenTTL = 10 * time.Minute
 
@@ -62,11 +62,11 @@ const bootstrapTokenTTL = 10 * time.Minute
 // and returns the raw token for stdout. Calling it again replaces any prior
 // token (so repeated startups don't leave stale tokens lying around).
 //
-// Returns ("", nil) when an admin has already been bootstrapped — detected
+// Returns ("", nil) when an admin has already been bootstrapped â€” detected
 // via presence of any audit_logs row with action LIKE 'admin.%'. The caller
 // uses "" to mean "don't print anything".
 func (s *Server) MintBootstrapToken(ctx context.Context) (string, error) {
-	// "Has any admin ever acted on this install?" — cheap probe via
+	// "Has any admin ever acted on this install?" â€” cheap probe via
 	// QueryAuditLogs with a comma-separated action list is not feasible
 	// (LIKE isn't supported), so we scan the N most recent rows and check
 	// for any admin.* prefix. On a fresh DB this is zero rows and we mint.
@@ -109,7 +109,7 @@ type bootstrapConsumeResponse struct {
 }
 
 // handleBootstrapConsume validates a bootstrap token and mints a real admin
-// API key. No auth middleware is mounted on this route — the token itself is
+// API key. No auth middleware is mounted on this route â€” the token itself is
 // the credential.
 func (s *Server) handleBootstrapConsume(w http.ResponseWriter, r *http.Request) {
 	var req bootstrapConsumeRequest
@@ -228,12 +228,12 @@ func (s *Server) handleBootstrapConsume(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, bootstrapConsumeResponse{APIKey: fullKey})
 }
 
-// handleFirstbootKey serves the contents of data/admin.key.firstboot ONCE —
+// handleFirstbootKey serves the contents of data/admin.key.firstboot ONCE â€”
 // only while the file exists AND no admin-scoped API key has been bootstrapped
 // via the audit trail. Once either condition is gone it returns 404 so the
 // credential is never surfaced again.
 //
-// GET /api/v1/admin/firstboot/key  (public — this IS the pre-auth setup UX)
+// GET /api/v1/admin/firstboot/key  (public â€” this IS the pre-auth setup UX)
 func (s *Server) handleFirstbootKey(w http.ResponseWriter, r *http.Request) {
 	keyPath := s.firstbootKeyPath()
 	if keyPath == "" {
@@ -245,7 +245,7 @@ func (s *Server) handleFirstbootKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Security gate: once any API key exists (other than the default admin
-	// created during first boot) the admin has already bootstrapped — stop
+	// created during first boot) the admin has already bootstrapped â€” stop
 	// serving the key. FAIL CLOSED on any DB error so a transient failure
 	// cannot bypass the gate.
 	keys, err := s.Store.ListAPIKeys(r.Context())
@@ -284,7 +284,7 @@ func (s *Server) handleFirstbootKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := strings.TrimSpace(string(data))
-	// Do NOT include filesystem path in response — it leaks deployment layout
+	// Do NOT include filesystem path in response â€” it leaks deployment layout
 	// to unauthenticated callers.
 	writeJSON(w, http.StatusOK, map[string]string{
 		"key": key,

@@ -1,10 +1,10 @@
-// Package webhook handles outbound event delivery: HMAC-signed payloads,
+﻿// Package webhook handles outbound event delivery: HMAC-signed payloads,
 // exponential retry, durable delivery log.
 //
 // Design choices:
 //   - Durable-first: every attempt writes a webhook_deliveries row before the
 //     HTTP call leaves the process. Process death mid-flight never loses
-//     events — the next scheduler tick finds the row and retries.
+//     events â€” the next scheduler tick finds the row and retries.
 //   - Async fan-out: Emit() returns immediately after persisting the pending
 //     delivery row; the actual HTTP call runs on a bounded worker pool.
 //   - Retry policy: 5 attempts, backoff [1m, 5m, 30m, 2h, 12h]. Past that, mark
@@ -30,12 +30,12 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // BackoffSchedule defines the delay after attempt N (1-indexed).
 // Attempt 1 (first delivery) uses delay 0. Attempt 2 waits BackoffSchedule[0].
-// Total window: 1m + 5m + 30m + 2h + 12h ≈ 14h40m.
+// Total window: 1m + 5m + 30m + 2h + 12h â‰ˆ 14h40m.
 var BackoffSchedule = []time.Duration{
 	1 * time.Minute,
 	5 * time.Minute,
@@ -167,7 +167,7 @@ func (d *Dispatcher) Stop() {
 }
 
 // Emit records a pending delivery per matching webhook and enqueues immediate
-// delivery. Non-blocking — all I/O happens on workers.
+// delivery. Non-blocking â€” all I/O happens on workers.
 func (d *Dispatcher) Emit(ctx context.Context, event string, payload any) error {
 	env := EventEnvelope{
 		Event:     event,
@@ -440,9 +440,9 @@ func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return s[:n] + "â€¦"
 }
 
-// Ensure unused import (strings) is referenced — left for future signature
+// Ensure unused import (strings) is referenced â€” left for future signature
 // parsing helper. Removed if not needed.
 var _ = strings.Split

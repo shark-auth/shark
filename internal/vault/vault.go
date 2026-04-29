@@ -1,4 +1,4 @@
-// Package vault implements the Token Vault: managed third-party OAuth token
+﻿// Package vault implements the Token Vault: managed third-party OAuth token
 // storage. Agents and dashboards request tokens through this package rather
 // than handling raw credentials. Tokens are encrypted at rest using AES-256-GCM
 // (see internal/auth.FieldEncryptor) and refreshed lazily on retrieval.
@@ -20,8 +20,8 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // Sentinel errors returned by the Manager.
@@ -48,7 +48,7 @@ var (
 )
 
 // expiryLeeway is the cushion applied when deciding whether an access token
-// is "expired" — we refresh slightly early so callers never receive a token
+// is "expired" â€” we refresh slightly early so callers never receive a token
 // that's about to die mid-request.
 const expiryLeeway = 30 * time.Second
 
@@ -180,7 +180,7 @@ func (m *Manager) BuildAuthURL(ctx context.Context, providerID, state, redirectU
 
 	// Extra authorize-URL params (e.g. prompt=consent for Linear,
 	// audience=api.atlassian.com for Jira).
-	// Primary: read from the persisted ExtraAuthParams on the provider row —
+	// Primary: read from the persisted ExtraAuthParams on the provider row â€”
 	// this covers both template-created and manual providers uniformly.
 	// Backward-compat: if the row has no persisted params (pre-migration rows
 	// that defaulted to "{}"), fall back to the built-in template lookup so
@@ -269,7 +269,7 @@ func (m *Manager) ExchangeAndStore(ctx context.Context, providerID, userID, code
 		// rather than overwriting with an encrypted empty string. Mirrors
 		// the refresh-path behaviour below.
 		if token.RefreshToken == "" && existing.RefreshTokenEnc != "" {
-			// keep existing ciphertext — upstream didn't rotate
+			// keep existing ciphertext â€” upstream didn't rotate
 		} else {
 			refreshEnc, err := m.encryptor.Encrypt(token.RefreshToken)
 			if err != nil {
@@ -350,7 +350,7 @@ func (m *Manager) GetFreshToken(ctx context.Context, providerID, userID string) 
 		return access, nil
 	}
 
-	// Expired — try to refresh.
+	// Expired â€” try to refresh.
 	refreshPlain, err := m.encryptor.Decrypt(conn.RefreshTokenEnc)
 	if err != nil {
 		return "", fmt.Errorf("decrypt refresh token: %w", err)
@@ -386,7 +386,7 @@ func (m *Manager) GetFreshToken(ctx context.Context, providerID, userID string) 
 	})
 	fresh, err := source.Token()
 	if err != nil {
-		// Refresh rejected — mark re-auth required. If flipping the flag
+		// Refresh rejected â€” mark re-auth required. If flipping the flag
 		// itself fails we surface the storage error so operators see it
 		// instead of silently stranding the connection in an inconsistent
 		// state.
@@ -400,7 +400,7 @@ func (m *Manager) GetFreshToken(ctx context.Context, providerID, userID string) 
 	if err != nil {
 		return "", fmt.Errorf("encrypt refreshed access token: %w", err)
 	}
-	// Many providers omit the refresh token on refresh responses — preserve
+	// Many providers omit the refresh token on refresh responses â€” preserve
 	// the existing one when that happens.
 	newRefreshPlain := fresh.RefreshToken
 	if newRefreshPlain == "" {
@@ -471,7 +471,7 @@ func (m *Manager) ListConnections(ctx context.Context, userID string) ([]*storag
 //
 // Reference: https://api.slack.com/methods/oauth.v2.access
 func (m *Manager) exchangeSlackV2(ctx context.Context, cfg *oauth2.Config, code string) (*oauth2.Token, error) {
-	// Build the POST form body directly — we can't use cfg.Exchange because
+	// Build the POST form body directly â€” we can't use cfg.Exchange because
 	// oauth2.Transport parses the response as RFC 6749 and misses the ok flag.
 	form := url.Values{
 		"code":          {code},
@@ -586,7 +586,7 @@ func (m *Manager) oauthConfig(provider *storage.VaultProvider, redirectURI strin
 // don't keep a stale token forever) or when now+leeway is past it.
 func (m *Manager) isExpired(exp *time.Time) bool {
 	if exp == nil {
-		// No expiry recorded: we can't know if it's good. Treat as fresh —
+		// No expiry recorded: we can't know if it's good. Treat as fresh â€”
 		// some providers issue non-expiring tokens (e.g. Slack bot tokens).
 		// Callers who need strict expiry must set ExpiresAt during exchange.
 		return false
@@ -609,7 +609,7 @@ func extractGrantedScopes(token *oauth2.Token, requested []string) []string {
 	return out
 }
 
-// newID returns "<prefix><24 hex chars>" — matches the pattern used by
+// newID returns "<prefix><24 hex chars>" â€” matches the pattern used by
 // internal/sso and internal/user for consistency across Shark entities.
 func newID(prefix string) (string, error) {
 	b := make([]byte, 12)

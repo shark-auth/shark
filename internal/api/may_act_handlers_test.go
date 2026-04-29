@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
-// helper — seed a grant directly via the store (bypasses POST handler) to
+// helper â€” seed a grant directly via the store (bypasses POST handler) to
 // keep tests focused on list/filter/revoke surface.
 func seedGrant(t *testing.T, store storage.Store, id, fromID, toID string, revoked bool) {
 	t.Helper()
@@ -40,7 +40,7 @@ func TestMayActGrants_ListAndRevoke(t *testing.T) {
 	seedGrant(t, ts.Store, "mag_a", "agent-a", "user-1", false)
 	seedGrant(t, ts.Store, "mag_b", "agent-b", "user-1", false)
 
-	// no filters → both
+	// no filters â†’ both
 	resp := ts.GetWithAdminKey("/api/v1/admin/may-act")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /admin/may-act: status=%d", resp.StatusCode)
@@ -53,7 +53,7 @@ func TestMayActGrants_ListAndRevoke(t *testing.T) {
 		t.Errorf("no filters: want 2 grants, got %d", len(out.Grants))
 	}
 
-	// from_id=agent-a → exactly one
+	// from_id=agent-a â†’ exactly one
 	resp = ts.GetWithAdminKey("/api/v1/admin/may-act?from_id=agent-a")
 	out = struct {
 		Grants []*storage.MayActGrant `json:"grants"`
@@ -77,7 +77,7 @@ func TestMayActGrants_ListAndRevoke(t *testing.T) {
 		t.Errorf("after revoke, default list: want [mag_b], got %+v", out.Grants)
 	}
 
-	// include_revoked=true → both back
+	// include_revoked=true â†’ both back
 	resp = ts.GetWithAdminKey("/api/v1/admin/may-act?include_revoked=true")
 	out = struct {
 		Grants []*storage.MayActGrant `json:"grants"`
@@ -93,7 +93,7 @@ func TestMayActGrants_ListAndRevoke(t *testing.T) {
 func TestAuditLogs_FilterByGrantID(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// Event 1 — tagged with grant_id
+	// Event 1 â€” tagged with grant_id
 	meta1, _ := json.Marshal(map[string]any{"grant_id": "g_filter_test"})
 	if err := ts.APIServer.AuditLogger.Log(context.Background(), &storage.AuditLog{
 		Action:    "oauth.token.exchanged",
@@ -104,7 +104,7 @@ func TestAuditLogs_FilterByGrantID(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("log 1: %v", err)
 	}
-	// Event 2 — no grant_id
+	// Event 2 â€” no grant_id
 	if err := ts.APIServer.AuditLogger.Log(context.Background(), &storage.AuditLog{
 		Action:    "oauth.token.exchanged",
 		ActorID:   "agent-y",

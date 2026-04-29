@@ -1,12 +1,12 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
 	"net/http"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/auth"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 // mfaEnrollResponse is the response body for POST /api/v1/auth/mfa/enroll.
@@ -407,7 +407,7 @@ func (s *Server) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Disable MFA — clear verified_at so a future enroll is treated as fresh.
+	// Disable MFA â€” clear verified_at so a future enroll is treated as fresh.
 	user.MFAEnabled = false
 	user.MFAVerified = false
 	user.MFASecret = nil

@@ -1,4 +1,4 @@
-package server
+﻿package server
 
 import (
 	"bufio"
@@ -17,11 +17,11 @@ import (
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/mattn/go-isatty"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/cli"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/cli"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // FirstBootResult holds secrets generated on first boot that must be shown
@@ -42,15 +42,15 @@ func isFirstBoot(ctx context.Context, store *storage.SQLiteStore) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("firstboot: get system_config: %w", err)
 	}
-	// Migration seeds the row with '{}' — treat that as "not configured yet".
+	// Migration seeds the row with '{}' â€” treat that as "not configured yet".
 	if payload != "" && payload != "{}" {
 		return false, nil
 	}
 
-	// Check secrets table — any row means already bootstrapped.
+	// Check secrets table â€” any row means already bootstrapped.
 	_, err = store.GetSecret(ctx, "server.secret")
 	if err == nil {
-		// Row exists — not first boot.
+		// Row exists â€” not first boot.
 		return false, nil
 	}
 	if err != sql.ErrNoRows {
@@ -136,7 +136,7 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 
 	// ---- Step 4: Generate secrets ----
 
-	// 4a: server.secret — 32-byte hex
+	// 4a: server.secret â€” 32-byte hex
 	secretBytes := make([]byte, 32)
 	if _, err := rand.Read(secretBytes); err != nil {
 		return nil, fmt.Errorf("firstboot: generate server secret: %w", err)
@@ -148,7 +148,7 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 
 	// 4b: JWT signing key via the JWT manager
 	// We need a temporary store-backed manager to generate the key.
-	// Use empty JWT config — EnsureActiveKey will generate an RS256 key.
+	// Use empty JWT config â€” EnsureActiveKey will generate an RS256 key.
 	jwtMgr := jwtpkg.NewManager(&cfg.Auth.JWT, store, cfg.Server.BaseURL, serverSecret)
 	if err := jwtMgr.GenerateAndStore(ctx, false); err != nil {
 		return nil, fmt.Errorf("firstboot: generate JWT signing key: %w", err)
@@ -211,9 +211,9 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 	if len(kidShort) > 8 {
 		kidShort = kidShort[:8]
 	}
-	fmt.Println("  ✓ Generated server secret")
-	fmt.Printf("  ✓ Generated JWT signing key (kid: bootstrap-%s)\n", kidShort)
-	fmt.Println("  ✓ Generated admin API key")
+	fmt.Println("  âœ“ Generated server secret")
+	fmt.Printf("  âœ“ Generated JWT signing key (kid: bootstrap-%s)\n", kidShort)
+	fmt.Println("  âœ“ Generated admin API key")
 	// W18: full admin key surfaced via cli.PrintAdminKeyBanner in server.Serve
 	// (wide one-time banner). Old masked-print here removed to avoid duplicate.
 
@@ -230,9 +230,9 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 // of their installation without reading log lines.
 //
 // Three states:
-//  1. Active admin API key exists → "✓ admin configured" + dashboard URL
-//  2. No admin key + bootstrap key file present → "⚠ setup pending" + key file path
-//  3. No admin key + no key file → nothing (first-boot flow already ran above)
+//  1. Active admin API key exists â†’ "âœ“ admin configured" + dashboard URL
+//  2. No admin key + bootstrap key file present â†’ "âš  setup pending" + key file path
+//  3. No admin key + no key file â†’ nothing (first-boot flow already ran above)
 func RunRerunBanner(ctx context.Context, store *storage.SQLiteStore, cfg *config.Config) {
 	// Determine dashboard URL from configured base_url, falling back to port.
 	dashURL := cfg.Server.BaseURL
@@ -253,19 +253,19 @@ func RunRerunBanner(ctx context.Context, store *storage.SQLiteStore, cfg *config
 	}
 
 	if count > 0 {
-		// State 1 — admin already configured.
+		// State 1 â€” admin already configured.
 		cli.PrintAdminConfigured(dashURL)
 		return
 	}
 
-	// State 2 — no admin key yet, check for bootstrap key file.
+	// State 2 â€” no admin key yet, check for bootstrap key file.
 	keyPath := filepath.Join(filepath.Dir(cfg.Storage.Path), "admin.key.firstboot")
 	if _, statErr := os.Stat(keyPath); statErr == nil {
 		cli.PrintSetupPending(dashURL, keyPath)
 		return
 	}
 
-	// State 3 — no key, no file: first-boot flow already handled this boot.
+	// State 3 â€” no key, no file: first-boot flow already handled this boot.
 	// Nothing to print here; the first-boot banner already ran.
 }
 

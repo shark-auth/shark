@@ -1,4 +1,4 @@
-package proxy
+﻿package proxy
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/identity"
-	"github.com/sharkauth/sharkauth/internal/oauth"
+	"github.com/shark-auth/shark/internal/identity"
+	"github.com/shark-auth/shark/internal/oauth"
 )
 
 // WithIdentity is a back-compat wrapper that forwards to
@@ -30,7 +30,7 @@ func IdentityFromContext(ctx context.Context) (Identity, bool) {
 
 // HeaderDenyReason is the response header set when the rules engine
 // denies a request. Its value is the Decision.Reason string, which is
-// safe to surface — it describes the policy that failed, not any
+// safe to surface â€” it describes the policy that failed, not any
 // caller-supplied data.
 const HeaderDenyReason = "X-Shark-Deny-Reason"
 
@@ -65,7 +65,7 @@ type ReverseProxy struct {
 // New builds a ReverseProxy from cfg. It validates the config, parses the
 // upstream URL, and wires the httputil.ReverseProxy director, transport,
 // and error handler. If engine is nil the proxy runs in passthrough mode
-// — no rule evaluation, all requests forwarded (P1 behavior). If logger
+// â€” no rule evaluation, all requests forwarded (P1 behavior). If logger
 // is nil, slog.Default() is used.
 func New(cfg Config, engine *Engine, logger *slog.Logger) (*ReverseProxy, error) {
 	if err := cfg.Validate(); err != nil {
@@ -134,7 +134,7 @@ func (p *ReverseProxy) SetResolver(res AppResolver) {
 // SetDPoPCache wires a DPoP JTI replay cache into the proxy. When set,
 // ServeHTTP validates the DPoP proof header against the bearer access
 // token for any request whose resolved Identity.AuthMethod is
-// AuthMethodDPoP — invalid/missing proofs produce 401 with the
+// AuthMethodDPoP â€” invalid/missing proofs produce 401 with the
 // X-Shark-Deny-Reason header describing the failure.
 //
 // Passing nil disables DPoP enforcement; the proxy will forward
@@ -245,10 +245,10 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"host", r.Host,
 			)
 
-			// PROXYV1_5 §4.7: tier mismatch for an authenticated caller
+			// PROXYV1_5 Â§4.7: tier mismatch for an authenticated caller
 			// redirects to the hosted paywall page so they can upgrade.
 			// Anonymous tier-mismatches fall through to the standard
-			// 401/redirect-to-login path below — upgrading before signing
+			// 401/redirect-to-login path below â€” upgrading before signing
 			// in has no meaning.
 			if decision.Kind == DecisionPaywallRedirect && !isAnonymous(id) && p.issuer != "" {
 				slug := "default"
@@ -409,7 +409,7 @@ func singleJoiningSlash(a, b string) string {
 func (p *ReverseProxy) onUpstreamError(w http.ResponseWriter, r *http.Request, err error) {
 	// Distinguish context deadline exceeded (timeout) from other errors
 	// in the log so operators can spot slow upstreams quickly. Both
-	// still surface to the client as 502 — the proxy doesn't leak
+	// still surface to the client as 502 â€” the proxy doesn't leak
 	// whether the upstream was unreachable vs slow.
 	if ctxErr := r.Context().Err(); ctxErr == context.DeadlineExceeded {
 		p.logger.Warn("proxy upstream timeout",
@@ -435,11 +435,11 @@ func isAnonymous(id Identity) bool {
 }
 
 // validateDPoPProof validates the DPoP proof header on r against the
-// bearer access token per RFC 9449 §4.3. Called only when
+// bearer access token per RFC 9449 Â§4.3. Called only when
 // p.dpopCache is non-nil and the resolved identity used AuthMethodDPoP.
 //
-// htu is constructed from the request as scheme://host/path — query and
-// fragment are explicitly excluded because RFC 9449 §4.2 defines htu
+// htu is constructed from the request as scheme://host/path â€” query and
+// fragment are explicitly excluded because RFC 9449 Â§4.2 defines htu
 // that way. Scheme defaults to "https" when unset (the usual case
 // behind a TLS terminator that rewrites r.URL.Scheme to empty).
 //

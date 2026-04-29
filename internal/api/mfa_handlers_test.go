@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"net/http"
@@ -8,7 +8,7 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestMFAEnrollChallengeFlow(t *testing.T) {
@@ -69,7 +69,7 @@ func TestMFAEnrollChallengeFlow(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// 5. Login — should get mfa_required
+	// 5. Login â€” should get mfa_required
 	resp = ts.PostJSON("/api/v1/auth/login", map[string]string{
 		"email":    "mfa-flow@example.com",
 		"password": "SecurePassword123",
@@ -161,7 +161,7 @@ func TestMFARecoveryCodeFlow(t *testing.T) {
 	// Logout
 	ts.PostJSON("/api/v1/auth/logout", nil).Body.Close()
 
-	// Login — mfa_required
+	// Login â€” mfa_required
 	resp = ts.PostJSON("/api/v1/auth/login", map[string]string{
 		"email":    "mfa-recovery@example.com",
 		"password": "SecurePassword123",

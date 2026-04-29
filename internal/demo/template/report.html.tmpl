@@ -1,15 +1,15 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SharkAuth · Delegation Trace · {{.GeneratedAt}}</title>
+<title>SharkAuth Â· Delegation Trace Â· {{.GeneratedAt}}</title>
 <style>{{css}}</style>
 </head>
 <body>
 
 <div class="header">
-  <h1>SharkAuth · Delegation Trace</h1>
+  <h1>SharkAuth Â· Delegation Trace</h1>
   <span class="ts">{{.GeneratedAt}}</span>
 </div>
 
@@ -21,10 +21,10 @@
     <div class="breadcrumb">
       <div class="bc-node">
         <span class="bc-label">[user]</span>
-        <span class="bc-jkt">demo-user@sharkauth.dev</span>
+        <span class="bc-jkt">demo-user@sharkauth.com</span>
       </div>
       {{range $i, $a := .Agents}}
-      <div class="bc-arrow">→</div>
+      <div class="bc-arrow">â†’</div>
       <div class="bc-node">
         <span class="bc-label">[{{$a.Name}}]</span>
         <span class="bc-jkt">jkt: {{shortJKT $a.JKT}}</span>
@@ -46,11 +46,11 @@
         <div class="card-body">
           <div class="card-row">
             <span class="label">sub</span>
-            <span class="value">{{if $t.Sub}}{{$t.Sub}}{{else}}—{{end}}</span>
+            <span class="value">{{if $t.Sub}}{{$t.Sub}}{{else}}â€”{{end}}</span>
           </div>
           <div class="card-row">
             <span class="label">scope</span>
-            <span class="value">{{if $t.Scope}}{{$t.Scope}}{{else}}—{{end}}</span>
+            <span class="value">{{if $t.Scope}}{{$t.Scope}}{{else}}â€”{{end}}</span>
           </div>
           <div class="card-row">
             <span class="label">cnf.jkt</span>
@@ -63,7 +63,7 @@
               <span class="act-chain">
                 {{range $t.ActChain}}<span class="act-tag">{{.}}</span>{{end}}
               </span>
-              {{else}}—{{end}}
+              {{else}}â€”{{end}}
             </span>
           </div>
           <div class="jwt-detail">
@@ -85,10 +85,10 @@
       </div>
       <div class="card-body">
         {{if .Vault.AccessToken}}
-        <div class="check-row"><span class="check-mark">✓</span> DPoP proof valid (jkt: {{shortJKT (index .Agents 2).JKT}})</div>
-        <div class="check-row"><span class="check-mark">✓</span> Scope vault:read present</div>
-        <div class="check-row"><span class="check-mark">✓</span> User binding: demo-user@sharkauth.dev</div>
-        <div class="check-row"><span class="check-mark">✓</span> Audit event: vault.token.retrieved</div>
+        <div class="check-row"><span class="check-mark">âœ“</span> DPoP proof valid (jkt: {{shortJKT (index .Agents 2).JKT}})</div>
+        <div class="check-row"><span class="check-mark">âœ“</span> Scope vault:read present</div>
+        <div class="check-row"><span class="check-mark">âœ“</span> User binding: demo-user@sharkauth.com</div>
+        <div class="check-row"><span class="check-mark">âœ“</span> Audit event: vault.token.retrieved</div>
         <div class="card-row" style="margin-top:12px">
           <span class="label">provider</span>
           <span class="value">{{.Vault.Provider}}</span>
@@ -103,7 +103,7 @@
         </div>
         {{else}}
         <div class="check-row">
-          <span style="color:#999">Provider: {{.Vault.Provider}} — vault connection not provisioned (run with a live server that has a vault entry)</span>
+          <span style="color:#999">Provider: {{.Vault.Provider}} â€” vault connection not provisioned (run with a live server that has a vault entry)</span>
         </div>
         {{end}}
       </div>

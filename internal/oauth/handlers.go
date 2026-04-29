@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 import (
 	"context"
@@ -14,8 +14,8 @@ import (
 	"github.com/ory/fosite"
 	"github.com/ory/fosite/token/jwt"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // newUUID wraps uuid.New().String() so the call site stays compact.
@@ -45,9 +45,9 @@ func dpopTokenEndpointURL(r *http.Request) string {
 // Device Authorization Grant (RFC 8628) is intercepted and handled manually
 // before passing to fosite, since fosite v0.49 has no built-in device flow.
 func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
-	// Device Authorization Grant (RFC 8628) is disabled for v0.1 — coming v0.2.
+	// Device Authorization Grant (RFC 8628) is disabled for v0.1 â€” coming v0.2.
 	// Return unsupported_grant_type so clients get a clear, spec-compliant error.
-	// Defense-in-depth — routes are unmounted in v0.1, but kept here in case they come back.
+	// Defense-in-depth â€” routes are unmounted in v0.1, but kept here in case they come back.
 	if r.FormValue("grant_type") == "urn:ietf:params:oauth:grant-type:device_code" {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -115,8 +115,8 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	// DX1: ensure the JWT access token has a meaningful aud claim. fosite
 	// only fills GrantedAudience from the explicit `resource` (RFC 8707) or
 	// `audience` (RFC 8693) request params. When the caller didn't request
-	// any, fall back to the client_id — same convention Auth0/Okta use for
-	// machine-to-machine tokens — so SDKs can verify aud without bespoke
+	// any, fall back to the client_id â€” same convention Auth0/Okta use for
+	// machine-to-machine tokens â€” so SDKs can verify aud without bespoke
 	// config.
 	if len(ar.GetGrantedAudience()) == 0 {
 		for _, aud := range ar.GetRequestedAudience() {
@@ -143,7 +143,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 				jc.Extra["client_id"] = cid
 			}
 			// For client_credentials, subject is typically the client itself.
-			// We populate this on the JWT claims only — NOT the DefaultSession
+			// We populate this on the JWT claims only â€” NOT the DefaultSession
 			// Subject, which the FositeStore persists into oauth_tokens.user_id
 			// (a FK into users). Setting client_id there would FK-fail.
 			if jc.Subject == "" {
@@ -153,7 +153,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 				jc.Extra["cnf"] = map[string]interface{}{"jkt": dpopJKT}
 			}
 			// DX1: pin the JTI so the on-the-wire `jti` claim matches the
-			// DB row our FositeStore persists — lets introspection/revocation
+			// DB row our FositeStore persists â€” lets introspection/revocation
 			// look up tokens by JTI directly.
 			if jc.JTI == "" {
 				jc.JTI = "jti_" + newUUID()
@@ -169,7 +169,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If a DPoP proof was validated, store the jkt on the token record.
-	// This is a best-effort background operation — it does not affect the
+	// This is a best-effort background operation â€” it does not affect the
 	// response because fosite has already committed the token to its own store.
 	if dpopJKT != "" {
 		s.storeDPoPJKT(ctx, ar, dpopJKT)
@@ -313,8 +313,8 @@ func (s *Server) HandleAuthorizeDecision(w http.ResponseWriter, r *http.Request)
 
 	userID := getUserIDFromRequest(r)
 	if userID == "" {
-		// RFC 6749 §5.2 shape. Any "where to log in" hint goes on the URI,
-		// never as an extra top-level field — client libs reject unknowns.
+		// RFC 6749 Â§5.2 shape. Any "where to log in" hint goes on the URI,
+		// never as an extra top-level field â€” client libs reject unknowns.
 		WriteOAuthError(w, http.StatusUnauthorized,
 			NewOAuthError(ErrLoginRequired, "End-user authentication is required"))
 		return
@@ -339,7 +339,7 @@ func (s *Server) HandleAuthorizeDecision(w http.ResponseWriter, r *http.Request)
 		GrantedAt: time.Now().UTC(),
 	}
 	// Ignore duplicate consent (idempotent); log non-duplicate failures so audit
-	// drift is visible — the user already consented so we still complete the flow.
+	// drift is visible â€” the user already consented so we still complete the flow.
 	if err := s.RawStore.CreateOAuthConsent(ctx, consent); err != nil {
 		slog.Warn("oauth: failed to persist consent record", "user_id", userID, "client_id", clientID, "err", err)
 	}

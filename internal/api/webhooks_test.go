@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"net/http"
@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/api"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
-	"github.com/sharkauth/sharkauth/internal/webhook"
+	"github.com/shark-auth/shark/internal/api"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
+	"github.com/shark-auth/shark/internal/webhook"
 )
 
 // testServerWithDispatcher rebuilds a test server with a webhook dispatcher
@@ -33,7 +33,7 @@ func testServerWithDispatcher(t *testing.T, backend http.Handler) *testutil.Test
 	d.Start(t.Context())
 	t.Cleanup(d.Stop)
 
-	// Swap the dispatcher on the existing API server — mirrors what
+	// Swap the dispatcher on the existing API server â€” mirrors what
 	// server.Build does at startup.
 	api.WithWebhookDispatcher(d)(ts.APIServer)
 	return ts

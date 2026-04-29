@@ -1,11 +1,11 @@
-package rbac
+﻿package rbac
 
 import (
 	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 // RequireOrgMembership returns HTTP middleware that enforces that the caller is
@@ -83,7 +83,7 @@ func RequireOrgPermission(mgr *RBACManager, action, resource string) func(http.H
 func writeJSONError(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	// Inline JSON — avoids pulling in encoding/json just for a small error body.
+	// Inline JSON â€” avoids pulling in encoding/json just for a small error body.
 	_, _ = w.Write([]byte(`{"error":"` + jsonEscape(code) + `","message":"` + jsonEscape(msg) + `"}`))
 }
 

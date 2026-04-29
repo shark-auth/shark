@@ -1,4 +1,4 @@
-// Package api — tests for handleAppSnippet (A8).
+﻿// Package api â€” tests for handleAppSnippet (A8).
 package api_test
 
 import (
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 type snippetResponse struct {

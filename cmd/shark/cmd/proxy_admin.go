@@ -1,4 +1,4 @@
-// Package cmd — `shark proxy` admin subcommand tree (Lane E, E1).
+﻿// Package cmd â€” `shark proxy` admin subcommand tree (Lane E, E1).
 //
 // Provides lifecycle control (start/stop/reload/status) and rule management
 // (list/add/show/delete/import) over the admin HTTP API.
@@ -10,7 +10,7 @@
 // using `shark proxy` get the deprecation notice, and new tooling uses
 // the explicit `shark proxy-admin ...` surface.
 //
-// Wait — re-reading the spec: the spec says `shark proxy start` etc, which
+// Wait â€” re-reading the spec: the spec says `shark proxy start` etc, which
 // means the subcommands ARE under `shark proxy`. The current stub has RunE
 // that calls os.Exit(2) unconditionally, which would fire before any child
 // RunE. We solve this by: remove RunE from the stub when child commands are
@@ -29,7 +29,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
+	"github.com/shark-auth/shark/internal/cli"
 )
 
 // init replaces the old deprecation-stub proxyCmd with a real command tree
@@ -404,7 +404,7 @@ func openBrowser(url string) error {
 	case "windows":
 		cmd = exec.Command("cmd", "/c", "start", url)
 	default:
-		return fmt.Errorf("unsupported platform %q — open %s manually", runtime.GOOS, url)
+		return fmt.Errorf("unsupported platform %q â€” open %s manually", runtime.GOOS, url)
 	}
 	return cmd.Start()
 }

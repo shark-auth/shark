@@ -1,11 +1,11 @@
-// Package api — admin-key-authenticated organization management handlers.
+﻿// Package api â€” admin-key-authenticated organization management handlers.
 //
 // The user-facing handlers in `organization_handlers.go` rely on session auth
 // + RBAC permission middleware. Dashboard pages send the admin Bearer key, so
 // those routes 401 from the admin UI. Rather than add an admin-key bypass to
 // the existing routes (which would muddle the permission model), we mount a
 // parallel `/admin/organizations/*` group authenticated only by the admin
-// API key — same shape as `/admin/sessions`, `/admin/apps`, `/admin/flows`.
+// API key â€” same shape as `/admin/sessions`, `/admin/apps`, `/admin/flows`.
 package api
 
 import (
@@ -22,8 +22,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/email"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // --- Create org (admin) ---
@@ -36,7 +36,7 @@ type adminCreateOrgRequest struct {
 }
 
 // handleAdminCreateOrganization handles POST /api/v1/admin/organizations.
-// Creates a new org without requiring a session user — the admin key is the
+// Creates a new org without requiring a session user â€” the admin key is the
 // only credential. No owner membership row is created (admin-managed orgs
 // are bootstrapped; owners can be added via POST /admin/organizations/{id}/members
 // or by having users join the org later). RBAC builtin roles are seeded if
@@ -82,7 +82,7 @@ func (s *Server) handleAdminCreateOrganization(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Seed builtin RBAC roles (owner/admin/member). Non-fatal — log on error.
+	// Seed builtin RBAC roles (owner/admin/member). Non-fatal â€” log on error.
 	if s.RBAC != nil {
 		if err := s.RBAC.SeedOrgRoles(r.Context(), org.ID); err != nil {
 			slog.Warn("admin create org: seed roles failed", "org_id", org.ID, "err", err)
@@ -215,7 +215,7 @@ func (s *Server) handleAdminDeleteOrganization(w http.ResponseWriter, r *http.Re
 
 // handleAdminCreateOrgRole handles POST /api/v1/admin/organizations/{id}/roles.
 // Mirrors the user-facing handleCreateOrgRole but skips RBAC permission
-// middleware — admin key is full-access by design.
+// middleware â€” admin key is full-access by design.
 func (s *Server) handleAdminCreateOrgRole(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
 
@@ -334,7 +334,7 @@ func (s *Server) handleAdminDeleteOrgInvitation(w http.ResponseWriter, r *http.R
 		return
 	}
 	if inv.OrganizationID != orgID {
-		// URL mismatch — don't let an admin nuke another org's invitation
+		// URL mismatch â€” don't let an admin nuke another org's invitation
 		// via a crafted URL.
 		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Invitation not found"))
 		return
@@ -459,7 +459,7 @@ func (s *Server) sendAdminInvitationResend(parent context.Context, inv *storage.
 
 // handleAdminRemoveOrgMember handles
 // DELETE /api/v1/admin/organizations/{id}/members/{uid}.
-// Admin override of the user-facing remove-member flow — no RBAC permission
+// Admin override of the user-facing remove-member flow â€” no RBAC permission
 // check required (admin key is full-access). Prevents removing the last owner.
 func (s *Server) handleAdminRemoveOrgMember(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
@@ -480,7 +480,7 @@ func (s *Server) handleAdminRemoveOrgMember(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	// Best-effort lookup of the member's email for the audit row — the
+	// Best-effort lookup of the member's email for the audit row â€” the
 	// membership record only holds user_id, so a user delete after this
 	// point would erase the email forever otherwise.
 	memberEmail := ""
@@ -500,7 +500,7 @@ func (s *Server) handleAdminRemoveOrgMember(w http.ResponseWriter, r *http.Reque
 
 // handleAdminCreateOrgInvitation handles
 // POST /api/v1/admin/organizations/{id}/invitations.
-// Admin override — no RBAC session required; admin key is full-access.
+// Admin override â€” no RBAC session required; admin key is full-access.
 func (s *Server) handleAdminCreateOrgInvitation(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
 
@@ -569,7 +569,7 @@ func (s *Server) handleAdminCreateOrgInvitation(w http.ResponseWriter, r *http.R
 
 // handleAdminUpdateOrgMemberRole handles
 // PATCH /api/v1/admin/organizations/{id}/members/{uid}.
-// Admin override of the user-facing member role update — no RBAC required.
+// Admin override of the user-facing member role update â€” no RBAC required.
 func (s *Server) handleAdminUpdateOrgMemberRole(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
 	targetUserID := chi.URLParam(r, "uid")
@@ -611,7 +611,7 @@ func (s *Server) handleAdminUpdateOrgMemberRole(w http.ResponseWriter, r *http.R
 }
 
 // auditAdminOrg writes an admin-actor audit log row with structured metadata.
-// ActorID is hardcoded to "admin_key" — admin-key auth doesn't carry a per-user
+// ActorID is hardcoded to "admin_key" â€” admin-key auth doesn't carry a per-user
 // identity, but tagging it explicitly lets dashboard filters distinguish
 // admin-driven events from user/session/agent actor types. The metadata map
 // is per-action (e.g. {org_name, org_slug} for create, {changed_fields: [...]}

@@ -1,4 +1,4 @@
-openapi: "3.1.0"
+﻿openapi: "3.1.0"
 info:
   title: SharkAuth System API
   version: "0.9.0"
@@ -12,7 +12,7 @@ info:
     This file is one of five sections that compose the full SharkAuth API
     spec. See `../openapi.yaml` for the master index.
   contact: { name: "SharkAuth", url: "https://sharkauth.com" }
-  license: { name: "MIT", url: "https://github.com/sharkauth/sharkauth/blob/main/LICENSE" }
+  license: { name: "MIT", url: "https://github.com/shark-auth/shark/blob/main/LICENSE" }
 
 servers:
   - url: "https://sharkauth.example.com"
@@ -34,7 +34,7 @@ paths:
     get:
       tags: [system-health]
       operationId: healthz
-      summary: Liveness probe — returns 200 if server can respond
+      summary: Liveness probe â€” returns 200 if server can respond
       description: "Cheap probe used by Docker healthcheck and orchestrators. Does not check downstream dependencies (DB, SMTP); use `/api/v1/admin/health` for that."
       x-source: "internal/api/router.go:219"
       security: []

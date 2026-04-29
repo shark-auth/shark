@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // auditRBAC logs a global (non-org) RBAC event with metadata.
@@ -638,7 +638,7 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Security: distinguish session callers from admin callers.
 	// Session path (auth_method="jwt" or "cookie"): clamp user_id to the
-	// authenticated caller — silently ignore any user_id in the body to prevent
+	// authenticated caller â€” silently ignore any user_id in the body to prevent
 	// cross-tenant IDOR (session user probing another user's permissions).
 	// Admin path (auth_method=""): body user_id is trusted for legitimate
 	// backend-to-backend cross-user checks; fall back to ctx for self-checks.
@@ -678,7 +678,7 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListRolesByPermission handles GET /api/v1/permissions/{id}/roles.
-// Reverse lookup — given a permission, return every role that grants it.
+// Reverse lookup â€” given a permission, return every role that grants it.
 // Used by the dashboard's "where is this permission used?" card.
 func (s *Server) handleListRolesByPermission(w http.ResponseWriter, r *http.Request) {
 	permID := chi.URLParam(r, "id")
@@ -704,7 +704,7 @@ func (s *Server) handleListRolesByPermission(w http.ResponseWriter, r *http.Requ
 }
 
 // handleListUsersByPermission handles GET /api/v1/permissions/{id}/users.
-// Reverse lookup — every user that has this permission via any role
+// Reverse lookup â€” every user that has this permission via any role
 // assignment. Mirrors handleListRolesByPermission's contract.
 func (s *Server) handleListUsersByPermission(w http.ResponseWriter, r *http.Request) {
 	permID := chi.URLParam(r, "id")
@@ -730,15 +730,15 @@ func (s *Server) handleListUsersByPermission(w http.ResponseWriter, r *http.Requ
 }
 
 // permissionUsage holds the lightweight counts the dashboard needs to
-// render "Used by N roles · M users" without 2 per-row round-trips.
+// render "Used by N roles Â· M users" without 2 per-row round-trips.
 type permissionUsage struct {
 	Roles int `json:"roles"`
 	Users int `json:"users"`
 }
 
 // handlePermissionsBatchUsage handles GET /api/v1/admin/permissions/batch-usage.
-// Query ?ids=a,b,c returns a map of permission_id → {roles, users} counts.
-// A single SQL pass per dimension replaces N×2 per-row API calls from the
+// Query ?ids=a,b,c returns a map of permission_id â†’ {roles, users} counts.
+// A single SQL pass per dimension replaces NÃ—2 per-row API calls from the
 // PermissionRow component, cutting 20-perm pages from 40 concurrent requests
 // down to 2 (or 0 when ids is empty).
 func (s *Server) handlePermissionsBatchUsage(w http.ResponseWriter, r *http.Request) {

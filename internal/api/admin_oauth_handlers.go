@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // adminDeviceCodeResponse is the wire shape for the admin device-code queue.
@@ -66,9 +66,9 @@ func (s *Server) handleAdminListDeviceCodes(w http.ResponseWriter, r *http.Reque
 }
 
 // handleAdminApproveDeviceCode handles POST /api/v1/admin/oauth/device-codes/{user_code}/approve.
-// Admin override of the user-facing approval flow — flips status to "approved"
+// Admin override of the user-facing approval flow â€” flips status to "approved"
 // without requiring a session for the user_id field. The body may carry
-// {"user_id": "usr_…"} so the resulting access token is bound to a specific
+// {"user_id": "usr_â€¦"} so the resulting access token is bound to a specific
 // user; if omitted the existing user_id (set by an earlier verify step) stays.
 func (s *Server) handleAdminApproveDeviceCode(w http.ResponseWriter, r *http.Request) {
 	s.adminDecideDeviceCode(w, r, "approved")

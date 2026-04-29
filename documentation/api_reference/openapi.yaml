@@ -1,4 +1,4 @@
-openapi: "3.1.0"
+﻿openapi: "3.1.0"
 
 info:
   title: SharkAuth API
@@ -6,9 +6,9 @@ info:
   summary: "Open-source OAuth 2.1 authorization server with native agent delegation."
   description: |
     SharkAuth is a single-binary, open-source authentication platform purpose-built
-    for the agent era. It ships every primitive a modern auth product needs —
+    for the agent era. It ships every primitive a modern auth product needs â€”
     SSO (SAML + OIDC), passkeys (WebAuthn), TOTP MFA, magic links, social login,
-    organizations + RBAC, audit log, webhooks, reverse-proxy mode — plus
+    organizations + RBAC, audit log, webhooks, reverse-proxy mode â€” plus
     native RFC 8693 token-exchange with full agent delegation chains.
 
     ### Surfaces
@@ -39,9 +39,9 @@ info:
 
     Two error envelopes coexist by surface:
 
-    1. **OAuth surface** (`/oauth/*`) — RFC 6749 §5.2 shape:
+    1. **OAuth surface** (`/oauth/*`) â€” RFC 6749 Â§5.2 shape:
        `{error, error_description, error_uri}`.
-    2. **Auth + Platform + Admin surfaces** — extended shape:
+    2. **Auth + Platform + Admin surfaces** â€” extended shape:
        `{error, code, message, docs_url, details}`.
 
     See the per-section files and `docs/errors.md` in the repo for the full
@@ -65,7 +65,7 @@ info:
     email: "support@sharkauth.com"
   license:
     name: "MIT"
-    url: "https://github.com/sharkauth/sharkauth/blob/main/LICENSE"
+    url: "https://github.com/shark-auth/shark/blob/main/LICENSE"
 
 servers:
   - url: "https://sharkauth.example.com"
@@ -78,7 +78,7 @@ externalDocs:
   url: "https://sharkauth.com/docs"
 
 # ---------------------------------------------------------------------------
-# Tag groups (organized by surface — Scalar / Redoc render this nicely)
+# Tag groups (organized by surface â€” Scalar / Redoc render this nicely)
 # Tags themselves are defined in the per-section files; this master file
 # documents the full set so consumers see them organized when sections are
 # rendered together.
@@ -317,7 +317,7 @@ components:
       description: "OAuth client credentials in form-encoded body (`client_id` + `client_secret` fields)."
     privateKeyJwt:
       type: oauth2
-      description: "RFC 7521 client_assertion via signed JWT — for high-assurance clients."
+      description: "RFC 7521 client_assertion via signed JWT â€” for high-assurance clients."
       flows:
         clientCredentials:
           tokenUrl: "/oauth/token"
@@ -352,7 +352,7 @@ components:
   schemas:
     OAuthError:
       type: object
-      description: "RFC 6749 §5.2 standard error envelope used by all `/oauth/*` endpoints."
+      description: "RFC 6749 Â§5.2 standard error envelope used by all `/oauth/*` endpoints."
       required: [error]
       properties:
         error:

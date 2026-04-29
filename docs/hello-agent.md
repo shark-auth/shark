@@ -1,7 +1,7 @@
-# Hello Agent — 15-minute walkthrough
+﻿# Hello Agent â€” 15-minute walkthrough
 
 Stand up SharkAuth, register an OAuth-2.1 agent, mint a DPoP-bound access
-token from Python, and verify claims against the server — end to end, in
+token from Python, and verify claims against the server â€” end to end, in
 under fifteen minutes.
 
 ## What you'll build
@@ -16,7 +16,7 @@ token minting, and JWKS-based JWT verification.
 ## Prerequisites
 
 - **Python 3.9+** and `pip` (or `uv`) on your `$PATH`
-- **Go 1.22+** — you are going to build `shark` from source
+- **Go 1.22+** â€” you are going to build `shark` from source
 - A terminal, `curl`, and `jq`
 - 15 minutes
 
@@ -26,7 +26,7 @@ is the same path step-by-step.
 
 ---
 
-## Step 1 — Install SharkAuth (2 min)
+## Step 1 â€” Install SharkAuth (2 min)
 
 Clone and build the binary from source. Installers (`curl | sh`,
 Homebrew, `go install`) are coming with the public launch.
@@ -37,11 +37,11 @@ go build -o bin/shark ./cmd/shark
 ./bin/shark version
 ```
 
-## Step 2 — Start the server (1 min)
+## Step 2 â€” Start the server (1 min)
 
 `--dev` boots an ephemeral SQLite store, auto-creates a default OAuth
 application, and prints a one-time admin API key. No config file or setup
-wizard required in dev mode — just run and go.
+wizard required in dev mode â€” just run and go.
 
 ```bash
 ./bin/shark serve --dev
@@ -56,10 +56,10 @@ dev mode: using in-db dev inbox for email capture
   ============================================================
     Default application created
     client_id:     shark_app_...
-    client_secret: ...                (shown once — save it)
+    client_secret: ...                (shown once â€” save it)
   ============================================================
 
-  ADMIN API KEY (shown once — save it now)
+  ADMIN API KEY (shown once â€” save it now)
     sk_live_...
 
 SharkAuth starting                    addr=:8080 dev_mode=true
@@ -74,7 +74,7 @@ curl -s http://localhost:8080/healthz
 # {"status":"ok"}
 ```
 
-## Step 3 — Register an agent (2 min)
+## Step 3 â€” Register an agent (2 min)
 
 Agents are the OAuth 2.1 clients that obtain access tokens on behalf of
 your software. Register one using **RFC 7591 Dynamic Client Registration**
@@ -96,7 +96,7 @@ Response fields that matter:
 | field | meaning |
 |-------|---------|
 | `client_id` | agent identifier, e.g. `shark_dcr_abc...` |
-| `client_secret` | long random secret — **save it, it is shown once** |
+| `client_secret` | long random secret â€” **save it, it is shown once** |
 | `registration_access_token` | bearer for future RFC 7592 updates/rotation |
 | `registration_client_uri` | `GET`/`PUT`/`DELETE` endpoint for this client |
 | `grant_types` | the grants this client may use at `/oauth/token` |
@@ -109,16 +109,16 @@ export CSECRET='...'
 ```
 
 *(If you prefer the CLI, `./bin/shark app create --name hello-agent --json`
-registers a regular OAuth Application — good for the Authorization Code
+registers a regular OAuth Application â€” good for the Authorization Code
 flow but not for `client_credentials`. DCR is the agent-native path.)*
 
-## Step 4 — Install the Python SDK (1 min)
+## Step 4 â€” Install the Python SDK (1 min)
 
-`shark-auth` is not yet on PyPI — install directly from the repo:
+`shark-auth` is not yet on PyPI â€” install directly from the repo:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install git+https://github.com/sharkauth/sharkauth#subdirectory=sdk/python
+pip install git+https://github.com/shark-auth/shark#subdirectory=sdk/python
 # PyPI release coming after dogfood validation
 ```
 
@@ -132,7 +132,7 @@ Or with `uv`:
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install git+https://github.com/sharkauth/sharkauth#subdirectory=sdk/python
+uv pip install git+https://github.com/shark-auth/shark#subdirectory=sdk/python
 ```
 
 Smoke-test the import:
@@ -142,7 +142,7 @@ python -c "import shark_auth; print(shark_auth.__version__)"
 # 0.1.0
 ```
 
-## Step 5 — Write your first agent (5 min)
+## Step 5 â€” Write your first agent (5 min)
 
 A ~30-line script that mints a token and emits a DPoP proof. The full
 runnable version lives at
@@ -187,9 +187,9 @@ Why `client_credentials` and not Device Flow here? CI-friendly: no human
 has to type a code into a browser. Device Flow shines when the same agent
 is paired to a specific *user*; see `DeviceFlow` in the SDK for that.
 
-## Step 6 — Call a protected resource (2 min)
+## Step 6 â€” Call a protected resource (2 min)
 
-Attach both headers — `Authorization: DPoP <token>` and `DPoP: <proof>` —
+Attach both headers â€” `Authorization: DPoP <token>` and `DPoP: <proof>` â€”
 to your resource request:
 
 ```python
@@ -202,7 +202,7 @@ r = requests.get(
 
 SharkAuth issues **real RFC 7519 JWTs** out of the box, signed with the
 ES256 key advertised at `/.well-known/jwks.json`. Resource servers can
-verify them locally with three lines of SDK code — no introspection
+verify them locally with three lines of SDK code â€” no introspection
 round-trip required:
 
 ```python
@@ -225,7 +225,7 @@ If you prefer the round-trip (e.g. to centralize revocation checks),
 RFC 7662 introspection still works against the same `/oauth/introspect`
 endpoint and returns `{active, sub, iss, exp, scope, ...}`.
 
-## Step 7 — Retrieve a 3rd-party credential via Vault (2 min)
+## Step 7 â€” Retrieve a 3rd-party credential via Vault (2 min)
 
 The **Token Vault** stores user-granted OAuth connections (Google,
 GitHub, Slack, ...) and hands back refreshed access tokens on demand so
@@ -266,13 +266,13 @@ Architecture deep-dive: [`AGENT_AUTH.md`](../AGENT_AUTH.md).
 
 ## Next steps
 
-- **Device Flow** — headless agents that need user approval:
+- **Device Flow** â€” headless agents that need user approval:
   `shark_auth.DeviceFlow`.
-- **RFC 8693 Token Exchange** — delegation + `act` (actor) chains for
-  multi-agent systems. See `AGENT_AUTH.md` → Token Exchange.
-- **Custom claim injection** — extend the JWT body with deployment-
+- **RFC 8693 Token Exchange** â€” delegation + `act` (actor) chains for
+  multi-agent systems. See `AGENT_AUTH.md` â†’ Token Exchange.
+- **Custom claim injection** â€” extend the JWT body with deployment-
   specific extras (planned, see Implementation Status in
   [`AGENT_AUTH.md`](../AGENT_AUTH.md)).
-- **Vault provider setup** — admin dashboard → Vault → Providers.
-- **RFC compliance matrix** — [`AGENT_AUTH.md`](../AGENT_AUTH.md)
+- **Vault provider setup** â€” admin dashboard â†’ Vault â†’ Providers.
+- **RFC compliance matrix** â€” [`AGENT_AUTH.md`](../AGENT_AUTH.md)
   Implementation Status section.

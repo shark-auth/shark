@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/auth"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 // passkeyLoginBeginRequest is the request body for POST /passkey/login/begin.

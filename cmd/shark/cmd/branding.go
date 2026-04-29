@@ -1,4 +1,4 @@
-// Package cmd — `shark branding` subcommand (Lane E, E3).
+﻿// Package cmd â€” `shark branding` subcommand (Lane E, E3).
 package cmd
 
 import (
@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
+	"github.com/shark-auth/shark/internal/cli"
 )
 
 var brandingCmd = &cobra.Command{

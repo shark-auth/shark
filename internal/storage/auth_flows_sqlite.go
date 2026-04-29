@@ -20,7 +20,7 @@ func (s *SQLiteStore) CreateAuthFlow(ctx context.Context, flow *AuthFlow) error 
 		return fmt.Errorf("marshal conditions: %w", err)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`INSERT INTO auth_flows
 		 (id, name, trigger, steps, enabled, priority, conditions, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -33,13 +33,13 @@ func (s *SQLiteStore) CreateAuthFlow(ctx context.Context, flow *AuthFlow) error 
 }
 
 func (s *SQLiteStore) GetAuthFlowByID(ctx context.Context, id string) (*AuthFlow, error) {
-	return s.scanAuthFlow(s.db.QueryRowContext(ctx,
+	return s.scanAuthFlow(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, trigger, steps, enabled, priority, conditions, created_at, updated_at
 		 FROM auth_flows WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) ListAuthFlows(ctx context.Context) ([]*AuthFlow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, name, trigger, steps, enabled, priority, conditions, created_at, updated_at
 		 FROM auth_flows ORDER BY priority DESC, created_at ASC`)
 	if err != nil {
@@ -62,7 +62,7 @@ func (s *SQLiteStore) ListAuthFlows(ctx context.Context) ([]*AuthFlow, error) {
 // first. Ties are broken by created_at ASC (earliest wins) so behavior is
 // deterministic under concurrent inserts.
 func (s *SQLiteStore) ListAuthFlowsByTrigger(ctx context.Context, trigger string) ([]*AuthFlow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, name, trigger, steps, enabled, priority, conditions, created_at, updated_at
 		 FROM auth_flows WHERE trigger = ?
 		 ORDER BY priority DESC, created_at ASC`, trigger)
@@ -92,7 +92,7 @@ func (s *SQLiteStore) UpdateAuthFlow(ctx context.Context, flow *AuthFlow) error 
 		return fmt.Errorf("marshal conditions: %w", err)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`UPDATE auth_flows SET
 		   name = ?, trigger = ?, steps = ?, enabled = ?,
 		   priority = ?, conditions = ?, updated_at = ?
@@ -106,7 +106,7 @@ func (s *SQLiteStore) UpdateAuthFlow(ctx context.Context, flow *AuthFlow) error 
 }
 
 func (s *SQLiteStore) DeleteAuthFlow(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_flows WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM auth_flows WHERE id = ?`, id)
 	return err
 }
 
@@ -197,7 +197,7 @@ func (s *SQLiteStore) CreateAuthFlowRun(ctx context.Context, run *AuthFlowRun) e
 		blockedAt = int64(*run.BlockedAtStep)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`INSERT INTO auth_flow_runs
 		 (id, flow_id, user_id, trigger, outcome, blocked_at_step,
 		  reason, metadata, started_at, finished_at)
@@ -219,7 +219,7 @@ func (s *SQLiteStore) ListAuthFlowRunsByFlowID(ctx context.Context, flowID strin
 	if limit > 500 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, flow_id, user_id, trigger, outcome, blocked_at_step,
 		        reason, metadata, started_at, finished_at
 		 FROM auth_flow_runs

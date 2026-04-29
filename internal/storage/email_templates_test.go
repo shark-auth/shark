@@ -1,10 +1,10 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestSeedEmailTemplates_Idempotent(t *testing.T) {
@@ -60,12 +60,12 @@ func TestUpdateEmailTemplate_PreservesUnchanged(t *testing.T) {
 		t.Errorf("subject not persisted: %q", got.Subject)
 	}
 	if got.HeaderText == "" {
-		t.Errorf("header_text was cleared — should only update 'subject'")
+		t.Errorf("header_text was cleared â€” should only update 'subject'")
 	}
 	if got.CTAText == "" {
-		t.Errorf("cta_text was cleared — should only update 'subject'")
+		t.Errorf("cta_text was cleared â€” should only update 'subject'")
 	}
 	if len(got.BodyParagraphs) == 0 {
-		t.Errorf("body_paragraphs was cleared — should only update 'subject'")
+		t.Errorf("body_paragraphs was cleared â€” should only update 'subject'")
 	}
 }

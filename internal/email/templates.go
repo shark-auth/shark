@@ -1,4 +1,4 @@
-package email
+﻿package email
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"html/template"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 //go:embed templates/*.html
@@ -130,7 +130,7 @@ type WelcomeData struct {
 
 // RenderWelcome renders the welcome email. When no DB template exists (or
 // lookup fails) it degrades to a minimal hardcoded body rather than failing
-// the caller — a missed welcome is not worth blocking signup on.
+// the caller â€” a missed welcome is not worth blocking signup on.
 func RenderWelcome(ctx context.Context, store storage.Store, branding *storage.BrandingConfig, data WelcomeData) (Rendered, error) {
 	if store != nil {
 		if tmpl, err := store.GetEmailTemplate(ctx, "welcome"); err == nil && tmpl != nil {

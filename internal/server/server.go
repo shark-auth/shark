@@ -1,4 +1,4 @@
-// Package server wires config, storage, migrations, and HTTP into a runnable unit.
+﻿// Package server wires config, storage, migrations, and HTTP into a runnable unit.
 // Extracted so cobra subcommands (serve, dev-mode serve, tests) can share the same path.
 package server
 
@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -22,18 +21,19 @@ import (
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/mattn/go-isatty"
 
-	"github.com/sharkauth/sharkauth/internal/api"
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/cli"
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/oauth"
-	"github.com/sharkauth/sharkauth/internal/proxy"
-	"github.com/sharkauth/sharkauth/internal/rbac"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/telemetry"
-	"github.com/sharkauth/sharkauth/internal/webhook"
+	"github.com/shark-auth/shark/internal/api"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/cli"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/email"
+	"github.com/shark-auth/shark/internal/oauth"
+	"github.com/shark-auth/shark/internal/proxy"
+	"github.com/shark-auth/shark/internal/rbac"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/telemetry"
+	"github.com/shark-auth/shark/internal/version"
+	"github.com/shark-auth/shark/internal/webhook"
 )
 
 // Options controls how Run assembles the server. Fields not set receive defaults.
@@ -124,7 +124,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		// Dual-config is only a real conflict when the legacy fields don't
 		// match a Resolve()-synthesised implicit listener. When Listeners was
 		// originally empty, Resolve() synthesises one from the legacy fields
-		// — that case is not a dual config even though all three are now set.
+		// â€” that case is not a dual config even though all three are now set.
 		// Detect the "user explicitly set both" case by checking that at
 		// least one listener has a non-empty Bind (i.e. listeners was set by
 		// the user, not synthesised).
@@ -143,19 +143,19 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	if opts.SecretOverride != "" {
 		cfg.Server.Secret = opts.SecretOverride
 	}
-	// W17: secret length validation moved AFTER store open + RunFirstBoot —
+	// W17: secret length validation moved AFTER store open + RunFirstBoot â€”
 	// first boot generates the secret if absent, so validating here would
 	// always fail on a fresh install.
 
 	// --proxy-upstream override. Flips Enabled on and pins the upstream
 	// URL so a single CLI flag is all an operator needs to demo embedded
-	// mode. Rules are DB-sourced in v1.5 — operators add rules post-boot
+	// mode. Rules are DB-sourced in v1.5 â€” operators add rules post-boot
 	// via `/api/v1/admin/proxy/rules`; until then the engine is empty and
 	// default-deny surfaces 403s, which matches the safe-by-default stance.
 	if opts.ProxyUpstream != "" {
 		cfg.Proxy.Enabled = true
 		cfg.Proxy.Upstream = opts.ProxyUpstream
-		// Drop any pre-existing listener set — the CLI flag is the
+		// Drop any pre-existing listener set â€” the CLI flag is the
 		// single source of truth for the demo path, and Resolve() below
 		// will re-synthesise a single implicit main-port listener.
 		cfg.Proxy.Listeners = nil
@@ -167,13 +167,13 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	// W17: legacy "phase 2 minimum config" check removed. First boot now
 	// generates server.secret + admin key + defaults email.provider=dev
 	// after store opens (RunFirstBoot below). Operators can switch email
-	// provider from Settings → Email Delivery any time post-boot.
+	// provider from Settings â†’ Email Delivery any time post-boot.
 
 	if opts.StoragePathOverride != "" {
 		cfg.Storage.Path = opts.StoragePathOverride
 	}
 
-	// W17 Phase E: interactive prompt (TTY only) — asks for defaults if
+	// W17 Phase E: interactive prompt (TTY only) â€” asks for defaults if
 	// no state file exists AND no explicit overrides were provided via
 	// flags or env vars. This ensures headless/scripted boots remain
 	// 100% unattended while giving local users a nice setup flow.
@@ -189,7 +189,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 	dataDir := filepath.Dir(cfg.Storage.Path)
 	if dataDir != "" && dataDir != "." {
-		// 0o700 (owner rwx only) — the dir holds sharkauth.db + WAL/SHM which
+		// 0o700 (owner rwx only) â€” the dir holds sharkauth.db + WAL/SHM which
 		// contain session material, field-encrypted OAuth tokens, etc. World
 		// or group read is never appropriate.
 		if err := os.MkdirAll(dataDir, 0o700); err != nil {
@@ -208,7 +208,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	}
 	slog.Info("database schema up to date")
 
-	// W17 Phase B: first-boot bootstrap — detects empty system_config + secrets
+	// W17 Phase B: first-boot bootstrap â€” detects empty system_config + secrets
 	// tables, generates server.secret + JWT signing key + admin API key,
 	// prints setup URL + admin key once. Non-fatal if not first boot
 	// (just loads existing secret from DB into cfg.Server.Secret).
@@ -230,7 +230,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	}
 
 	// W17: default email provider to dev inbox if unconfigured. Operators
-	// flip it to resend/smtp from Settings → Email Delivery once ready.
+	// flip it to resend/smtp from Settings â†’ Email Delivery once ready.
 	if cfg.Email.Provider == "" {
 		cfg.Email.Provider = config.EmailProviderDev
 	}
@@ -250,7 +250,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	}
 
 	// Seed editable copies for hosted email templates. Idempotent via INSERT OR
-	// IGNORE — only fills rows that don't already exist, so operator edits stick.
+	// IGNORE â€” only fills rows that don't already exist, so operator edits stick.
 	if err := store.SeedEmailTemplates(seedCtx); err != nil {
 		slog.Warn("email: failed to seed email templates", "error", err)
 		// Non-fatal: server continues; renderer falls back to bundled defaults.
@@ -265,7 +265,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	sender := opts.EmailSenderOverride
 	if sender == nil {
 		if cfg.Email.Provider == "dev" {
-			slog.Info("email: provider=dev — using in-db dev inbox for capture")
+			slog.Info("email: provider=dev â€” using in-db dev inbox for capture")
 			sender = email.NewDevInboxSender(store)
 		} else {
 			sender = chooseEmailSender(cfg)
@@ -319,6 +319,9 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 		api.WithProxyListeners(proxyListeners),
 	)
 
+	// Start async audit logging
+	apiSrv.AuditLogger.Start(ctx)
+
 	// Now that apiSrv exists, wire the AuthWrap and AppResolver for each listener.
 	for _, l := range proxyListeners {
 		if err := l.SetAuthWrap(apiSrv.ProxyAuthMiddlewareFor(l.Breaker())); err != nil {
@@ -349,19 +352,19 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 
 // buildProxyListeners constructs one *proxy.Listener per config entry with
 // a non-empty Bind. Legacy mount-on-main-port entries (Bind=="") are
-// skipped — api.Server.initProxy handles them via the router catch-all.
+// skipped â€” api.Server.initProxy handles them via the router catch-all.
 func buildProxyListeners(cfg *config.Config, apiSrv *api.Server) ([]*proxy.Listener, error) {
 	out := make([]*proxy.Listener, 0, len(cfg.Proxy.Listeners))
 	for i, lc := range cfg.Proxy.Listeners {
 		if lc.Bind == "" {
-			// Legacy main-port mount — handled inside api.Server.
+			// Legacy main-port mount â€” handled inside api.Server.
 			continue
 		}
 		if lc.Upstream == "" {
 			return nil, fmt.Errorf("listeners[%d] %s: upstream is required", i, lc.Bind)
 		}
 
-		// v1.5: listener rules are DB-sourced — the engine starts empty
+		// v1.5: listener rules are DB-sourced â€” the engine starts empty
 		// and admin API mutations refresh it via refreshProxyEngineFromDB.
 		var ruleSpecs []proxy.RuleSpec
 
@@ -416,12 +419,12 @@ func Serve(ctx context.Context, opts Options) error {
 	if tok, mintErr := b.API.MintBootstrapToken(ctx); mintErr != nil {
 		slog.Warn("bootstrap token: mint failed", "err", mintErr)
 	} else if tok != "" {
-		bootstrapURL = fmt.Sprintf("http://localhost:%d/admin/?bootstrap=%s", b.Config.Server.Port, tok)
+		bootstrapURL = fmt.Sprintf("http://localhost:%d/admin/get-started?bootstrap=%s", b.Config.Server.Port, tok)
 	}
 
 	// W18: on first boot, print the full admin key in a wide banner so the
 	// operator cannot miss it. The key file path is shown for scripted pickup.
-	// On non-first-boot (b.AdminKey empty), nothing prints — the daemon stays quiet.
+	// On non-first-boot (b.AdminKey empty), nothing prints â€” the daemon stays quiet.
 	if b.AdminKey != "" {
 		keyFilePath := filepath.Join(filepath.Dir(b.Config.Storage.Path), "admin.key.firstboot")
 		cli.PrintAdminKeyBanner(os.Stdout, b.AdminKey, bootstrapURL, keyFilePath)
@@ -477,7 +480,7 @@ func Serve(ctx context.Context, opts Options) error {
 
 	// W15: start each proxy listener BEFORE the main server so a port-
 	// in-use failure is surfaced synchronously as a fatal startup error.
-	// Partial bind is never acceptable — if any listener can't bind, the
+	// Partial bind is never acceptable â€” if any listener can't bind, the
 	// entire server exits non-zero so the operator can fix config and
 	// retry rather than run half-protected.
 	for _, pl := range b.ProxyListeners {
@@ -519,6 +522,7 @@ func Serve(ctx context.Context, opts Options) error {
 	select {
 	case <-ctx.Done():
 		slog.Info("shutting down server")
+		b.API.AuditLogger.Stop()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		// Fan-out shutdown to proxy listeners first so they stop
@@ -543,14 +547,9 @@ func Serve(ctx context.Context, opts Options) error {
 	}
 }
 
-// resolveBuildVersion returns the module version if embedded via `go install`
-// or ldflags -X, falling back to "dev". Separate from the cobra `version` var
-// to avoid importing cmd/ from internal/.
+// resolveBuildVersion returns the version from internal/version.
 func resolveBuildVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
-	}
-	return "dev"
+	return version.Version
 }
 
 func bootstrapAdminKey(ctx context.Context, store *storage.SQLiteStore) (string, error) {
@@ -604,7 +603,7 @@ func chooseEmailSender(cfg *config.Config) email.Sender {
 		}
 		return email.NewResendSender(resendCfg)
 	case config.EmailProviderShark:
-		slog.Info("using shark.email relay (scaffolding — not yet live)")
+		slog.Info("using shark.email relay (scaffolding â€” not yet live)")
 		return email.NewSharkEmailSender(cfg.Email.APIKey, cfg.Email.From, cfg.Email.FromName)
 	case config.EmailProviderSMTP:
 		slog.Info("using SMTP for email delivery")
@@ -619,7 +618,7 @@ func chooseEmailSender(cfg *config.Config) email.Sender {
 		}
 		return email.NewSMTPSender(smtpCfg)
 	default:
-		slog.Warn("no email provider configured — using legacy SMTP dispatch", "host", cfg.SMTP.Host)
+		slog.Warn("no email provider configured â€” using legacy SMTP dispatch", "host", cfg.SMTP.Host)
 		if cfg.SMTP.Host == "smtp.resend.com" {
 			return email.NewResendSender(cfg.SMTP)
 		}
@@ -629,7 +628,7 @@ func chooseEmailSender(cfg *config.Config) email.Sender {
 
 func printAdminKey(key string) {
 	fmt.Println()
-	fmt.Println("  ADMIN API KEY (shown once — save it now)")
+	fmt.Println("  ADMIN API KEY (shown once â€” save it now)")
 	fmt.Println()
 	fmt.Printf("    %s\n", key)
 	fmt.Println()

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sharkauth/sharkauth/internal/sso"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/sso"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // ssoStateEntry holds an OIDC state and nonce with an expiry time.

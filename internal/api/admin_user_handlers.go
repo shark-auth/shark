@@ -1,8 +1,8 @@
-// Package api — admin-key-authenticated user management handlers.
+﻿// Package api â€” admin-key-authenticated user management handlers.
 //
 // Parallels admin_organization_handlers.go: dashboard pages send the admin
 // Bearer key, so user-creation flows land here instead of the public
-// /auth/signup route. T04 of DASHBOARD_DX_EXECUTION_PLAN.md — POST creates a
+// /auth/signup route. T04 of DASHBOARD_DX_EXECUTION_PLAN.md â€” POST creates a
 // new user (password optional; invite-via-magic-link is T05/T06 scope).
 package api
 
@@ -16,8 +16,8 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // adminCreateUserRequest is the POST /admin/users body.
@@ -95,7 +95,7 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Audit log entry — mirrors admin_organization_handlers.auditAdminOrg
+	// Audit log entry â€” mirrors admin_organization_handlers.auditAdminOrg
 	// shape but targets the new user. Metadata carries the email for
 	// operator-friendly review without needing a user-table join.
 	if s.AuditLogger != nil {

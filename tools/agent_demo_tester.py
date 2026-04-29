@@ -131,7 +131,7 @@ def health_check(c: Client) -> None:
 
 def create_user(c: Client, suffix: str) -> dict:
     body = {
-        "email": f"demo_tester_{suffix}@sharkauth.dev",
+        "email": f"demo_tester_{suffix}@sharkauth.com",
         "password": "DemoPassword!2026",
     }
     r = c.post("/api/v1/admin/users", json_body=body)

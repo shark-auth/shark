@@ -1,11 +1,11 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import React from 'react'
 import { Icon, CopyField } from './shared'
 import { API, useAPI } from './api'
 import { CLIFooter } from './CLIFooter'
 import { useToast } from './toast'
 
-// Get Started — agent-first onboarding. Rebuilt Wave 1.7 Edit 4.
+// Get Started â€” agent-first onboarding. Rebuilt Wave 1.7 Edit 4.
 // Design: monochrome, square, hairline, 13px base, matches users.tsx density.
 // Three tracks: Agent (primary), Human auth, Both. Track selection sticky in localStorage.
 // Each section is an accordion row; clicking opens the task drawer.
@@ -13,7 +13,7 @@ import { useToast } from './toast'
 
 const STORAGE_KEY = 'shark_get_started_v2';
 
-// ─── Section markers (smoke-tested, do not rename) ───────────────────────────
+// â”€â”€â”€ Section markers (smoke-tested, do not rename) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const SECTION_IDS = [
   'why-sharkauth',
   'sixty-second-setup',
@@ -23,42 +23,42 @@ export const SECTION_IDS = [
   'next-steps',
 ];
 
-// ─── Why SharkAuth (Section 1) ───────────────────────────────────────────────
+// â”€â”€â”€ Why SharkAuth (Section 1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const WHY_BULLETS = [
-  'Per-token, per-agent, and per-customer revocation — five independent layers, RFC-correct.',
+  'Per-token, per-agent, and per-customer revocation â€” five independent layers, RFC-correct.',
   'DPoP-bound tokens (RFC 9449): stolen access tokens cannot be replayed by a different client.',
   'Delegation chain audit (RFC 8693): every act claim is logged with full chain traceability.',
 ];
 
-// ─── 60-second setup tasks (Section 2) ──────────────────────────────────────
+// â”€â”€â”€ 60-second setup tasks (Section 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SETUP_TASKS = [
   {
     id: 'setup.adminkey',
     title: 'Copy the admin key',
-    summary: 'The one-time key was printed on first boot and saved to data/admin.key.firstboot. Paste it into the login screen. Shown once — store it securely.',
+    summary: 'The one-time key was printed on first boot and saved to data/admin.key.firstboot. Paste it into the login screen. Shown once â€” store it securely.',
     page: 'overview',
-    pageLabel: 'Overview → Admin key banner',
+    pageLabel: 'Overview â†’ Admin key banner',
     autoCheck: 'hasAdminKey',
   },
 ];
 
-// ─── Your first agent tasks (Section 3) ─────────────────────────────────────
+// â”€â”€â”€ Your first agent tasks (Section 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const AGENT_TASKS = [
   {
     id: 'user.create',
     title: 'Create your first human user',
-    summary: 'Your first end-user. Real humans authenticate against shark — sessions, MFA, password reset all built-in.',
+    summary: 'Your first end-user. Real humans authenticate against shark â€” sessions, MFA, password reset all built-in.',
     page: 'users',
-    pageLabel: '→ /users (create-drawer)',
+    pageLabel: 'â†’ /users (create-drawer)',
     cli: 'shark user create --email demo@example.com',
     autoCheck: 'hasUser',
   },
   {
     id: 'agent.register',
     title: 'Register your first agent',
-    summary: 'Each agent gets a DPoP-bound credential. Tokens are cryptographically tied to the agent\'s keypair — token theft is useless without the private key.',
+    summary: 'Each agent gets a DPoP-bound credential. Tokens are cryptographically tied to the agent\'s keypair â€” token theft is useless without the private key.',
     page: 'agents',
-    pageLabel: '→ /agents/new',
+    pageLabel: 'â†’ /agents/new',
     cli: 'shark agent register --name my-first-agent',
     autoCheck: 'hasAgent',
   },
@@ -67,8 +67,8 @@ const AGENT_TASKS = [
     title: 'Get credentials',
     summary: 'After registration, copy the client_id and client_secret from the agent detail drawer. The secret is shown once.',
     page: 'agents',
-    pageLabel: '→ /agents',
-    code: `# Store securely — shown once
+    pageLabel: 'â†’ /agents',
+    code: `# Store securely â€” shown once
 CLIENT_ID=ag_01abc...
 CLIENT_SECRET=sk_...`,
     autoCheck: 'hasAgent',
@@ -78,14 +78,14 @@ CLIENT_SECRET=sk_...`,
     title: 'Set a delegation policy',
     summary: 'Grant this agent permission to act on behalf of a user or another agent within a scope.',
     page: 'agents',
-    pageLabel: '→ Agent detail → Delegation Policies',
+    pageLabel: 'â†’ Agent detail â†’ Delegation Policies',
     cli: 'shark agents policy set <agent-id> --may-act <other-agent-id> --scope email:read',
     autoCheck: 'hasAgentPolicy',
   },
 ];
 
-// ─── DPoP-bound token in 10 lines (Section 4) ───────────────────────────────
-// DATA-MARKER: dpop-python-10-liner — smoke test asserts this string is present in the bundle
+// â”€â”€â”€ DPoP-bound token in 10 lines (Section 4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// DATA-MARKER: dpop-python-10-liner â€” smoke test asserts this string is present in the bundle
 const DPOP_PYTHON_SNIPPET = `import shark_auth
 
 client = shark_auth.Client(
@@ -115,13 +115,13 @@ const DPOP_TASKS = [
     code: DPOP_PYTHON_SNIPPET,
     extraSnippets: [
       { label: 'curl (no SDK)', code: DPOP_CURL_SNIPPET },
-      { label: 'TypeScript — coming W18', code: '// TypeScript SDK ships W18. Use curl alternative above.' },
+      { label: 'TypeScript â€” coming W18', code: '// TypeScript SDK ships W18. Use curl alternative above.' },
     ],
     autoCheck: 'hasDPoPToken',
   },
 ];
 
-// ─── Delegation chain demo (Section 5) ──────────────────────────────────────
+// â”€â”€â”€ Delegation chain demo (Section 5) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DELEGATION_TASKS = [
   {
     id: 'delegation.run',
@@ -135,38 +135,38 @@ const DELEGATION_TASKS = [
     title: 'Verify the audit trail',
     summary: 'Open the audit log filtered to delegation events. Each row shows the act claim (agent) alongside the subject (user).',
     page: 'audit',
-    pageLabel: '→ /audit?delegation=true',
+    pageLabel: 'â†’ /audit?delegation=true',
     cli: 'curl -sH "Authorization: Bearer $ADMIN_KEY" "http://localhost:8080/api/v1/admin/audit?delegation=true"',
     autoCheck: 'hasDelegationEvent',
   },
 ];
 
-// ─── Next steps (Section 6) ──────────────────────────────────────────────────
+// â”€â”€â”€ Next steps (Section 6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const NEXT_STEPS = [
   {
     id: 'next.docs',
     title: 'Read the API reference',
     summary: 'Full REST + SDK docs including DPoP flows, token exchange parameters, revocation endpoints.',
-    href: 'https://sharkauth.dev/docs',
-    label: 'sharkauth.dev/docs →',
+    href: 'https://sharkauth.com/docs',
+    label: 'sharkauth.com/docs â†’',
   },
   {
     id: 'next.screencast',
     title: 'Watch the screencast',
     summary: '90-second walkthrough: install, first agent, first DPoP token, delegation chain.',
-    href: 'https://sharkauth.dev/screencast',
-    label: 'sharkauth.dev/screencast →',
+    href: 'https://sharkauth.com/screencast',
+    label: 'sharkauth.com/screencast â†’',
   },
   {
     id: 'next.github',
     title: 'GitHub',
     summary: 'Source code, issues, roadmap. Star if you find it useful.',
-    href: 'https://github.com/sharkauth/sharkauth',
-    label: 'github.com/sharkauth/sharkauth →',
+    href: 'https://github.com/shark-auth/shark',
+    label: 'github.com/shark-auth/shark â†’',
   },
 ];
 
-// ─── All sections in display order ───────────────────────────────────────────
+// â”€â”€â”€ All sections in display order â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // SECTION_IDS above are the smoke-verified marker strings.
 const SECTIONS = [
   { id: 'why-sharkauth',       label: 'Why SharkAuth',              kind: 'why' },
@@ -177,21 +177,21 @@ const SECTIONS = [
   { id: 'next-steps',          label: 'Next steps',                 kind: 'next' },
 ];
 
-// ─── Human auth tasks (secondary track) ──────────────────────────────────────
+// â”€â”€â”€ Human auth tasks (secondary track) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const HUMAN_TASKS = [
   {
     id: 'human.email',
     title: 'Configure email delivery',
     summary: 'SharkAuth needs an outbound mail provider to send magic links and password resets.',
     page: 'settings',
-    pageLabel: 'Settings → Email Delivery',
+    pageLabel: 'Settings â†’ Email Delivery',
   },
   {
     id: 'human.providers',
     title: 'Enable OAuth providers',
     summary: 'Add Google, GitHub, Apple, or Discord social login. Each provider needs a client_id + client_secret.',
     page: 'settings',
-    pageLabel: 'Settings → OAuth & SSO',
+    pageLabel: 'Settings â†’ OAuth & SSO',
   },
   {
     id: 'human.magiclink',
@@ -211,7 +211,7 @@ const HUMAN_TASKS = [
   },
 ];
 
-// ─── State helpers ────────────────────────────────────────────────────────────
+// â”€â”€â”€ State helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -229,7 +229,7 @@ function persist(state) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
 }
 
-// ─── Auto-verify hook ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Auto-verify hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useAutoChecks() {
   const [checks, setChecks] = React.useState({
     hasAdminKey: false,
@@ -285,7 +285,7 @@ function useAutoChecks() {
   return { checks, refresh: probe };
 }
 
-// ─── Status dot ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Status dot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function StatusDot({ status }) {
   const color = status === 'done' ? 'var(--success)'
     : status === 'skipped' ? 'var(--warn)'
@@ -303,7 +303,7 @@ function StatusDot({ status }) {
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function GetStarted({ setPage }) {
   const initial = React.useMemo(loadState, []);
   const [track, setTrack] = React.useState(initial.track);
@@ -377,7 +377,7 @@ export function GetStarted({ setPage }) {
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
-        {/* ── Toolbar ─────────────────────────────────────────────────────── */}
+        {/* â”€â”€ Toolbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div style={{
           padding: '10px 16px',
           borderBottom: '1px solid var(--hairline)',
@@ -398,7 +398,7 @@ export function GetStarted({ setPage }) {
           </div>
           <div style={{ flex: 1 }}/>
           <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-            {done}/{total} done{skipped ? ` · ${skipped} skipped` : ''}
+            {done}/{total} done{skipped ? ` Â· ${skipped} skipped` : ''}
           </span>
           <div style={{ width: 80, height: 4, background: 'var(--surface-2)', borderRadius: 2, overflow: 'hidden' }}>
             <div style={{ width: pct + '%', height: '100%', background: 'var(--fg)' }}/>
@@ -411,7 +411,7 @@ export function GetStarted({ setPage }) {
           </button>
         </div>
 
-        {/* ── Sub-header ──────────────────────────────────────────────────── */}
+        {/* â”€â”€ Sub-header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div style={{
           padding: '7px 16px',
           borderBottom: '1px solid var(--hairline)',
@@ -421,11 +421,11 @@ export function GetStarted({ setPage }) {
           {track === 'human'
             ? 'Add human sign-in to your product: email, social, magic link, SSO, passkeys.'
             : track === 'both'
-            ? 'Full integration: agent DPoP-bound tokens + human sign-in. Agent track first — it is the moat.'
+            ? 'Full integration: agent DPoP-bound tokens + human sign-in. Agent track first â€” it is the moat.'
             : 'Auth for products that give customers their own agents. Get to first DPoP-bound token in 5 minutes.'}
         </div>
 
-        {/* ── Section accordion body ───────────────────────────────────────── */}
+        {/* â”€â”€ Section accordion body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {visibleSections.map(section => (
             <SectionBlock
@@ -444,7 +444,7 @@ export function GetStarted({ setPage }) {
           ))}
         </div>
 
-        {/* ── Footer ──────────────────────────────────────────────────────── */}
+        {/* â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div style={{
           padding: '8px 16px',
           borderTop: '1px solid var(--hairline)',
@@ -453,9 +453,9 @@ export function GetStarted({ setPage }) {
           fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)',
         }}>
           <span>{total - done - skipped} pending</span>
-          <span>·</span>
+          <span>Â·</span>
           <span>{done} done</span>
-          {skipped > 0 && <><span>·</span><span>{skipped} skipped</span></>}
+          {skipped > 0 && <><span>Â·</span><span>{skipped} skipped</span></>}
           <div style={{ flex: 1 }}/>
           <span className="faint">Status auto-syncs from /admin/agents, /admin/audit.</span>
         </div>
@@ -463,7 +463,7 @@ export function GetStarted({ setPage }) {
         <CLIFooter command="shark help"/>
       </div>
 
-      {/* ── Task drawer ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ Task drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {selectedTask && (
         <TaskDrawer
           task={selectedTask}
@@ -486,11 +486,11 @@ export function GetStarted({ setPage }) {
   );
 }
 
-// ─── Section block ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Section block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SectionBlock({ section, open, onToggle, tasks: sectionTasks, taskStates, checks, selectedId, onSelect, track, humanTasks }) {
   return (
     <div data-section={section.id} style={{ borderBottom: '1px solid var(--hairline)' }}>
-      {/* Section header — clickable to toggle */}
+      {/* Section header â€” clickable to toggle */}
       <div
         onClick={onToggle}
         style={{
@@ -610,7 +610,7 @@ function SectionProgress({ tasks, taskStates }) {
   );
 }
 
-// ─── Why SharkAuth section body ───────────────────────────────────────────────
+// â”€â”€â”€ Why SharkAuth section body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function WhySection() {
   return (
     <div style={{ padding: '12px 16px 14px 38px' }}>
@@ -627,7 +627,7 @@ function WhySection() {
   );
 }
 
-// ─── Next steps section body ──────────────────────────────────────────────────
+// â”€â”€â”€ Next steps section body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function NextStepsSection() {
   return (
     <div style={{ padding: '12px 16px 14px 38px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -654,7 +654,7 @@ function NextStepsSection() {
   );
 }
 
-// ─── Tab button ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tab button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TabBtn({ on, onClick, children }) {
   return (
     <button
@@ -674,7 +674,7 @@ function TabBtn({ on, onClick, children }) {
   );
 }
 
-// ─── Task drawer ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Task drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TaskDrawer({ task, status, onClose, onStatus, onGo, checks }) {
   const toast = useToast();
   const [snippetTab, setSnippetTab] = React.useState(0);

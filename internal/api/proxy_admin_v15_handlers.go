@@ -1,4 +1,4 @@
-// Package api — PROXYV1_5 Lane B admin handlers: user tier, branding
+﻿// Package api â€” PROXYV1_5 Lane B admin handlers: user tier, branding
 // design tokens. Kept in a dedicated file so the v1.5 surface is easy
 // to audit against PROXYV1_5.md and so the existing branding/user
 // handler files don't grow unbounded.
@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // setUserTierRequest is the PATCH body for /admin/users/{id}/tier.

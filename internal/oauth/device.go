@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 import (
 	"context"
@@ -16,11 +16,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // ---------------------------------------------------------------------------
-// Rate limiter — per-client_id, 10 requests per minute window
+// Rate limiter â€” per-client_id, 10 requests per minute window
 // ---------------------------------------------------------------------------
 
 const deviceRateLimitPerMin = 10
@@ -88,7 +88,7 @@ func generateUserCode() (string, error) {
 }
 
 // ---------------------------------------------------------------------------
-// Device authorization response (RFC 8628 §3.2)
+// Device authorization response (RFC 8628 Â§3.2)
 // ---------------------------------------------------------------------------
 
 type deviceAuthResponse struct {
@@ -101,7 +101,7 @@ type deviceAuthResponse struct {
 }
 
 // HandleDeviceAuthorization handles POST /oauth/device.
-// Device Authorization Grant is disabled for v0.1 — returns 501 Not Implemented.
+// Device Authorization Grant is disabled for v0.1 â€” returns 501 Not Implemented.
 func (s *Server) HandleDeviceAuthorization(w http.ResponseWriter, r *http.Request) {
 	writeDeviceError(w, http.StatusNotImplemented, "not_implemented",
 		"Device authorization grant (RFC 8628) is not yet supported. Coming in v0.2.")
@@ -193,7 +193,7 @@ func (s *Server) handleDeviceAuthorizationImpl(w http.ResponseWriter, r *http.Re
 }
 
 // ---------------------------------------------------------------------------
-// Device verification page — GET /oauth/device/verify
+// Device verification page â€” GET /oauth/device/verify
 // ---------------------------------------------------------------------------
 
 // DeviceVerifyData is the template data for the device code entry page.
@@ -203,7 +203,7 @@ type DeviceVerifyData struct {
 }
 
 // HandleDeviceVerify handles GET /oauth/device/verify.
-// Device Authorization Grant is disabled for v0.1 — returns 501 Not Implemented.
+// Device Authorization Grant is disabled for v0.1 â€” returns 501 Not Implemented.
 func (s *Server) HandleDeviceVerify(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Device authorization grant is not yet supported. Coming in v0.2.", http.StatusNotImplemented)
 }
@@ -227,7 +227,7 @@ func (s *Server) handleDeviceVerifyImpl(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// No user_code — render the code-entry form.
+	// No user_code â€” render the code-entry form.
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'")
@@ -238,7 +238,7 @@ func (s *Server) handleDeviceVerifyImpl(w http.ResponseWriter, r *http.Request) 
 }
 
 // ---------------------------------------------------------------------------
-// Device approval page — POST /oauth/device/verify
+// Device approval page â€” POST /oauth/device/verify
 // ---------------------------------------------------------------------------
 
 // DeviceApprovalData is the template data for the device consent decision page.
@@ -251,7 +251,7 @@ type DeviceApprovalData struct {
 }
 
 // HandleDeviceApprove handles POST /oauth/device/verify.
-// Device Authorization Grant is disabled for v0.1 — returns 501 Not Implemented.
+// Device Authorization Grant is disabled for v0.1 â€” returns 501 Not Implemented.
 func (s *Server) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Device authorization grant is not yet supported. Coming in v0.2.", http.StatusNotImplemented)
 }
@@ -318,7 +318,7 @@ func (s *Server) handleDeviceApproveImpl(w http.ResponseWriter, r *http.Request)
 
 	approved := r.FormValue("approved")
 	if approved == "" {
-		// No decision yet — show the consent page.
+		// No decision yet â€” show the consent page.
 		s.renderDeviceApprovalPage(w, r, userCode, userID)
 		return
 	}
@@ -402,12 +402,12 @@ func (s *Server) renderDeviceApprovalPage(w http.ResponseWriter, r *http.Request
 }
 
 // ---------------------------------------------------------------------------
-// Device token polling — HandleDeviceTokenRequest
+// Device token polling â€” HandleDeviceTokenRequest
 // ---------------------------------------------------------------------------
 
 const devicePollInterval = 5 // seconds
 
-// deviceTokenError writes a JSON error response per RFC 8628 §3.5.
+// deviceTokenError writes a JSON error response per RFC 8628 Â§3.5.
 type deviceTokenError struct {
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description,omitempty"`

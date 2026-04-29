@@ -1,4 +1,4 @@
-package auth
+﻿package auth
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"golang.org/x/oauth2"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 var (
@@ -97,7 +97,7 @@ func (m *OAuthManager) HandleCallback(ctx context.Context, providerName, code, i
 	// Check if we already have this OAuth account linked
 	existingAcct, err := m.store.GetOAuthAccountByProviderID(ctx, providerName, info.ProviderID)
 	if err == nil && existingAcct != nil {
-		// Already linked — load the user and create session
+		// Already linked â€” load the user and create session
 		user, err := m.store.GetUserByID(ctx, existingAcct.UserID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("getting linked user: %w", err)
@@ -143,7 +143,7 @@ func (m *OAuthManager) HandleCallback(ctx context.Context, providerName, code, i
 	} else if err != nil {
 		return nil, nil, fmt.Errorf("looking up user by email: %w", err)
 	} else if info.AvatarURL != "" && (user.AvatarURL == nil || *user.AvatarURL == "") {
-		// Existing user, first OAuth link — set avatar if missing
+		// Existing user, first OAuth link â€” set avatar if missing
 		user.AvatarURL = &info.AvatarURL
 		user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		if err := m.store.UpdateUser(ctx, user); err != nil {

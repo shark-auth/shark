@@ -1,47 +1,47 @@
-# Shark Auth — Launch Sprint Spec (v2)
+﻿# Shark Auth â€” Launch Sprint Spec (v2)
 
 **Ship date:** Sunday, April 27, 2026
 **Time budget:** ~17 days (evenings + three weekends)
 **Rule:** If it's not on this list, it doesn't exist yet.
 
-> **What changed from v1:** Market research showed passkeys are approaching table stakes, REST-only is a dealbreaker for most devs, single-provider OAuth limits addressable market, and M2M tokens are increasingly expected. This spec adds passkeys/WebAuthn, multi-provider social OAuth (Google, GitHub, Apple, Discord), magic links, M2M API keys, and a TypeScript SDK — while keeping the single-binary philosophy intact.
+> **What changed from v1:** Market research showed passkeys are approaching table stakes, REST-only is a dealbreaker for most devs, single-provider OAuth limits addressable market, and M2M tokens are increasingly expected. This spec adds passkeys/WebAuthn, multi-provider social OAuth (Google, GitHub, Apple, Discord), magic links, M2M API keys, and a TypeScript SDK â€” while keeping the single-binary philosophy intact.
 
 ---
 
 ## What ships at launch
 
-A single Go binary that handles signup, login, sessions, OAuth, MFA, passkeys, magic links, RBAC, SSO, M2M tokens — with a working Auth0 migration CLI, an embedded admin dashboard, and a TypeScript SDK. No "shipping soon." Every feature on the landing page works. No separate frontend deploy. `shark serve` and visit `:8080/admin`.
+A single Go binary that handles signup, login, sessions, OAuth, MFA, passkeys, magic links, RBAC, SSO, M2M tokens â€” with a working Auth0 migration CLI, an embedded admin dashboard, and a TypeScript SDK. No "shipping soon." Every feature on the landing page works. No separate frontend deploy. `shark serve` and visit `:8080/admin`.
 
 ### The binary does exactly this:
 
 1. **Email/password signup + login** (Argon2id hashing)
 2. **Passkey/WebAuthn login** (FIDO2-compliant, resident credentials, platform + cross-platform authenticators)
-3. **Magic link login** (email-based passwordless — token via SMTP, click to authenticate)
+3. **Magic link login** (email-based passwordless â€” token via SMTP, click to authenticate)
 4. **Server-side sessions** (encrypted cookies, no JWT complexity)
-5. **Social OAuth login** — Google, GitHub, Apple, Discord (four providers, generic handler pattern)
-6. **MFA — TOTP** (Google Authenticator / Authy compatible, recovery codes)
+5. **Social OAuth login** â€” Google, GitHub, Apple, Discord (four providers, generic handler pattern)
+6. **MFA â€” TOTP** (Google Authenticator / Authy compatible, recovery codes)
 7. **RBAC** (roles, permissions, role assignment, middleware enforcement)
-8. **SSO — OIDC provider** (SharkAuth as an OIDC IdP)
-9. **SSO — SAML SP** (beta — connect to enterprise IdPs like Okta/Azure AD)
-10. **M2M API keys** (service-to-service auth — scoped, rotatable, rate-limit-aware)
+8. **SSO â€” OIDC provider** (SharkAuth as an OIDC IdP)
+9. **SSO â€” SAML SP** (beta â€” connect to enterprise IdPs like Okta/Azure AD)
+10. **M2M API keys** (service-to-service auth â€” scoped, rotatable, rate-limit-aware)
 11. **Auth0 user import** (read their export JSON, verify bcrypt hashes, rehash on first login)
-12. **Audit logs** (every auth event recorded — login, signup, MFA, role changes, SSO, API keys. Filterable, exportable, retention-configurable)
+12. **Audit logs** (every auth event recorded â€” login, signup, MFA, role changes, SSO, API keys. Filterable, exportable, retention-configurable)
 13. **REST API** for everything above
-14. **TypeScript SDK** (`@sharkauth/js`) — fetch-based, zero-dependency, works in Node/browser/edge
+14. **TypeScript SDK** (`@sharkauth/js`) â€” fetch-based, zero-dependency, works in Node/browser/edge
 15. **YAML config** with env var overrides
 16. **SQLite storage** (embedded, zero-config)
 17. **Docker image** (one container, done)
-18. **Admin dashboard** (Svelte, embedded in the binary — user management, sessions, MFA, passkeys, RBAC, SSO connections, API keys, audit logs, migration status)
+18. **Admin dashboard** (Svelte, embedded in the binary â€” user management, sessions, MFA, passkeys, RBAC, SSO connections, API keys, audit logs, migration status)
 19. **Automated test suite** (Go unit + integration tests with 60%+ coverage, SDK tests with Vitest, CI pipeline with gosec linting)
 
 ### What does NOT ship at launch:
 
-- No organizations/multi-tenancy (post-launch — highest priority after launch)
-- No OIDC client federation (post-launch — this is "Login with X enterprise IdP via OIDC")
-- No agent identity / MCP auth (later — emerging standard, not yet table stakes)
+- No organizations/multi-tenancy (post-launch â€” highest priority after launch)
+- No OIDC client federation (post-launch â€” this is "Login with X enterprise IdP via OIDC")
+- No agent identity / MCP auth (later â€” emerging standard, not yet table stakes)
 - No Clerk/Firebase/Cognito migration (later)
 - No Postgres mode (later)
-- No React/Next.js component library (later — SDK ships first, pre-built UI components follow)
+- No React/Next.js component library (later â€” SDK ships first, pre-built UI components follow)
 
 ---
 
@@ -49,7 +49,7 @@ A single Go binary that handles signup, login, sessions, OAuth, MFA, passkeys, m
 
 ### Philosophy
 
-The binary is the product. Cloud is a convenience layer, not a feature gate. Self-hosted is the free tier. Every auth feature ships in the binary for $0. Cloud sells operational burden — managed infra, SLA, support — not features.
+The binary is the product. Cloud is a convenience layer, not a feature gate. Self-hosted is the free tier. Every auth feature ships in the binary for $0. Cloud sells operational burden â€” managed infra, SLA, support â€” not features.
 
 ### Tiers
 
@@ -326,17 +326,17 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
 ### Auth (core)
 
 ```
-POST   /api/v1/auth/signup              — Create user + session
-POST   /api/v1/auth/login               — Verify password, return session (or MFA challenge)
-POST   /api/v1/auth/logout              — Destroy session
-GET    /api/v1/auth/me                  — Current user from session
+POST   /api/v1/auth/signup              â€” Create user + session
+POST   /api/v1/auth/login               â€” Verify password, return session (or MFA challenge)
+POST   /api/v1/auth/logout              â€” Destroy session
+GET    /api/v1/auth/me                  â€” Current user from session
 ```
 
 ### Social OAuth (generic pattern)
 
 ```
-GET    /api/v1/auth/oauth/:provider              — Redirect to provider (google, github, apple, discord)
-GET    /api/v1/auth/oauth/:provider/callback     — Handle OAuth callback, create/link user + session
+GET    /api/v1/auth/oauth/:provider              â€” Redirect to provider (google, github, apple, discord)
+GET    /api/v1/auth/oauth/:provider/callback     â€” Handle OAuth callback, create/link user + session
 ```
 
 **Supported providers:** `google`, `github`, `apple`, `discord`
@@ -344,13 +344,13 @@ GET    /api/v1/auth/oauth/:provider/callback     — Handle OAuth callback, crea
 ### Passkeys / WebAuthn
 
 ```
-POST   /api/v1/auth/passkey/register/begin    — Generate registration options (PublicKeyCredentialCreationOptions)
-POST   /api/v1/auth/passkey/register/finish   — Verify attestation, store credential
-POST   /api/v1/auth/passkey/login/begin       — Generate authentication options (PublicKeyCredentialRequestOptions)
-POST   /api/v1/auth/passkey/login/finish      — Verify assertion, create session
-GET    /api/v1/auth/passkey/credentials        — List user's registered passkeys
-DELETE /api/v1/auth/passkey/credentials/:id    — Remove a passkey
-PATCH  /api/v1/auth/passkey/credentials/:id    — Rename a passkey
+POST   /api/v1/auth/passkey/register/begin    â€” Generate registration options (PublicKeyCredentialCreationOptions)
+POST   /api/v1/auth/passkey/register/finish   â€” Verify attestation, store credential
+POST   /api/v1/auth/passkey/login/begin       â€” Generate authentication options (PublicKeyCredentialRequestOptions)
+POST   /api/v1/auth/passkey/login/finish      â€” Verify assertion, create session
+GET    /api/v1/auth/passkey/credentials        â€” List user's registered passkeys
+DELETE /api/v1/auth/passkey/credentials/:id    â€” Remove a passkey
+PATCH  /api/v1/auth/passkey/credentials/:id    â€” Rename a passkey
 ```
 
 **Passkey registration flow:**
@@ -358,146 +358,146 @@ PATCH  /api/v1/auth/passkey/credentials/:id    — Rename a passkey
 ```
 1. User is logged in (via password, OAuth, or magic link)
 2. POST /passkey/register/begin
-   → Server generates challenge, returns PublicKeyCredentialCreationOptions
-   → Options include: rp.id (from config), user.id, user.name, user.displayName
-   → Options include: pubKeyCredParams [ES256, RS256], authenticatorSelection
+   â†’ Server generates challenge, returns PublicKeyCredentialCreationOptions
+   â†’ Options include: rp.id (from config), user.id, user.name, user.displayName
+   â†’ Options include: pubKeyCredParams [ES256, RS256], authenticatorSelection
 3. Client calls navigator.credentials.create() with those options
 4. POST /passkey/register/finish with attestation response
-   → Server verifies origin, challenge, attestation
-   → Stores credential_id, public_key, sign_count, aaguid, transports
-   → Returns { "credential_id": "pk_xxx", "name": "Unnamed passkey" }
+   â†’ Server verifies origin, challenge, attestation
+   â†’ Stores credential_id, public_key, sign_count, aaguid, transports
+   â†’ Returns { "credential_id": "pk_xxx", "name": "Unnamed passkey" }
 ```
 
 **Passkey login flow:**
 
 ```
 1. POST /passkey/login/begin (optionally with { "email": "..." } for non-discoverable)
-   → Server generates challenge, returns PublicKeyCredentialRequestOptions
-   → If email provided: includes allowCredentials for that user's passkeys
-   → If no email: empty allowCredentials (discoverable/resident key flow)
+   â†’ Server generates challenge, returns PublicKeyCredentialRequestOptions
+   â†’ If email provided: includes allowCredentials for that user's passkeys
+   â†’ If no email: empty allowCredentials (discoverable/resident key flow)
 2. Client calls navigator.credentials.get() with those options
 3. POST /passkey/login/finish with assertion response
-   → Server looks up credential by credential_id
-   → Verifies signature against stored public_key
-   → Verifies sign_count > stored value (replay protection)
-   → Updates sign_count + last_used_at
-   → Creates session with auth_method="passkey", mfa_passed=1 (passkeys satisfy MFA)
-   → Returns session cookie
+   â†’ Server looks up credential by credential_id
+   â†’ Verifies signature against stored public_key
+   â†’ Verifies sign_count > stored value (replay protection)
+   â†’ Updates sign_count + last_used_at
+   â†’ Creates session with auth_method="passkey", mfa_passed=1 (passkeys satisfy MFA)
+   â†’ Returns session cookie
 ```
 
 ### Magic Links
 
 ```
-POST   /api/v1/auth/magic-link/send       — Send magic link to email
-GET    /api/v1/auth/magic-link/verify      — Verify token from email link, create session
+POST   /api/v1/auth/magic-link/send       â€” Send magic link to email
+GET    /api/v1/auth/magic-link/verify      â€” Verify token from email link, create session
 ```
 
 **Magic link flow:**
 
 ```
 1. POST /magic-link/send with { "email": "user@example.com" }
-   → Generate 32-byte random token
-   → Store SHA-256(token) in magic_link_tokens with 10-minute expiry
-   → Send email with link: https://yourapp.com/auth/magic?token=<token>
-   → If user doesn't exist: create account with email_verified=1
-   → Always return 200 (don't leak whether email exists)
+   â†’ Generate 32-byte random token
+   â†’ Store SHA-256(token) in magic_link_tokens with 10-minute expiry
+   â†’ Send email with link: https://yourapp.com/auth/magic?token=<token>
+   â†’ If user doesn't exist: create account with email_verified=1
+   â†’ Always return 200 (don't leak whether email exists)
 2. GET /magic-link/verify?token=<token>
-   → Hash token, look up in magic_link_tokens
-   → Verify not expired, not used
-   → Mark as used
-   → Create or find user by email, set email_verified=1
-   → Create session with auth_method="magic_link"
-   → Redirect to configured success URL with session cookie set
+   â†’ Hash token, look up in magic_link_tokens
+   â†’ Verify not expired, not used
+   â†’ Mark as used
+   â†’ Create or find user by email, set email_verified=1
+   â†’ Create session with auth_method="magic_link"
+   â†’ Redirect to configured success URL with session cookie set
 ```
 
 ### MFA
 
 ```
-POST   /api/v1/auth/mfa/enroll          — Generate TOTP secret + QR URI
-POST   /api/v1/auth/mfa/verify          — Confirm setup with first code
-POST   /api/v1/auth/mfa/challenge       — Submit TOTP code during login
-POST   /api/v1/auth/mfa/recovery        — Use a recovery code
-DELETE /api/v1/auth/mfa                  — Disable MFA (requires current code)
-GET    /api/v1/auth/mfa/recovery-codes   — Regenerate recovery codes
+POST   /api/v1/auth/mfa/enroll          â€” Generate TOTP secret + QR URI
+POST   /api/v1/auth/mfa/verify          â€” Confirm setup with first code
+POST   /api/v1/auth/mfa/challenge       â€” Submit TOTP code during login
+POST   /api/v1/auth/mfa/recovery        â€” Use a recovery code
+DELETE /api/v1/auth/mfa                  â€” Disable MFA (requires current code)
+GET    /api/v1/auth/mfa/recovery-codes   â€” Regenerate recovery codes
 ```
 
 **MFA login flow:**
 
 ```
 1. POST /auth/login with email + password
-2. If MFA enabled → 200 { "mfa_required": true, "session_token": "partial_xxx" }
+2. If MFA enabled â†’ 200 { "mfa_required": true, "session_token": "partial_xxx" }
    Session is created with mfa_passed=0 (can only hit /mfa/challenge)
 3. POST /auth/mfa/challenge with TOTP code
-4. If valid → session upgraded to mfa_passed=1, full access granted
-5. If user lost device → POST /auth/mfa/recovery with recovery code
+4. If valid â†’ session upgraded to mfa_passed=1, full access granted
+5. If user lost device â†’ POST /auth/mfa/recovery with recovery code
 ```
 
-**Note:** Passkey login bypasses MFA — passkeys are phishing-resistant and satisfy AAL2. Sessions created via passkey have mfa_passed=1 automatically.
+**Note:** Passkey login bypasses MFA â€” passkeys are phishing-resistant and satisfy AAL2. Sessions created via passkey have mfa_passed=1 automatically.
 
 ### RBAC
 
 ```
-POST   /api/v1/roles                    — Create role
-GET    /api/v1/roles                    — List roles
-GET    /api/v1/roles/:id                — Get role with permissions
-PUT    /api/v1/roles/:id                — Update role
-DELETE /api/v1/roles/:id                — Delete role
+POST   /api/v1/roles                    â€” Create role
+GET    /api/v1/roles                    â€” List roles
+GET    /api/v1/roles/:id                â€” Get role with permissions
+PUT    /api/v1/roles/:id                â€” Update role
+DELETE /api/v1/roles/:id                â€” Delete role
 
-POST   /api/v1/permissions              — Create permission
-GET    /api/v1/permissions              — List permissions
+POST   /api/v1/permissions              â€” Create permission
+GET    /api/v1/permissions              â€” List permissions
 
-POST   /api/v1/roles/:id/permissions    — Attach permissions to role
-DELETE /api/v1/roles/:id/permissions/:pid — Detach permission from role
+POST   /api/v1/roles/:id/permissions    â€” Attach permissions to role
+DELETE /api/v1/roles/:id/permissions/:pid â€” Detach permission from role
 
-POST   /api/v1/users/:id/roles          — Assign role to user
-DELETE /api/v1/users/:id/roles/:rid      — Remove role from user
-GET    /api/v1/users/:id/roles           — List user's roles
-GET    /api/v1/users/:id/permissions     — List user's effective permissions (resolved)
+POST   /api/v1/users/:id/roles          â€” Assign role to user
+DELETE /api/v1/users/:id/roles/:rid      â€” Remove role from user
+GET    /api/v1/users/:id/roles           â€” List user's roles
+GET    /api/v1/users/:id/permissions     â€” List user's effective permissions (resolved)
 
-POST   /api/v1/auth/check               — Check permission: { "user_id", "action", "resource" } → { "allowed": bool }
+POST   /api/v1/auth/check               â€” Check permission: { "user_id", "action", "resource" } â†’ { "allowed": bool }
 ```
 
 ### SSO
 
 ```
-POST   /api/v1/sso/connections           — Create SSO connection (SAML or OIDC config)
-GET    /api/v1/sso/connections           — List connections
-GET    /api/v1/sso/connections/:id       — Get connection details
-PUT    /api/v1/sso/connections/:id       — Update connection
-DELETE /api/v1/sso/connections/:id       — Delete connection
+POST   /api/v1/sso/connections           â€” Create SSO connection (SAML or OIDC config)
+GET    /api/v1/sso/connections           â€” List connections
+GET    /api/v1/sso/connections/:id       â€” Get connection details
+PUT    /api/v1/sso/connections/:id       â€” Update connection
+DELETE /api/v1/sso/connections/:id       â€” Delete connection
 
-GET    /api/v1/sso/saml/:connection_id/metadata  — SP metadata XML (for IdP setup)
-POST   /api/v1/sso/saml/:connection_id/acs       — SAML ACS endpoint (receives assertion)
+GET    /api/v1/sso/saml/:connection_id/metadata  â€” SP metadata XML (for IdP setup)
+POST   /api/v1/sso/saml/:connection_id/acs       â€” SAML ACS endpoint (receives assertion)
 
-GET    /api/v1/sso/oidc/:connection_id/auth      — OIDC authorization redirect
-GET    /api/v1/sso/oidc/:connection_id/callback   — OIDC callback
+GET    /api/v1/sso/oidc/:connection_id/auth      â€” OIDC authorization redirect
+GET    /api/v1/sso/oidc/:connection_id/callback   â€” OIDC callback
 
-GET    /api/v1/auth/sso?email=user@corp.com      — Auto-route: looks up domain → redirect to correct IdP
+GET    /api/v1/auth/sso?email=user@corp.com      â€” Auto-route: looks up domain â†’ redirect to correct IdP
 ```
 
 ### M2M API Keys
 
 ```
-POST   /api/v1/api-keys                 — Create API key (returns full key ONCE, then only prefix shown)
-GET    /api/v1/api-keys                 — List API keys (prefix + metadata only, never full key)
-GET    /api/v1/api-keys/:id             — Get API key details
-PATCH  /api/v1/api-keys/:id             — Update name, scopes, rate_limit, expires_at
-DELETE /api/v1/api-keys/:id             — Revoke API key (soft-delete, sets revoked_at)
-POST   /api/v1/api-keys/:id/rotate     — Rotate: generate new key, revoke old one atomically
+POST   /api/v1/api-keys                 â€” Create API key (returns full key ONCE, then only prefix shown)
+GET    /api/v1/api-keys                 â€” List API keys (prefix + metadata only, never full key)
+GET    /api/v1/api-keys/:id             â€” Get API key details
+PATCH  /api/v1/api-keys/:id             â€” Update name, scopes, rate_limit, expires_at
+DELETE /api/v1/api-keys/:id             â€” Revoke API key (soft-delete, sets revoked_at)
+POST   /api/v1/api-keys/:id/rotate     â€” Rotate: generate new key, revoke old one atomically
 ```
 
 **API key authentication:**
 ```
 Authorization: Bearer sh_xxx(32 random bytes base62-encoded)
 
-→ Server hashes the key with SHA-256
-→ Looks up key_hash in api_keys table
-→ Verifies not revoked (revoked_at IS NULL)
-→ Verifies not expired (expires_at IS NULL OR expires_at > now)
-→ Checks scope against requested action
-→ Enforces rate limit (in-memory token bucket per key_hash)
-→ Updates last_used_at
-→ Request proceeds with the key's scopes as the permission set
+â†’ Server hashes the key with SHA-256
+â†’ Looks up key_hash in api_keys table
+â†’ Verifies not revoked (revoked_at IS NULL)
+â†’ Verifies not expired (expires_at IS NULL OR expires_at > now)
+â†’ Checks scope against requested action
+â†’ Enforces rate limit (in-memory token bucket per key_hash)
+â†’ Updates last_used_at
+â†’ Request proceeds with the key's scopes as the permission set
 ```
 
 **Key format:** `sk_live_` + 32 random bytes base62-encoded (48 chars total). The `sk_live_` prefix makes keys easily identifiable in logs and secret scanners.
@@ -505,10 +505,10 @@ Authorization: Bearer sh_xxx(32 random bytes base62-encoded)
 ### Audit Logs
 
 ```
-GET    /api/v1/audit-logs                — List audit logs (paginated, filterable)
-GET    /api/v1/audit-logs/:id            — Get single audit log entry
-GET    /api/v1/users/:id/audit-logs      — Audit logs for a specific user (as actor or target)
-POST   /api/v1/audit-logs/export         — Export logs as JSON/CSV (date range required)
+GET    /api/v1/audit-logs                â€” List audit logs (paginated, filterable)
+GET    /api/v1/audit-logs/:id            â€” Get single audit log entry
+GET    /api/v1/users/:id/audit-logs      â€” Audit logs for a specific user (as actor or target)
+POST   /api/v1/audit-logs/export         â€” Export logs as JSON/CSV (date range required)
 ```
 
 **Query parameters for `GET /api/v1/audit-logs`:**
@@ -528,11 +528,11 @@ POST   /api/v1/audit-logs/export         — Export logs as JSON/CSV (date range
 ### Admin + Migration
 
 ```
-GET    /api/v1/users                     — List users (paginated)
-GET    /api/v1/users/:id                 — Get user
-POST   /api/v1/migrate/auth0             — Upload Auth0 export JSON
-GET    /api/v1/migrate/:id               — Migration status
-GET    /healthz                          — Health check
+GET    /api/v1/users                     â€” List users (paginated)
+GET    /api/v1/users/:id                 â€” Get user
+POST   /api/v1/migrate/auth0             â€” Upload Auth0 export JSON
+GET    /api/v1/migrate/:id               â€” Migration status
+GET    /healthz                          â€” Health check
 ```
 
 ---
@@ -618,124 +618,124 @@ admin:
 
 ```
 sharkauth/
-├── main.go
-├── cmd/
-│   ├── serve.go
-│   └── migrate.go
-├── internal/
-│   ├── config/
-│   │   └── config.go
-│   ├── storage/
-│   │   ├── storage.go                   # Storage interface
-│   │   └── sqlite.go                    # SQLite implementation
-│   ├── auth/
-│   │   ├── password.go                  # Argon2id + multi-hash
-│   │   ├── session.go                   # Sessions + MFA-aware gating
-│   │   ├── oauth.go                     # Generic OAuth handler + provider registry
-│   │   ├── providers/                   # OAuth provider implementations
-│   │   │   ├── google.go
-│   │   │   ├── github.go
-│   │   │   ├── apple.go                 # Apple uses JWT client_secret
-│   │   │   └── discord.go
-│   │   ├── mfa.go                       # TOTP generation, verification, recovery codes
-│   │   ├── passkey.go                   # WebAuthn registration + authentication (go-webauthn/webauthn)
-│   │   ├── magiclink.go                 # Token generation, email sending, verification
-│   │   └── apikey.go                    # M2M API key CRUD, hashing, validation, rate limiting
-│   ├── email/
-│   │   ├── sender.go                    # SMTP client wrapper
-│   │   └── templates/                   # HTML email templates
-│   │       ├── magic_link.html
-│   │       └── verify_email.html
-│   ├── rbac/
-│   │   ├── rbac.go                      # Role/permission CRUD
-│   │   └── middleware.go                # RequirePermission("action", "resource")
-│   ├── sso/
-│   │   ├── saml.go                      # SAML SP: metadata, ACS, assertion parsing
-│   │   ├── oidc.go                      # OIDC client: auth redirect, callback, token exchange
-│   │   └── connection.go                # SSO connection CRUD + domain routing
-│   ├── audit/
-│   │   ├── audit.go                     # Log(), Query(), Cleanup() — core audit engine
-│   │   └── middleware.go                # HTTP middleware that auto-logs requests
-│   ├── user/
-│   │   └── user.go
-│   ├── migrate/
-│   │   └── auth0.go
-│   ├── testutil/                        # Shared test infrastructure
-│   │   ├── db.go                        # NewTestDB (in-memory SQLite)
-│   │   ├── server.go                    # TestServer (httptest + cookiejar)
-│   │   ├── config.go                    # TestConfig with safe defaults
-│   │   ├── factories.go                 # CreateUser, CreateRole, CreateAPIKey, etc.
-│   │   └── email.go                     # MemoryEmailSender (captures sent emails)
-│   └── api/
-│       ├── router.go
-│       ├── auth_handlers.go             # Signup, login, logout, me
-│       ├── oauth_handlers.go            # Generic OAuth redirect + callback
-│       ├── passkey_handlers.go          # WebAuthn register/login begin/finish
-│       ├── magiclink_handlers.go        # Magic link send + verify
-│       ├── mfa_handlers.go              # Enroll, verify, challenge, recovery
-│       ├── rbac_handlers.go             # Roles, permissions, assignment, check
-│       ├── sso_handlers.go              # Connections, SAML ACS, OIDC callback
-│       ├── apikey_handlers.go           # M2M API key CRUD + rotate
-│       ├── audit_handlers.go            # Audit log list, detail, export
-│       ├── user_handlers.go             # Admin user endpoints
-│       └── migrate_handlers.go          # Migration endpoints
-├── dashboard/                           # Svelte app, embedded in binary
-│   ├── src/
-│   │   ├── routes/
-│   │   │   ├── +page.svelte             # Dashboard overview (user count, active sessions, auth method breakdown)
-│   │   │   ├── users/
-│   │   │   │   ├── +page.svelte         # User list (search, paginate, filter by auth method)
-│   │   │   │   └── [id]/+page.svelte    # User detail (sessions, roles, MFA, passkeys, OAuth accounts)
-│   │   │   ├── sessions/+page.svelte    # Active sessions (revoke, per-device view, auth method column)
-│   │   │   ├── roles/
-│   │   │   │   ├── +page.svelte         # Role list + create
-│   │   │   │   └── [id]/+page.svelte    # Role detail (edit permissions, assigned users)
-│   │   │   ├── sso/
-│   │   │   │   ├── +page.svelte         # SSO connections list
-│   │   │   │   └── [id]/+page.svelte    # Connection config (SAML cert upload, OIDC fields)
-│   │   │   ├── api-keys/
-│   │   │   │   └── +page.svelte         # API key list, create, revoke, rotate, usage stats
-│   │   │   ├── audit/
-│   │   │   │   └── +page.svelte         # Audit log stream (filter by action/user/date, live tail)
-│   │   │   └── migrations/
-│   │   │       └── +page.svelte         # Migration history + trigger new import
-│   │   └── lib/
-│   │       ├── api.ts                   # Fetch wrapper for internal API
-│   │       └── components/              # Shared UI components
-│   ├── package.json
-│   └── svelte.config.js
-├── sdk/                                 # TypeScript SDK
-│   ├── src/
-│   │   ├── index.ts                     # Main export: createSharkAuth(config)
-│   │   ├── client.ts                    # HTTP client (fetch-based, works everywhere)
-│   │   ├── auth.ts                      # signup, login, logout, me
-│   │   ├── passkey.ts                   # registerPasskey, loginWithPasskey (wraps navigator.credentials)
-│   │   ├── magic-link.ts               # sendMagicLink
-│   │   ├── oauth.ts                     # getOAuthURL, handleCallback
-│   │   ├── mfa.ts                       # enrollMFA, verifyMFA, challengeMFA
-│   │   └── types.ts                     # All TypeScript interfaces
-│   ├── package.json                     # @sharkauth/js
-│   ├── tsconfig.json
-│   └── README.md                        # SDK-specific docs with code examples
-├── examples/
-│   ├── nextjs/                          # Next.js App Router example
-│   │   ├── middleware.ts                # Auth middleware (session check)
-│   │   ├── app/
-│   │   │   ├── login/page.tsx           # Login form (password + passkey + magic link + OAuth buttons)
-│   │   │   └── dashboard/page.tsx       # Protected page
-│   │   └── lib/sharkauth.ts            # SDK initialization
-│   └── react-spa/                       # Vite + React SPA example
-│       ├── src/
-│       │   ├── auth/
-│       │   │   ├── LoginForm.tsx         # Full login component
-│       │   │   └── PasskeyButton.tsx     # Passkey-specific component
-│       │   └── App.tsx
-│       └── package.json
-├── sharkauth.yaml
-├── Dockerfile
-├── docker-compose.yml
-├── README.md
-└── go.mod
+â”œâ”€â”€ main.go
+â”œâ”€â”€ cmd/
+â”‚   â”œâ”€â”€ serve.go
+â”‚   â””â”€â”€ migrate.go
+â”œâ”€â”€ internal/
+â”‚   â”œâ”€â”€ config/
+â”‚   â”‚   â””â”€â”€ config.go
+â”‚   â”œâ”€â”€ storage/
+â”‚   â”‚   â”œâ”€â”€ storage.go                   # Storage interface
+â”‚   â”‚   â””â”€â”€ sqlite.go                    # SQLite implementation
+â”‚   â”œâ”€â”€ auth/
+â”‚   â”‚   â”œâ”€â”€ password.go                  # Argon2id + multi-hash
+â”‚   â”‚   â”œâ”€â”€ session.go                   # Sessions + MFA-aware gating
+â”‚   â”‚   â”œâ”€â”€ oauth.go                     # Generic OAuth handler + provider registry
+â”‚   â”‚   â”œâ”€â”€ providers/                   # OAuth provider implementations
+â”‚   â”‚   â”‚   â”œâ”€â”€ google.go
+â”‚   â”‚   â”‚   â”œâ”€â”€ github.go
+â”‚   â”‚   â”‚   â”œâ”€â”€ apple.go                 # Apple uses JWT client_secret
+â”‚   â”‚   â”‚   â””â”€â”€ discord.go
+â”‚   â”‚   â”œâ”€â”€ mfa.go                       # TOTP generation, verification, recovery codes
+â”‚   â”‚   â”œâ”€â”€ passkey.go                   # WebAuthn registration + authentication (go-webauthn/webauthn)
+â”‚   â”‚   â”œâ”€â”€ magiclink.go                 # Token generation, email sending, verification
+â”‚   â”‚   â””â”€â”€ apikey.go                    # M2M API key CRUD, hashing, validation, rate limiting
+â”‚   â”œâ”€â”€ email/
+â”‚   â”‚   â”œâ”€â”€ sender.go                    # SMTP client wrapper
+â”‚   â”‚   â””â”€â”€ templates/                   # HTML email templates
+â”‚   â”‚       â”œâ”€â”€ magic_link.html
+â”‚   â”‚       â””â”€â”€ verify_email.html
+â”‚   â”œâ”€â”€ rbac/
+â”‚   â”‚   â”œâ”€â”€ rbac.go                      # Role/permission CRUD
+â”‚   â”‚   â””â”€â”€ middleware.go                # RequirePermission("action", "resource")
+â”‚   â”œâ”€â”€ sso/
+â”‚   â”‚   â”œâ”€â”€ saml.go                      # SAML SP: metadata, ACS, assertion parsing
+â”‚   â”‚   â”œâ”€â”€ oidc.go                      # OIDC client: auth redirect, callback, token exchange
+â”‚   â”‚   â””â”€â”€ connection.go                # SSO connection CRUD + domain routing
+â”‚   â”œâ”€â”€ audit/
+â”‚   â”‚   â”œâ”€â”€ audit.go                     # Log(), Query(), Cleanup() â€” core audit engine
+â”‚   â”‚   â””â”€â”€ middleware.go                # HTTP middleware that auto-logs requests
+â”‚   â”œâ”€â”€ user/
+â”‚   â”‚   â””â”€â”€ user.go
+â”‚   â”œâ”€â”€ migrate/
+â”‚   â”‚   â””â”€â”€ auth0.go
+â”‚   â”œâ”€â”€ testutil/                        # Shared test infrastructure
+â”‚   â”‚   â”œâ”€â”€ db.go                        # NewTestDB (in-memory SQLite)
+â”‚   â”‚   â”œâ”€â”€ server.go                    # TestServer (httptest + cookiejar)
+â”‚   â”‚   â”œâ”€â”€ config.go                    # TestConfig with safe defaults
+â”‚   â”‚   â”œâ”€â”€ factories.go                 # CreateUser, CreateRole, CreateAPIKey, etc.
+â”‚   â”‚   â””â”€â”€ email.go                     # MemoryEmailSender (captures sent emails)
+â”‚   â””â”€â”€ api/
+â”‚       â”œâ”€â”€ router.go
+â”‚       â”œâ”€â”€ auth_handlers.go             # Signup, login, logout, me
+â”‚       â”œâ”€â”€ oauth_handlers.go            # Generic OAuth redirect + callback
+â”‚       â”œâ”€â”€ passkey_handlers.go          # WebAuthn register/login begin/finish
+â”‚       â”œâ”€â”€ magiclink_handlers.go        # Magic link send + verify
+â”‚       â”œâ”€â”€ mfa_handlers.go              # Enroll, verify, challenge, recovery
+â”‚       â”œâ”€â”€ rbac_handlers.go             # Roles, permissions, assignment, check
+â”‚       â”œâ”€â”€ sso_handlers.go              # Connections, SAML ACS, OIDC callback
+â”‚       â”œâ”€â”€ apikey_handlers.go           # M2M API key CRUD + rotate
+â”‚       â”œâ”€â”€ audit_handlers.go            # Audit log list, detail, export
+â”‚       â”œâ”€â”€ user_handlers.go             # Admin user endpoints
+â”‚       â””â”€â”€ migrate_handlers.go          # Migration endpoints
+â”œâ”€â”€ dashboard/                           # Svelte app, embedded in binary
+â”‚   â”œâ”€â”€ src/
+â”‚   â”‚   â”œâ”€â”€ routes/
+â”‚   â”‚   â”‚   â”œâ”€â”€ +page.svelte             # Dashboard overview (user count, active sessions, auth method breakdown)
+â”‚   â”‚   â”‚   â”œâ”€â”€ users/
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ +page.svelte         # User list (search, paginate, filter by auth method)
+â”‚   â”‚   â”‚   â”‚   â””â”€â”€ [id]/+page.svelte    # User detail (sessions, roles, MFA, passkeys, OAuth accounts)
+â”‚   â”‚   â”‚   â”œâ”€â”€ sessions/+page.svelte    # Active sessions (revoke, per-device view, auth method column)
+â”‚   â”‚   â”‚   â”œâ”€â”€ roles/
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ +page.svelte         # Role list + create
+â”‚   â”‚   â”‚   â”‚   â””â”€â”€ [id]/+page.svelte    # Role detail (edit permissions, assigned users)
+â”‚   â”‚   â”‚   â”œâ”€â”€ sso/
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ +page.svelte         # SSO connections list
+â”‚   â”‚   â”‚   â”‚   â””â”€â”€ [id]/+page.svelte    # Connection config (SAML cert upload, OIDC fields)
+â”‚   â”‚   â”‚   â”œâ”€â”€ api-keys/
+â”‚   â”‚   â”‚   â”‚   â””â”€â”€ +page.svelte         # API key list, create, revoke, rotate, usage stats
+â”‚   â”‚   â”‚   â”œâ”€â”€ audit/
+â”‚   â”‚   â”‚   â”‚   â””â”€â”€ +page.svelte         # Audit log stream (filter by action/user/date, live tail)
+â”‚   â”‚   â”‚   â””â”€â”€ migrations/
+â”‚   â”‚   â”‚       â””â”€â”€ +page.svelte         # Migration history + trigger new import
+â”‚   â”‚   â””â”€â”€ lib/
+â”‚   â”‚       â”œâ”€â”€ api.ts                   # Fetch wrapper for internal API
+â”‚   â”‚       â””â”€â”€ components/              # Shared UI components
+â”‚   â”œâ”€â”€ package.json
+â”‚   â””â”€â”€ svelte.config.js
+â”œâ”€â”€ sdk/                                 # TypeScript SDK
+â”‚   â”œâ”€â”€ src/
+â”‚   â”‚   â”œâ”€â”€ index.ts                     # Main export: createSharkAuth(config)
+â”‚   â”‚   â”œâ”€â”€ client.ts                    # HTTP client (fetch-based, works everywhere)
+â”‚   â”‚   â”œâ”€â”€ auth.ts                      # signup, login, logout, me
+â”‚   â”‚   â”œâ”€â”€ passkey.ts                   # registerPasskey, loginWithPasskey (wraps navigator.credentials)
+â”‚   â”‚   â”œâ”€â”€ magic-link.ts               # sendMagicLink
+â”‚   â”‚   â”œâ”€â”€ oauth.ts                     # getOAuthURL, handleCallback
+â”‚   â”‚   â”œâ”€â”€ mfa.ts                       # enrollMFA, verifyMFA, challengeMFA
+â”‚   â”‚   â””â”€â”€ types.ts                     # All TypeScript interfaces
+â”‚   â”œâ”€â”€ package.json                     # @sharkauth/js
+â”‚   â”œâ”€â”€ tsconfig.json
+â”‚   â””â”€â”€ README.md                        # SDK-specific docs with code examples
+â”œâ”€â”€ examples/
+â”‚   â”œâ”€â”€ nextjs/                          # Next.js App Router example
+â”‚   â”‚   â”œâ”€â”€ middleware.ts                # Auth middleware (session check)
+â”‚   â”‚   â”œâ”€â”€ app/
+â”‚   â”‚   â”‚   â”œâ”€â”€ login/page.tsx           # Login form (password + passkey + magic link + OAuth buttons)
+â”‚   â”‚   â”‚   â””â”€â”€ dashboard/page.tsx       # Protected page
+â”‚   â”‚   â””â”€â”€ lib/sharkauth.ts            # SDK initialization
+â”‚   â””â”€â”€ react-spa/                       # Vite + React SPA example
+â”‚       â”œâ”€â”€ src/
+â”‚       â”‚   â”œâ”€â”€ auth/
+â”‚       â”‚   â”‚   â”œâ”€â”€ LoginForm.tsx         # Full login component
+â”‚       â”‚   â”‚   â””â”€â”€ PasskeyButton.tsx     # Passkey-specific component
+â”‚       â”‚   â””â”€â”€ App.tsx
+â”‚       â””â”€â”€ package.json
+â”œâ”€â”€ sharkauth.yaml
+â”œâ”€â”€ Dockerfile
+â”œâ”€â”€ docker-compose.yml
+â”œâ”€â”€ README.md
+â””â”€â”€ go.mod
 ```
 
 ---
@@ -749,7 +749,7 @@ import { createSharkAuth } from '@sharkauth/js';
 
 const auth = createSharkAuth({
   baseURL: 'https://auth.myapp.com',  // or http://localhost:8080
-  // No API key needed for client-side operations — session cookies handle auth
+  // No API key needed for client-side operations â€” session cookies handle auth
 });
 
 // Email/password
@@ -784,19 +784,19 @@ const { authenticated, user } = await auth.check();
 
 ### Design constraints
 
-- **Zero dependencies** — uses native `fetch` only
-- **Isomorphic** — works in browser, Node.js 18+, Deno, Bun, Cloudflare Workers, Vercel Edge
-- **Cookie-based** — relies on `credentials: 'include'` for session management, no token handling
-- **Passkey helpers** — wraps WebAuthn browser API with proper ArrayBuffer↔base64url conversion
-- **Tree-shakeable** — ESM-first with named exports
-- **Type-safe** — full TypeScript types for all request/response shapes
+- **Zero dependencies** â€” uses native `fetch` only
+- **Isomorphic** â€” works in browser, Node.js 18+, Deno, Bun, Cloudflare Workers, Vercel Edge
+- **Cookie-based** â€” relies on `credentials: 'include'` for session management, no token handling
+- **Passkey helpers** â€” wraps WebAuthn browser API with proper ArrayBufferâ†”base64url conversion
+- **Tree-shakeable** â€” ESM-first with named exports
+- **Type-safe** â€” full TypeScript types for all request/response shapes
 
 ### Build + publish
 
 ```bash
 cd sdk/
-npm run build    # tsup → ESM + CJS + .d.ts
-npm publish      # → @sharkauth/js on npm
+npm run build    # tsup â†’ ESM + CJS + .d.ts
+npm publish      # â†’ @sharkauth/js on npm
 ```
 
 ---
@@ -805,32 +805,32 @@ npm publish      # → @sharkauth/js on npm
 
 ### Philosophy
 
-Test as you build — not as a separate phase. Every feature gets at minimum one integration test before moving to the next. Target 60% coverage by launch. Focus on flows that would cause the most damage if broken.
+Test as you build â€” not as a separate phase. Every feature gets at minimum one integration test before moving to the next. Target 60% coverage by launch. Focus on flows that would cause the most damage if broken.
 
 ### Test Infrastructure (`internal/testutil/`)
 
 Built on Day 1 (Saturday morning of Weekend 1), used everywhere:
 
-- **`NewTestDB(t)`** — in-memory SQLite (`:memory:?_foreign_keys=on`). Each test gets its own DB. No cleanup. Tests run in parallel.
-- **`TestServer`** — wraps `httptest.Server` + `http.Client` with `cookiejar.Jar`. Maintains session cookies across requests automatically. Helpers: `PostJSON()`, `Get()`, `DecodeJSON[T]()`.
-- **`TestConfig`** — safe defaults for all config sections. Reduced Argon2id params (16MB memory, 1 iteration) so tests don't block on hashing.
-- **Factory functions** — `CreateUser()`, `CreateUserWithRole()`, `CreateAndLogin()`, `CreateAPIKey()`, etc. One-liners that set up test state.
-- **`MemoryEmailSender`** — implements `EmailSender` interface, captures sent emails in a slice. Used to test magic link flows without SMTP.
-- **`Clock` interface** — injectable time source. Tests use `TestClock` with `Advance(d)` to test expiry without `time.Sleep`.
+- **`NewTestDB(t)`** â€” in-memory SQLite (`:memory:?_foreign_keys=on`). Each test gets its own DB. No cleanup. Tests run in parallel.
+- **`TestServer`** â€” wraps `httptest.Server` + `http.Client` with `cookiejar.Jar`. Maintains session cookies across requests automatically. Helpers: `PostJSON()`, `Get()`, `DecodeJSON[T]()`.
+- **`TestConfig`** â€” safe defaults for all config sections. Reduced Argon2id params (16MB memory, 1 iteration) so tests don't block on hashing.
+- **Factory functions** â€” `CreateUser()`, `CreateUserWithRole()`, `CreateAndLogin()`, `CreateAPIKey()`, etc. One-liners that set up test state.
+- **`MemoryEmailSender`** â€” implements `EmailSender` interface, captures sent emails in a slice. Used to test magic link flows without SMTP.
+- **`Clock` interface** â€” injectable time source. Tests use `TestClock` with `Advance(d)` to test expiry without `time.Sleep`.
 
 ### What Gets Tested (and How)
 
 | Area | Type | Approach |
 |------|------|----------|
-| Password hashing (argon2id + bcrypt compat) | Unit | Real crypto, reduced params. Test round-trip, wrong password, bcrypt→argon2id rehash. |
-| TOTP generation/verification | Unit | Real `pquerna/otp`. Generate code at known time, verify. Test ±1 step tolerance, reject old codes. |
+| Password hashing (argon2id + bcrypt compat) | Unit | Real crypto, reduced params. Test round-trip, wrong password, bcryptâ†’argon2id rehash. |
+| TOTP generation/verification | Unit | Real `pquerna/otp`. Generate code at known time, verify. Test Â±1 step tolerance, reject old codes. |
 | Recovery codes | Unit | Verify uniqueness, one-time use, hash comparison. |
 | Session create/validate/expire/revoke | Integration | Real SQLite. Test cookie setting, expiry via Clock, rotation on login. |
-| Signup → login → me → logout flow | Integration | `TestServer` + cookiejar. Full HTTP round-trip. |
-| MFA enroll → verify → login → challenge → upgrade | Integration | Generate real TOTP code from enrolled secret, verify partial session gates `/me`. |
+| Signup â†’ login â†’ me â†’ logout flow | Integration | `TestServer` + cookiejar. Full HTTP round-trip. |
+| MFA enroll â†’ verify â†’ login â†’ challenge â†’ upgrade | Integration | Generate real TOTP code from enrolled secret, verify partial session gates `/me`. |
 | OAuth callback | Integration | Mock provider (Google/GitHub) with `httptest.Server` returning fake tokens. Override `TokenURL`/`UserInfoURL` in config. Test one provider, trust the generic handler pattern for the rest. |
 | Passkey register/login begin | Integration | Test that `begin` endpoints return well-formed `PublicKeyCredentialCreationOptions`/`RequestOptions`. For `finish` endpoints, test error cases (bad challenge, expired). Trust `go-webauthn` library for crypto verification. Full passkey flow tested manually in browser. |
-| Magic link send → verify → session | Integration | `MemoryEmailSender` captures email, extract token, verify endpoint creates session. Test one-time use (second verify = 400). Test expiry via Clock. |
+| Magic link send â†’ verify â†’ session | Integration | `MemoryEmailSender` captures email, extract token, verify endpoint creates session. Test one-time use (second verify = 400). Test expiry via Clock. |
 | RBAC permission resolution | Unit | Table-driven tests. Admin wildcard, multiple roles merge, no roles = no access, specific action+resource matching. |
 | `RequirePermission` middleware | Integration | Create user with role, hit protected endpoint. Create user without role, verify 403. |
 | `POST /auth/check` | Integration | Exercise the permission check endpoint with various user/action/resource combos. |
@@ -840,27 +840,27 @@ Built on Day 1 (Saturday morning of Weekend 1), used everywhere:
 | Auth0 migration import | Integration | Load fixture JSON, verify users imported, bcrypt hashes verified, rehash on first login. |
 | Audit log capture | Integration | Perform an action (login, role change), query audit log endpoint, verify event recorded with correct actor/target/action. |
 | Session fixation | Security | Verify session token changes on login (not reused from signup). |
-| Login brute force | Security | 10 wrong passwords → 11th attempt (even correct) returns 429. |
+| Login brute force | Security | 10 wrong passwords â†’ 11th attempt (even correct) returns 429. |
 | Token expiry enforcement | Security | Magic link + session expiry via Clock. Expired = rejected. |
 | SSO OIDC callback | Integration | Mock OIDC provider. Test token exchange + user creation. |
 | SSO SAML ACS | Integration | Test with pre-built SAML assertion XML (from Okta dev account). Verify user created/linked. |
 
 ### What Does NOT Get Tested (in the sprint)
 
-- **Dashboard Svelte components** — internal admin tool, manual QA is enough. Add Playwright post-launch.
-- **SAML XML parsing edge cases** — trust the SAML library, test your integration only.
-- **Each OAuth provider separately** — all 4 use the generic handler. Test GitHub mock, trust the pattern.
-- **Cookie encryption internals** — trust `gorilla/securecookie`. Test at HTTP level only.
-- **Email HTML template rendering** — visual, not functional. Manual check.
-- **Passkey `finish` crypto verification** — go-webauthn is conformance-tested.
+- **Dashboard Svelte components** â€” internal admin tool, manual QA is enough. Add Playwright post-launch.
+- **SAML XML parsing edge cases** â€” trust the SAML library, test your integration only.
+- **Each OAuth provider separately** â€” all 4 use the generic handler. Test GitHub mock, trust the pattern.
+- **Cookie encryption internals** â€” trust `gorilla/securecookie`. Test at HTTP level only.
+- **Email HTML template rendering** â€” visual, not functional. Manual check.
+- **Passkey `finish` crypto verification** â€” go-webauthn is conformance-tested.
 
 ### SDK Testing (TypeScript)
 
-Stack: **Vitest + MSW (Mock Service Worker)**. MSW intercepts `fetch` at the network level — no real server needed.
+Stack: **Vitest + MSW (Mock Service Worker)**. MSW intercepts `fetch` at the network level â€” no real server needed.
 
 - Test request formatting (correct URLs, methods, JSON bodies)
 - Test response parsing (happy path + one error case per method)
-- Test passkey helpers (`base64url ↔ ArrayBuffer` conversion — pure functions)
+- Test passkey helpers (`base64url â†” ArrayBuffer` conversion â€” pure functions)
 - Test error handling (network errors, 4xx/5xx, expired sessions)
 - `npm run typecheck` (tsc --noEmit) catches contract drift
 
@@ -870,9 +870,9 @@ Stack: **Vitest + MSW (Mock Service Worker)**. MSW intercepts `fetch` at the net
 # .github/workflows/ci.yml
 jobs:
   lint:        # golangci-lint with gosec (catches weak crypto, SQL injection)
-  test-go:     # go test -race -coverprofile ./... — fail if <60% coverage
+  test-go:     # go test -race -coverprofile ./... â€” fail if <60% coverage
   test-sdk:    # npm run typecheck && npm test (vitest)
-  build:       # compile Svelte → embed in Go → verify binary starts
+  build:       # compile Svelte â†’ embed in Go â†’ verify binary starts
 ```
 
 ### Estimated Effort
@@ -883,33 +883,33 @@ jobs:
 
 ## 17-Day Sprint Plan
 
-### Weekend 1 (April 11–12) — Core auth + OAuth
+### Weekend 1 (April 11â€“12) â€” Core auth + OAuth
 
-**Saturday — Scaffold + Auth + OAuth**
+**Saturday â€” Scaffold + Auth + OAuth**
 
 Morning (4h):
 - [ ] `go mod init`, project scaffold
 - [ ] Config loader (YAML + env vars, including new passkey/smtp/social sections)
 - [ ] SQLite storage layer (connect, migrate full schema including new tables, CRUD)
 - [ ] User model + create/get/list
-- [ ] **`internal/testutil/` package** — `NewTestDB`, `TestServer`, `TestConfig`, factories, `MemoryEmailSender`
+- [ ] **`internal/testutil/` package** â€” `NewTestDB`, `TestServer`, `TestConfig`, factories, `MemoryEmailSender`
 
 Afternoon (4h):
 - [ ] Password hashing (Argon2id) + multi-hash verification (bcrypt compat)
 - [ ] **Unit tests: password hash round-trip, wrong password, bcrypt compat, rehash detection**
 - [ ] Session management (create, validate, revoke, cookie handling, auth_method tracking)
 - [ ] Signup + login + logout + me API handlers
-- [ ] **Integration test: signup → login → me → logout → login flow (TestServer + cookiejar)**
-- [ ] **Audit log engine** (`internal/audit/audit.go`) — `Log()` writes to DB, `Query()` with filters, `Cleanup()` goroutine
+- [ ] **Integration test: signup â†’ login â†’ me â†’ logout â†’ login flow (TestServer + cookiejar)**
+- [ ] **Audit log engine** (`internal/audit/audit.go`) â€” `Log()` writes to DB, `Query()` with filters, `Cleanup()` goroutine
 
 Evening (3h):
 - [ ] Generic OAuth handler: provider registry pattern, redirect + callback
 - [ ] Google OAuth provider implementation
 - [ ] GitHub OAuth provider implementation
 - [ ] Admin endpoints behind API key
-- [ ] **Audit middleware** — auto-log `user.signup`, `user.login`, `user.login_failed`, `user.logout`
+- [ ] **Audit middleware** â€” auto-log `user.signup`, `user.login`, `user.login_failed`, `user.logout`
 
-**Sunday — More OAuth + Migration + MFA**
+**Sunday â€” More OAuth + Migration + MFA**
 
 Morning (4h):
 - [ ] Apple OAuth provider (JWT client_secret from .p8 key, id_token parsing)
@@ -920,22 +920,22 @@ Morning (4h):
 
 Afternoon (4h):
 - [ ] Auth0 migration: JSON parser, CLI command, API endpoint
-- [ ] Transparent bcrypt→argon2id rehash on first login
-- [ ] **Integration test: Auth0 import fixture → user created → bcrypt login → rehash verified**
-- [ ] MFA: TOTP secret generation (crypto/rand → base32)
+- [ ] Transparent bcryptâ†’argon2id rehash on first login
+- [ ] **Integration test: Auth0 import fixture â†’ user created â†’ bcrypt login â†’ rehash verified**
+- [ ] MFA: TOTP secret generation (crypto/rand â†’ base32)
 - [ ] MFA: QR URI builder (otpauth://totp/...)
 
 Evening (3h):
-- [ ] MFA: TOTP code validation (HMAC-SHA1, 30s window, ±1 step tolerance)
-- [ ] **Unit tests: TOTP verify, ±1 step tolerance, reject 5-min-old code, recovery code uniqueness**
+- [ ] MFA: TOTP code validation (HMAC-SHA1, 30s window, Â±1 step tolerance)
+- [ ] **Unit tests: TOTP verify, Â±1 step tolerance, reject 5-min-old code, recovery code uniqueness**
 - [ ] MFA: Enroll + verify + challenge endpoints
 - [ ] MFA: Recovery codes (generate 10, hash with bcrypt, one-time use)
-- [ ] MFA: Login flow integration (partial session → challenge → upgrade)
+- [ ] MFA: Login flow integration (partial session â†’ challenge â†’ upgrade)
 - [ ] MFA: Disable endpoint (require current code to turn off)
-- [ ] **Integration test: MFA enroll → verify → logout → login → mfa_required → challenge → /me works**
+- [ ] **Integration test: MFA enroll â†’ verify â†’ logout â†’ login â†’ mfa_required â†’ challenge â†’ /me works**
 - [ ] Audit: wire `mfa.enrolled`, `mfa.enabled`, `mfa.disabled`, `mfa.challenge_passed/failed` events
 
-### Weeknights (April 13–17) — RBAC + SSO + Passkeys
+### Weeknights (April 13â€“17) â€” RBAC + SSO + Passkeys
 
 **Monday evening (3h):**
 - [ ] RBAC: Roles + permissions CRUD
@@ -944,8 +944,8 @@ Evening (3h):
 - [ ] Audit: wire `role.created`, `role.updated`, `role.deleted`, `role.assigned`, `role.unassigned`
 
 **Tuesday evening (3h):**
-- [ ] RBAC: Permission resolution (user → roles → permissions)
-- [ ] **Unit tests: RBAC permission resolution — table-driven (admin wildcard, multi-role merge, no roles = no access)**
+- [ ] RBAC: Permission resolution (user â†’ roles â†’ permissions)
+- [ ] **Unit tests: RBAC permission resolution â€” table-driven (admin wildcard, multi-role merge, no roles = no access)**
 - [ ] RBAC: `POST /auth/check` endpoint
 - [ ] RBAC: `RequirePermission` middleware
 - [ ] **Integration test: user with role hits protected endpoint (200), user without role (403)**
@@ -953,7 +953,7 @@ Evening (3h):
 
 **Wednesday evening (3h):**
 - [ ] SSO: Connection model CRUD
-- [ ] SSO: OIDC client flow (redirect → callback → token exchange → user creation/linking)
+- [ ] SSO: OIDC client flow (redirect â†’ callback â†’ token exchange â†’ user creation/linking)
 - [ ] SSO: Domain-based auto-routing (`GET /auth/sso?email=...`)
 
 **Thursday evening (3h):**
@@ -973,18 +973,18 @@ Evening (3h):
 - [ ] **Integration test: passkey `begin` endpoints return well-formed options (rp.id, challenge, user info)**
 - [ ] Audit: wire `passkey.registered`, `passkey.login`, `passkey.deleted`
 
-### Weekend 2 (April 18–19) — Magic Links + M2M + Dashboard
+### Weekend 2 (April 18â€“19) â€” Magic Links + M2M + Dashboard
 
-**Saturday — Magic Links + M2M API Keys**
+**Saturday â€” Magic Links + M2M API Keys**
 
 Morning (4h):
 - [ ] Email: SMTP sender (net/smtp with STARTTLS)
-- [ ] Email: HTML templates (magic link, email verification — minimal, inline CSS)
-- [ ] Magic links: Token generation (32 bytes → base64url), SHA-256 hash storage
+- [ ] Email: HTML templates (magic link, email verification â€” minimal, inline CSS)
+- [ ] Magic links: Token generation (32 bytes â†’ base64url), SHA-256 hash storage
 - [ ] Magic links: Send endpoint (rate limit: 1 per email per 60s)
 - [ ] Magic links: Verify endpoint (hash token, check expiry, create session, redirect)
 - [ ] Magic links: Create-on-first-use flow (new user gets account + email_verified=1)
-- [ ] **Integration test: magic link send → MemoryEmailSender captures email → extract token → verify → session active → second verify = 400 (one-time use)**
+- [ ] **Integration test: magic link send â†’ MemoryEmailSender captures email â†’ extract token â†’ verify â†’ session active â†’ second verify = 400 (one-time use)**
 - [ ] Audit: wire `magic_link.sent`, `magic_link.verified`
 
 Afternoon (4h):
@@ -992,21 +992,21 @@ Afternoon (4h):
 - [ ] M2M API keys: Create endpoint (return full key ONCE, store SHA-256 hash)
 - [ ] M2M API keys: List/get/update/revoke endpoints
 - [ ] M2M API keys: Rotate endpoint (atomic: create new, revoke old)
-- [ ] M2M API keys: Auth middleware (Bearer token → hash → lookup → scope check)
+- [ ] M2M API keys: Auth middleware (Bearer token â†’ hash â†’ lookup â†’ scope check)
 - [ ] M2M API keys: In-memory token bucket rate limiter per key
 - [ ] **Unit tests: API key generation (sk_live_ prefix), hash round-trip, wrong key fails, constant-time comparison**
-- [ ] **Integration test: create key → API call with Bearer → scope enforcement (403 on wrong scope) → rate limit (429)**
+- [ ] **Integration test: create key â†’ API call with Bearer â†’ scope enforcement (403 on wrong scope) â†’ rate limit (429)**
 - [ ] Audit: wire `api_key.created`, `api_key.rotated`, `api_key.revoked`
 
 Evening (3h):
-- [ ] Integration testing: passkey register → passkey login → verify MFA skipped
-- [ ] Integration testing: magic link send → verify → session created
-- [ ] Integration testing: M2M key create → API call with key → scope enforcement
+- [ ] Integration testing: passkey register â†’ passkey login â†’ verify MFA skipped
+- [ ] Integration testing: magic link send â†’ verify â†’ session created
+- [ ] Integration testing: M2M key create â†’ API call with key â†’ scope enforcement
 - [ ] Test passkey flow in browser (need minimal HTML test page)
-- [ ] **Security tests: session fixation (token rotates on login), login brute force (10 fails → 429), token expiry (Clock-based)**
-- [ ] **Integration test: audit log — perform login + role change → GET /audit-logs → verify events recorded**
+- [ ] **Security tests: session fixation (token rotates on login), login brute force (10 fails â†’ 429), token expiry (Clock-based)**
+- [ ] **Integration test: audit log â€” perform login + role change â†’ GET /audit-logs â†’ verify events recorded**
 
-**Sunday — Dashboard**
+**Sunday â€” Dashboard**
 
 Morning (4h):
 - [ ] Dashboard: MFA views (per-user MFA status, enable/disable toggle, recovery code regen)
@@ -1017,17 +1017,17 @@ Morning (4h):
 Afternoon (4h):
 - [ ] Dashboard: Passkey views (per-user passkey list, last used, delete, device info from aaguid)
 - [ ] Dashboard: API key views (create key modal, show full key once, list with prefix, revoke, rotate, usage stats)
-- [ ] Dashboard: User detail page — show MFA status, passkeys, assigned roles, SSO identities, OAuth accounts, active sessions, auth method breakdown
-- [ ] Dashboard: Overview page — auth method distribution chart (password vs passkey vs magic link vs OAuth vs SSO)
+- [ ] Dashboard: User detail page â€” show MFA status, passkeys, assigned roles, SSO identities, OAuth accounts, active sessions, auth method breakdown
+- [ ] Dashboard: Overview page â€” auth method distribution chart (password vs passkey vs magic link vs OAuth vs SSO)
 
 Evening (3h):
 - [ ] Dashboard: **Audit log view** (event stream with filters: action, user, date range, status. Cursor-based pagination. Export button.)
-- [ ] Audit log API handlers (`audit_handlers.go`) — list, detail, per-user, export
+- [ ] Audit log API handlers (`audit_handlers.go`) â€” list, detail, per-user, export
 - [ ] Integration testing: all dashboard views against live API
 - [ ] Fix edge cases, error messages, validation gaps
 - [ ] Passkey: Test with multiple authenticator types (platform + cross-platform)
 
-### Weeknights (April 20–24) — SDK + Examples
+### Weeknights (April 20â€“24) â€” SDK + Examples
 
 **Monday evening (3h):**
 - [ ] SDK: Project scaffold (tsup, tsconfig, package.json for @sharkauth/js)
@@ -1036,14 +1036,14 @@ Evening (3h):
 - [ ] SDK: types.ts (all request/response interfaces)
 
 **Tuesday evening (3h):**
-- [ ] SDK: passkey module (ArrayBuffer↔base64url helpers, register, login, list, remove, rename)
+- [ ] SDK: passkey module (ArrayBufferâ†”base64url helpers, register, login, list, remove, rename)
 - [ ] SDK: magic-link module (send)
 - [ ] SDK: oauth module (getURL helper)
 - [ ] SDK: mfa module (enroll, verify, challenge, useRecoveryCode)
 
 **Wednesday evening (3h):**
 - [ ] SDK: Build + test (ESM + CJS output, verify types)
-- [ ] **SDK tests: Vitest + MSW — auth happy path, login error, passkey base64url helpers, type checking (tsc --noEmit)**
+- [ ] **SDK tests: Vitest + MSW â€” auth happy path, login error, passkey base64url helpers, type checking (tsc --noEmit)**
 - [ ] SDK: README with full code examples (all auth methods)
 - [ ] Example: Next.js App Router project (middleware.ts, login page, protected page)
 
@@ -1052,17 +1052,17 @@ Evening (3h):
 - [ ] Test SDK against live SharkAuth server end-to-end
 - [ ] SDK: Edge cases (expired sessions, network errors, passkey not supported fallback)
 
-**Friday evening (3h) — buffer / polish:**
+**Friday evening (3h) â€” buffer / polish:**
 - [ ] Fix any SDK or API issues found during testing
 - [ ] SDK: Add JSDoc comments to all public methods
 - [ ] Publish @sharkauth/js to npm (v0.1.0)
 
-### Weekend 3 (April 26–27) — Package + Ship
+### Weekend 3 (April 26â€“27) â€” Package + Ship
 
-**Saturday — Docker + Docs**
+**Saturday â€” Docker + Docs**
 
 Morning (4h):
-- [ ] Dockerfile (multi-stage build: compile Svelte → embed in Go → Alpine, <30MB)
+- [ ] Dockerfile (multi-stage build: compile Svelte â†’ embed in Go â†’ Alpine, <30MB)
 - [ ] docker-compose.yml for one-command startup (includes SMTP for dev via Mailpit)
 - [ ] `sharkauth init` command (generates config + secret + first admin key)
 - [ ] Verify dashboard serves at `:8080/admin` from single binary
@@ -1072,7 +1072,7 @@ Afternoon (4h):
 - [ ] README.md: Passkey setup guide (config, SDK usage, browser support notes)
 - [ ] README.md: Magic link setup guide (SMTP config, email templates)
 - [ ] README.md: MFA setup guide with dashboard screenshots
-- [ ] README.md: RBAC guide (create roles, assign, check — show dashboard + API)
+- [ ] README.md: RBAC guide (create roles, assign, check â€” show dashboard + API)
 - [ ] README.md: SSO setup guide (SAML with Okta walkthrough, OIDC example)
 - [ ] README.md: M2M API key guide (create, scope, rotate, use in service)
 - [ ] README.md: Auth0 migration guide (CLI + dashboard upload)
@@ -1080,11 +1080,11 @@ Afternoon (4h):
 
 Evening (2h):
 - [ ] End-to-end testing of Docker image
-- [ ] **GitHub Actions CI: lint (golangci-lint + gosec) → test-go (race + 60% coverage gate) → test-sdk (typecheck + vitest) → build (Svelte + Go + verify binary starts)**
-- [ ] `go test ./... -race -cover` — verify 60%+ coverage, fix any gaps
+- [ ] **GitHub Actions CI: lint (golangci-lint + gosec) â†’ test-go (race + 60% coverage gate) â†’ test-sdk (typecheck + vitest) â†’ build (Svelte + Go + verify binary starts)**
+- [ ] `go test ./... -race -cover` â€” verify 60%+ coverage, fix any gaps
 - [ ] Tag v0.1.0
 
-**Sunday — Launch**
+**Sunday â€” Launch**
 
 Morning (3h):
 - [ ] Update sharkauth.com: remove all "shipping soon" labels
@@ -1097,7 +1097,7 @@ Morning (3h):
 
 Afternoon (2h):
 - [ ] Final full-flow test on a fresh $5 VPS (prove the "3 minutes" claim)
-- [ ] Record demo GIF: install → `shark serve` → dashboard → create user → passkey register → passkey login → magic link → OAuth → MFA → assign role → create API key → migrate Auth0 users
+- [ ] Record demo GIF: install â†’ `shark serve` â†’ dashboard â†’ create user â†’ passkey register â†’ passkey login â†’ magic link â†’ OAuth â†’ MFA â†’ assign role â†’ create API key â†’ migrate Auth0 users
 - [ ] Push everything
 
 Evening (2h):
@@ -1114,12 +1114,12 @@ Evening (2h):
 
 ```
 Login request comes in
-  → Look up user by email
-  → Check hash_type
-  → If "bcrypt": verify with bcrypt, if valid → rehash with argon2id, update hash_type
-  → If "argon2id": verify with argon2id (normal path)
-  → If "scrypt": verify with scrypt, rehash (for Firebase imports later)
-  → Return session (or MFA challenge if enabled)
+  â†’ Look up user by email
+  â†’ Check hash_type
+  â†’ If "bcrypt": verify with bcrypt, if valid â†’ rehash with argon2id, update hash_type
+  â†’ If "argon2id": verify with argon2id (normal path)
+  â†’ If "scrypt": verify with scrypt, rehash (for Firebase imports later)
+  â†’ Return session (or MFA challenge if enabled)
 ```
 
 ---
@@ -1128,16 +1128,16 @@ Login request comes in
 
 ### Library
 
-Use `github.com/go-webauthn/webauthn` — the standard Go WebAuthn library. It handles CBOR decoding, attestation verification, and assertion verification.
+Use `github.com/go-webauthn/webauthn` â€” the standard Go WebAuthn library. It handles CBOR decoding, attestation verification, and assertion verification.
 
 ### Key decisions
 
 - **Attestation:** `none` by default (maximum authenticator compatibility). Configurable for enterprise deployments that need device attestation.
-- **Resident keys:** `preferred` — enables discoverable credential flow (login without typing email) but doesn't exclude security keys that don't support it.
-- **User verification:** `preferred` — uses biometric/PIN when available, doesn't fail on security keys without it.
+- **Resident keys:** `preferred` â€” enables discoverable credential flow (login without typing email) but doesn't exclude security keys that don't support it.
+- **User verification:** `preferred` â€” uses biometric/PIN when available, doesn't fail on security keys without it.
 - **Algorithms:** Support ES256 (preferred) and RS256 (fallback for Windows Hello on older versions).
 - **Challenge storage:** Store in sessions table with 5-minute expiry. Clean up expired challenges on a timer.
-- **Sign count validation:** Verify sign_count increases on each authentication. Log warning if it doesn't (cloned authenticator risk) but don't block — some authenticators (like iCloud Keychain synced passkeys) always return 0.
+- **Sign count validation:** Verify sign_count increases on each authentication. Log warning if it doesn't (cloned authenticator risk) but don't block â€” some authenticators (like iCloud Keychain synced passkeys) always return 0.
 - **MFA bypass:** Passkey authentication sets mfa_passed=1 automatically. Passkeys are phishing-resistant AAL2 by definition (NIST SP 800-63-4).
 
 ### Browser detection for SDK
@@ -1156,14 +1156,14 @@ export function isPasskeySupported(): boolean {
 ## README Structure (ships with the code)
 
 ```markdown
-# 🦈 Shark Auth
+# ðŸ¦ˆ Shark Auth
 
 Single-binary authentication server.
-Passkeys, MFA, SSO, RBAC, magic links, API keys, admin dashboard — all in one binary. Self-host in three minutes.
+Passkeys, MFA, SSO, RBAC, magic links, API keys, admin dashboard â€” all in one binary. Self-host in three minutes.
 
 ## Quickstart
 
-# Download binary from GitHub Releases: https://github.com/sharkauth/sharkauth/releases
+# Download binary from GitHub Releases: https://github.com/shark-auth/shark/releases
 ./shark serve
 
 # Dashboard at http://localhost:8080/admin
@@ -1189,7 +1189,7 @@ await auth.magicLink.send({ email: 'user@example.com' });
 
 sharkauth migrate auth0 --file export.json
 # 4,218 users imported. Passwords work immediately.
-# Or upload via dashboard: Admin → Migrations → Import
+# Or upload via dashboard: Admin â†’ Migrations â†’ Import
 
 ## Features
 
@@ -1199,7 +1199,7 @@ sharkauth migrate auth0 --file export.json
 - RBAC (roles + permissions + enforcement middleware)
 - SSO (SAML + OIDC)
 - M2M API keys (scoped, rotatable)
-- Admin dashboard (embedded Svelte UI — no separate deploy)
+- Admin dashboard (embedded Svelte UI â€” no separate deploy)
 - TypeScript SDK (@sharkauth/js)
 - Server-side sessions
 - Auth0 migration (CLI or dashboard)
@@ -1232,7 +1232,7 @@ Cloud: Starting at $19/mo. Same features, we run it.
 
 - Single binary. Dashboard included. Runs on a $5 VPS.
 - Passkeys, MFA, SSO, RBAC on every plan. No add-on tax.
-- TypeScript SDK — npm install and go.
+- TypeScript SDK â€” npm install and go.
 - Auth0 migration in one command. No password resets.
 - 98% cheaper than Clerk/Auth0 at every scale.
 - Open source. Self-host forever.
@@ -1257,11 +1257,11 @@ What's included:
 - Email/password + passkeys + magic links
 - Social login: Google, GitHub, Apple, Discord
 - MFA (TOTP) with recovery codes
-- RBAC — roles, permissions, enforcement
-- SSO — SAML + OIDC
-- M2M API keys — scoped, rotatable, rate-limited
-- Admin dashboard — manage everything from a browser
-- TypeScript SDK — `npm install @sharkauth/js`
+- RBAC â€” roles, permissions, enforcement
+- SSO â€” SAML + OIDC
+- M2M API keys â€” scoped, rotatable, rate-limited
+- Admin dashboard â€” manage everything from a browser
+- TypeScript SDK â€” `npm install @sharkauth/js`
 - Auth0 migration: one command, passwords work immediately
 - SQLite default, <30MB Docker image
 
@@ -1280,6 +1280,6 @@ SSO on every tier (WorkOS charges $125/connection).
 GitHub: [link]
 SDK: `npm install @sharkauth/js`
 Site: sharkauth.com
-Docs: docs.sharkauth.dev
+Docs: docs.sharkauth.com
 
 What migration source should I build next?

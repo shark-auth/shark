@@ -1,4 +1,4 @@
-package sso
+﻿package sso
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // GenerateSPMetadata returns SAML SP metadata XML for the given connection.

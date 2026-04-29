@@ -1,11 +1,11 @@
-package api_test
+﻿package api_test
 
 import (
 	"net/http"
 	"net/url"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestSignupLoginLogoutFlow(t *testing.T) {

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -17,9 +17,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/vault"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/vault"
 )
 
 // Audit event names emitted by the vault handlers. Centralised so the
@@ -41,7 +41,7 @@ const (
 
 // vaultProviderResponse mirrors VaultProvider minus the encrypted client_secret.
 // We never let ciphertext or plaintext secrets leak out to API callers, even
-// admin ones — rotation goes through a dedicated PATCH body field.
+// admin ones â€” rotation goes through a dedicated PATCH body field.
 type vaultProviderResponse struct {
 	ID              string            `json:"id"`
 	Name            string            `json:"name"`
@@ -121,7 +121,7 @@ func isHTTPSURL(u string) bool {
 	return true
 }
 
-// auditVault centralises audit logging for vault ops. Best-effort — audit
+// auditVault centralises audit logging for vault ops. Best-effort â€” audit
 // failures never block the request path.
 func (s *Server) auditVault(r *http.Request, actorType, action, targetType, targetID string, meta map[string]any) {
 	if s.AuditLogger == nil {
@@ -246,7 +246,7 @@ func (s *Server) handleCreateVaultProvider(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Duplicate detection — storage layer's UNIQUE constraint would bubble up
+	// Duplicate detection â€” storage layer's UNIQUE constraint would bubble up
 	// as a generic error; we do the lookup first to return a clean 409.
 	if existing, err := s.Store.GetVaultProviderByName(r.Context(), provider.Name); err == nil && existing != nil {
 		writeJSON(w, http.StatusConflict, errPayload("name_exists", "A vault provider with this name already exists"))
@@ -254,7 +254,7 @@ func (s *Server) handleCreateVaultProvider(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := s.VaultManager.CreateProvider(r.Context(), provider, req.ClientSecret); err != nil {
-		// Best-effort duplicate recovery — if two creates race, the store can
+		// Best-effort duplicate recovery â€” if two creates race, the store can
 		// still 500 the second; translate known duplicate markers.
 		if isDuplicateErr(err) {
 			writeJSON(w, http.StatusConflict, errPayload("name_exists", "A vault provider with this name already exists"))
@@ -264,7 +264,7 @@ func (s *Server) handleCreateVaultProvider(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Audit: log param keys only — values could contain sensitive info.
+	// Audit: log param keys only â€” values could contain sensitive info.
 	extraKeys := make([]string, 0, len(provider.ExtraAuthParams))
 	for k := range provider.ExtraAuthParams {
 		extraKeys = append(extraKeys, k)
@@ -416,7 +416,7 @@ func (s *Server) handleUpdateVaultProvider(w http.ResponseWriter, r *http.Reques
 		changed = true
 	}
 	if req.ExtraAuthParams != nil {
-		// Full replacement — PATCH sends the complete desired map.
+		// Full replacement â€” PATCH sends the complete desired map.
 		p.ExtraAuthParams = req.ExtraAuthParams
 		changed = true
 	}
@@ -428,7 +428,7 @@ func (s *Server) handleUpdateVaultProvider(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Audit: log param keys only — values could contain sensitive info.
+	// Audit: log param keys only â€” values could contain sensitive info.
 	extraKeys := make([]string, 0, len(p.ExtraAuthParams))
 	for k := range p.ExtraAuthParams {
 		extraKeys = append(extraKeys, k)
@@ -516,7 +516,7 @@ func (s *Server) handleVaultConnectStart(w http.ResponseWriter, r *http.Request)
 	}
 	state := hex.EncodeToString(stateBytes)
 
-	// Optional scope override via ?scopes=a,b,c — empty means provider defaults.
+	// Optional scope override via ?scopes=a,b,c â€” empty means provider defaults.
 	var scopesOverride []string
 	if raw := r.URL.Query().Get("scopes"); raw != "" {
 		for _, sc := range strings.Split(raw, ",") {
@@ -601,7 +601,7 @@ func (s *Server) handleVaultCallback(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errPayload("not_found", "Vault provider not available"))
 		return
 	}
-	// Bind the provider ID carried in the cookie to the one in the path — stops
+	// Bind the provider ID carried in the cookie to the one in the path â€” stops
 	// a cookie from one provider being replayed to steal consent from another.
 	if subtle.ConstantTimeCompare([]byte(cookieProviderID), []byte(provider.ID)) != 1 {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_state", "Vault state provider mismatch"))
@@ -629,7 +629,7 @@ func (s *Server) handleVaultCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Atlassian post-exchange: discover cloud IDs so callers can construct
 	// API URLs (https://api.atlassian.com/ex/jira/{cloudId}/rest/...).
-	// Failure blocks the connection from being saved — a token without a
+	// Failure blocks the connection from being saved â€” a token without a
 	// cloud ID is unusable for Jira Cloud.
 	if provider.Name == "jira" {
 		if metaErr := s.atlassianFetchCloudIDs(r.Context(), conn); metaErr != nil {
@@ -652,7 +652,7 @@ func (s *Server) handleVaultCallback(w http.ResponseWriter, r *http.Request) {
 		"provider_name": provider.Name,
 	})
 
-	// Simple success redirect — the dashboard can reload its connection list.
+	// Simple success redirect â€” the dashboard can reload its connection list.
 	base := strings.TrimRight(s.Config.Server.BaseURL, "/")
 	if base == "" {
 		scheme := "http"
@@ -667,13 +667,13 @@ func (s *Server) handleVaultCallback(w http.ResponseWriter, r *http.Request) {
 // --- Agent token retrieval (OAuth bearer) ------------------------------------
 
 // handleVaultGetToken returns a fresh access token for the caller's vault
-// connection. Auth is OAuth 2.1 bearer — the token must have a user_id
+// connection. Auth is OAuth 2.1 bearer â€” the token must have a user_id
 // binding (delegation), otherwise we can't look up the right connection.
 //
 // Route: GET /api/v1/vault/{provider}/token.
 func (s *Server) handleVaultGetToken(w http.ResponseWriter, r *http.Request) {
 	if s.OAuthServer == nil || s.OAuthServer.RawStore == nil {
-		// OAuth 2.1 server not wired — reject cleanly rather than 500.
+		// OAuth 2.1 server not wired â€” reject cleanly rather than 500.
 		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
 		writeJSON(w, http.StatusUnauthorized, errPayload("invalid_token", "OAuth server not available"))
 		return
@@ -693,7 +693,7 @@ func (s *Server) handleVaultGetToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Token lookup delegates to the oauth Server's canonical three-tier
-	// resolver (JWT → JTI, opaque "key.sig" → sha256(sig), raw → sha256(raw)).
+	// resolver (JWT â†’ JTI, opaque "key.sig" â†’ sha256(sig), raw â†’ sha256(raw)).
 	// Rolling our own half-measure here silently 401'd JWT bearers.
 	tok := s.OAuthServer.LookupBearer(r.Context(), rawToken)
 	if tok == nil {
@@ -712,7 +712,7 @@ func (s *Server) handleVaultGetToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if tok.UserID == "" {
-		// No delegation binding — vault is a per-user concept, so a
+		// No delegation binding â€” vault is a per-user concept, so a
 		// client-credentials token has no user to scope to.
 		w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
 		writeJSON(w, http.StatusUnauthorized, errPayload("insufficient_scope", "Token has no user binding"))
@@ -849,7 +849,7 @@ func (s *Server) handleListVaultConnections(w http.ResponseWriter, r *http.Reque
 
 // handleDeleteVaultConnection handles DELETE /api/v1/vault/connections/{id}.
 // IDOR protection: we only look for the connection among the caller's own
-// rows — someone else's ID returns 404 without disclosing existence.
+// rows â€” someone else's ID returns 404 without disclosing existence.
 func (s *Server) handleDeleteVaultConnection(w http.ResponseWriter, r *http.Request) {
 	userID := mw.GetUserID(r.Context())
 	connID := chi.URLParam(r, "id")
@@ -888,7 +888,7 @@ func (s *Server) handleDeleteVaultConnection(w http.ResponseWriter, r *http.Requ
 
 // adminVaultConnectionResponse is the admin view of a vault connection. Adds
 // user_id (cross-user listing context) on top of the user-facing fields. Token
-// material is never serialized — both the underlying VaultConnection columns
+// material is never serialized â€” both the underlying VaultConnection columns
 // and this struct hide it.
 type adminVaultConnectionResponse struct {
 	vaultConnectionResponse
@@ -948,7 +948,7 @@ func (s *Server) handleAdminListVaultConnections(w http.ResponseWriter, r *http.
 }
 
 // handleAdminSeedDemoVaultConnection handles POST /api/v1/admin/vault/connections/_seed_demo.
-// Admin-only. Creates a synthetic vault_connection for demo/test purposes — bypasses
+// Admin-only. Creates a synthetic vault_connection for demo/test purposes â€” bypasses
 // the real OAuth browser flow. Tokens are FieldEncryptor-encrypted fake values.
 //
 // Body: {"user_id": "...", "provider_id": "...", "scopes": ["..."]}
@@ -1098,7 +1098,7 @@ func (s *Server) atlassianFetchCloudIDs(ctx context.Context, conn *storage.Vault
 		return fmt.Errorf("no Jira Cloud sites found for this token; the app may not be installed on any site")
 	}
 
-	// Persist as structured metadata — callers read
+	// Persist as structured metadata â€” callers read
 	// conn.Metadata["accessible_resources"] to pick a cloud ID.
 	type cloudResource struct {
 		ID   string `json:"id"`
@@ -1117,7 +1117,7 @@ func (s *Server) atlassianFetchCloudIDs(ctx context.Context, conn *storage.Vault
 }
 
 // handleAdminDeleteVaultConnection handles DELETE /api/v1/admin/vault/connections/{id}.
-// Cross-user revoke — admin can disconnect any vault connection without owning
+// Cross-user revoke â€” admin can disconnect any vault connection without owning
 // the session. Audited as admin-actor for traceability.
 //
 // Layer 5 cascade: after disconnect, all OAuth tokens belonging to agents that

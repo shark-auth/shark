@@ -1,4 +1,4 @@
-package auth
+﻿package auth
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/gorilla/securecookie"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 const (
@@ -66,32 +66,25 @@ func newSessionID() string {
 	return sessionPrefix + id
 }
 
-// CreateSession creates a new session and returns the session.
-func (sm *SessionManager) CreateSession(ctx context.Context, userID, ip, userAgent, authMethod string) (*storage.Session, error) {
+// PrepareSession creates a session object without persisting it.
+func (sm *SessionManager) PrepareSession(userID, ip, userAgent, authMethod string) *storage.Session {
 	now := time.Now().UTC()
-
-	sess := &storage.Session{
+	return &storage.Session{
 		ID:         newSessionID(),
 		UserID:     userID,
 		IP:         ip,
 		UserAgent:  userAgent,
-		MFAPassed:  true,
+		MFAPassed:  false,
 		AuthMethod: authMethod,
 		ExpiresAt:  now.Add(sm.lifetime).Format(time.RFC3339),
 		CreatedAt:  now.Format(time.RFC3339),
 	}
-
-	if err := sm.store.CreateSession(ctx, sess); err != nil {
-		return nil, fmt.Errorf("creating session: %w", err)
-	}
-	return sess, nil
 }
 
-// CreateSessionWithMFA creates a new session with a specific mfa_passed value.
-func (sm *SessionManager) CreateSessionWithMFA(ctx context.Context, userID, ip, userAgent, authMethod string, mfaPassed bool) (*storage.Session, error) {
+// PrepareSessionWithMFA creates a session object with a specific mfa_passed value without persisting it.
+func (sm *SessionManager) PrepareSessionWithMFA(userID, ip, userAgent, authMethod string, mfaPassed bool) *storage.Session {
 	now := time.Now().UTC()
-
-	sess := &storage.Session{
+	return &storage.Session{
 		ID:         newSessionID(),
 		UserID:     userID,
 		IP:         ip,
@@ -101,6 +94,21 @@ func (sm *SessionManager) CreateSessionWithMFA(ctx context.Context, userID, ip, 
 		ExpiresAt:  now.Add(sm.lifetime).Format(time.RFC3339),
 		CreatedAt:  now.Format(time.RFC3339),
 	}
+}
+
+// CreateSession creates a new session and returns the session.
+func (sm *SessionManager) CreateSession(ctx context.Context, userID, ip, userAgent, authMethod string) (*storage.Session, error) {
+	sess := sm.PrepareSession(userID, ip, userAgent, authMethod)
+
+	if err := sm.store.CreateSession(ctx, sess); err != nil {
+		return nil, fmt.Errorf("creating session: %w", err)
+	}
+	return sess, nil
+}
+
+// CreateSessionWithMFA creates a new session with a specific mfa_passed value.
+func (sm *SessionManager) CreateSessionWithMFA(ctx context.Context, userID, ip, userAgent, authMethod string, mfaPassed bool) (*storage.Session, error) {
+	sess := sm.PrepareSessionWithMFA(userID, ip, userAgent, authMethod, mfaPassed)
 
 	if err := sm.store.CreateSession(ctx, sess); err != nil {
 		return nil, fmt.Errorf("creating session: %w", err)

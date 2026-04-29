@@ -1,11 +1,11 @@
-package email_test
+﻿package email_test
 
 import (
 	"context"
 	"encoding/json"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/shark-auth/shark/internal/email"
 )
 
 // mockRedirectStore implements email.RedirectStore for testing.

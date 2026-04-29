@@ -1,12 +1,12 @@
-package rbac_test
+﻿package rbac_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/rbac"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/rbac"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // testSetup holds a store for test helpers.

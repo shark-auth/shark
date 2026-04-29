@@ -1,11 +1,11 @@
-package api_test
+﻿package api_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestAdminConfigShape asserts that GET /admin/config returns all the nested
@@ -112,14 +112,14 @@ func TestAdminConfigShape(t *testing.T) {
 			t.Errorf("missing password_policy.%s", k)
 		}
 	}
-	// password_policy.min_length must be numeric ≥ 1.
+	// password_policy.min_length must be numeric â‰¥ 1.
 	if raw, ok := pp["min_length"]; ok {
 		var n float64
 		if err := json.Unmarshal(raw, &n); err != nil {
 			t.Errorf("password_policy.min_length is not a number: %v", err)
 		}
 		if n < 1 {
-			t.Errorf("password_policy.min_length = %v, want ≥1", n)
+			t.Errorf("password_policy.min_length = %v, want â‰¥1", n)
 		}
 	}
 

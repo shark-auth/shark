@@ -96,7 +96,7 @@ The gap between today's 56% raw coverage and 90%+ is concentrated in four shippa
 3. **SSO connection management** (create / list / update / delete connections, IdP metadata).
 4. **Flow Builder** (CRUD on flows + steps).
 
-Tracking and the full post-launch backlog live in `sdk/HANDOFF.md` at the repo root. Other notable not-yet-shipped items: admin SSE log stream and signing-key rotation.
+Tracking and the full post-launch backlog live in `sdk/HANDOFF.md`. Other notable not-yet-shipped items: admin SSE log stream and signing-key rotation.
 
 ## How the two SDKs relate
 

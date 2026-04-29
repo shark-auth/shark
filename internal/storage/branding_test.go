@@ -1,10 +1,10 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestResolveBranding_GlobalOnly(t *testing.T) {

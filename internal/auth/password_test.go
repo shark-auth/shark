@@ -1,11 +1,11 @@
-package auth
+﻿package auth
 
 import (
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/shark-auth/shark/internal/config"
 )
 
 var testArgon2Config = config.Argon2idConfig{

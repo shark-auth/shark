@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ func TestIntrospect_RevokedToken(t *testing.T) {
 	if result["active"] != false {
 		t.Errorf("expected active=false for revoked token, got %v", result["active"])
 	}
-	// Per RFC 7662 §2.2, no other fields should be present when active=false.
+	// Per RFC 7662 Â§2.2, no other fields should be present when active=false.
 	if _, hasScope := result["scope"]; hasScope {
 		t.Error("scope should not be present in inactive response")
 	}
@@ -427,7 +427,7 @@ func TestRevoke_WrongClient(t *testing.T) {
 
 	// Attempt to revoke it as other-client.
 	revokeStatus := doRevoke(t, ts, accessToken, basicAuth("other-client", "test-secret"))
-	// Per RFC 7009 §2.2, must return 200 even for unauthorized attempts.
+	// Per RFC 7009 Â§2.2, must return 200 even for unauthorized attempts.
 	if revokeStatus != http.StatusOK {
 		t.Fatalf("expected 200 per RFC 7009, got %d", revokeStatus)
 	}

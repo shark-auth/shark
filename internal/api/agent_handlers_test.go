@@ -1,11 +1,11 @@
-package api_test
+﻿package api_test
 
 import (
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestAgentCRUD(t *testing.T) {

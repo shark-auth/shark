@@ -1,4 +1,4 @@
-package authflow_test
+﻿package authflow_test
 
 import (
 	"context"
@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/authflow"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/authflow"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // --- helpers ---
@@ -603,7 +603,7 @@ func TestConditions_Evaluate_AllOf_AnyOf_Not(t *testing.T) {
 		t.Fatalf("any_of match failed: ok=%v err=%v", ok, err)
 	}
 
-	// not → invert all_of so it no longer matches.
+	// not â†’ invert all_of so it no longer matches.
 	notExpr := map[string]any{
 		"not": map[string]any{"trigger_eq": "signup"},
 	}
@@ -640,7 +640,7 @@ func TestEngine_NilMetadata_DoesNotPanic(t *testing.T) {
 }
 
 // TestEngine_WebhookBody_HasTrigger double-checks the shape of what goes
-// over the wire — we only use sanitizeUser but the trigger/metadata keys
+// over the wire â€” we only use sanitizeUser but the trigger/metadata keys
 // are part of the public webhook contract.
 func TestEngine_WebhookBody_HasTrigger(t *testing.T) {
 	var captured []byte

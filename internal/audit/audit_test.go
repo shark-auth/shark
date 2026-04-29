@@ -1,4 +1,4 @@
-package audit_test
+﻿package audit_test
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/audit"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/audit"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestAuditLogCreate(t *testing.T) {
@@ -70,7 +70,7 @@ func TestAuditLogDefaults(t *testing.T) {
 	logger := audit.NewLogger(store)
 	ctx := context.Background()
 
-	// Log with minimal fields — defaults should fill in the rest
+	// Log with minimal fields â€” defaults should fill in the rest
 	event := &storage.AuditLog{
 		Action: "user.signup",
 	}

@@ -1,9 +1,9 @@
-package rbac
+﻿package rbac
 
 import (
 	"net/http"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 // RequirePermission returns middleware that checks the authenticated user

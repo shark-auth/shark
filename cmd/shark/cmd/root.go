@@ -1,4 +1,4 @@
-// Package cmd wires cobra subcommands for the shark binary.
+﻿// Package cmd wires cobra subcommands for the shark binary.
 package cmd
 
 import (
@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
+	"github.com/shark-auth/shark/internal/cli"
 )
 
 // migrationsFS is injected by main.go at startup; holds the embedded migrations/.
@@ -26,10 +26,10 @@ var verbose bool
 // root is the base command for the shark binary.
 var root = &cobra.Command{
 	Use:   "shark",
-	Short: "SharkAuth — single-binary identity platform",
+	Short: "SharkAuth â€” single-binary identity platform",
 	Long: `SharkAuth is a single Go binary that provides auth: password, OAuth,
 passkeys, magic links, MFA, SSO, RBAC, organizations, audit logs,
-agent auth — all embedded with SQLite.`,
+agent auth â€” all embedded with SQLite.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {

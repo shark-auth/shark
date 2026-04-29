@@ -1,11 +1,11 @@
-package vault_test
+﻿package vault_test
 
 import (
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/vault"
+	"github.com/shark-auth/shark/internal/vault"
 )
 
 // TestTemplates_Nonempty_AndHaveUniqueNames guards the invariants every
@@ -64,7 +64,7 @@ func TestTemplates_Nonempty_AndHaveUniqueNames(t *testing.T) {
 		seen[tpl.Name] = true
 	}
 
-	// Spot-check that the expected catalog members exist — prevents a
+	// Spot-check that the expected catalog members exist â€” prevents a
 	// silent deletion slipping past review.
 	expected := []string{
 		"google_calendar", "google_drive", "google_gmail",
@@ -104,7 +104,7 @@ func TestTemplate_KnownAndUnknown(t *testing.T) {
 }
 
 // TestListTemplates_SortedByDisplayName verifies that ListTemplates returns
-// the catalog in alphabetical order by DisplayName — the admin UI relies on
+// the catalog in alphabetical order by DisplayName â€” the admin UI relies on
 // this ordering when rendering the picker.
 func TestListTemplates_SortedByDisplayName(t *testing.T) {
 	list := vault.ListTemplates()
@@ -121,7 +121,7 @@ func TestListTemplates_SortedByDisplayName(t *testing.T) {
 		t.Errorf("expected ListTemplates sorted by DisplayName, got order: %v", displayNames)
 	}
 
-	// Same cardinality as the map registry — nothing lost in translation.
+	// Same cardinality as the map registry â€” nothing lost in translation.
 	if want := len(vault.Templates()); len(list) != want {
 		t.Errorf("ListTemplates size mismatch: got %d, want %d", len(list), want)
 	}
@@ -130,7 +130,7 @@ func TestListTemplates_SortedByDisplayName(t *testing.T) {
 // TestApplyTemplate_BuildsVaultProvider_WithDefaultsAndOverrides exercises
 // the core ApplyTemplate contract: defaults flow through, overrides win,
 // and the encrypted-secret slot stays empty (Manager.CreateProvider owns
-// the crypto boundary — a template has no business pre-populating it).
+// the crypto boundary â€” a template has no business pre-populating it).
 func TestApplyTemplate_BuildsVaultProvider_WithDefaultsAndOverrides(t *testing.T) {
 	tpl, ok := vault.Template("slack")
 	if !ok {
@@ -185,7 +185,7 @@ func TestApplyTemplate_BuildsVaultProvider_WithDefaultsAndOverrides(t *testing.T
 		if len(got.Scopes) != 1 || got.Scopes[0] != "chat:write" {
 			t.Errorf("Scopes override failed: got %v", got.Scopes)
 		}
-		// Name is NOT overridable — it's the stable key for the provider.
+		// Name is NOT overridable â€” it's the stable key for the provider.
 		if got.Name != "slack" {
 			t.Errorf("Name must remain slack (not overridable), got %q", got.Name)
 		}
@@ -193,7 +193,7 @@ func TestApplyTemplate_BuildsVaultProvider_WithDefaultsAndOverrides(t *testing.T
 
 	t.Run("empty_scopes_slice_uses_defaults", func(t *testing.T) {
 		// An empty-but-non-nil slice should still fall through to defaults;
-		// we treat nil and []string{} the same — caller expressed "no
+		// we treat nil and []string{} the same â€” caller expressed "no
 		// custom scopes" in both cases. This matches the CreateProvider
 		// semantics in vault.go which normalises nil to empty.
 		got := vault.ApplyTemplate(tpl, "client-xyz", "", []string{})
@@ -210,7 +210,7 @@ func TestApplyTemplate_BuildsVaultProvider_WithDefaultsAndOverrides(t *testing.T
 
 	t.Run("scopes_defensive_copy", func(t *testing.T) {
 		// Mutating the returned Scopes slice must not corrupt the
-		// template's DefaultScopes — templates are shared state.
+		// template's DefaultScopes â€” templates are shared state.
 		originalFirst := tpl.DefaultScopes[0]
 		got := vault.ApplyTemplate(tpl, "client-abc", "", nil)
 		got.Scopes[0] = "mutated"

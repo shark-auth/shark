@@ -1,4 +1,4 @@
-package proxy
+﻿package proxy
 
 import (
 	"io"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/identity"
+	"github.com/shark-auth/shark/internal/identity"
 )
 
 // mustEngine compiles specs and fails the test on error. Used in the
@@ -138,7 +138,7 @@ func TestPath_CaseSensitive(t *testing.T) {
 
 func TestEngine_FirstMatchWins(t *testing.T) {
 	// Two overlapping rules: the first forbids, the second would allow.
-	// First should win — deny.
+	// First should win â€” deny.
 	e := mustEngine(t,
 		RuleSpec{Path: "/api/admin/*", Require: "role:admin"},
 		RuleSpec{Path: "/api/*", Allow: "anonymous"},
@@ -242,7 +242,7 @@ func TestEngine_AgentRequired(t *testing.T) {
 
 // TestEngine_M2M_RuleAllowsAgent confirms an M2M rule accepts an
 // agent-typed identity that also satisfies Require (authenticated).
-// Covers the happy path — machine-to-machine calls against an
+// Covers the happy path â€” machine-to-machine calls against an
 // M2M-gated surface must not be regressed into a deny.
 func TestEngine_M2M_RuleAllowsAgent(t *testing.T) {
 	e := mustEngine(t, RuleSpec{
@@ -267,7 +267,7 @@ func TestEngine_M2M_RuleAllowsAgent(t *testing.T) {
 // TestEngine_M2M_RuleDeniesHuman confirms an M2M rule rejects a
 // human-typed caller even when every other predicate (path, method,
 // Require) would otherwise permit. The deny must be DecisionDenyForbidden
-// (not DecisionDenyAnonymous — the caller IS authenticated, just the
+// (not DecisionDenyAnonymous â€” the caller IS authenticated, just the
 // wrong kind) and the reason string must contain "m2m" so operators
 // can distinguish this deny class from a generic "authentication
 // required" or "scope X required" surface.
@@ -318,7 +318,7 @@ func TestEngine_ExtraScopes_AndSemantics(t *testing.T) {
 		Scopes:  []string{"a", "b"},
 	})
 
-	// Has a but not b → deny, reason mentions b.
+	// Has a but not b â†’ deny, reason mentions b.
 	partial := Identity{AgentID: "a1", Scopes: []string{"a"}}
 	d := e.Evaluate(newGetReq("/ops/x"), partial)
 	if d.Allow {
@@ -328,13 +328,13 @@ func TestEngine_ExtraScopes_AndSemantics(t *testing.T) {
 		t.Errorf("reason = %q, want mention of missing scope \"b\"", d.Reason)
 	}
 
-	// Has both → allow.
+	// Has both â†’ allow.
 	full := Identity{AgentID: "a1", Scopes: []string{"a", "b"}}
 	if d := e.Evaluate(newGetReq("/ops/x"), full); !d.Allow {
 		t.Errorf("all scopes present should allow: %q", d.Reason)
 	}
 
-	// Primary requirement unmet (not an agent) → extra scopes never
+	// Primary requirement unmet (not an agent) â†’ extra scopes never
 	// inspected; reason reflects the primary failure.
 	notAgent := Identity{UserID: "u1", Scopes: []string{"a", "b"}}
 	d = e.Evaluate(newGetReq("/ops/x"), notAgent)
@@ -536,7 +536,7 @@ func TestReverseProxy_EngineNilPassthrough(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	// No engine: legacy P1 behavior — every request forwarded.
+	// No engine: legacy P1 behavior â€” every request forwarded.
 	p, err := New(Config{
 		Enabled:       true,
 		Upstream:      upstream.URL,
@@ -591,7 +591,7 @@ func TestReverseProxy_DenyReasonInHeader(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
-// atomic.Pointer swap — lock-free concurrency
+// atomic.Pointer swap â€” lock-free concurrency
 // -----------------------------------------------------------------------------
 
 // TestEngine_SetRulesAtomicSwap verifies the pointer-swap semantics: after
@@ -605,7 +605,7 @@ func TestEngine_SetRulesAtomicSwap(t *testing.T) {
 		t.Fatalf("initial Rules() len = %d, want 1", got)
 	}
 
-	// Successful swap — new snapshot replaces the old one.
+	// Successful swap â€” new snapshot replaces the old one.
 	if err := e.SetRules([]RuleSpec{
 		{Path: "/a", Allow: "anonymous"},
 		{Path: "/b", Allow: "anonymous"},
@@ -616,7 +616,7 @@ func TestEngine_SetRulesAtomicSwap(t *testing.T) {
 		t.Errorf("after swap Rules() len = %d, want 2", got)
 	}
 
-	// Failed compile — previous snapshot must remain in place.
+	// Failed compile â€” previous snapshot must remain in place.
 	if err := e.SetRules([]RuleSpec{{Path: "no-slash", Allow: "anonymous"}}); err == nil {
 		t.Fatal("expected compile error for missing leading slash")
 	}
@@ -630,8 +630,8 @@ func TestEngine_SetRulesAtomicSwap(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 // TestEngine_TierPredicates is the table-driven home for tier:X rule
-// behavior. Covers exact match, mismatch → PaywallRedirect,
-// anonymous → DenyAnonymous (paywall suppressed), and ensures
+// behavior. Covers exact match, mismatch â†’ PaywallRedirect,
+// anonymous â†’ DenyAnonymous (paywall suppressed), and ensures
 // RequiredTier is populated on the deny decision.
 func TestEngine_TierPredicates(t *testing.T) {
 	type tc struct {
@@ -652,7 +652,7 @@ func TestEngine_TierPredicates(t *testing.T) {
 			wantKind:  DecisionAllow,
 		},
 		{
-			name:         "tier mismatch → PaywallRedirect",
+			name:         "tier mismatch â†’ PaywallRedirect",
 			require:      "tier:pro",
 			id:           Identity{UserID: "u1", Tier: "free"},
 			wantKind:     DecisionPaywallRedirect,
@@ -660,7 +660,7 @@ func TestEngine_TierPredicates(t *testing.T) {
 			wantInReason: "tier",
 		},
 		{
-			name:         "tier mismatch empty tier → PaywallRedirect",
+			name:         "tier mismatch empty tier â†’ PaywallRedirect",
 			require:      "tier:pro",
 			id:           Identity{UserID: "u1"},
 			wantKind:     DecisionPaywallRedirect,
@@ -668,7 +668,7 @@ func TestEngine_TierPredicates(t *testing.T) {
 			wantInReason: "tier",
 		},
 		{
-			name:         "anonymous tier → DenyAnonymous (paywall suppressed)",
+			name:         "anonymous tier â†’ DenyAnonymous (paywall suppressed)",
 			require:      "tier:pro",
 			id:           Identity{},
 			wantKind:     DecisionDenyAnonymous,
@@ -696,7 +696,7 @@ func TestEngine_TierPredicates(t *testing.T) {
 	}
 }
 
-// TestEngine_GlobalRolePredicate covers global_role:X — distinct kind
+// TestEngine_GlobalRolePredicate covers global_role:X â€” distinct kind
 // from role:X but identical membership check against Identity.Roles.
 // Also verifies the back-compat alias: role:X still works.
 func TestEngine_GlobalRolePredicate(t *testing.T) {
@@ -719,7 +719,7 @@ func TestEngine_GlobalRolePredicate(t *testing.T) {
 		t.Errorf("reason should mention global_role, got %q", d.Reason)
 	}
 
-	// Anonymous caller on role/global_role rule → DenyAnonymous, not
+	// Anonymous caller on role/global_role rule â†’ DenyAnonymous, not
 	// Forbidden. The proxy uses this to pick 401 vs 403.
 	anonD := e.Evaluate(newGetReq("/ops/x"), Identity{})
 	if anonD.Kind != DecisionDenyAnonymous {
@@ -734,7 +734,7 @@ func TestEngine_GlobalRolePredicate(t *testing.T) {
 }
 
 // TestEngine_DecisionKind_NoMatch covers the default-deny path's Kind:
-// anonymous → DenyAnonymous, authenticated → DenyForbidden.
+// anonymous â†’ DenyAnonymous, authenticated â†’ DenyForbidden.
 func TestEngine_DecisionKind_NoMatch(t *testing.T) {
 	e := mustEngine(t, RuleSpec{Path: "/matches/nothing", Allow: "anonymous"})
 

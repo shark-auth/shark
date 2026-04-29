@@ -1,15 +1,15 @@
-package api
+﻿package api
 
 import (
 	"context"
 	"log/slog"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // emit is a tiny nil-safe wrapper around WebhookDispatcher.Emit so emission
 // sites don't repeat the nil check. Errors are logged but never fail the
-// caller's request — webhook delivery is always best-effort async.
+// caller's request â€” webhook delivery is always best-effort async.
 func (s *Server) emit(ctx context.Context, event string, payload any) {
 	if s.WebhookDispatcher == nil {
 		return

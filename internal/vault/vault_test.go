@@ -1,4 +1,4 @@
-package vault_test
+﻿package vault_test
 
 import (
 	"context"
@@ -14,10 +14,10 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
-	"github.com/sharkauth/sharkauth/internal/vault"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
+	"github.com/shark-auth/shark/internal/vault"
 )
 
 // The server secret must be >= 32 chars (see auth.NewFieldEncryptor).
@@ -27,7 +27,7 @@ const testServerSecret = "test-server-secret-0123456789-abcdef"
 // tests. Fields map straight onto the JSON payload the oauth2 library
 // expects from a standards-compliant token endpoint.
 type mockTokenResponse struct {
-	status       int           // HTTP status — defaults to 200 when zero
+	status       int           // HTTP status â€” defaults to 200 when zero
 	accessToken  string        // access_token
 	refreshToken string        // refresh_token (empty = omit)
 	tokenType    string        // token_type (defaults to "Bearer")
@@ -203,7 +203,7 @@ func TestExchangeAndStore_EncryptsTokens(t *testing.T) {
 		t.Fatalf("refresh token missing encryption prefix: %q", conn.RefreshTokenEnc)
 	}
 
-	// Decrypt round-trip — confirms the bytes we stored really are the
+	// Decrypt round-trip â€” confirms the bytes we stored really are the
 	// plaintext the mock server returned.
 	accessPlain, err := enc.Decrypt(conn.AccessTokenEnc)
 	if err != nil {
@@ -234,7 +234,7 @@ func TestExchangeAndStore_EncryptsTokens(t *testing.T) {
 // the stored access token is still well inside its expiry window, so we
 // return it without hitting the network.
 func TestGetFreshToken_ReturnsUnchangedWhenValid(t *testing.T) {
-	// The token endpoint must NOT be called in this test — point at a
+	// The token endpoint must NOT be called in this test â€” point at a
 	// server that errors on every request so we trip loudly if we do.
 	panicServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("mock server unexpectedly called for a valid-token scenario")
@@ -271,7 +271,7 @@ func TestGetFreshToken_ReturnsUnchangedWhenValid(t *testing.T) {
 }
 
 // TestGetFreshToken_AutoRefreshesWhenExpired drives the refresh path end to
-// end: stale token → manager swaps it for a fresh one via the mock server →
+// end: stale token â†’ manager swaps it for a fresh one via the mock server â†’
 // stored ciphertext and the returned plaintext both reflect the new token.
 func TestGetFreshToken_AutoRefreshesWhenExpired(t *testing.T) {
 	mock := newMockOAuthServer(t, &mockTokenResponse{
@@ -440,7 +440,7 @@ func TestCreateProvider_EncryptsClientSecret(t *testing.T) {
 }
 
 // TestDisconnect_RemovesConnection exercises the disconnect path: row present
-// → delete succeeds → subsequent Disconnect on the same id returns
+// â†’ delete succeeds â†’ subsequent Disconnect on the same id returns
 // ErrConnectionNotFound.
 func TestDisconnect_RemovesConnection(t *testing.T) {
 	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
@@ -476,7 +476,7 @@ func TestListConnections_ReturnsUserConnections(t *testing.T) {
 	seedUser(t, store, "usr_a")
 	seedUser(t, store, "usr_b")
 
-	// Two providers — use a second call to seedProvider-like logic since
+	// Two providers â€” use a second call to seedProvider-like logic since
 	// the helper hard-codes Name="mock".
 	providerA := seedProvider(t, m, "https://a.test/authorize", "https://a.test/token")
 	pB := &storage.VaultProvider{
@@ -634,7 +634,7 @@ func TestExchangeAndStore_PreservesRefreshTokenWhenOmittedOnReExchange(t *testin
 // markReauthErrStore wraps a real Store and forces
 // MarkVaultConnectionNeedsReauth to return a sentinel error. Everything
 // else delegates to the embedded store so the rest of the manager keeps
-// working. Method set is satisfied via interface embedding — Go picks up
+// working. Method set is satisfied via interface embedding â€” Go picks up
 // the real implementation for every method we don't redeclare.
 type markReauthErrStore struct {
 	storage.Store
@@ -657,8 +657,8 @@ func TestGetFreshToken_RefreshFailureWithMarkReauthError(t *testing.T) {
 
 	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
 
-	// Build the normal stack first — seeding providers + connections needs
-	// the real store — then wrap the store and build a second Manager that
+	// Build the normal stack first â€” seeding providers + connections needs
+	// the real store â€” then wrap the store and build a second Manager that
 	// shares the same DB but reroutes MarkVaultConnectionNeedsReauth.
 	baseStore := testutil.NewTestDB(t)
 	enc, err := auth.NewFieldEncryptor(testServerSecret)
@@ -731,7 +731,7 @@ func TestUpdateProviderSecret(t *testing.T) {
 
 // TestBuildAuthURL_LinearExtraParams verifies that BuildAuthURL injects
 // prompt=consent into the authorize URL for a provider named "linear", relying
-// on the template registry — not a hard-coded branch in the manager.
+// on the template registry â€” not a hard-coded branch in the manager.
 func TestBuildAuthURL_LinearExtraParams(t *testing.T) {
 	now := time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC)
 	m, _, _ := setupManager(t, func() time.Time { return now })
@@ -901,7 +901,7 @@ func TestExchangeAndStore_SlackV2_XoxpPreferred(t *testing.T) {
 // are encrypted with the same FieldEncryptor the manager uses.
 func mustSeedConnection(t *testing.T, store storage.Store, m *vault.Manager, providerID, userID, accessPlain, refreshPlain string, expires *time.Time) *storage.VaultConnection {
 	t.Helper()
-	// Reach into a fresh encryptor with the same secret — keeps the helper
+	// Reach into a fresh encryptor with the same secret â€” keeps the helper
 	// cohesive without needing to thread `enc` through every call site.
 	enc, err := auth.NewFieldEncryptor(testServerSecret)
 	if err != nil {
@@ -965,7 +965,7 @@ func seedProviderWithExtra(t *testing.T, m *vault.Manager, store storage.Store, 
 
 // TestBuildAuthURL_ManualProviderWithExtraAuthParams verifies that a manual
 // (non-template) provider with persisted ExtraAuthParams produces an authorize
-// URL containing those params — fixing the silent regression where manual
+// URL containing those params â€” fixing the silent regression where manual
 // providers skipped extras entirely.
 func TestBuildAuthURL_ManualProviderWithExtraAuthParams(t *testing.T) {
 	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
@@ -989,7 +989,7 @@ func TestBuildAuthURL_ManualProviderWithExtraAuthParams(t *testing.T) {
 	}
 	q := u.Query()
 	if got := q.Get("prompt"); got != "consent" {
-		t.Errorf("prompt param: got %q, want %q — manual provider ExtraAuthParams not applied", got, "consent")
+		t.Errorf("prompt param: got %q, want %q â€” manual provider ExtraAuthParams not applied", got, "consent")
 	}
 }
 

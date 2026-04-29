@@ -1,4 +1,4 @@
-# OAuth 2.1 + Agent Auth Implementation Plan
+﻿# OAuth 2.1 + Agent Auth Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go + fosite (ory/fosite) + lestrrat-go/jwx (ES256/JWK) + chi router + SQLite WAL + React admin dashboard
 
-**Spec Reference:** `AGENT_AUTH.md` — canonical spec for data model, endpoints, JWT format, security model
+**Spec Reference:** `AGENT_AUTH.md` â€” canonical spec for data model, endpoints, JWT format, security model
 
 **Note:** fosite is chosen for correctness and compliance. In the future, a custom implementation may replace it once the system is battle-tested and all edge cases are understood. This decision should be revisited after v1.0 stabilization.
 
@@ -18,12 +18,12 @@
 
 | Wave | Scope | Status |
 |------|-------|--------|
-| **A — Foundation** | Migration, deps (fosite + jwx), ES256, AS metadata, config, storage types | **Done** |
-| **B — Core Grants** | fosite SQLite adapter, token/authorize endpoints, PKCE + client_credentials | **Done** |
-| **C — Agent + Consent** | Agent CRUD API, server-rendered consent HTML, consent management API | **Done** |
-| **D — Advanced Grants** | DCR (RFC 7591), Device Flow (RFC 8628), Token Exchange (RFC 8693) | **Done** |
-| **E — Security Hardening** | DPoP (RFC 9449), Introspection (RFC 7662), Revocation (RFC 7009), Resource Indicators (RFC 8707) | **Done** |
-| **F — Dashboard + Tests** | Agent/consent UI, device approval page, full OAuth smoke tests, unit coverage | **Done** |
+| **A â€” Foundation** | Migration, deps (fosite + jwx), ES256, AS metadata, config, storage types | **Done** |
+| **B â€” Core Grants** | fosite SQLite adapter, token/authorize endpoints, PKCE + client_credentials | **Done** |
+| **C â€” Agent + Consent** | Agent CRUD API, server-rendered consent HTML, consent management API | **Done** |
+| **D â€” Advanced Grants** | DCR (RFC 7591), Device Flow (RFC 8628), Token Exchange (RFC 8693) | **Done** |
+| **E â€” Security Hardening** | DPoP (RFC 9449), Introspection (RFC 7662), Revocation (RFC 7009), Resource Indicators (RFC 8707) | **Done** |
+| **F â€” Dashboard + Tests** | Agent/consent UI, device approval page, full OAuth smoke tests, unit coverage | **Done** |
 
 **Smoke test status:** 181 PASS, 0 FAIL (sections 1-42).
 **Unit tests:** 120+ oauth + storage tests passing.
@@ -34,11 +34,11 @@
 ## Revised Phase Order
 
 ```
-Phase 5  → OAuth 2.1 + Agent Auth (this plan — P0+P1 from AGENT_AUTH.md)
-Phase 5.5 → Token Vault (separate plan)
-Phase 6  → Proxy + Visual Flow Builder (separate plan)
-Phase 7  → SDK (separate plan, builds on OAuth 2.1 flows)
-Phase 8  → P2 Enterprise Features (RAR, PAR, step-up — deferred)
+Phase 5  â†’ OAuth 2.1 + Agent Auth (this plan â€” P0+P1 from AGENT_AUTH.md)
+Phase 5.5 â†’ Token Vault (separate plan)
+Phase 6  â†’ Proxy + Visual Flow Builder (separate plan)
+Phase 7  â†’ SDK (separate plan, builds on OAuth 2.1 flows)
+Phase 8  â†’ P2 Enterprise Features (RAR, PAR, step-up â€” deferred)
 ```
 
 ## RFC Compliance Matrix
@@ -63,57 +63,57 @@ Phase 8  → P2 Enterprise Features (RAR, PAR, step-up — deferred)
 ### New Files
 
 ```
-internal/oauth/                          # NEW PACKAGE — OAuth 2.1 server
-├── server.go                            # fosite config, provider setup, main wiring
-├── store.go                             # fosite.Storage adapter → SQLite
-├── store_test.go                        # Unit tests for storage adapter
-├── handlers.go                          # /oauth/* HTTP handlers (authorize, token)
-├── handlers_test.go                     # Handler unit tests
-├── metadata.go                          # /.well-known/oauth-authorization-server
-├── metadata_test.go                     # Metadata endpoint tests
-├── consent.go                           # Consent screen logic (approve/deny)
-├── consent_templates/                   # Go HTML templates
-│   ├── consent.html                     # User-facing consent screen
-│   ├── device_verify.html               # Device flow verification page
-│   ├── error.html                       # OAuth error page
-│   └── base.html                        # Shared layout
-├── dcr.go                               # Dynamic Client Registration (RFC 7591)
-├── dcr_test.go                          # DCR tests
-├── device.go                            # Device Authorization Grant (RFC 8628)
-├── device_test.go                       # Device flow tests
-├── exchange.go                          # Token Exchange (RFC 8693)
-├── exchange_test.go                     # Token exchange tests
-├── dpop.go                              # DPoP proof validation (RFC 9449)
-├── dpop_test.go                         # DPoP tests
-├── introspect.go                        # Token Introspection (RFC 7662)
-└── revoke.go                            # Token Revocation (RFC 7009)
+internal/oauth/                          # NEW PACKAGE â€” OAuth 2.1 server
+â”œâ”€â”€ server.go                            # fosite config, provider setup, main wiring
+â”œâ”€â”€ store.go                             # fosite.Storage adapter â†’ SQLite
+â”œâ”€â”€ store_test.go                        # Unit tests for storage adapter
+â”œâ”€â”€ handlers.go                          # /oauth/* HTTP handlers (authorize, token)
+â”œâ”€â”€ handlers_test.go                     # Handler unit tests
+â”œâ”€â”€ metadata.go                          # /.well-known/oauth-authorization-server
+â”œâ”€â”€ metadata_test.go                     # Metadata endpoint tests
+â”œâ”€â”€ consent.go                           # Consent screen logic (approve/deny)
+â”œâ”€â”€ consent_templates/                   # Go HTML templates
+â”‚   â”œâ”€â”€ consent.html                     # User-facing consent screen
+â”‚   â”œâ”€â”€ device_verify.html               # Device flow verification page
+â”‚   â”œâ”€â”€ error.html                       # OAuth error page
+â”‚   â””â”€â”€ base.html                        # Shared layout
+â”œâ”€â”€ dcr.go                               # Dynamic Client Registration (RFC 7591)
+â”œâ”€â”€ dcr_test.go                          # DCR tests
+â”œâ”€â”€ device.go                            # Device Authorization Grant (RFC 8628)
+â”œâ”€â”€ device_test.go                       # Device flow tests
+â”œâ”€â”€ exchange.go                          # Token Exchange (RFC 8693)
+â”œâ”€â”€ exchange_test.go                     # Token exchange tests
+â”œâ”€â”€ dpop.go                              # DPoP proof validation (RFC 9449)
+â”œâ”€â”€ dpop_test.go                         # DPoP tests
+â”œâ”€â”€ introspect.go                        # Token Introspection (RFC 7662)
+â””â”€â”€ revoke.go                            # Token Revocation (RFC 7009)
 
 internal/storage/
-├── agents.go                            # NEW — Agent CRUD storage methods
-├── agents_test.go                       # NEW — Agent storage tests
-├── oauth.go                             # NEW — OAuth tables (codes, tokens, consents, device codes, DCR)
-└── oauth_test.go                        # NEW — OAuth storage tests
+â”œâ”€â”€ agents.go                            # NEW â€” Agent CRUD storage methods
+â”œâ”€â”€ agents_test.go                       # NEW â€” Agent storage tests
+â”œâ”€â”€ oauth.go                             # NEW â€” OAuth tables (codes, tokens, consents, device codes, DCR)
+â””â”€â”€ oauth_test.go                        # NEW â€” OAuth storage tests
 
 internal/auth/jwt/
-├── es256.go                             # NEW — ES256 key generation + JWK building
-└── es256_test.go                        # NEW — ES256 tests
+â”œâ”€â”€ es256.go                             # NEW â€” ES256 key generation + JWK building
+â””â”€â”€ es256_test.go                        # NEW â€” ES256 tests
 
 internal/api/
-├── agent_handlers.go                    # NEW — /api/v1/agents/* CRUD
-├── agent_handlers_test.go               # NEW — Agent handler tests
-├── consent_handlers.go                  # NEW — /api/v1/auth/consents management
-└── consent_handlers_test.go             # NEW — Consent handler tests
+â”œâ”€â”€ agent_handlers.go                    # NEW â€” /api/v1/agents/* CRUD
+â”œâ”€â”€ agent_handlers_test.go               # NEW â€” Agent handler tests
+â”œâ”€â”€ consent_handlers.go                  # NEW â€” /api/v1/auth/consents management
+â””â”€â”€ consent_handlers_test.go             # NEW â€” Consent handler tests
 
 cmd/shark/migrations/
-└── 00010_oauth.sql                      # NEW — All OAuth 2.1 tables
+â””â”€â”€ 00010_oauth.sql                      # NEW â€” All OAuth 2.1 tables
 
 admin/src/components/
-├── agents_manage.tsx                    # NEW — Replace stub with full agent management
-├── consents_manage.tsx                  # NEW — Replace stub with consent management
-└── device_approve.tsx                   # NEW — Device flow approval UI
+â”œâ”€â”€ agents_manage.tsx                    # NEW â€” Replace stub with full agent management
+â”œâ”€â”€ consents_manage.tsx                  # NEW â€” Replace stub with consent management
+â””â”€â”€ device_approve.tsx                   # NEW â€” Device flow approval UI
 
 scripts/
-└── smoke_oauth.sh                       # NEW — OAuth 2.1 smoke test suite
+â””â”€â”€ smoke_oauth.sh                       # NEW â€” OAuth 2.1 smoke test suite
 ```
 
 ### Modified Files
@@ -134,9 +134,9 @@ ATTACK.md                               # Update phase order + mark progress
 
 ---
 
-## Wave A — Foundation (Migration + ES256 + Metadata)
+## Wave A â€” Foundation (Migration + ES256 + Metadata)
 
-### Task 1: Database Migration — OAuth 2.1 Tables
+### Task 1: Database Migration â€” OAuth 2.1 Tables
 
 **Files:**
 - Create: `cmd/shark/migrations/00010_oauth.sql`
@@ -283,7 +283,7 @@ git commit -m "feat: add OAuth 2.1 tables migration (agents, codes, tokens, cons
 
 ---
 
-### Task 2: Add Dependencies — fosite + jwx
+### Task 2: Add Dependencies â€” fosite + jwx
 
 **Files:**
 - Modify: `go.mod`
@@ -391,7 +391,7 @@ func TestES256JWK(t *testing.T) {
 go test ./internal/auth/jwt/ -run TestGenerateES256 -v
 ```
 
-Expected: FAIL — functions not defined.
+Expected: FAIL â€” functions not defined.
 
 - [ ] **Step 3: Implement ES256 key generation**
 
@@ -482,7 +482,7 @@ func padTo32(b []byte) []byte {
 }
 ```
 
-- [ ] **Step 4: Run tests — verify pass**
+- [ ] **Step 4: Run tests â€” verify pass**
 
 ```bash
 go test ./internal/auth/jwt/ -run TestES256 -v
@@ -493,7 +493,7 @@ Expected: All PASS.
 
 - [ ] **Step 5: Extend JWKS endpoint to serve ES256 keys**
 
-Modify `internal/api/well_known_handlers.go` — in the `HandleJWKS` function, after the RSA JWK building block, add ES256 JWK building:
+Modify `internal/api/well_known_handlers.go` â€” in the `HandleJWKS` function, after the RSA JWK building block, add ES256 JWK building:
 
 ```go
 // After existing RSA block, add:
@@ -588,7 +588,7 @@ func TestMetadataEndpoint(t *testing.T) {
         t.Errorf("expected S256, got %v", methods[0])
     }
     
-    // MCP requirement — DCR
+    // MCP requirement â€” DCR
     if meta["registration_endpoint"] == nil {
         t.Error("missing registration_endpoint (MCP requires DCR)")
     }
@@ -665,7 +665,7 @@ Expected: PASS.
 Add to `internal/api/router.go` in `NewServer`, after the JWKS endpoint:
 
 ```go
-// OAuth 2.1 AS Metadata (RFC 8414) — MCP discovery
+// OAuth 2.1 AS Metadata (RFC 8414) â€” MCP discovery
 r.Get("/.well-known/oauth-authorization-server", oauth.MetadataHandler(cfg.Server.BaseURL))
 ```
 
@@ -919,7 +919,7 @@ Add to `internal/storage/storage.go` in the `Store` interface:
 go build ./internal/storage/...
 ```
 
-Expected: Compilation fails (methods not implemented on SQLiteStore yet) — that's correct for now. The interface is defined, implementation comes in the fosite storage adapter task.
+Expected: Compilation fails (methods not implemented on SQLiteStore yet) â€” that's correct for now. The interface is defined, implementation comes in the fosite storage adapter task.
 
 - [ ] **Step 5: Commit**
 
@@ -930,7 +930,7 @@ git commit -m "feat: define Agent + OAuth entity types and Store interface exten
 
 ---
 
-## Wave B — Core Grants (fosite Integration)
+## Wave B â€” Core Grants (fosite Integration)
 
 ### Task 7: fosite Storage Adapter
 
@@ -956,11 +956,11 @@ Create `internal/storage/agents_test.go` and `internal/storage/oauth_test.go`. T
 
 - [ ] **Step 4: Implement fosite Storage adapter**
 
-Create `internal/oauth/store.go` — implements `fosite.Storage` interface by delegating to our `storage.Store`. Key interfaces to implement:
-- `fosite.ClientManager` — `GetClient()` maps to `GetAgentByClientID()`
-- `oauth2.CoreStorage` — maps auth codes, access tokens, refresh tokens to our tables
-- `oauth2.ResourceOwnerPasswordCredentialsGrantStorage` — NOT implemented (removed in OAuth 2.1)
-- `pkce.PKCERequestStorage` — stores/validates PKCE challenges
+Create `internal/oauth/store.go` â€” implements `fosite.Storage` interface by delegating to our `storage.Store`. Key interfaces to implement:
+- `fosite.ClientManager` â€” `GetClient()` maps to `GetAgentByClientID()`
+- `oauth2.CoreStorage` â€” maps auth codes, access tokens, refresh tokens to our tables
+- `oauth2.ResourceOwnerPasswordCredentialsGrantStorage` â€” NOT implemented (removed in OAuth 2.1)
+- `pkce.PKCERequestStorage` â€” stores/validates PKCE challenges
 
 ```go
 // internal/oauth/store.go
@@ -969,7 +969,7 @@ package oauth
 import (
     "context"
     "github.com/ory/fosite"
-    "github.com/sharkauth/sharkauth/internal/storage"
+    "github.com/shark-auth/shark/internal/storage"
 )
 
 // FositeStore adapts our storage.Store to fosite's storage interfaces.
@@ -1036,8 +1036,8 @@ import (
 
     "github.com/ory/fosite"
     "github.com/ory/fosite/compose"
-    "github.com/sharkauth/sharkauth/internal/config"
-    "github.com/sharkauth/sharkauth/internal/storage"
+    "github.com/shark-auth/shark/internal/config"
+    "github.com/shark-auth/shark/internal/storage"
 )
 
 // Server holds the fosite OAuth2 provider and related dependencies.
@@ -1089,7 +1089,7 @@ import (
     "github.com/ory/fosite"
 )
 
-// HandleAuthorize handles GET /oauth/authorize — shows consent screen.
+// HandleAuthorize handles GET /oauth/authorize â€” shows consent screen.
 func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
     ctx := r.Context()
     ar, err := s.Provider.NewAuthorizeRequest(ctx, r)
@@ -1104,7 +1104,7 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
     // ...
 }
 
-// HandleAuthorizeDecision handles POST /oauth/authorize — user approves/denies.
+// HandleAuthorizeDecision handles POST /oauth/authorize â€” user approves/denies.
 func (s *Server) HandleAuthorizeDecision(w http.ResponseWriter, r *http.Request) {
     // Parse form (approved=true/false)
     // Store consent
@@ -1112,7 +1112,7 @@ func (s *Server) HandleAuthorizeDecision(w http.ResponseWriter, r *http.Request)
     // Redirect with code
 }
 
-// HandleToken handles POST /oauth/token — all grant types.
+// HandleToken handles POST /oauth/token â€” all grant types.
 func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
     ctx := r.Context()
     session := NewOAuthSession("") // will be populated by fosite
@@ -1147,7 +1147,7 @@ Test client_credentials grant (happy path), auth code + PKCE flow (end-to-end), 
 Add to `internal/api/router.go`:
 
 ```go
-// OAuth 2.1 endpoints (outside /api/v1 — standard OAuth paths)
+// OAuth 2.1 endpoints (outside /api/v1 â€” standard OAuth paths)
 r.Route("/oauth", func(r chi.Router) {
     r.Get("/authorize", oauthServer.HandleAuthorize)
     r.Post("/authorize", oauthServer.HandleAuthorizeDecision)
@@ -1170,7 +1170,7 @@ git commit -m "feat: OAuth 2.1 token endpoint with auth code + PKCE and client c
 
 ---
 
-## Wave C — Agent Management + Consent UI
+## Wave C â€” Agent Management + Consent UI
 
 ### Task 9: Agent CRUD API Handlers
 
@@ -1179,22 +1179,22 @@ git commit -m "feat: OAuth 2.1 token endpoint with auth code + PKCE and client c
 - Create: `internal/api/agent_handlers_test.go`
 
 Endpoints (admin API key required):
-- `POST /api/v1/agents` — register agent, return client_secret ONCE
-- `GET /api/v1/agents` — list agents (search, pagination)
-- `GET /api/v1/agents/{id}` — get agent details
-- `PATCH /api/v1/agents/{id}` — update agent
-- `DELETE /api/v1/agents/{id}` — deactivate + revoke all tokens
-- `GET /api/v1/agents/{id}/tokens` — list active tokens
-- `POST /api/v1/agents/{id}/tokens/revoke-all` — revoke all tokens
-- `GET /api/v1/agents/{id}/audit` — agent audit trail
+- `POST /api/v1/agents` â€” register agent, return client_secret ONCE
+- `GET /api/v1/agents` â€” list agents (search, pagination)
+- `GET /api/v1/agents/{id}` â€” get agent details
+- `PATCH /api/v1/agents/{id}` â€” update agent
+- `DELETE /api/v1/agents/{id}` â€” deactivate + revoke all tokens
+- `GET /api/v1/agents/{id}/tokens` â€” list active tokens
+- `POST /api/v1/agents/{id}/tokens/revoke-all` â€” revoke all tokens
+- `GET /api/v1/agents/{id}/audit` â€” agent audit trail
 
 Follow existing handler patterns from `application_handlers.go` (client_secret shown once, SHA-256 hash stored, prefix for UX display).
 
-- [ ] Steps: Write tests → implement handlers → mount in router → verify → commit
+- [ ] Steps: Write tests â†’ implement handlers â†’ mount in router â†’ verify â†’ commit
 
 ---
 
-### Task 10: Consent Screen — Server-Rendered Go Templates
+### Task 10: Consent Screen â€” Server-Rendered Go Templates
 
 **Files:**
 - Create: `internal/oauth/consent_templates/base.html`
@@ -1203,12 +1203,12 @@ Follow existing handler patterns from `application_handlers.go` (client_secret s
 - Create: `internal/oauth/consent.go`
 
 The consent screen is what users see when an agent requests authorization. Must be:
-- Server-rendered (no SPA dependency — security boundary)
+- Server-rendered (no SPA dependency â€” security boundary)
 - Dark theme matching admin dashboard aesthetic
 - Shows: agent name, logo, requested scopes, approve/deny buttons
 - Remembers consent (auto-approve on repeat if scope unchanged)
 
-- [ ] Steps: Create templates → implement consent logic → wire into HandleAuthorize → test → commit
+- [ ] Steps: Create templates â†’ implement consent logic â†’ wire into HandleAuthorize â†’ test â†’ commit
 
 ---
 
@@ -1218,15 +1218,15 @@ The consent screen is what users see when an agent requests authorization. Must 
 - Create: `internal/api/consent_handlers.go`
 - Create: `internal/api/consent_handlers_test.go`
 
-Endpoints (session auth — user manages their own consents):
-- `GET /api/v1/auth/consents` — list active consents
-- `DELETE /api/v1/auth/consents/{id}` — revoke consent + all associated tokens
+Endpoints (session auth â€” user manages their own consents):
+- `GET /api/v1/auth/consents` â€” list active consents
+- `DELETE /api/v1/auth/consents/{id}` â€” revoke consent + all associated tokens
 
-- [ ] Steps: Write tests → implement → mount → verify → commit
+- [ ] Steps: Write tests â†’ implement â†’ mount â†’ verify â†’ commit
 
 ---
 
-## Wave D — Advanced Grants
+## Wave D â€” Advanced Grants
 
 ### Task 12: Dynamic Client Registration (RFC 7591)
 
@@ -1235,16 +1235,16 @@ Endpoints (session auth — user manages their own consents):
 - Create: `internal/oauth/dcr_test.go`
 
 Endpoints:
-- `POST /oauth/register` — register new client
-- `GET /oauth/register/{client_id}` — get client info (RFC 7592)
-- `PUT /oauth/register/{client_id}` — update client (RFC 7592)
-- `DELETE /oauth/register/{client_id}` — delete client (RFC 7592)
+- `POST /oauth/register` â€” register new client
+- `GET /oauth/register/{client_id}` â€” get client info (RFC 7592)
+- `PUT /oauth/register/{client_id}` â€” update client (RFC 7592)
+- `DELETE /oauth/register/{client_id}` â€” delete client (RFC 7592)
 
 Protected by registration_access_token (SHA-256 hashed in `oauth_dcr_clients`). Rate limited to 5/min/IP.
 
 MCP compatibility: agents discover Shark via AS metadata, then register via DCR. Client metadata validated per RFC 7591 Section 2.
 
-- [ ] Steps: Write tests → implement DCR handler → implement management handlers → mount → verify → commit
+- [ ] Steps: Write tests â†’ implement DCR handler â†’ implement management handlers â†’ mount â†’ verify â†’ commit
 
 ---
 
@@ -1256,15 +1256,15 @@ MCP compatibility: agents discover Shark via AS metadata, then register via DCR.
 - Create: `internal/oauth/consent_templates/device_verify.html`
 
 Endpoints:
-- `POST /oauth/device` — request device code + user code
-- `GET /oauth/device/verify` — render verification page (user enters code)
-- `POST /oauth/device/verify` — user approves/denies
+- `POST /oauth/device` â€” request device code + user code
+- `GET /oauth/device/verify` â€” render verification page (user enters code)
+- `POST /oauth/device/verify` â€” user approves/denies
 
-Token endpoint handling: `grant_type=urn:ietf:params:oauth:grant-type:device_code` — polls until approved/denied/expired. Enforce `interval` parameter, return `slow_down` on violation.
+Token endpoint handling: `grant_type=urn:ietf:params:oauth:grant-type:device_code` â€” polls until approved/denied/expired. Enforce `interval` parameter, return `slow_down` on violation.
 
 User code format: `SHARK-XXXX` (4 chars, uppercase, no ambiguous chars I/O/0/1).
 
-- [ ] Steps: Write tests → implement device flow handlers → implement verification page → add polling logic to token endpoint → mount → verify → commit
+- [ ] Steps: Write tests â†’ implement device flow handlers â†’ implement verification page â†’ add polling logic to token endpoint â†’ mount â†’ verify â†’ commit
 
 ---
 
@@ -1287,11 +1287,11 @@ Key behaviors:
 
 This is the agent-to-agent delegation primitive.
 
-- [ ] Steps: Write tests → implement exchange handler → add to token endpoint dispatch → verify delegation chain in JWT → commit
+- [ ] Steps: Write tests â†’ implement exchange handler â†’ add to token endpoint dispatch â†’ verify delegation chain in JWT â†’ commit
 
 ---
 
-## Wave E — Security Hardening
+## Wave E â€” Security Hardening
 
 ### Task 15: DPoP Proof Validation (RFC 9449)
 
@@ -1300,7 +1300,7 @@ This is the agent-to-agent delegation primitive.
 - Create: `internal/oauth/dpop_test.go`
 
 DPoP binds access tokens to a client's key pair. Two integration points:
-1. **Token endpoint**: validate `DPoP` header proof JWT → store `cnf.jkt` (key thumbprint) in issued token
+1. **Token endpoint**: validate `DPoP` header proof JWT â†’ store `cnf.jkt` (key thumbprint) in issued token
 2. **Resource server middleware**: validate `DPoP` proof matches token's `cnf.jkt`
 
 Validation checks per RFC 9449:
@@ -1313,7 +1313,7 @@ Validation checks per RFC 9449:
 
 Token type changes from `Bearer` to `DPoP` when DPoP is used.
 
-- [ ] Steps: Write tests → implement DPoP validation → integrate with token endpoint → add middleware for resource server validation → commit
+- [ ] Steps: Write tests â†’ implement DPoP validation â†’ integrate with token endpoint â†’ add middleware for resource server validation â†’ commit
 
 ---
 
@@ -1325,12 +1325,12 @@ Token type changes from `Bearer` to `DPoP` when DPoP is used.
 - Create: `internal/oauth/introspect_test.go`
 
 Endpoints:
-- `POST /oauth/introspect` — returns `{active: true/false, ...claims}`. Authenticated (client credentials or admin key).
-- `POST /oauth/revoke` — accepts `token` + optional `token_type_hint`. Always returns 200 (RFC 7009 §2.2 — no error on invalid token). Revokes both access + refresh in same family.
+- `POST /oauth/introspect` â€” returns `{active: true/false, ...claims}`. Authenticated (client credentials or admin key).
+- `POST /oauth/revoke` â€” accepts `token` + optional `token_type_hint`. Always returns 200 (RFC 7009 Â§2.2 â€” no error on invalid token). Revokes both access + refresh in same family.
 
 Introspection response includes: `active`, `scope`, `client_id`, `sub`, `exp`, `iat`, `aud`, `iss`, `jti`, `token_type`, `agent_id`, `act` (delegation).
 
-- [ ] Steps: Write tests → implement introspection → implement revocation → mount → verify → commit
+- [ ] Steps: Write tests â†’ implement introspection â†’ implement revocation â†’ mount â†’ verify â†’ commit
 
 ---
 
@@ -1342,13 +1342,13 @@ Introspection response includes: `active`, `scope`, `client_id`, `sub`, `exp`, `
 
 Accept `resource` parameter on authorize + token endpoints. Bind to `aud` claim in issued JWT. Validate against agent's registered `scopes` (if resource-specific scopes configured).
 
-This ensures tokens are audience-restricted — a token for `https://api.example.com` can't be used at `https://other.example.com`.
+This ensures tokens are audience-restricted â€” a token for `https://api.example.com` can't be used at `https://other.example.com`.
 
-- [ ] Steps: Add resource parameter handling → bind to JWT audience → validate at introspection → test → commit
+- [ ] Steps: Add resource parameter handling â†’ bind to JWT audience â†’ validate at introspection â†’ test â†’ commit
 
 ---
 
-## Wave F — Dashboard + Tests
+## Wave F â€” Dashboard + Tests
 
 ### Task 18: Agent Management Dashboard Page
 
@@ -1367,7 +1367,7 @@ Full CRUD page following `applications.tsx` pattern:
 - Modals: Create agent, Rotate secret, Confirm deactivate
 - CLI footer with equivalent commands
 
-- [ ] Steps: Create component → register in App.tsx + layout.tsx → remove stub → build admin assets → verify in browser → commit
+- [ ] Steps: Create component â†’ register in App.tsx + layout.tsx â†’ remove stub â†’ build admin assets â†’ verify in browser â†’ commit
 
 ---
 
@@ -1378,12 +1378,12 @@ Full CRUD page following `applications.tsx` pattern:
 - Modify: `admin/src/components/App.tsx`
 - Modify: `admin/src/components/empty_shell.tsx` (remove stub)
 
-Shows user → agent consent grants. Admin can view all consents, users can view/revoke their own.
+Shows user â†’ agent consent grants. Admin can view all consents, users can view/revoke their own.
 - Table: user email, agent name, scopes, granted_at, status
 - Revoke action (with confirmation)
 - Filter by agent, user, scope
 
-- [ ] Steps: Create component → register → remove stub → build → verify → commit
+- [ ] Steps: Create component â†’ register â†’ remove stub â†’ build â†’ verify â†’ commit
 
 ---
 
@@ -1400,7 +1400,7 @@ When user visits `/admin/device-flow`, show:
 
 This is the React-based companion to the server-rendered device_verify.html.
 
-- [ ] Steps: Extend existing component → wire to API → test → commit
+- [ ] Steps: Extend existing component â†’ wire to API â†’ test â†’ commit
 
 ---
 
@@ -1417,22 +1417,22 @@ New smoke test sections covering:
 | 14 | AS Metadata | `/.well-known/oauth-authorization-server` returns all required fields |
 | 15 | Agent CRUD | Create/list/get/update/deactivate agent via admin API |
 | 16 | Client Credentials | Agent gets access token with `grant_type=client_credentials` |
-| 17 | Auth Code + PKCE | Full flow: authorize → consent → code → token → /me |
-| 18 | PKCE Enforcement | Missing `code_challenge` → rejected |
-| 19 | Refresh Token Rotation | Refresh → new pair, reuse old refresh → family revoked |
-| 20 | Device Flow | Request device code → approve → poll → token |
-| 21 | Token Exchange | Agent A token → exchange → Agent B token with `act` claim |
-| 22 | DPoP | Token request with DPoP proof → `token_type=DPoP`, cnf.jkt in token |
-| 23 | Introspection | Valid token → `active:true`, revoked → `active:false` |
-| 24 | Revocation | Revoke token → introspect returns inactive |
-| 25 | DCR | Register client → get credentials → use for auth |
-| 26 | Resource Indicators | Token with `resource` → `aud` claim matches |
+| 17 | Auth Code + PKCE | Full flow: authorize â†’ consent â†’ code â†’ token â†’ /me |
+| 18 | PKCE Enforcement | Missing `code_challenge` â†’ rejected |
+| 19 | Refresh Token Rotation | Refresh â†’ new pair, reuse old refresh â†’ family revoked |
+| 20 | Device Flow | Request device code â†’ approve â†’ poll â†’ token |
+| 21 | Token Exchange | Agent A token â†’ exchange â†’ Agent B token with `act` claim |
+| 22 | DPoP | Token request with DPoP proof â†’ `token_type=DPoP`, cnf.jkt in token |
+| 23 | Introspection | Valid token â†’ `active:true`, revoked â†’ `active:false` |
+| 24 | Revocation | Revoke token â†’ introspect returns inactive |
+| 25 | DCR | Register client â†’ get credentials â†’ use for auth |
+| 26 | Resource Indicators | Token with `resource` â†’ `aud` claim matches |
 | 27 | ES256 JWKS | JWKS returns EC key with crv=P-256, token verifiable with it |
 | 28 | Consent Management | User lists/revokes consents via self-service API |
 
 Each test must pass for the phase to be marked complete.
 
-- [ ] Steps: Write smoke script (bash, following existing `smoke_test.sh` patterns) → run against fresh dev instance → fix failures → document in SMOKE_TEST.md → commit
+- [ ] Steps: Write smoke script (bash, following existing `smoke_test.sh` patterns) â†’ run against fresh dev instance â†’ fix failures â†’ document in SMOKE_TEST.md â†’ commit
 
 ---
 
@@ -1441,14 +1441,14 @@ Each test must pass for the phase to be marked complete.
 **Files:** All `*_test.go` files created in previous tasks
 
 Minimum coverage targets:
-- `internal/oauth/store.go` — 80%+ (every fosite interface method)
-- `internal/oauth/handlers.go` — 80%+ (happy path + error paths)
-- `internal/oauth/dpop.go` — 90%+ (security-critical)
-- `internal/oauth/exchange.go` — 90%+ (delegation chain correctness)
-- `internal/storage/agents_sqlite.go` — 80%+ (CRUD + edge cases)
-- `internal/storage/oauth_sqlite.go` — 80%+ (all entity operations)
+- `internal/oauth/store.go` â€” 80%+ (every fosite interface method)
+- `internal/oauth/handlers.go` â€” 80%+ (happy path + error paths)
+- `internal/oauth/dpop.go` â€” 90%+ (security-critical)
+- `internal/oauth/exchange.go` â€” 90%+ (delegation chain correctness)
+- `internal/storage/agents_sqlite.go` â€” 80%+ (CRUD + edge cases)
+- `internal/storage/oauth_sqlite.go` â€” 80%+ (all entity operations)
 
-- [ ] Steps: Run coverage → identify gaps → add tests → verify targets met → commit
+- [ ] Steps: Run coverage â†’ identify gaps â†’ add tests â†’ verify targets met â†’ commit
 
 ---
 
@@ -1467,7 +1467,7 @@ Wire everything together:
 6. Mount consent management under `/api/v1/auth/consents`
 7. Add `WithOAuthServer` option to `api.Server`
 
-- [ ] Steps: Wire startup → mount routes → build binary → run smoke tests → fix issues → commit
+- [ ] Steps: Wire startup â†’ mount routes â†’ build binary â†’ run smoke tests â†’ fix issues â†’ commit
 
 ---
 
@@ -1479,56 +1479,56 @@ Wire everything together:
 Update phase order and mark OAuth 2.1 Agent Auth as done (when all smoke tests pass):
 
 ```
-Phase 5 — OAuth 2.1 + Agent Auth — Done
-Phase 5.5 — Token Vault
-Phase 6 — Proxy + Visual Flow Builder
-Phase 7 — SDK
+Phase 5 â€” OAuth 2.1 + Agent Auth â€” Done
+Phase 5.5 â€” Token Vault
+Phase 6 â€” Proxy + Visual Flow Builder
+Phase 7 â€” SDK
 ```
 
-- [ ] Steps: Update ATTACK.md → commit
+- [ ] Steps: Update ATTACK.md â†’ commit
 
 ---
 
 ## Execution Order (Dependencies)
 
 ```
-Task 1 (migration) ──┐
-Task 2 (deps)     ───┤
-Task 3 (ES256)    ───┤── Wave A (parallel-safe, no interdeps)
-Task 4 (metadata) ───┤
-Task 5 (config)   ───┘
-                      │
-Task 6 (types)    ────┘ depends on Task 1
-                      │
-Task 7 (store)    ────┘ depends on Task 6
-                      │
-Task 8 (server)   ────┘ depends on Task 2, 3, 7
-                      │
-Task 9 (agents)   ──┐
-Task 10 (consent) ──┤── Wave C (depends on Task 7, 8)
-Task 11 (consent API)┘
-                      │
-Task 12 (DCR)     ──┐
-Task 13 (device)  ──┤── Wave D (depends on Task 8)
-Task 14 (exchange)──┘
-                      │
-Task 15 (DPoP)    ──┐
-Task 16 (intro)   ──┤── Wave E (depends on Task 8)
-Task 17 (resource)──┘
-                      │
-Task 18-22        ────── Wave F (depends on all above)
-Task 23           ────── Final wiring (depends on all)
-Task 24           ────── Documentation (last)
+Task 1 (migration) â”€â”€â”
+Task 2 (deps)     â”€â”€â”€â”¤
+Task 3 (ES256)    â”€â”€â”€â”¤â”€â”€ Wave A (parallel-safe, no interdeps)
+Task 4 (metadata) â”€â”€â”€â”¤
+Task 5 (config)   â”€â”€â”€â”˜
+                      â”‚
+Task 6 (types)    â”€â”€â”€â”€â”˜ depends on Task 1
+                      â”‚
+Task 7 (store)    â”€â”€â”€â”€â”˜ depends on Task 6
+                      â”‚
+Task 8 (server)   â”€â”€â”€â”€â”˜ depends on Task 2, 3, 7
+                      â”‚
+Task 9 (agents)   â”€â”€â”
+Task 10 (consent) â”€â”€â”¤â”€â”€ Wave C (depends on Task 7, 8)
+Task 11 (consent API)â”˜
+                      â”‚
+Task 12 (DCR)     â”€â”€â”
+Task 13 (device)  â”€â”€â”¤â”€â”€ Wave D (depends on Task 8)
+Task 14 (exchange)â”€â”€â”˜
+                      â”‚
+Task 15 (DPoP)    â”€â”€â”
+Task 16 (intro)   â”€â”€â”¤â”€â”€ Wave E (depends on Task 8)
+Task 17 (resource)â”€â”€â”˜
+                      â”‚
+Task 18-22        â”€â”€â”€â”€â”€â”€ Wave F (depends on all above)
+Task 23           â”€â”€â”€â”€â”€â”€ Final wiring (depends on all)
+Task 24           â”€â”€â”€â”€â”€â”€ Documentation (last)
 ```
 
 ### Parallelization Opportunities
 
 Within each wave, tasks can be dispatched to parallel subagents:
 
-- **Wave A**: Tasks 1-5 are independent — run all 5 in parallel
-- **Wave C**: Tasks 9-11 are independent — run all 3 in parallel
-- **Wave D**: Tasks 12-14 are independent — run all 3 in parallel
-- **Wave E**: Tasks 15-17 are independent — run all 3 in parallel
+- **Wave A**: Tasks 1-5 are independent â€” run all 5 in parallel
+- **Wave C**: Tasks 9-11 are independent â€” run all 3 in parallel
+- **Wave D**: Tasks 12-14 are independent â€” run all 3 in parallel
+- **Wave E**: Tasks 15-17 are independent â€” run all 3 in parallel
 - **Wave F**: Tasks 18-20 (dashboard) can parallel with 21-22 (tests)
 
 ---

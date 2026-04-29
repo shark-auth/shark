@@ -1,6 +1,6 @@
-// Package jwt implements RS256 JWT issuance, validation, and key management
+﻿// Package jwt implements RS256 JWT issuance, validation, and key management
 // for SharkAuth. Algorithms other than RS256 are rejected at parse time to
-// prevent alg-confusion attacks (RFC 8725 §2.1).
+// prevent alg-confusion attacks (RFC 8725 Â§2.1).
 package jwt
 
 import (
@@ -16,8 +16,8 @@ import (
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // Sentinel errors returned by Validate and related methods.
@@ -29,7 +29,7 @@ var (
 	ErrAlgMismatch      = errors.New("jwt: algorithm mismatch")
 	// ErrRefreshToken is returned when a refresh token is presented where an
 	// access/session token is required. Callers (e.g. middleware) can detect this
-	// specific error to return an actionable error_description to the client (§2.3).
+	// specific error to return an actionable error_description to the client (Â§2.3).
 	ErrRefreshToken = errors.New("jwt: refresh token cannot be used as access credential")
 )
 
@@ -38,7 +38,7 @@ var (
 // Tier, Roles, and Scope are emitted omitempty so existing consumers
 // parsing the legacy shape continue to work, and so refresh tokens
 // (which don't need the enrichment) stay small. They are populated at
-// issuance time from the RBAC store + user metadata — see
+// issuance time from the RBAC store + user metadata â€” see
 // IssueSessionJWT / IssueAccessRefreshPair.
 type Claims struct {
 	gojwt.RegisteredClaims
@@ -54,8 +54,8 @@ type Claims struct {
 type Manager struct {
 	cfg    *config.JWTConfig
 	store  storage.Store
-	base   string // server.base_url — fallback issuer
-	secret string // server.secret — used for AES-GCM key derivation
+	base   string // server.base_url â€” fallback issuer
+	secret string // server.secret â€” used for AES-GCM key derivation
 }
 
 // defaultUserTier is what we bake into Claims.Tier when the user's
@@ -68,7 +68,7 @@ const defaultUserTier = "free"
 // userEnrichment is the Tier + Roles slice baked into an issued JWT for
 // a given user. Returned by resolveEnrichment so IssueSessionJWT and
 // IssueAccessRefreshPair share exactly one code path for role + tier
-// lookup. On partial failure we still return a best-effort struct —
+// lookup. On partial failure we still return a best-effort struct â€”
 // issuance must not fail just because a side-table read blew up.
 type userEnrichment struct {
 	Tier  string
@@ -77,7 +77,7 @@ type userEnrichment struct {
 
 // resolveEnrichment loads roles + tier for user so every issuance site
 // bakes the same claim set. Role lookup errors are logged through the
-// returned error; tier parsing is best-effort — an unreadable metadata
+// returned error; tier parsing is best-effort â€” an unreadable metadata
 // JSON yields the default tier rather than failing issuance.
 //
 // Returns (_, nil) on success. A non-nil error means roles could not be
@@ -110,7 +110,7 @@ func (m *Manager) resolveEnrichment(ctx context.Context, user *storage.User) (us
 
 // userTierFromMetadata parses the user's metadata JSON and returns the
 // "tier" field if present and non-empty. On any parse failure we return
-// defaultUserTier — invalid metadata must not break issuance.
+// defaultUserTier â€” invalid metadata must not break issuance.
 func userTierFromMetadata(metadataJSON string) string {
 	if metadataJSON == "" {
 		return defaultUserTier
@@ -255,7 +255,7 @@ func (m *Manager) IssueSessionJWT(ctx context.Context, user *storage.User, sessi
 	// Bake Tier + Roles into the session JWT so downstream consumers
 	// (proxy rules, admin handlers) can authorize without re-hitting the
 	// RBAC store on every request. A fetch error here falls through with
-	// empty roles rather than failing issuance — the rules engine will
+	// empty roles rather than failing issuance â€” the rules engine will
 	// treat it as "no roles" and deny any role:/global_role: predicate.
 	enrich, _ := m.resolveEnrichment(ctx, user)
 
@@ -295,7 +295,7 @@ func (m *Manager) IssueAccessRefreshPair(ctx context.Context, user *storage.User
 	refreshTTL := m.cfg.RefreshTokenTTLDuration()
 	aud := gojwt.ClaimStrings{m.cfg.Audience}
 
-	// Enrichment only rides on the access token — the refresh token is
+	// Enrichment only rides on the access token â€” the refresh token is
 	// opaque-ish and only used to mint new access tokens, so baking
 	// roles/tier in would just make refresh payloads larger for no gain.
 	enrich, _ := m.resolveEnrichment(ctx, user)
@@ -349,7 +349,7 @@ func (m *Manager) IssueAccessRefreshPair(ctx context.Context, user *storage.User
 // and issues a new access+refresh pair.
 // The one-time-use revocation check runs regardless of check_per_request.
 func (m *Manager) Refresh(ctx context.Context, refreshToken string) (newAccess, newRefresh string, err error) {
-	// We validate here with a relaxed token-type check — we need to allow
+	// We validate here with a relaxed token-type check â€” we need to allow
 	// refresh tokens through for this specific operation.
 	claims, err := m.validateInternal(ctx, refreshToken, true)
 	if err != nil {
@@ -381,7 +381,7 @@ func (m *Manager) Refresh(ctx context.Context, refreshToken string) (newAccess, 
 }
 
 // Validate parses and validates a JWT. Returns Claims on success, or a sentinel
-// error from the Err* set. Validation order per PHASE3.md §1.5.
+// error from the Err* set. Validation order per PHASE3.md Â§1.5.
 func (m *Manager) Validate(ctx context.Context, token string) (*Claims, error) {
 	return m.validateInternal(ctx, token, false)
 }
@@ -443,7 +443,7 @@ func (m *Manager) validateInternal(ctx context.Context, tokenStr string, allowRe
 	// Token type enforcement.
 	if claims.TokenType == "refresh" && !allowRefresh {
 		// Return a specific sentinel so the middleware can report an actionable
-		// error_description rather than a generic "invalid_token" (§2.3).
+		// error_description rather than a generic "invalid_token" (Â§2.3).
 		return nil, ErrRefreshToken
 	}
 	allowed := map[string]bool{"session": true, "access": true, "refresh": allowRefresh}

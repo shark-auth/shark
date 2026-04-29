@@ -13,54 +13,69 @@ import (
 
 // SQLiteStore implements the Store interface using SQLite.
 type SQLiteStore struct {
-	db   *sql.DB
-	path string // DSN / file path passed to NewSQLiteStore
+	writer *sql.DB // Single writer connection
+	reader *sql.DB // Concurrent reader pool
+	path   string  // DSN / file path passed to NewSQLiteStore
 }
 
 // NewSQLiteStore opens a SQLite database at the given path and configures it
-// with WAL mode and foreign keys enabled.
+// for high-performance Single Writer, Multiple Readers (SWMR) access.
 func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite", dsn)
+	// 1. Initialize Writer Pool (Single Writer)
+	writer, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("opening sqlite: %w", err)
+		return nil, fmt.Errorf("opening writer sqlite: %w", err)
+	}
+	writer.SetMaxOpenConns(1)
+	writer.SetMaxIdleConns(1)
+	writer.SetConnMaxLifetime(time.Hour)
+
+	// 2. Initialize Reader Pool (Concurrent Readers)
+	reader, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		writer.Close()
+		return nil, fmt.Errorf("opening reader sqlite: %w", err)
+	}
+	reader.SetMaxOpenConns(25)
+	reader.SetMaxIdleConns(5)
+	reader.SetConnMaxLifetime(time.Hour)
+
+	// 3. Configure Pragmas on both pools
+	configure := func(db *sql.DB, label string) error {
+		pragmas := []string{
+			"PRAGMA journal_mode=WAL",
+			"PRAGMA synchronous=NORMAL",
+			"PRAGMA mmap_size=268435456", // 256MB
+			"PRAGMA temp_store=MEMORY",
+			"PRAGMA cache_size=-2000", // 2MB
+			"PRAGMA busy_timeout=30000",
+			"PRAGMA foreign_keys=ON",
+		}
+		for _, p := range pragmas {
+			if _, err := db.Exec(p); err != nil {
+				return fmt.Errorf("setting %s on %s: %w", p, label, err)
+			}
+		}
+		return nil
 	}
 
-	// SQLite is single-writer: capping the pool at 1 connection eliminates all
-	// SQLITE_BUSY "database is locked" errors that arise when multiple goroutines
-	// (e.g. the webhook retry loop + HTTP handlers) race to write concurrently.
-	// `:memory:` needs this for correctness (each connection gets its own private
-	// DB); file-backed DBs need it for write serialization.
-	db.SetMaxOpenConns(1)
-
-	// Verify connection
-	if err := db.Ping(); err != nil {
-		db.Close() //#nosec G104 -- cleanup after open failure; primary error is returned below
-		return nil, fmt.Errorf("pinging sqlite: %w", err)
+	if err := configure(writer, "writer"); err != nil {
+		writer.Close()
+		reader.Close()
+		return nil, err
+	}
+	if err := configure(reader, "reader"); err != nil {
+		writer.Close()
+		reader.Close()
+		return nil, err
 	}
 
-	// Set pragmas via exec (modernc.org/sqlite doesn't support DSN pragmas)
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close() //#nosec G104 -- cleanup after pragma failure; primary error is returned below
-		return nil, fmt.Errorf("setting WAL mode: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		db.Close() //#nosec G104 -- cleanup after pragma failure; primary error is returned below
-		return nil, fmt.Errorf("enabling foreign keys: %w", err)
-	}
-	// busy_timeout: if a second goroutine somehow still contends (e.g. the
-	// Python test db_conn or an external tool opens the DB), wait up to 5 s
-	// before returning SQLITE_BUSY instead of failing immediately.
-	if _, err := db.Exec("PRAGMA busy_timeout=30000"); err != nil {
-		db.Close() //#nosec G104 -- cleanup after pragma failure; primary error is returned below
-		return nil, fmt.Errorf("setting busy_timeout: %w", err)
-	}
-
-	return &SQLiteStore{db: db, path: dsn}, nil
+	return &SQLiteStore{writer: writer, reader: reader, path: dsn}, nil
 }
 
-// DB returns the underlying *sql.DB.
+// DB returns the underlying writer *sql.DB for compatibility with migrations.
 func (s *SQLiteStore) DB() *sql.DB {
-	return s.db
+	return s.writer
 }
 
 // DBPath returns the filesystem path (or DSN) of the open SQLite database.
@@ -68,11 +83,15 @@ func (s *SQLiteStore) DBPath() string {
 	return s.path
 }
 
-// Close closes the database connection.
+// Close closes both database connection pools.
 func (s *SQLiteStore) Close() error {
-	return s.db.Close()
+	errW := s.writer.Close()
+	errR := s.reader.Close()
+	if errW != nil {
+		return errW
+	}
+	return errR
 }
-
 // WipeAllData truncates all user-data tables while preserving goose migration
 // metadata. Used by POST /admin/system/reset to start fresh without
 // dropping and re-creating the schema.
@@ -117,7 +136,7 @@ func (s *SQLiteStore) WipeAllData(ctx context.Context) error {
 		"user_org_roles",
 	}
 	for _, t := range tables {
-		if _, err := s.db.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+		if _, err := s.writer.ExecContext(ctx, "DELETE FROM "+t); err != nil {
 			// Ignore "no such table" — not all tables exist in all migrations.
 			if strings.Contains(err.Error(), "no such table") {
 				continue
@@ -131,7 +150,7 @@ func (s *SQLiteStore) WipeAllData(ctx context.Context) error {
 // RevokeAllAdminAPIKeys soft-deletes all API keys with "*" (admin) scope.
 func (s *SQLiteStore) RevokeAllAdminAPIKeys(ctx context.Context) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE api_keys SET revoked_at = ? WHERE scopes LIKE '%"*"%' AND revoked_at IS NULL`,
 		now)
 	return err
@@ -140,7 +159,7 @@ func (s *SQLiteStore) RevokeAllAdminAPIKeys(ctx context.Context) error {
 // --- Users ---
 
 func (s *SQLiteStore) CreateUser(ctx context.Context, u *User) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO users (id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Email, boolToInt(u.EmailVerified), u.PasswordHash, u.HashType,
@@ -151,13 +170,13 @@ func (s *SQLiteStore) CreateUser(ctx context.Context, u *User) error {
 }
 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (*User, error) {
-	return s.scanUser(s.db.QueryRowContext(ctx,
+	return s.scanUser(s.reader.QueryRowContext(ctx,
 		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at
 		 FROM users WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	return s.scanUser(s.db.QueryRowContext(ctx,
+	return s.scanUser(s.reader.QueryRowContext(ctx,
 		`SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at
 		 FROM users WHERE email = ?`, email))
 }
@@ -215,7 +234,7 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 	query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
 	args = append(args, opts.Limit, opts.Offset)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +252,7 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 }
 
 func (s *SQLiteStore) UpdateUser(ctx context.Context, u *User) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE users SET email=?, email_verified=?, password_hash=?, hash_type=?, name=?, avatar_url=?, mfa_enabled=?, mfa_secret=?, mfa_verified=?, mfa_verified_at=?, metadata=?, updated_at=?, last_login_at=?
 		 WHERE id=?`,
 		u.Email, boolToInt(u.EmailVerified), u.PasswordHash, u.HashType,
@@ -245,7 +264,7 @@ func (s *SQLiteStore) UpdateUser(ctx context.Context, u *User) error {
 }
 
 func (s *SQLiteStore) DeleteUser(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
 	return err
 }
 
@@ -254,7 +273,7 @@ func (s *SQLiteStore) DeleteUser(ctx context.Context, id string) error {
 // sql.ErrNoRows as the "already sent / nothing to do" signal — the
 // verify-email handler reads that and skips the send goroutine.
 func (s *SQLiteStore) MarkWelcomeEmailSent(ctx context.Context, userID string) error {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.writer.ExecContext(ctx,
 		`UPDATE users SET welcome_email_sent = 1 WHERE id = ? AND welcome_email_sent = 0`, userID)
 	if err != nil {
 		return err
@@ -305,7 +324,7 @@ func (s *SQLiteStore) scanUserFromRows(rows *sql.Rows) (*User, error) {
 // --- Sessions ---
 
 func (s *SQLiteStore) CreateSession(ctx context.Context, sess *Session) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO sessions (id, user_id, ip, user_agent, mfa_passed, auth_method, expires_at, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, sess.IP, sess.UserAgent,
@@ -317,7 +336,7 @@ func (s *SQLiteStore) CreateSession(ctx context.Context, sess *Session) error {
 func (s *SQLiteStore) GetSessionByID(ctx context.Context, id string) (*Session, error) {
 	var sess Session
 	var mfaPassed int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, user_id, ip, user_agent, mfa_passed, auth_method, expires_at, created_at
 		 FROM sessions WHERE id = ?`, id,
 	).Scan(&sess.ID, &sess.UserID, &sess.IP, &sess.UserAgent, &mfaPassed,
@@ -330,7 +349,7 @@ func (s *SQLiteStore) GetSessionByID(ctx context.Context, id string) (*Session, 
 }
 
 func (s *SQLiteStore) GetSessionsByUserID(ctx context.Context, userID string) ([]*Session, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, user_id, ip, user_agent, mfa_passed, auth_method, expires_at, created_at
 		 FROM sessions WHERE user_id = ? ORDER BY created_at DESC`, userID)
 	if err != nil {
@@ -353,13 +372,13 @@ func (s *SQLiteStore) GetSessionsByUserID(ctx context.Context, userID string) ([
 }
 
 func (s *SQLiteStore) DeleteSession(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, id)
 	return err
 }
 
 func (s *SQLiteStore) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < ?`, now)
+	res, err := s.writer.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < ?`, now)
 	if err != nil {
 		return 0, err
 	}
@@ -367,7 +386,7 @@ func (s *SQLiteStore) DeleteExpiredSessions(ctx context.Context) (int64, error) 
 }
 
 func (s *SQLiteStore) UpdateSessionMFAPassed(ctx context.Context, id string, mfaPassed bool) error {
-	result, err := s.db.ExecContext(ctx,
+	result, err := s.writer.ExecContext(ctx,
 		`UPDATE sessions SET mfa_passed = ? WHERE id = ?`,
 		boolToInt(mfaPassed), id,
 	)
@@ -387,7 +406,7 @@ func (s *SQLiteStore) UpdateSessionMFAPassed(ctx context.Context, id string, mfa
 // --- OAuthAccounts ---
 
 func (s *SQLiteStore) CreateOAuthAccount(ctx context.Context, a *OAuthAccount) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO oauth_accounts (id, user_id, provider, provider_id, email, access_token, refresh_token, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.UserID, a.Provider, a.ProviderID, a.Email, a.AccessToken, a.RefreshToken, a.CreatedAt,
@@ -397,7 +416,7 @@ func (s *SQLiteStore) CreateOAuthAccount(ctx context.Context, a *OAuthAccount) e
 
 func (s *SQLiteStore) GetOAuthAccountByProviderID(ctx context.Context, provider, providerID string) (*OAuthAccount, error) {
 	var a OAuthAccount
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, user_id, provider, provider_id, email, access_token, refresh_token, created_at
 		 FROM oauth_accounts WHERE provider = ? AND provider_id = ?`, provider, providerID,
 	).Scan(&a.ID, &a.UserID, &a.Provider, &a.ProviderID, &a.Email, &a.AccessToken, &a.RefreshToken, &a.CreatedAt)
@@ -408,7 +427,7 @@ func (s *SQLiteStore) GetOAuthAccountByProviderID(ctx context.Context, provider,
 }
 
 func (s *SQLiteStore) GetOAuthAccountsByUserID(ctx context.Context, userID string) ([]*OAuthAccount, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, user_id, provider, provider_id, email, access_token, refresh_token, created_at
 		 FROM oauth_accounts WHERE user_id = ?`, userID)
 	if err != nil {
@@ -428,14 +447,14 @@ func (s *SQLiteStore) GetOAuthAccountsByUserID(ctx context.Context, userID strin
 }
 
 func (s *SQLiteStore) DeleteOAuthAccount(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM oauth_accounts WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM oauth_accounts WHERE id = ?`, id)
 	return err
 }
 
 // --- PasskeyCredentials ---
 
 func (s *SQLiteStore) CreatePasskeyCredential(ctx context.Context, c *PasskeyCredential) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO passkey_credentials (id, user_id, credential_id, public_key, aaguid, sign_count, name, transports, backed_up, created_at, last_used_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.ID, c.UserID, c.CredentialID, c.PublicKey, c.AAGUID, c.SignCount,
@@ -447,7 +466,7 @@ func (s *SQLiteStore) CreatePasskeyCredential(ctx context.Context, c *PasskeyCre
 func (s *SQLiteStore) GetPasskeyByCredentialID(ctx context.Context, credentialID []byte) (*PasskeyCredential, error) {
 	var c PasskeyCredential
 	var backedUp int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, user_id, credential_id, public_key, aaguid, sign_count, name, transports, backed_up, created_at, last_used_at
 		 FROM passkey_credentials WHERE credential_id = ?`, credentialID,
 	).Scan(&c.ID, &c.UserID, &c.CredentialID, &c.PublicKey, &c.AAGUID, &c.SignCount,
@@ -460,7 +479,7 @@ func (s *SQLiteStore) GetPasskeyByCredentialID(ctx context.Context, credentialID
 }
 
 func (s *SQLiteStore) GetPasskeysByUserID(ctx context.Context, userID string) ([]*PasskeyCredential, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, user_id, credential_id, public_key, aaguid, sign_count, name, transports, backed_up, created_at, last_used_at
 		 FROM passkey_credentials WHERE user_id = ?`, userID)
 	if err != nil {
@@ -483,7 +502,7 @@ func (s *SQLiteStore) GetPasskeysByUserID(ctx context.Context, userID string) ([
 }
 
 func (s *SQLiteStore) UpdatePasskeyCredential(ctx context.Context, c *PasskeyCredential) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE passkey_credentials SET sign_count=?, name=?, last_used_at=? WHERE id=?`,
 		c.SignCount, c.Name, c.LastUsedAt, c.ID,
 	)
@@ -491,14 +510,14 @@ func (s *SQLiteStore) UpdatePasskeyCredential(ctx context.Context, c *PasskeyCre
 }
 
 func (s *SQLiteStore) DeletePasskeyCredential(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM passkey_credentials WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM passkey_credentials WHERE id = ?`, id)
 	return err
 }
 
 // --- MagicLinkTokens ---
 
 func (s *SQLiteStore) CreateMagicLinkToken(ctx context.Context, t *MagicLinkToken) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO magic_link_tokens (id, email, token_hash, used, expires_at, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		t.ID, t.Email, t.TokenHash, boolToInt(t.Used), t.ExpiresAt, t.CreatedAt,
@@ -509,7 +528,7 @@ func (s *SQLiteStore) CreateMagicLinkToken(ctx context.Context, t *MagicLinkToke
 func (s *SQLiteStore) GetMagicLinkTokenByHash(ctx context.Context, tokenHash string) (*MagicLinkToken, error) {
 	var t MagicLinkToken
 	var used int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, email, token_hash, used, expires_at, created_at
 		 FROM magic_link_tokens WHERE token_hash = ?`, tokenHash,
 	).Scan(&t.ID, &t.Email, &t.TokenHash, &used, &t.ExpiresAt, &t.CreatedAt)
@@ -521,13 +540,13 @@ func (s *SQLiteStore) GetMagicLinkTokenByHash(ctx context.Context, tokenHash str
 }
 
 func (s *SQLiteStore) MarkMagicLinkTokenUsed(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE magic_link_tokens SET used = 1 WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `UPDATE magic_link_tokens SET used = 1 WHERE id = ?`, id)
 	return err
 }
 
 func (s *SQLiteStore) DeleteExpiredMagicLinkTokens(ctx context.Context) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.ExecContext(ctx, `DELETE FROM magic_link_tokens WHERE expires_at < ?`, now)
+	res, err := s.writer.ExecContext(ctx, `DELETE FROM magic_link_tokens WHERE expires_at < ?`, now)
 	if err != nil {
 		return 0, err
 	}
@@ -537,7 +556,7 @@ func (s *SQLiteStore) DeleteExpiredMagicLinkTokens(ctx context.Context) (int64, 
 // --- MFARecoveryCodes ---
 
 func (s *SQLiteStore) CreateMFARecoveryCodes(ctx context.Context, codes []*MFARecoveryCode) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.writer.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -560,7 +579,7 @@ func (s *SQLiteStore) CreateMFARecoveryCodes(ctx context.Context, codes []*MFARe
 }
 
 func (s *SQLiteStore) GetMFARecoveryCodesByUserID(ctx context.Context, userID string) ([]*MFARecoveryCode, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, user_id, code, used, created_at FROM mfa_recovery_codes WHERE user_id = ?`, userID)
 	if err != nil {
 		return nil, err
@@ -581,19 +600,19 @@ func (s *SQLiteStore) GetMFARecoveryCodesByUserID(ctx context.Context, userID st
 }
 
 func (s *SQLiteStore) MarkMFARecoveryCodeUsed(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE mfa_recovery_codes SET used = 1 WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `UPDATE mfa_recovery_codes SET used = 1 WHERE id = ?`, id)
 	return err
 }
 
 func (s *SQLiteStore) DeleteAllMFARecoveryCodesByUserID(ctx context.Context, userID string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM mfa_recovery_codes WHERE user_id = ?`, userID)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM mfa_recovery_codes WHERE user_id = ?`, userID)
 	return err
 }
 
 // --- Roles ---
 
 func (s *SQLiteStore) CreateRole(ctx context.Context, r *Role) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO roles (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
 		r.ID, r.Name, r.Description, r.CreatedAt, r.UpdatedAt,
 	)
@@ -602,7 +621,7 @@ func (s *SQLiteStore) CreateRole(ctx context.Context, r *Role) error {
 
 func (s *SQLiteStore) GetRoleByID(ctx context.Context, id string) (*Role, error) {
 	var r Role
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, name, description, created_at, updated_at FROM roles WHERE id = ?`, id,
 	).Scan(&r.ID, &r.Name, &r.Description, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
@@ -613,7 +632,7 @@ func (s *SQLiteStore) GetRoleByID(ctx context.Context, id string) (*Role, error)
 
 func (s *SQLiteStore) GetRoleByName(ctx context.Context, name string) (*Role, error) {
 	var r Role
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, name, description, created_at, updated_at FROM roles WHERE name = ?`, name,
 	).Scan(&r.ID, &r.Name, &r.Description, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
@@ -623,7 +642,7 @@ func (s *SQLiteStore) GetRoleByName(ctx context.Context, name string) (*Role, er
 }
 
 func (s *SQLiteStore) ListRoles(ctx context.Context) ([]*Role, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, name, description, created_at, updated_at FROM roles ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -642,7 +661,7 @@ func (s *SQLiteStore) ListRoles(ctx context.Context) ([]*Role, error) {
 }
 
 func (s *SQLiteStore) UpdateRole(ctx context.Context, r *Role) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE roles SET name=?, description=?, updated_at=? WHERE id=?`,
 		r.Name, r.Description, r.UpdatedAt, r.ID,
 	)
@@ -650,14 +669,14 @@ func (s *SQLiteStore) UpdateRole(ctx context.Context, r *Role) error {
 }
 
 func (s *SQLiteStore) DeleteRole(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM roles WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM roles WHERE id = ?`, id)
 	return err
 }
 
 // --- Permissions ---
 
 func (s *SQLiteStore) CreatePermission(ctx context.Context, p *Permission) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO permissions (id, action, resource, created_at) VALUES (?, ?, ?, ?)`,
 		p.ID, p.Action, p.Resource, p.CreatedAt,
 	)
@@ -666,7 +685,7 @@ func (s *SQLiteStore) CreatePermission(ctx context.Context, p *Permission) error
 
 func (s *SQLiteStore) GetPermissionByID(ctx context.Context, id string) (*Permission, error) {
 	var p Permission
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, action, resource, created_at FROM permissions WHERE id = ?`, id,
 	).Scan(&p.ID, &p.Action, &p.Resource, &p.CreatedAt)
 	if err != nil {
@@ -676,7 +695,7 @@ func (s *SQLiteStore) GetPermissionByID(ctx context.Context, id string) (*Permis
 }
 
 func (s *SQLiteStore) ListPermissions(ctx context.Context) ([]*Permission, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, action, resource, created_at FROM permissions ORDER BY resource, action`)
 	if err != nil {
 		return nil, err
@@ -696,7 +715,7 @@ func (s *SQLiteStore) ListPermissions(ctx context.Context) ([]*Permission, error
 
 func (s *SQLiteStore) GetPermissionByActionResource(ctx context.Context, action, resource string) (*Permission, error) {
 	var p Permission
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, action, resource, created_at FROM permissions WHERE action = ? AND resource = ?`, action, resource,
 	).Scan(&p.ID, &p.Action, &p.Resource, &p.CreatedAt)
 	if err != nil {
@@ -706,14 +725,14 @@ func (s *SQLiteStore) GetPermissionByActionResource(ctx context.Context, action,
 }
 
 func (s *SQLiteStore) DeletePermission(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM permissions WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM permissions WHERE id = ?`, id)
 	return err
 }
 
 // --- RolePermissions ---
 
 func (s *SQLiteStore) AttachPermissionToRole(ctx context.Context, roleID, permissionID string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
 		roleID, permissionID,
 	)
@@ -721,7 +740,7 @@ func (s *SQLiteStore) AttachPermissionToRole(ctx context.Context, roleID, permis
 }
 
 func (s *SQLiteStore) DetachPermissionFromRole(ctx context.Context, roleID, permissionID string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?`,
 		roleID, permissionID,
 	)
@@ -729,7 +748,7 @@ func (s *SQLiteStore) DetachPermissionFromRole(ctx context.Context, roleID, perm
 }
 
 func (s *SQLiteStore) GetPermissionsByRoleID(ctx context.Context, roleID string) ([]*Permission, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT p.id, p.action, p.resource, p.created_at
 		 FROM permissions p
 		 INNER JOIN role_permissions rp ON rp.permission_id = p.id
@@ -754,7 +773,7 @@ func (s *SQLiteStore) GetPermissionsByRoleID(ctx context.Context, roleID string)
 // --- UserRoles ---
 
 func (s *SQLiteStore) AssignRoleToUser(ctx context.Context, userID, roleID string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)`,
 		userID, roleID,
 	)
@@ -762,7 +781,7 @@ func (s *SQLiteStore) AssignRoleToUser(ctx context.Context, userID, roleID strin
 }
 
 func (s *SQLiteStore) RemoveRoleFromUser(ctx context.Context, userID, roleID string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`DELETE FROM user_roles WHERE user_id = ? AND role_id = ?`,
 		userID, roleID,
 	)
@@ -770,7 +789,7 @@ func (s *SQLiteStore) RemoveRoleFromUser(ctx context.Context, userID, roleID str
 }
 
 func (s *SQLiteStore) GetRolesByUserID(ctx context.Context, userID string) ([]*Role, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT r.id, r.name, r.description, r.created_at, r.updated_at
 		 FROM roles r
 		 INNER JOIN user_roles ur ON ur.role_id = r.id
@@ -793,7 +812,7 @@ func (s *SQLiteStore) GetRolesByUserID(ctx context.Context, userID string) ([]*R
 }
 
 func (s *SQLiteStore) GetUsersByRoleID(ctx context.Context, roleID string) ([]*User, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at, u.mfa_verified_at
 		 FROM users u
 		 INNER JOIN user_roles ur ON ur.user_id = u.id
@@ -818,7 +837,7 @@ func (s *SQLiteStore) GetUsersByRoleID(ctx context.Context, roleID string) ([]*U
 // every role that grants the given permission. Used by the dashboard's
 // "where is this permission used?" reverse lookup.
 func (s *SQLiteStore) GetRolesByPermissionID(ctx context.Context, permissionID string) ([]*Role, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT r.id, r.name, r.description, r.created_at, r.updated_at
 		 FROM roles r
 		 INNER JOIN role_permissions rp ON rp.role_id = r.id
@@ -844,7 +863,7 @@ func (s *SQLiteStore) GetRolesByPermissionID(ctx context.Context, permissionID s
 // any role assignment. DISTINCT collapses duplicates when a user has the
 // permission through multiple roles. Used by the RBAC reverse-lookup card.
 func (s *SQLiteStore) GetUsersByPermissionID(ctx context.Context, permissionID string) ([]*User, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT DISTINCT u.id, u.email, u.email_verified, u.password_hash, u.hash_type, u.name, u.avatar_url, u.mfa_enabled, u.mfa_secret, u.mfa_verified, u.metadata, u.created_at, u.updated_at, u.last_login_at, u.mfa_verified_at
 		 FROM users u
 		 INNER JOIN user_roles ur ON ur.user_id = u.id
@@ -880,7 +899,7 @@ func (s *SQLiteStore) BatchCountRolesByPermissionIDs(ctx context.Context, permis
 	for i, id := range permissionIDs {
 		args[i] = id
 	}
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		fmt.Sprintf(`SELECT permission_id, COUNT(DISTINCT role_id) AS cnt
 		             FROM role_permissions WHERE permission_id IN (%s)
 		             GROUP BY permission_id`, placeholders),
@@ -914,7 +933,7 @@ func (s *SQLiteStore) BatchCountUsersByPermissionIDs(ctx context.Context, permis
 	for i, id := range permissionIDs {
 		args[i] = id
 	}
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		fmt.Sprintf(`SELECT rp.permission_id, COUNT(DISTINCT ur.user_id) AS cnt
 		             FROM role_permissions rp
 		             INNER JOIN user_roles ur ON ur.role_id = rp.role_id
@@ -940,7 +959,7 @@ func (s *SQLiteStore) BatchCountUsersByPermissionIDs(ctx context.Context, permis
 // --- SSOConnections ---
 
 func (s *SQLiteStore) CreateSSOConnection(ctx context.Context, c *SSOConnection) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO sso_connections (id, type, name, domain, saml_idp_url, saml_idp_cert, saml_sp_entity_id, saml_sp_acs_url, oidc_issuer, oidc_client_id, oidc_client_secret, enabled, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.ID, c.Type, c.Name, c.Domain,
@@ -952,19 +971,19 @@ func (s *SQLiteStore) CreateSSOConnection(ctx context.Context, c *SSOConnection)
 }
 
 func (s *SQLiteStore) GetSSOConnectionByID(ctx context.Context, id string) (*SSOConnection, error) {
-	return s.scanSSOConnection(s.db.QueryRowContext(ctx,
+	return s.scanSSOConnection(s.reader.QueryRowContext(ctx,
 		`SELECT id, type, name, domain, saml_idp_url, saml_idp_cert, saml_sp_entity_id, saml_sp_acs_url, oidc_issuer, oidc_client_id, oidc_client_secret, enabled, created_at, updated_at
 		 FROM sso_connections WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetSSOConnectionByDomain(ctx context.Context, domain string) (*SSOConnection, error) {
-	return s.scanSSOConnection(s.db.QueryRowContext(ctx,
+	return s.scanSSOConnection(s.reader.QueryRowContext(ctx,
 		`SELECT id, type, name, domain, saml_idp_url, saml_idp_cert, saml_sp_entity_id, saml_sp_acs_url, oidc_issuer, oidc_client_id, oidc_client_secret, enabled, created_at, updated_at
 		 FROM sso_connections WHERE domain = ? AND enabled = 1`, domain))
 }
 
 func (s *SQLiteStore) ListSSOConnections(ctx context.Context) ([]*SSOConnection, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, type, name, domain, saml_idp_url, saml_idp_cert, saml_sp_entity_id, saml_sp_acs_url, oidc_issuer, oidc_client_id, oidc_client_secret, enabled, created_at, updated_at
 		 FROM sso_connections ORDER BY name`)
 	if err != nil {
@@ -989,7 +1008,7 @@ func (s *SQLiteStore) ListSSOConnections(ctx context.Context) ([]*SSOConnection,
 }
 
 func (s *SQLiteStore) UpdateSSOConnection(ctx context.Context, c *SSOConnection) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE sso_connections SET type=?, name=?, domain=?, saml_idp_url=?, saml_idp_cert=?, saml_sp_entity_id=?, saml_sp_acs_url=?, oidc_issuer=?, oidc_client_id=?, oidc_client_secret=?, enabled=?, updated_at=?
 		 WHERE id=?`,
 		c.Type, c.Name, c.Domain,
@@ -1001,7 +1020,7 @@ func (s *SQLiteStore) UpdateSSOConnection(ctx context.Context, c *SSOConnection)
 }
 
 func (s *SQLiteStore) DeleteSSOConnection(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM sso_connections WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM sso_connections WHERE id = ?`, id)
 	return err
 }
 
@@ -1022,7 +1041,7 @@ func (s *SQLiteStore) scanSSOConnection(row *sql.Row) (*SSOConnection, error) {
 // --- SSOIdentities ---
 
 func (s *SQLiteStore) CreateSSOIdentity(ctx context.Context, i *SSOIdentity) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO sso_identities (id, user_id, connection_id, provider_sub, created_at)
 		 VALUES (?, ?, ?, ?, ?)`,
 		i.ID, i.UserID, i.ConnectionID, i.ProviderSub, i.CreatedAt,
@@ -1032,7 +1051,7 @@ func (s *SQLiteStore) CreateSSOIdentity(ctx context.Context, i *SSOIdentity) err
 
 func (s *SQLiteStore) GetSSOIdentityByConnectionAndSub(ctx context.Context, connectionID, providerSub string) (*SSOIdentity, error) {
 	var i SSOIdentity
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, user_id, connection_id, provider_sub, created_at
 		 FROM sso_identities WHERE connection_id = ? AND provider_sub = ?`,
 		connectionID, providerSub,
@@ -1044,7 +1063,7 @@ func (s *SQLiteStore) GetSSOIdentityByConnectionAndSub(ctx context.Context, conn
 }
 
 func (s *SQLiteStore) GetSSOIdentitiesByUserID(ctx context.Context, userID string) ([]*SSOIdentity, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, user_id, connection_id, provider_sub, created_at
 		 FROM sso_identities WHERE user_id = ?`, userID)
 	if err != nil {
@@ -1066,7 +1085,7 @@ func (s *SQLiteStore) GetSSOIdentitiesByUserID(ctx context.Context, userID strin
 // --- APIKeys ---
 
 func (s *SQLiteStore) CreateAPIKey(ctx context.Context, k *APIKey) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO api_keys (id, name, key_hash, key_prefix, key_suffix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		k.ID, k.Name, k.KeyHash, k.KeyPrefix, k.KeySuffix, k.Scopes, k.RateLimit,
@@ -1076,19 +1095,19 @@ func (s *SQLiteStore) CreateAPIKey(ctx context.Context, k *APIKey) error {
 }
 
 func (s *SQLiteStore) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (*APIKey, error) {
-	return s.scanAPIKey(s.db.QueryRowContext(ctx,
+	return s.scanAPIKey(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, key_hash, key_prefix, key_suffix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
 		 FROM api_keys WHERE key_hash = ?`, keyHash))
 }
 
 func (s *SQLiteStore) GetAPIKeyByID(ctx context.Context, id string) (*APIKey, error) {
-	return s.scanAPIKey(s.db.QueryRowContext(ctx,
+	return s.scanAPIKey(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, key_hash, key_prefix, key_suffix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
 		 FROM api_keys WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) ListAPIKeys(ctx context.Context) ([]*APIKey, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, name, key_hash, key_prefix, key_suffix, scopes, rate_limit, expires_at, last_used_at, created_at, revoked_at
 		 FROM api_keys ORDER BY created_at DESC`)
 	if err != nil {
@@ -1109,7 +1128,7 @@ func (s *SQLiteStore) ListAPIKeys(ctx context.Context) ([]*APIKey, error) {
 }
 
 func (s *SQLiteStore) UpdateAPIKey(ctx context.Context, k *APIKey) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE api_keys SET name=?, scopes=?, rate_limit=?, expires_at=?, last_used_at=? WHERE id=?`,
 		k.Name, k.Scopes, k.RateLimit, k.ExpiresAt, k.LastUsedAt, k.ID,
 	)
@@ -1117,7 +1136,7 @@ func (s *SQLiteStore) UpdateAPIKey(ctx context.Context, k *APIKey) error {
 }
 
 func (s *SQLiteStore) RevokeAPIKey(ctx context.Context, id string, revokedAt time.Time) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE api_keys SET revoked_at = ? WHERE id = ?`,
 		revokedAt.UTC().Format(time.RFC3339), id,
 	)
@@ -1125,7 +1144,7 @@ func (s *SQLiteStore) RevokeAPIKey(ctx context.Context, id string, revokedAt tim
 }
 
 func (s *SQLiteStore) DeleteAPIKey(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ?`, id)
 	return err
 }
 
@@ -1143,7 +1162,7 @@ func (s *SQLiteStore) CountActiveAPIKeysByScope(ctx context.Context, scope strin
 	var count int
 	pattern := fmt.Sprintf("%%%q%%", scope)
 	// Match keys that contain the scope in their JSON scopes array, are not revoked, and not expired
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM api_keys
 		 WHERE revoked_at IS NULL
 		 AND (expires_at IS NULL OR expires_at = '' OR expires_at > ?)
@@ -1156,7 +1175,7 @@ func (s *SQLiteStore) CountActiveAPIKeysByScope(ctx context.Context, scope strin
 // --- AuditLogs ---
 
 func (s *SQLiteStore) CreateAuditLog(ctx context.Context, l *AuditLog) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.ActorID, l.ActorType, l.Action, l.TargetType, l.TargetID,
@@ -1166,9 +1185,40 @@ func (s *SQLiteStore) CreateAuditLog(ctx context.Context, l *AuditLog) error {
 	return err
 }
 
+func (s *SQLiteStore) CreateAuditLogsBatch(ctx context.Context, logs []*AuditLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, l := range logs {
+		if _, err := stmt.ExecContext(ctx,
+			l.ID, l.ActorID, l.ActorType, l.Action, l.TargetType, l.TargetID,
+			l.OrgID, l.SessionID, l.ResourceType, l.ResourceID,
+			l.IP, l.UserAgent, l.Metadata, l.Status, l.CreatedAt,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (s *SQLiteStore) GetAuditLogByID(ctx context.Context, id string) (*AuditLog, error) {
 	var l AuditLog
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at
 		 FROM audit_logs WHERE id = ?`, id,
 	).Scan(&l.ID, &l.ActorID, &l.ActorType, &l.Action, &l.TargetType, &l.TargetID,
@@ -1265,7 +1315,7 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 	query += " ORDER BY created_at DESC LIMIT ?"
 	args = append(args, opts.Limit)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1285,7 +1335,7 @@ func (s *SQLiteStore) QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([
 }
 
 func (s *SQLiteStore) DeleteAuditLogsBefore(ctx context.Context, before time.Time) (int64, error) {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.writer.ExecContext(ctx,
 		`DELETE FROM audit_logs WHERE created_at < ?`,
 		before.UTC().Format(time.RFC3339))
 	if err != nil {
@@ -1330,7 +1380,7 @@ func (s *SQLiteStore) CreateMayActGrant(ctx context.Context, g *MayActGrant) err
 	if g.MaxHops <= 0 {
 		g.MaxHops = 1
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO may_act_grants (id, from_id, to_id, max_hops, scopes, expires_at, revoked_at, created_by, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		g.ID, g.FromID, g.ToID, g.MaxHops, scopesToJSON(g.Scopes),
@@ -1372,7 +1422,7 @@ func scanMayActGrant(row interface {
 }
 
 func (s *SQLiteStore) GetMayActGrantByID(ctx context.Context, id string) (*MayActGrant, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.reader.QueryRowContext(ctx,
 		`SELECT id, from_id, to_id, max_hops, scopes, expires_at, revoked_at, created_by, created_at
 		 FROM may_act_grants WHERE id = ?`, id,
 	)
@@ -1398,7 +1448,7 @@ func (s *SQLiteStore) ListMayActGrants(ctx context.Context, opts ListMayActGrant
 		q += " WHERE " + strings.Join(conditions, " AND ") //#nosec G202 -- predicates are constants; values via ? placeholders
 	}
 	q += " ORDER BY created_at DESC"
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.reader.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1415,7 +1465,7 @@ func (s *SQLiteStore) ListMayActGrants(ctx context.Context, opts ListMayActGrant
 }
 
 func (s *SQLiteStore) RevokeMayActGrant(ctx context.Context, id string, revokedAt time.Time) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE may_act_grants SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`,
 		revokedAt.UTC().Format(time.RFC3339), id,
 	)
@@ -1427,7 +1477,7 @@ func (s *SQLiteStore) RevokeMayActGrant(ctx context.Context, id string, revokedA
 // audit metadata. Returns sql.ErrNoRows when nothing matches.
 func (s *SQLiteStore) FindLiveMayActGrant(ctx context.Context, fromID, toID string, at time.Time) (*MayActGrant, error) {
 	atStr := at.UTC().Format(time.RFC3339)
-	row := s.db.QueryRowContext(ctx,
+	row := s.reader.QueryRowContext(ctx,
 		`SELECT id, from_id, to_id, max_hops, scopes, expires_at, revoked_at, created_by, created_at
 		 FROM may_act_grants
 		 WHERE from_id = ? AND to_id = ?
@@ -1443,7 +1493,7 @@ func (s *SQLiteStore) FindLiveMayActGrant(ctx context.Context, fromID, toID stri
 // --- Migrations ---
 
 func (s *SQLiteStore) CreateMigration(ctx context.Context, m *Migration) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO migrations (id, source, status, users_total, users_imported, errors, created_at, completed_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, m.Source, m.Status, m.UsersTotal, m.UsersImported, m.Errors, m.CreatedAt, m.CompletedAt,
@@ -1453,7 +1503,7 @@ func (s *SQLiteStore) CreateMigration(ctx context.Context, m *Migration) error {
 
 func (s *SQLiteStore) GetMigrationByID(ctx context.Context, id string) (*Migration, error) {
 	var m Migration
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, source, status, users_total, users_imported, errors, created_at, completed_at
 		 FROM migrations WHERE id = ?`, id,
 	).Scan(&m.ID, &m.Source, &m.Status, &m.UsersTotal, &m.UsersImported, &m.Errors, &m.CreatedAt, &m.CompletedAt)
@@ -1464,7 +1514,7 @@ func (s *SQLiteStore) GetMigrationByID(ctx context.Context, id string) (*Migrati
 }
 
 func (s *SQLiteStore) ListMigrations(ctx context.Context) ([]*Migration, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, source, status, users_total, users_imported, errors, created_at, completed_at
 		 FROM migrations ORDER BY created_at DESC`)
 	if err != nil {
@@ -1484,7 +1534,7 @@ func (s *SQLiteStore) ListMigrations(ctx context.Context) ([]*Migration, error) 
 }
 
 func (s *SQLiteStore) UpdateMigration(ctx context.Context, m *Migration) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE migrations SET status=?, users_total=?, users_imported=?, errors=?, completed_at=? WHERE id=?`,
 		m.Status, m.UsersTotal, m.UsersImported, m.Errors, m.CompletedAt, m.ID,
 	)
@@ -1495,13 +1545,13 @@ func (s *SQLiteStore) UpdateMigration(ctx context.Context, m *Migration) error {
 
 func (s *SQLiteStore) CountUsers(ctx context.Context) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
+	err := s.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
 	return n, err
 }
 
 func (s *SQLiteStore) CountUsersCreatedSince(ctx context.Context, since time.Time) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM users WHERE created_at >= ?`,
 		since.UTC().Format(time.RFC3339),
 	).Scan(&n)
@@ -1510,7 +1560,7 @@ func (s *SQLiteStore) CountUsersCreatedSince(ctx context.Context, since time.Tim
 
 func (s *SQLiteStore) CountActiveSessions(ctx context.Context) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM sessions WHERE expires_at > ?`,
 		time.Now().UTC().Format(time.RFC3339),
 	).Scan(&n)
@@ -1519,13 +1569,13 @@ func (s *SQLiteStore) CountActiveSessions(ctx context.Context) (int, error) {
 
 func (s *SQLiteStore) CountMFAEnabled(ctx context.Context) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE mfa_enabled = 1 AND mfa_verified = 1`).Scan(&n)
+	err := s.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE mfa_enabled = 1 AND mfa_verified = 1`).Scan(&n)
 	return n, err
 }
 
 func (s *SQLiteStore) CountFailedLoginsSince(ctx context.Context, since time.Time) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM audit_logs WHERE action = 'user.login' AND status = 'failure' AND created_at >= ?`,
 		since.UTC().Format(time.RFC3339),
 	).Scan(&n)
@@ -1539,7 +1589,7 @@ func (s *SQLiteStore) CountExpiringAPIKeys(ctx context.Context, within time.Dura
 	cutoff := now.Add(within).Format(time.RFC3339)
 	nowStr := now.Format(time.RFC3339)
 	var n int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM api_keys
 		 WHERE revoked_at IS NULL
 		   AND expires_at IS NOT NULL
@@ -1556,13 +1606,13 @@ func (s *SQLiteStore) CountSSOConnections(ctx context.Context, enabledOnly bool)
 		q += ` WHERE enabled = 1`
 	}
 	var n int
-	err := s.db.QueryRowContext(ctx, q).Scan(&n)
+	err := s.reader.QueryRowContext(ctx, q).Scan(&n)
 	return n, err
 }
 
 // CountSSOIdentitiesByConnection returns a map of connection_id → user count.
 func (s *SQLiteStore) CountSSOIdentitiesByConnection(ctx context.Context) (map[string]int, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT connection_id, COUNT(*) FROM sso_identities GROUP BY connection_id`)
 	if err != nil {
 		return nil, err
@@ -1581,7 +1631,7 @@ func (s *SQLiteStore) CountSSOIdentitiesByConnection(ctx context.Context) (map[s
 }
 
 func (s *SQLiteStore) GroupSessionsByAuthMethodSince(ctx context.Context, since time.Time) ([]MethodCount, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT auth_method, COUNT(*) FROM sessions
 		 WHERE created_at >= ?
 		 GROUP BY auth_method ORDER BY COUNT(*) DESC`,
@@ -1611,7 +1661,7 @@ func (s *SQLiteStore) GroupUsersCreatedByDay(ctx context.Context, days int) ([]D
 		days = 30
 	}
 	since := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT substr(created_at, 1, 10) AS day, COUNT(*) FROM users
 		 WHERE created_at >= ?
 		 GROUP BY day ORDER BY day ASC`,
@@ -1687,7 +1737,7 @@ func (s *SQLiteStore) ListActiveSessions(ctx context.Context, opts ListSessionsO
 	      LIMIT ?`
 	args = append(args, limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.reader.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1710,7 +1760,7 @@ func (s *SQLiteStore) ListActiveSessions(ctx context.Context, opts ListSessionsO
 // DeleteSessionsByUserID deletes every session for a user and returns the IDs
 // of the deleted sessions so the caller can emit one audit entry per session.
 func (s *SQLiteStore) DeleteSessionsByUserID(ctx context.Context, userID string) ([]string, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.writer.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1745,7 +1795,7 @@ func (s *SQLiteStore) DeleteSessionsByUserID(ctx context.Context, userID string)
 
 // DeleteAllActiveSessions removes every non-expired session and returns the count deleted.
 func (s *SQLiteStore) DeleteAllActiveSessions(ctx context.Context) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at > datetime('now')`)
+	res, err := s.writer.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at > datetime('now')`)
 	if err != nil {
 		return 0, err
 	}
@@ -1753,10 +1803,101 @@ func (s *SQLiteStore) DeleteAllActiveSessions(ctx context.Context) (int64, error
 	return n, nil
 }
 
+// SignupAtomic performs CreateUser + CreateSession + CreateAuditLog in one transaction.
+func (s *SQLiteStore) SignupAtomic(ctx context.Context, u *User, sess *Session, log *AuditLog) error {
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Create User
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO users (id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		u.ID, u.Email, boolToInt(u.EmailVerified), u.PasswordHash, u.HashType,
+		u.Name, u.AvatarURL, boolToInt(u.MFAEnabled), u.MFASecret, boolToInt(u.MFAVerified),
+		u.Metadata, u.CreatedAt, u.UpdatedAt,
+	); err != nil {
+		return err
+	}
+
+	// 2. Create Session
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, ip, user_agent, mfa_passed, auth_method, expires_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		sess.ID, sess.UserID, sess.IP, sess.UserAgent,
+		boolToInt(sess.MFAPassed), sess.AuthMethod, sess.ExpiresAt, sess.CreatedAt,
+	); err != nil {
+		return err
+	}
+
+	// 3. Create Audit Log
+	if log != nil {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.ID, log.ActorID, log.ActorType, log.Action, log.TargetType, log.TargetID,
+			log.OrgID, log.SessionID, log.ResourceType, log.ResourceID,
+			log.IP, log.UserAgent, log.Metadata, log.Status, log.CreatedAt,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// LoginAtomic performs UpdateUser (last login/rehash) + CreateSession + CreateAuditLog in one transaction.
+func (s *SQLiteStore) LoginAtomic(ctx context.Context, u *User, sess *Session, log *AuditLog) error {
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Update User
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET email=?, email_verified=?, password_hash=?, hash_type=?, name=?, avatar_url=?, mfa_enabled=?, mfa_secret=?, mfa_verified=?, mfa_verified_at=?, metadata=?, updated_at=?, last_login_at=?
+		 WHERE id=?`,
+		u.Email, boolToInt(u.EmailVerified), u.PasswordHash, u.HashType,
+		u.Name, u.AvatarURL, boolToInt(u.MFAEnabled), u.MFASecret, boolToInt(u.MFAVerified),
+		u.MFAVerifiedAt,
+		u.Metadata, u.UpdatedAt, u.LastLoginAt, u.ID,
+	); err != nil {
+		return err
+	}
+
+	// 2. Create Session
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, ip, user_agent, mfa_passed, auth_method, expires_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		sess.ID, sess.UserID, sess.IP, sess.UserAgent,
+		boolToInt(sess.MFAPassed), sess.AuthMethod, sess.ExpiresAt, sess.CreatedAt,
+	); err != nil {
+		return err
+	}
+
+	// 3. Create Audit Log
+	if log != nil {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO audit_logs (id, actor_id, actor_type, action, target_type, target_id, org_id, session_id, resource_type, resource_id, ip, user_agent, metadata, status, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.ID, log.ActorID, log.ActorType, log.Action, log.TargetType, log.TargetID,
+			log.OrgID, log.SessionID, log.ResourceType, log.ResourceID,
+			log.IP, log.UserAgent, log.Metadata, log.Status, log.CreatedAt,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 // --- Dev inbox ---
 
 func (s *SQLiteStore) CreateDevEmail(ctx context.Context, e *DevEmail) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO dev_emails (id, to_addr, subject, html, text, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		e.ID, e.To, e.Subject, e.HTML, e.Text, e.CreatedAt,
@@ -1771,7 +1912,7 @@ func (s *SQLiteStore) ListDevEmails(ctx context.Context, limit int) ([]*DevEmail
 	if limit > 500 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, to_addr, subject, html, text, created_at
 		 FROM dev_emails ORDER BY created_at DESC, id DESC LIMIT ?`, limit)
 	if err != nil {
@@ -1792,7 +1933,7 @@ func (s *SQLiteStore) ListDevEmails(ctx context.Context, limit int) ([]*DevEmail
 
 func (s *SQLiteStore) GetDevEmail(ctx context.Context, id string) (*DevEmail, error) {
 	var e DevEmail
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT id, to_addr, subject, html, text, created_at FROM dev_emails WHERE id = ?`,
 		id,
 	).Scan(&e.ID, &e.To, &e.Subject, &e.HTML, &e.Text, &e.CreatedAt)
@@ -1803,7 +1944,7 @@ func (s *SQLiteStore) GetDevEmail(ctx context.Context, id string) (*DevEmail, er
 }
 
 func (s *SQLiteStore) DeleteAllDevEmails(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM dev_emails`)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM dev_emails`)
 	return err
 }
 

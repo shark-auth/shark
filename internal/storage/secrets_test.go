@@ -1,11 +1,11 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
 	"database/sql"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestSecrets_RoundTrip(t *testing.T) {

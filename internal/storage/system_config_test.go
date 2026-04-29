@@ -1,17 +1,17 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestSystemConfig_RoundTrip(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	ctx := context.Background()
 
-	// Migration seeds an empty row — GetSystemConfig should return "" or "{}".
+	// Migration seeds an empty row â€” GetSystemConfig should return "" or "{}".
 	got, err := store.GetSystemConfig(ctx)
 	if err != nil {
 		t.Fatalf("GetSystemConfig (initial): %v", err)

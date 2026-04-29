@@ -1,4 +1,4 @@
-package auth
+﻿package auth
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 const (
@@ -137,7 +137,7 @@ func (m *MFAManager) VerifyRecoveryCode(ctx context.Context, userID, code string
 		// Use constant-time comparison via bcrypt (which is inherently constant-time
 		// for the hash comparison step).
 		if err := bcrypt.CompareHashAndPassword([]byte(stored.Code), []byte(code)); err == nil {
-			// Match found — mark it used
+			// Match found â€” mark it used
 			if err := m.store.MarkMFARecoveryCodeUsed(ctx, stored.ID); err != nil {
 				return false, fmt.Errorf("marking recovery code used: %w", err)
 			}
@@ -145,7 +145,7 @@ func (m *MFAManager) VerifyRecoveryCode(ctx context.Context, userID, code string
 		}
 	}
 
-	// No match found — use subtle.ConstantTimeCompare on a dummy to avoid timing leaks
+	// No match found â€” use subtle.ConstantTimeCompare on a dummy to avoid timing leaks
 	// on the "no codes at all" path vs "codes exist but none match" path.
 	dummy := []byte("constant-time-dummy-comparison")
 	subtle.ConstantTimeCompare(dummy, dummy)

@@ -1,4 +1,4 @@
-package sso_test
+﻿package sso_test
 
 import (
 	"context"
@@ -14,10 +14,10 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/sso"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/sso"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func strPtr(s string) *string { return &s }

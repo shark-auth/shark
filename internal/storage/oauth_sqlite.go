@@ -10,7 +10,7 @@ import (
 // --- Authorization Codes ---
 
 func (s *SQLiteStore) CreateAuthorizationCode(ctx context.Context, code *OAuthAuthorizationCode) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT INTO oauth_authorization_codes (code_hash, client_id, user_id, redirect_uri,
 			scope, code_challenge, code_challenge_method, resource, authorization_details,
 			nonce, expires_at, created_at)
@@ -26,7 +26,7 @@ func (s *SQLiteStore) CreateAuthorizationCode(ctx context.Context, code *OAuthAu
 func (s *SQLiteStore) GetAuthorizationCode(ctx context.Context, codeHash string) (*OAuthAuthorizationCode, error) {
 	var c OAuthAuthorizationCode
 	var expiresAt, createdAt string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.reader.QueryRowContext(ctx, `
 		SELECT code_hash, client_id, user_id, redirect_uri, scope, code_challenge,
 			code_challenge_method, resource, authorization_details, nonce, expires_at, created_at
 		FROM oauth_authorization_codes WHERE code_hash = ?`, codeHash).Scan(
@@ -46,12 +46,12 @@ func (s *SQLiteStore) GetAuthorizationCode(ctx context.Context, codeHash string)
 }
 
 func (s *SQLiteStore) DeleteAuthorizationCode(ctx context.Context, codeHash string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM oauth_authorization_codes WHERE code_hash = ?`, codeHash)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM oauth_authorization_codes WHERE code_hash = ?`, codeHash)
 	return err
 }
 
 func (s *SQLiteStore) DeleteExpiredAuthorizationCodes(ctx context.Context) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM oauth_authorization_codes WHERE expires_at < ?`,
+	res, err := s.writer.ExecContext(ctx, `DELETE FROM oauth_authorization_codes WHERE expires_at < ?`,
 		time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return 0, err
@@ -66,7 +66,7 @@ func (s *SQLiteStore) CreatePKCESession(ctx context.Context, sess *OAuthPKCESess
 	if method == "" {
 		method = "S256"
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT OR REPLACE INTO oauth_pkce_sessions
 			(signature_hash, code_challenge, code_challenge_method, client_id, expires_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
@@ -79,7 +79,7 @@ func (s *SQLiteStore) CreatePKCESession(ctx context.Context, sess *OAuthPKCESess
 func (s *SQLiteStore) GetPKCESession(ctx context.Context, signatureHash string) (*OAuthPKCESession, error) {
 	var p OAuthPKCESession
 	var expiresAt, createdAt string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.reader.QueryRowContext(ctx, `
 		SELECT signature_hash, code_challenge, code_challenge_method, client_id, expires_at, created_at
 		FROM oauth_pkce_sessions WHERE signature_hash = ?`, signatureHash).Scan(
 		&p.SignatureHash, &p.CodeChallenge, &p.CodeChallengeMethod, &p.ClientID, &expiresAt, &createdAt,
@@ -96,12 +96,12 @@ func (s *SQLiteStore) GetPKCESession(ctx context.Context, signatureHash string) 
 }
 
 func (s *SQLiteStore) DeletePKCESession(ctx context.Context, signatureHash string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM oauth_pkce_sessions WHERE signature_hash = ?`, signatureHash)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM oauth_pkce_sessions WHERE signature_hash = ?`, signatureHash)
 	return err
 }
 
 func (s *SQLiteStore) DeleteExpiredPKCESessions(ctx context.Context) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM oauth_pkce_sessions WHERE expires_at < ?`,
+	res, err := s.writer.ExecContext(ctx, `DELETE FROM oauth_pkce_sessions WHERE expires_at < ?`,
 		time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return 0, err
@@ -125,7 +125,7 @@ func (s *SQLiteStore) CreateOAuthToken(ctx context.Context, token *OAuthToken) e
 		requestID = token.RequestID
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT INTO oauth_tokens (id, jti, client_id, agent_id, user_id, token_type,
 			token_hash, scope, audience, authorization_details, dpop_jkt,
 			delegation_subject, delegation_actor, family_id, expires_at, created_at, revoked_at, request_id)
@@ -146,7 +146,7 @@ func (s *SQLiteStore) CreateOAuthToken(ctx context.Context, token *OAuthToken) e
 // rotation chains (refresh.go:86) so multiple rows may exist; we return the
 // freshest active row, or sql.ErrNoRows-equivalent error.
 func (s *SQLiteStore) GetActiveOAuthTokenByRequestIDAndType(ctx context.Context, requestID, tokenType string) (*OAuthToken, error) {
-	return s.scanOAuthToken(s.db.QueryRowContext(ctx, `
+	return s.scanOAuthToken(s.reader.QueryRowContext(ctx, `
 		SELECT id, jti, client_id, agent_id, user_id, token_type, token_hash,
 			scope, audience, authorization_details, dpop_jkt, delegation_subject,
 			delegation_actor, family_id, expires_at, created_at, revoked_at, request_id
@@ -156,7 +156,7 @@ func (s *SQLiteStore) GetActiveOAuthTokenByRequestIDAndType(ctx context.Context,
 }
 
 func (s *SQLiteStore) GetOAuthTokenByJTI(ctx context.Context, jti string) (*OAuthToken, error) {
-	return s.scanOAuthToken(s.db.QueryRowContext(ctx, `
+	return s.scanOAuthToken(s.reader.QueryRowContext(ctx, `
 		SELECT id, jti, client_id, agent_id, user_id, token_type, token_hash,
 			scope, audience, authorization_details, dpop_jkt, delegation_subject,
 			delegation_actor, family_id, expires_at, created_at, revoked_at, request_id
@@ -164,7 +164,7 @@ func (s *SQLiteStore) GetOAuthTokenByJTI(ctx context.Context, jti string) (*OAut
 }
 
 func (s *SQLiteStore) GetOAuthTokenByHash(ctx context.Context, tokenHash string) (*OAuthToken, error) {
-	return s.scanOAuthToken(s.db.QueryRowContext(ctx, `
+	return s.scanOAuthToken(s.reader.QueryRowContext(ctx, `
 		SELECT id, jti, client_id, agent_id, user_id, token_type, token_hash,
 			scope, audience, authorization_details, dpop_jkt, delegation_subject,
 			delegation_actor, family_id, expires_at, created_at, revoked_at, request_id
@@ -172,7 +172,7 @@ func (s *SQLiteStore) GetOAuthTokenByHash(ctx context.Context, tokenHash string)
 }
 
 func (s *SQLiteStore) RevokeOAuthToken(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE oauth_tokens SET revoked_at = ? WHERE id = ?`,
+	_, err := s.writer.ExecContext(ctx, `UPDATE oauth_tokens SET revoked_at = ? WHERE id = ?`,
 		time.Now().UTC().Format(time.RFC3339), id)
 	return err
 }
@@ -189,7 +189,7 @@ func (s *SQLiteStore) RevokeOAuthToken(ctx context.Context, id string) error {
 // concurrent-refresh race that existed when RotateRefreshToken did a
 // read-then-write over two statements.
 func (s *SQLiteStore) RevokeActiveOAuthTokenByRequestID(ctx context.Context, requestID, tokenType string) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `
+	res, err := s.writer.ExecContext(ctx, `
 		UPDATE oauth_tokens
 		SET revoked_at = ?
 		WHERE id = (
@@ -210,7 +210,7 @@ func (s *SQLiteStore) RevokeActiveOAuthTokenByRequestID(ctx context.Context, req
 }
 
 func (s *SQLiteStore) RevokeOAuthTokensByClientID(ctx context.Context, clientID string) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE oauth_tokens SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL`,
+	res, err := s.writer.ExecContext(ctx, `UPDATE oauth_tokens SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL`,
 		time.Now().UTC().Format(time.RFC3339), clientID)
 	if err != nil {
 		return 0, err
@@ -219,7 +219,7 @@ func (s *SQLiteStore) RevokeOAuthTokensByClientID(ctx context.Context, clientID 
 }
 
 func (s *SQLiteStore) RevokeOAuthTokensByClientIDPattern(ctx context.Context, pattern string) (int64, error) {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.writer.ExecContext(ctx,
 		`UPDATE oauth_tokens SET revoked_at = ? WHERE client_id GLOB ? AND revoked_at IS NULL`,
 		time.Now().UTC().Format(time.RFC3339), pattern)
 	if err != nil {
@@ -229,7 +229,7 @@ func (s *SQLiteStore) RevokeOAuthTokensByClientIDPattern(ctx context.Context, pa
 }
 
 func (s *SQLiteStore) RevokeOAuthTokenFamily(ctx context.Context, familyID string) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE oauth_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL`,
+	res, err := s.writer.ExecContext(ctx, `UPDATE oauth_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL`,
 		time.Now().UTC().Format(time.RFC3339), familyID)
 	if err != nil {
 		return 0, err
@@ -241,7 +241,7 @@ func (s *SQLiteStore) ListOAuthTokensByAgentID(ctx context.Context, agentID stri
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, jti, client_id, agent_id, user_id, token_type, token_hash,
 			scope, audience, authorization_details, dpop_jkt, delegation_subject,
 			delegation_actor, family_id, expires_at, created_at, revoked_at, request_id
@@ -263,7 +263,7 @@ func (s *SQLiteStore) ListOAuthTokensByAgentID(ctx context.Context, agentID stri
 }
 
 func (s *SQLiteStore) DeleteExpiredOAuthTokens(ctx context.Context) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM oauth_tokens WHERE expires_at < ? AND revoked_at IS NOT NULL`,
+	res, err := s.writer.ExecContext(ctx, `DELETE FROM oauth_tokens WHERE expires_at < ? AND revoked_at IS NOT NULL`,
 		time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return 0, err
@@ -272,7 +272,7 @@ func (s *SQLiteStore) DeleteExpiredOAuthTokens(ctx context.Context) (int64, erro
 }
 
 func (s *SQLiteStore) UpdateOAuthTokenDPoPJKT(ctx context.Context, id string, jkt string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE oauth_tokens SET dpop_jkt = ? WHERE id = ?`, jkt, id)
+	_, err := s.writer.ExecContext(ctx, `UPDATE oauth_tokens SET dpop_jkt = ? WHERE id = ?`, jkt, id)
 	return err
 }
 
@@ -348,7 +348,7 @@ func (s *SQLiteStore) CreateOAuthConsent(ctx context.Context, consent *OAuthCons
 		s := consent.ExpiresAt.UTC().Format(time.RFC3339)
 		expiresAt = &s
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT INTO oauth_consents (id, user_id, client_id, scope, authorization_details,
 			granted_at, expires_at, revoked_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -363,7 +363,7 @@ func (s *SQLiteStore) GetActiveConsent(ctx context.Context, userID, clientID str
 	var c OAuthConsent
 	var grantedAt string
 	var expiresAt, revokedAt *string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.reader.QueryRowContext(ctx, `
 		SELECT id, user_id, client_id, scope, authorization_details, granted_at, expires_at, revoked_at
 		FROM oauth_consents WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL`,
 		userID, clientID).Scan(
@@ -385,7 +385,7 @@ func (s *SQLiteStore) GetActiveConsent(ctx context.Context, userID, clientID str
 }
 
 func (s *SQLiteStore) ListConsentsByUserID(ctx context.Context, userID string) ([]*OAuthConsent, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, user_id, client_id, scope, authorization_details, granted_at, expires_at, revoked_at
 		FROM oauth_consents WHERE user_id = ? AND revoked_at IS NULL ORDER BY granted_at DESC`, userID)
 	if err != nil {
@@ -413,14 +413,14 @@ func (s *SQLiteStore) ListConsentsByUserID(ctx context.Context, userID string) (
 }
 
 func (s *SQLiteStore) RevokeOAuthConsent(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE oauth_consents SET revoked_at = ? WHERE id = ?`,
+	_, err := s.writer.ExecContext(ctx, `UPDATE oauth_consents SET revoked_at = ? WHERE id = ?`,
 		time.Now().UTC().Format(time.RFC3339), id)
 	return err
 }
 
 // RevokeConsentsByUserID bulk-revokes all active consents for a user.
 func (s *SQLiteStore) RevokeConsentsByUserID(ctx context.Context, userID string) (int64, error) {
-	res, err := s.db.ExecContext(ctx,
+	res, err := s.writer.ExecContext(ctx,
 		`UPDATE oauth_consents SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`,
 		time.Now().UTC().Format(time.RFC3339), userID)
 	if err != nil {
@@ -433,7 +433,7 @@ func (s *SQLiteStore) RevokeConsentsByUserID(ctx context.Context, userID string)
 // users — admin scope. Mirrors ListConsentsByUserID's row contract so handlers
 // can convert via the same path.
 func (s *SQLiteStore) ListAllConsents(ctx context.Context) ([]*OAuthConsent, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, user_id, client_id, scope, authorization_details, granted_at, expires_at, revoked_at
 		FROM oauth_consents WHERE revoked_at IS NULL ORDER BY granted_at DESC`)
 	if err != nil {
@@ -463,7 +463,7 @@ func (s *SQLiteStore) ListAllConsents(ctx context.Context) ([]*OAuthConsent, err
 // --- Device Codes ---
 
 func (s *SQLiteStore) CreateDeviceCode(ctx context.Context, dc *OAuthDeviceCode) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT INTO oauth_device_codes (device_code_hash, user_code, client_id, scope,
 			resource, status, poll_interval, expires_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -475,14 +475,14 @@ func (s *SQLiteStore) CreateDeviceCode(ctx context.Context, dc *OAuthDeviceCode)
 }
 
 func (s *SQLiteStore) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*OAuthDeviceCode, error) {
-	return s.scanDeviceCode(s.db.QueryRowContext(ctx, `
+	return s.scanDeviceCode(s.reader.QueryRowContext(ctx, `
 		SELECT device_code_hash, user_code, client_id, scope, resource, user_id,
 			status, last_polled_at, poll_interval, expires_at, created_at
 		FROM oauth_device_codes WHERE user_code = ?`, userCode))
 }
 
 func (s *SQLiteStore) GetDeviceCodeByHash(ctx context.Context, hash string) (*OAuthDeviceCode, error) {
-	return s.scanDeviceCode(s.db.QueryRowContext(ctx, `
+	return s.scanDeviceCode(s.reader.QueryRowContext(ctx, `
 		SELECT device_code_hash, user_code, client_id, scope, resource, user_id,
 			status, last_polled_at, poll_interval, expires_at, created_at
 		FROM oauth_device_codes WHERE device_code_hash = ?`, hash))
@@ -491,7 +491,7 @@ func (s *SQLiteStore) GetDeviceCodeByHash(ctx context.Context, hash string) (*OA
 // ListPendingDeviceCodes returns device codes still awaiting user approval
 // that haven't expired yet. Used by the dashboard's admin device queue.
 func (s *SQLiteStore) ListPendingDeviceCodes(ctx context.Context) ([]*OAuthDeviceCode, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT device_code_hash, user_code, client_id, scope, resource, user_id,
 			status, last_polled_at, poll_interval, expires_at, created_at
 		FROM oauth_device_codes
@@ -529,19 +529,19 @@ func (s *SQLiteStore) ListPendingDeviceCodes(ctx context.Context) ([]*OAuthDevic
 }
 
 func (s *SQLiteStore) UpdateDeviceCodeStatus(ctx context.Context, hash string, status string, userID string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE oauth_device_codes SET status = ?, user_id = ? WHERE device_code_hash = ?`,
+	_, err := s.writer.ExecContext(ctx, `UPDATE oauth_device_codes SET status = ?, user_id = ? WHERE device_code_hash = ?`,
 		status, userID, hash)
 	return err
 }
 
 func (s *SQLiteStore) UpdateDeviceCodePolledAt(ctx context.Context, hash string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE oauth_device_codes SET last_polled_at = ? WHERE device_code_hash = ?`,
+	_, err := s.writer.ExecContext(ctx, `UPDATE oauth_device_codes SET last_polled_at = ? WHERE device_code_hash = ?`,
 		time.Now().UTC().Format(time.RFC3339), hash)
 	return err
 }
 
 func (s *SQLiteStore) DeleteExpiredDeviceCodes(ctx context.Context) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM oauth_device_codes WHERE expires_at < ?`,
+	res, err := s.writer.ExecContext(ctx, `DELETE FROM oauth_device_codes WHERE expires_at < ?`,
 		time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return 0, err
@@ -584,7 +584,7 @@ func (s *SQLiteStore) CreateDCRClient(ctx context.Context, client *OAuthDCRClien
 		s := client.ExpiresAt.UTC().Format(time.RFC3339)
 		expiresAt = &s
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT INTO oauth_dcr_clients (client_id, registration_token_hash, client_metadata, created_at, expires_at)
 		VALUES (?, ?, ?, ?, ?)`,
 		client.ClientID, client.RegistrationTokenHash, client.ClientMetadata,
@@ -597,7 +597,7 @@ func (s *SQLiteStore) GetDCRClient(ctx context.Context, clientID string) (*OAuth
 	var c OAuthDCRClient
 	var createdAt string
 	var expiresAt *string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.reader.QueryRowContext(ctx, `
 		SELECT client_id, registration_token_hash, client_metadata, created_at, expires_at
 		FROM oauth_dcr_clients WHERE client_id = ?`, clientID).Scan(
 		&c.ClientID, &c.RegistrationTokenHash, &c.ClientMetadata, &createdAt, &expiresAt,
@@ -622,7 +622,7 @@ func (s *SQLiteStore) UpdateDCRClient(ctx context.Context, client *OAuthDCRClien
 		s := client.ExpiresAt.UTC().Format(time.RFC3339)
 		expiresAt = &s
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		UPDATE oauth_dcr_clients SET client_metadata = ?, expires_at = ? WHERE client_id = ?`,
 		client.ClientMetadata, expiresAt, client.ClientID,
 	)
@@ -630,13 +630,13 @@ func (s *SQLiteStore) UpdateDCRClient(ctx context.Context, client *OAuthDCRClien
 }
 
 func (s *SQLiteStore) DeleteDCRClient(ctx context.Context, clientID string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM oauth_dcr_clients WHERE client_id = ?`, clientID)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM oauth_dcr_clients WHERE client_id = ?`, clientID)
 	return err
 }
 
 // RotateDCRRegistrationToken replaces the registration_token_hash for a DCR client.
 func (s *SQLiteStore) RotateDCRRegistrationToken(ctx context.Context, clientID, newTokenHash string) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		UPDATE oauth_dcr_clients SET registration_token_hash = ? WHERE client_id = ?`,
 		newTokenHash, clientID,
 	)

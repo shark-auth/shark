@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"bufio"
@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/proxy"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/proxy"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // newProxyTestServer returns a TestServer with proxy enabled and a mock
@@ -385,7 +385,7 @@ func TestProxyIntegration_AuthRoutesBypassProxy(t *testing.T) {
 	}
 	ts, _, _ := newProxyTestServer(t, rules)
 
-	// /api/v1/auth/login is a Shark route — must not be captured by the
+	// /api/v1/auth/login is a Shark route â€” must not be captured by the
 	// catch-all. Signup endpoint is the simplest unauthenticated Shark
 	// route that returns something other than 401 for missing body.
 	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", strings.NewReader(`{}`))
@@ -393,17 +393,17 @@ func TestProxyIntegration_AuthRoutesBypassProxy(t *testing.T) {
 		t.Fatalf("post: %v", err)
 	}
 	defer resp.Body.Close()
-	// 400 bad request body is fine — what we're ruling out is a 403/502
+	// 400 bad request body is fine â€” what we're ruling out is a 403/502
 	// from the proxy, which would mean the catch-all stole the route.
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusBadGateway {
-		t.Fatalf("auth/login got proxy status %d — catch-all stole the route", resp.StatusCode)
+		t.Fatalf("auth/login got proxy status %d â€” catch-all stole the route", resp.StatusCode)
 	}
 }
 
 func TestProxyIntegration_DeniedAnonymousReturns401(t *testing.T) {
-	// No rules at all → every path falls through to default-deny. The caller
+	// No rules at all â†’ every path falls through to default-deny. The caller
 	// is anonymous (no cookie, no bearer) so the proxy translates the deny
-	// into a 401 per W15b ("authentication required" semantics — 403 is
+	// into a 401 per W15b ("authentication required" semantics â€” 403 is
 	// reserved for authenticated-but-unauthorized).
 	rules := []proxy.RuleSpec{}
 	ts, _, _ := newProxyTestServer(t, rules)
@@ -422,7 +422,7 @@ func TestProxyIntegration_DeniedAnonymousReturns401(t *testing.T) {
 }
 
 // TestProxySimulate_EvalTimeIsRecorded checks that the simulator reports
-// a sub-ms evaluation time — if eval_us is negative or insanely large it
+// a sub-ms evaluation time â€” if eval_us is negative or insanely large it
 // signals a clock regression.
 func TestProxySimulate_EvalTimeIsRecorded(t *testing.T) {
 	rules := []proxy.RuleSpec{

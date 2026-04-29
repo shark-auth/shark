@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestMFA_FreshEnroll verifies that a fresh user can enroll in MFA successfully.
@@ -39,7 +39,7 @@ func TestMFA_ReEnrollWhenPending(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 	ts.SignupAndVerify("mfa-reenroll@example.com", "SecurePassword123", "Re-Enroll User")
 
-	// First enroll — pending (not yet verified).
+	// First enroll â€” pending (not yet verified).
 	resp1 := ts.PostJSON("/api/v1/auth/mfa/enroll", nil)
 	if resp1.StatusCode != http.StatusOK {
 		body := readBody(t, resp1)
@@ -47,7 +47,7 @@ func TestMFA_ReEnrollWhenPending(t *testing.T) {
 	}
 	resp1.Body.Close()
 
-	// Re-enroll without verifying — must succeed (replaces the pending secret).
+	// Re-enroll without verifying â€” must succeed (replaces the pending secret).
 	resp2 := ts.PostJSON("/api/v1/auth/mfa/enroll", nil)
 	if resp2.StatusCode != http.StatusOK {
 		body := readBody(t, resp2)
@@ -91,7 +91,7 @@ func TestMFA_ReEnrollBlockedWhenVerified(t *testing.T) {
 	}
 	verResp.Body.Close()
 
-	// Attempt re-enroll — must be blocked.
+	// Attempt re-enroll â€” must be blocked.
 	resp2 := ts.PostJSON("/api/v1/auth/mfa/enroll", nil)
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusConflict {
@@ -121,7 +121,7 @@ func TestMFA_VerifySetsFlag(t *testing.T) {
 	ts.DecodeJSON(resp, &enrollResult)
 	secret := enrollResult["secret"].(string)
 
-	// Before verify — mfa_verified_at should be NULL.
+	// Before verify â€” mfa_verified_at should be NULL.
 	userBefore, err := ts.Store.GetUserByEmail(context.Background(), "mfa-flag@example.com")
 	if err != nil {
 		t.Fatalf("GetUserByEmail before verify: %v", err)
@@ -144,7 +144,7 @@ func TestMFA_VerifySetsFlag(t *testing.T) {
 	}
 	verResp.Body.Close()
 
-	// After verify — mfa_verified_at must be non-NULL.
+	// After verify â€” mfa_verified_at must be non-NULL.
 	userAfter, err := ts.Store.GetUserByEmail(context.Background(), "mfa-flag@example.com")
 	if err != nil {
 		t.Fatalf("GetUserByEmail after verify: %v", err)

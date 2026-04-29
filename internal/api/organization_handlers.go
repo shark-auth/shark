@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -18,9 +18,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/email"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$`)
@@ -277,7 +277,7 @@ func (s *Server) handleUpdateOrganizationMemberRole(w http.ResponseWriter, r *ht
 		internal(w, err)
 		return
 	}
-	// Demoting the last owner is forbidden — use transfer-ownership flow instead.
+	// Demoting the last owner is forbidden â€” use transfer-ownership flow instead.
 	if target.Role == storage.OrgRoleOwner && req.Role != storage.OrgRoleOwner {
 		if err := s.refuseIfLastOwner(r.Context(), orgID); err != nil {
 			writeJSON(w, http.StatusConflict, errPayload("last_owner", err.Error()))
@@ -290,7 +290,7 @@ func (s *Server) handleUpdateOrganizationMemberRole(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Sync org RBAC role assignments (best-effort — do not revert the membership change on failure).
+	// Sync org RBAC role assignments (best-effort â€” do not revert the membership change on failure).
 	if s.RBAC != nil && oldRole != req.Role {
 		if oldOrgRole, err := s.Store.GetOrgRoleByName(r.Context(), orgID, oldRole); err == nil {
 			if revokeErr := s.RBAC.RevokeOrgRole(r.Context(), orgID, targetUserID, oldOrgRole.ID); revokeErr != nil {
@@ -356,7 +356,7 @@ type inviteResponse struct {
 }
 
 // handleCreateOrgInvitation persists an invitation and sends the accept email.
-// Token plaintext only lives in memory during this request — DB stores the
+// Token plaintext only lives in memory during this request â€” DB stores the
 // SHA-256 hash so leaks can't reveal valid invite links.
 func (s *Server) handleCreateOrgInvitation(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "id")
@@ -472,7 +472,7 @@ func (s *Server) handleAcceptOrgInvitation(w http.ResponseWriter, r *http.Reques
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	// Ignore duplicate membership error — idempotent accept.
+	// Ignore duplicate membership error â€” idempotent accept.
 	_ = s.Store.CreateOrganizationMember(r.Context(), &storage.OrganizationMember{
 		OrganizationID: inv.OrganizationID, UserID: userID,
 		Role: inv.Role, JoinedAt: now,
@@ -560,7 +560,7 @@ func inviterEmailOrEmpty(u *storage.User) string {
 	return u.Email
 }
 
-// auditOrgWithMeta is the structured variant — accepts a metadata map that
+// auditOrgWithMeta is the structured variant â€” accepts a metadata map that
 // gets JSON-encoded into AuditLog.Metadata. nil/empty meta yields "{}" so
 // the column is never literal NULL (mirrors other audit helpers in this
 // package).
@@ -583,7 +583,7 @@ func (s *Server) auditOrgWithMeta(ctx context.Context, actor, action, orgID, ip,
 }
 
 // emailSender reaches into the MagicLinkManager which already holds the wired
-// Sender. Returns nil if email is not configured — callers treat as no-op.
+// Sender. Returns nil if email is not configured â€” callers treat as no-op.
 func (s *Server) emailSender() email.Sender {
 	if s.MagicLinkManager == nil {
 		return nil

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"log/slog"
@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // statsResponse is the cheap, always-fresh overview for the dashboard header.
@@ -69,7 +69,7 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	// Active key count: reuse admin-scope counter for coarse "active" total. We
 	// call it across all scopes via a second query below; for now keep it cheap
 	// with CountActiveAPIKeysByScope("*") since that's what exists. We don't
-	// have a scope-agnostic CountActiveAPIKeys yet — derive from ListAPIKeys
+	// have a scope-agnostic CountActiveAPIKeys yet â€” derive from ListAPIKeys
 	// filtered in-memory only if that becomes a bottleneck.
 	keys, err := s.Store.ListAPIKeys(ctx)
 	if err != nil {

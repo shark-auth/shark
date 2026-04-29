@@ -1,4 +1,4 @@
-package rbac
+﻿package rbac
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // Sentinel errors for org-scoped RBAC.
@@ -259,9 +259,9 @@ func (r *RBACManager) DetachOrgPermission(ctx context.Context, orgRoleID, action
 //
 // Roles seeded:
 //
-//	owner  — (*,*) full wildcard
-//	admin  — members:*, org:update, roles:create, roles:assign, roles:revoke, webhooks:manage
-//	member — members:read, org:read
+//	owner  â€” (*,*) full wildcard
+//	admin  â€” members:*, org:update, roles:create, roles:assign, roles:revoke, webhooks:manage
+//	member â€” members:read, org:read
 func (r *RBACManager) SeedOrgRoles(ctx context.Context, orgID string) error {
 	type builtinRole struct {
 		name        string
@@ -282,7 +282,7 @@ func (r *RBACManager) SeedOrgRoles(ctx context.Context, orgID string) error {
 			// maps to action="members", resource="read".
 			// members:* is stored as action="members", resource="*" (wildcard).
 			permissions: [][2]string{
-				{"members", "*"}, // wildcard — covers read, invite, remove, update_role
+				{"members", "*"}, // wildcard â€” covers read, invite, remove, update_role
 				{"org", "update"},
 				{"roles", "create"},
 				{"roles", "assign"},

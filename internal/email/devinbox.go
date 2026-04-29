@@ -1,4 +1,4 @@
-package email
+﻿package email
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // DevInboxSender captures outbound emails into the `dev_emails` table so the

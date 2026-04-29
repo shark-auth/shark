@@ -1,4 +1,4 @@
-// Package cmd — `shark whoami` subcommand (Lane E, E6).
+﻿// Package cmd â€” `shark whoami` subcommand (Lane E, E6).
 //
 // Introspects the current admin token by calling GET /api/v1/auth/me
 // (requires a user session Bearer, not an admin key) or the admin stats
@@ -13,7 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
+	"github.com/shark-auth/shark/internal/cli"
 )
 
 var whoamiCmd = &cobra.Command{

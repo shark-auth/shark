@@ -1,4 +1,4 @@
-package email
+﻿package email
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/shark-auth/shark/internal/config"
 )
 
 const resendAPIURL = "https://api.resend.com/emails"

@@ -1,9 +1,9 @@
-package redirect_test
+﻿package redirect_test
 
 import (
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/auth/redirect"
+	"github.com/shark-auth/shark/internal/auth/redirect"
 )
 
 // app returns an Application with all three allowlists populated for use in tests.
@@ -74,7 +74,7 @@ func TestValidate_WildcardNoPathInjection(t *testing.T) {
 	}{
 		// The pattern normalised is "https://*.example.com/safe"; since the normalised
 		// requested URL must match the normalised pattern exactly (after wildcard check),
-		// only the subdomain+baseDomain check applies — path in pattern restricts match.
+		// only the subdomain+baseDomain check applies â€” path in pattern restricts match.
 		{"correct path", "https://sub.example.com/safe", nil},
 		{"different path", "https://sub.example.com/unsafe", redirect.ErrNotAllowed},
 		// Nested subdomain must be rejected even if path matches.
@@ -91,7 +91,7 @@ func TestValidate_WildcardNoPathInjection(t *testing.T) {
 }
 
 func TestValidate_LoopbackAnyPort(t *testing.T) {
-	// RFC 8252 §8.3: loopback pattern must allow any port.
+	// RFC 8252 Â§8.3: loopback pattern must allow any port.
 	a := app([]string{"http://127.0.0.1"}, nil, nil)
 
 	cases := []struct {
@@ -147,7 +147,7 @@ func TestValidate_BadScheme(t *testing.T) {
 	}{
 		{"javascript scheme", "javascript:alert(1)", redirect.ErrNotAllowed},
 		{"file scheme", "file:///etc/passwd", redirect.ErrNotAllowed},
-		// Empty string has no scheme → ErrInvalidURL.
+		// Empty string has no scheme â†’ ErrInvalidURL.
 		{"empty url", "", redirect.ErrInvalidURL},
 		// Custom native-app schemes are syntactically valid and may be in allowlist.
 		{"custom scheme not in list", "com.example.app://callback", redirect.ErrNotAllowed},

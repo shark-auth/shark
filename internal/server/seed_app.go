@@ -1,4 +1,4 @@
-package server
+﻿package server
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // base62Alphabet is the standard base62 character set (0-9, A-Z, a-z).
@@ -56,7 +56,7 @@ func divmod(n []byte, d byte) byte {
 	var rem uint64
 	for i := range n {
 		cur := rem*256 + uint64(n[i])
-		n[i] = byte(cur / uint64(d)) //#nosec G115 -- base-62 long division: d is a byte (≤255) and cur/d fits in a byte by construction
+		n[i] = byte(cur / uint64(d)) //#nosec G115 -- base-62 long division: d is a byte (â‰¤255) and cur/d fits in a byte by construction
 		rem = cur % uint64(d)
 	}
 	return byte(rem)
@@ -76,7 +76,7 @@ func generateClientSecret() (string, error) {
 func seedDefaultApplication(ctx context.Context, store storage.Store, cfg *config.Config) error {
 	_, err := store.GetDefaultApplication(ctx)
 	if err == nil {
-		// Already exists — idempotent, no-op.
+		// Already exists â€” idempotent, no-op.
 		return nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -165,7 +165,7 @@ func printDefaultAppBanner(clientID, clientSecret string) {
 	fmt.Println("  ============================================================")
 	fmt.Println("    Default application created")
 	fmt.Printf("    client_id:     %s\n", clientID)
-	fmt.Printf("    client_secret: %s   (shown once — save it)\n", clientSecret)
+	fmt.Printf("    client_secret: %s   (shown once â€” save it)\n", clientSecret)
 	fmt.Println("  ============================================================")
 	fmt.Println()
 }

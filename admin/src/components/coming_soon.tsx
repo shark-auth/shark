@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import React from 'react'
 
 interface ComingSoonProps {
@@ -8,7 +8,7 @@ interface ComingSoonProps {
   githubUrl?: string;
 }
 
-export function ComingSoon({ title, message, hint, githubUrl = 'https://github.com/sharkauth/sharkauth/discussions' }: ComingSoonProps) {
+export function ComingSoon({ title, message, hint, githubUrl = 'https://github.com/shark-auth/shark/discussions' }: ComingSoonProps) {
   return (
     <div style={{
       display: 'flex',
@@ -87,7 +87,7 @@ export function ComingSoon({ title, message, hint, githubUrl = 'https://github.c
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg-muted)')}
         >
-          Track this on GitHub →
+          Track this on GitHub â†’
         </a>
       </div>
     </div>

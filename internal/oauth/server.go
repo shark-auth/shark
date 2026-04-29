@@ -1,4 +1,4 @@
-// Package oauth provides the OAuth 2.1 Authorization Server backed by fosite.
+﻿// Package oauth provides the OAuth 2.1 Authorization Server backed by fosite.
 package oauth
 
 import (
@@ -17,10 +17,10 @@ import (
 	"github.com/ory/fosite/handler/openid"
 	"github.com/ory/fosite/token/jwt"
 
-	authjwt "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/audit"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	authjwt "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/audit"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // Server holds the fosite OAuth2 provider and dependencies.
@@ -85,7 +85,7 @@ func NewServer(store storage.Store, cfg *config.Config) (*Server, error) {
 	}
 
 	// Build the HMAC core strategy (still used for refresh-token and
-	// authorize-code signatures — refresh tokens stay opaque per DX1 scope).
+	// authorize-code signatures â€” refresh tokens stay opaque per DX1 scope).
 	hmacStrategy := compose.NewOAuth2HMACStrategy(fositeConfig)
 
 	// DX1: build the JWT access-token strategy keyed to the ES256 JWKS key.
@@ -153,7 +153,7 @@ func ensureES256Key(store storage.Store, serverSecret string) (*ecdsa.PrivateKey
 			slog.Info("oauth: loaded existing ES256 signing key", "kid", existing.KID)
 			return key, nil
 		}
-		// Decrypt failed — most likely server.secret changed (dev mode rotates
+		// Decrypt failed â€” most likely server.secret changed (dev mode rotates
 		// on each boot). Defer retiring the un-decryptable key until after the
 		// replacement key has been successfully inserted, so /oauth/* stays
 		// functional even if the insert fails.

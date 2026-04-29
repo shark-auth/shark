@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/rand"
@@ -11,10 +11,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/auth/providers"
-	"github.com/sharkauth/sharkauth/internal/auth/redirect"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/auth/providers"
+	"github.com/shark-auth/shark/internal/auth/redirect"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 const (
@@ -131,7 +131,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Phase 6 F3: fire auth flow hook. OAuthManager.HandleCallback already
 	// created a session row for us; if the flow blocks/redirects we leave
-	// that session in place — the cookie below is the caller-visible gate
+	// that session in place â€” the cookie below is the caller-visible gate
 	// and we skip it on a handled outcome.
 	if s.runAuthFlow(w, r, storage.AuthFlowTriggerOAuthCallback, user, "") {
 		return
@@ -140,8 +140,8 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
-	// Redirect to frontend if configured — JWT is additive but not embedded in redirect URL.
-	// Validate redirect_uri against the default application's allowlist (OAuth 2.1 §3.1.2).
+	// Redirect to frontend if configured â€” JWT is additive but not embedded in redirect URL.
+	// Validate redirect_uri against the default application's allowlist (OAuth 2.1 Â§3.1.2).
 	{
 		requestedRedirect := r.URL.Query().Get("redirect_uri")
 		if requestedRedirect == "" {
@@ -151,7 +151,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 			defaultApp, appErr := s.Store.GetDefaultApplication(r.Context())
 			if appErr != nil {
 				if errors.Is(appErr, sql.ErrNoRows) {
-					// No default app — server misconfiguration, not client error.
+					// No default app â€” server misconfiguration, not client error.
 					writeJSON(w, http.StatusInternalServerError, map[string]string{
 						"error":   "server_error",
 						"message": "Default application not configured",
@@ -177,7 +177,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Issue JWT alongside cookie if enabled (§1.4).
+	// Issue JWT alongside cookie if enabled (Â§1.4).
 	// OAuth callback is cookie-based (no MFA gate); mfaPassed=true for social logins.
 	resp := map[string]interface{}{}
 	for k, v := range userResponseMap(userToResponse(user)) {

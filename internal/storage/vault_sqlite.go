@@ -24,7 +24,7 @@ func (s *SQLiteStore) CreateVaultProvider(ctx context.Context, p *VaultProvider)
 		iconURL = p.IconURL
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`INSERT INTO vault_providers
 		 (id, name, display_name, auth_url, token_url, client_id,
 		  client_secret_enc, scopes, icon_url, active, extra_auth_params, created_at, updated_at)
@@ -39,14 +39,14 @@ func (s *SQLiteStore) CreateVaultProvider(ctx context.Context, p *VaultProvider)
 }
 
 func (s *SQLiteStore) GetVaultProviderByID(ctx context.Context, id string) (*VaultProvider, error) {
-	return s.scanVaultProvider(s.db.QueryRowContext(ctx,
+	return s.scanVaultProvider(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, display_name, auth_url, token_url, client_id,
 		        client_secret_enc, scopes, icon_url, active, extra_auth_params, created_at, updated_at
 		 FROM vault_providers WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetVaultProviderByName(ctx context.Context, name string) (*VaultProvider, error) {
-	return s.scanVaultProvider(s.db.QueryRowContext(ctx,
+	return s.scanVaultProvider(s.reader.QueryRowContext(ctx,
 		`SELECT id, name, display_name, auth_url, token_url, client_id,
 		        client_secret_enc, scopes, icon_url, active, extra_auth_params, created_at, updated_at
 		 FROM vault_providers WHERE name = ?`, name))
@@ -61,7 +61,7 @@ func (s *SQLiteStore) ListVaultProviders(ctx context.Context, activeOnly bool) (
 	}
 	query += ` ORDER BY display_name ASC`
 
-	rows, err := s.db.QueryContext(ctx, query)
+	rows, err := s.reader.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (s *SQLiteStore) UpdateVaultProvider(ctx context.Context, p *VaultProvider)
 		iconURL = p.IconURL
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`UPDATE vault_providers SET
 		   name = ?, display_name = ?, auth_url = ?, token_url = ?,
 		   client_id = ?, client_secret_enc = ?, scopes = ?, icon_url = ?,
@@ -107,7 +107,7 @@ func (s *SQLiteStore) UpdateVaultProvider(ctx context.Context, p *VaultProvider)
 }
 
 func (s *SQLiteStore) DeleteVaultProvider(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM vault_providers WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM vault_providers WHERE id = ?`, id)
 	return err
 }
 
@@ -213,7 +213,7 @@ func (s *SQLiteStore) CreateVaultConnection(ctx context.Context, c *VaultConnect
 		lastRefreshed = c.LastRefreshedAt.UTC().Format(time.RFC3339)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`INSERT INTO vault_connections
 		 (id, provider_id, user_id, access_token_enc, refresh_token_enc,
 		  token_type, scopes, expires_at, metadata, needs_reauth,
@@ -229,7 +229,7 @@ func (s *SQLiteStore) CreateVaultConnection(ctx context.Context, c *VaultConnect
 }
 
 func (s *SQLiteStore) GetVaultConnectionByID(ctx context.Context, id string) (*VaultConnection, error) {
-	return s.scanVaultConnection(s.db.QueryRowContext(ctx,
+	return s.scanVaultConnection(s.reader.QueryRowContext(ctx,
 		`SELECT id, provider_id, user_id, access_token_enc, refresh_token_enc,
 		        token_type, scopes, expires_at, metadata, needs_reauth,
 		        last_refreshed_at, created_at, updated_at
@@ -237,7 +237,7 @@ func (s *SQLiteStore) GetVaultConnectionByID(ctx context.Context, id string) (*V
 }
 
 func (s *SQLiteStore) GetVaultConnection(ctx context.Context, providerID, userID string) (*VaultConnection, error) {
-	return s.scanVaultConnection(s.db.QueryRowContext(ctx,
+	return s.scanVaultConnection(s.reader.QueryRowContext(ctx,
 		`SELECT id, provider_id, user_id, access_token_enc, refresh_token_enc,
 		        token_type, scopes, expires_at, metadata, needs_reauth,
 		        last_refreshed_at, created_at, updated_at
@@ -246,7 +246,7 @@ func (s *SQLiteStore) GetVaultConnection(ctx context.Context, providerID, userID
 }
 
 func (s *SQLiteStore) ListVaultConnectionsByUserID(ctx context.Context, userID string) ([]*VaultConnection, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, provider_id, user_id, access_token_enc, refresh_token_enc,
 		        token_type, scopes, expires_at, metadata, needs_reauth,
 		        last_refreshed_at, created_at, updated_at
@@ -271,7 +271,7 @@ func (s *SQLiteStore) ListVaultConnectionsByUserID(ctx context.Context, userID s
 // Admin-scope view used by the dashboard connections tab. Encrypted token
 // columns are still loaded but never serialized (json:"-" on the struct).
 func (s *SQLiteStore) ListAllVaultConnections(ctx context.Context) ([]*VaultConnection, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, provider_id, user_id, access_token_enc, refresh_token_enc,
 		        token_type, scopes, expires_at, metadata, needs_reauth,
 		        last_refreshed_at, created_at, updated_at
@@ -293,7 +293,7 @@ func (s *SQLiteStore) ListAllVaultConnections(ctx context.Context) ([]*VaultConn
 }
 
 func (s *SQLiteStore) ListVaultConnectionsByProviderID(ctx context.Context, providerID string) ([]*VaultConnection, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT id, provider_id, user_id, access_token_enc, refresh_token_enc,
 		        token_type, scopes, expires_at, metadata, needs_reauth,
 		        last_refreshed_at, created_at, updated_at
@@ -337,7 +337,7 @@ func (s *SQLiteStore) UpdateVaultConnection(ctx context.Context, c *VaultConnect
 		lastRefreshed = c.LastRefreshedAt.UTC().Format(time.RFC3339)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`UPDATE vault_connections SET
 		   access_token_enc = ?, refresh_token_enc = ?,
 		   token_type = ?, scopes = ?, expires_at = ?,
@@ -371,7 +371,7 @@ func (s *SQLiteStore) UpdateVaultConnectionTokens(
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE vault_connections SET
 		   access_token_enc = ?, refresh_token_enc = ?, expires_at = ?,
 		   last_refreshed_at = ?, needs_reauth = 0, updated_at = ?
@@ -385,7 +385,7 @@ func (s *SQLiteStore) UpdateVaultConnectionTokens(
 // the refresh pipeline when the provider rejects the refresh_token, so the UI
 // can nudge the user to re-connect.
 func (s *SQLiteStore) MarkVaultConnectionNeedsReauth(ctx context.Context, id string, needs bool) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE vault_connections SET needs_reauth = ?, updated_at = ? WHERE id = ?`,
 		boolToInt(needs), time.Now().UTC().Format(time.RFC3339), id,
 	)
@@ -393,7 +393,7 @@ func (s *SQLiteStore) MarkVaultConnectionNeedsReauth(ctx context.Context, id str
 }
 
 func (s *SQLiteStore) DeleteVaultConnection(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM vault_connections WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM vault_connections WHERE id = ?`, id)
 	return err
 }
 
@@ -402,7 +402,7 @@ func (s *SQLiteStore) DeleteVaultConnection(ctx context.Context, id string) erro
 // vault.token.retrieved events whose target_id matches connectionID, then
 // resolves each distinct actor_id to an Agent row.
 func (s *SQLiteStore) ListAgentsByVaultRetrieval(ctx context.Context, connectionID string) ([]*Agent, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT DISTINCT actor_id FROM audit_logs WHERE action = 'vault.token.retrieved' AND target_id = ?`,
 		connectionID)
 	if err != nil {

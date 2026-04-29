@@ -1,4 +1,4 @@
-// Package cmd — `shark user tier` subcommand (Lane E, E4).
+﻿// Package cmd â€” `shark user tier` subcommand (Lane E, E4).
 package cmd
 
 import (
@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
+	"github.com/shark-auth/shark/internal/cli"
 )
 
 var userCmd = &cobra.Command{
@@ -35,7 +35,7 @@ GET /api/v1/users?search=<email>.`,
 				fmt.Errorf("tier must be \"free\" or \"pro\", got %q", tier))
 		}
 
-		// Resolve email → ID if the ref looks like an email.
+		// Resolve email â†’ ID if the ref looks like an email.
 		userID, err := resolveUserID(cmd, userRef)
 		if err != nil {
 			return maybeJSONErr(cmd, "user_not_found", err)

@@ -1,4 +1,4 @@
-package middleware_test
+﻿package middleware_test
 
 import (
 	"context"
@@ -16,12 +16,12 @@ import (
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/auth"
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/auth"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 const (
@@ -133,7 +133,7 @@ func buildExpiredRS256Token(t *testing.T, store *storage.SQLiteStore) string {
 	}))
 
 	// Insert into store as "retired" so kid lookup passes.
-	// Validate only reads public_key_pem (plaintext column) — private_key_pem is unused here.
+	// Validate only reads public_key_pem (plaintext column) â€” private_key_pem is unused here.
 	if err := store.InsertSigningKey(ctx, &storage.SigningKey{
 		KID:           kid,
 		Algorithm:     "RS256",
@@ -167,8 +167,8 @@ func buildExpiredRS256Token(t *testing.T, store *storage.SQLiteStore) string {
 	return signed
 }
 
-// TestRequireSession_BearerValid: valid access JWT bearer → 200, AuthMethod="jwt",
-// SessionID="" (access token, token_type="access", per §2.2 has no SessionID).
+// TestRequireSession_BearerValid: valid access JWT bearer â†’ 200, AuthMethod="jwt",
+// SessionID="" (access token, token_type="access", per Â§2.2 has no SessionID).
 func TestRequireSession_BearerValid(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	cfg := testutil.TestConfig()
@@ -177,14 +177,14 @@ func TestRequireSession_BearerValid(t *testing.T) {
 
 	user := mwTestUser()
 
-	// Issue an access token (token_type="access") — SessionID must be empty per §2.2.
+	// Issue an access token (token_type="access") â€” SessionID must be empty per Â§2.2.
 	accessToken, _, err := jwtMgr.IssueAccessRefreshPair(context.Background(), user, "sess_bearer_valid", false)
 	if err != nil {
 		t.Fatalf("IssueAccessRefreshPair: %v", err)
 	}
 
 	capture := &captureHandler{}
-	handler := mw.RequireSessionFunc(sm, jwtMgr)(capture)
+	handler := mw.RequireSessionFunc(sm, jwtMgr, nil)(capture)
 
 	req := httptest.NewRequest("GET", "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -200,14 +200,14 @@ func TestRequireSession_BearerValid(t *testing.T) {
 	if capture.userID != user.ID {
 		t.Errorf("expected UserID=%s, got %q", user.ID, capture.userID)
 	}
-	// access token → SessionID must be "" (§2.2: empty when token_type=="access")
+	// access token â†’ SessionID must be "" (Â§2.2: empty when token_type=="access")
 	if capture.sessionID != "" {
 		t.Errorf("expected SessionID='' for access token, got %q", capture.sessionID)
 	}
 }
 
-// TestRequireSession_BearerInvalid: malformed bearer → 401 + WWW-Authenticate.
-// Cookie MUST be ignored even if a valid cookie is also present (no fallthrough per §2.1).
+// TestRequireSession_BearerInvalid: malformed bearer â†’ 401 + WWW-Authenticate.
+// Cookie MUST be ignored even if a valid cookie is also present (no fallthrough per Â§2.1).
 func TestRequireSession_BearerInvalid(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	cfg := testutil.TestConfig()
@@ -223,11 +223,11 @@ func TestRequireSession_BearerInvalid(t *testing.T) {
 	_, cookieVal := makeEncryptedSessionCookie(t, sm, store, user.ID)
 
 	capture := &captureHandler{}
-	handler := mw.RequireSessionFunc(sm, jwtMgr)(capture)
+	handler := mw.RequireSessionFunc(sm, jwtMgr, nil)(capture)
 
 	req := httptest.NewRequest("GET", "/protected", nil)
 	req.Header.Set("Authorization", "Bearer not.a.valid.jwt")
-	// Also set a valid cookie — middleware must NOT fall through to cookie path.
+	// Also set a valid cookie â€” middleware must NOT fall through to cookie path.
 	req.AddCookie(&http.Cookie{Name: "shark_session", Value: cookieVal})
 
 	w := httptest.NewRecorder()
@@ -245,7 +245,7 @@ func TestRequireSession_BearerInvalid(t *testing.T) {
 	}
 }
 
-// TestRequireSession_BearerExpired: expired JWT bearer → 401 with WWW-Authenticate
+// TestRequireSession_BearerExpired: expired JWT bearer â†’ 401 with WWW-Authenticate
 // containing error="invalid_token".
 func TestRequireSession_BearerExpired(t *testing.T) {
 	store := testutil.NewTestDB(t)
@@ -256,7 +256,7 @@ func TestRequireSession_BearerExpired(t *testing.T) {
 	expiredToken := buildExpiredRS256Token(t, store)
 
 	capture := &captureHandler{}
-	handler := mw.RequireSessionFunc(sm, jwtMgr)(capture)
+	handler := mw.RequireSessionFunc(sm, jwtMgr, nil)(capture)
 
 	req := httptest.NewRequest("GET", "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+expiredToken)
@@ -278,8 +278,8 @@ func TestRequireSession_BearerExpired(t *testing.T) {
 	}
 }
 
-// TestRequireSession_BearerRefreshToken: refresh token used as bearer → 401.
-// The WWW-Authenticate header includes error_description mentioning refresh (§2.3).
+// TestRequireSession_BearerRefreshToken: refresh token used as bearer â†’ 401.
+// The WWW-Authenticate header includes error_description mentioning refresh (Â§2.3).
 // Checked via the response body which contains the full message.
 func TestRequireSession_BearerRefreshToken(t *testing.T) {
 	store := testutil.NewTestDB(t)
@@ -294,7 +294,7 @@ func TestRequireSession_BearerRefreshToken(t *testing.T) {
 	}
 
 	capture := &captureHandler{}
-	handler := mw.RequireSessionFunc(sm, jwtMgr)(capture)
+	handler := mw.RequireSessionFunc(sm, jwtMgr, nil)(capture)
 
 	req := httptest.NewRequest("GET", "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+refreshToken)
@@ -304,7 +304,7 @@ func TestRequireSession_BearerRefreshToken(t *testing.T) {
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 when using refresh token as bearer, got %d", w.Code)
 	}
-	// §2.3: the rejection must communicate that a refresh token was used.
+	// Â§2.3: the rejection must communicate that a refresh token was used.
 	// Check both WWW-Authenticate and body for the "refresh" mention.
 	wwwAuth := w.Header().Get("WWW-Authenticate")
 	if wwwAuth == "" {
@@ -321,7 +321,7 @@ func TestRequireSession_BearerRefreshToken(t *testing.T) {
 	}
 }
 
-// TestRequireSession_CookieValid: cookie only (no bearer) → 200, AuthMethod="cookie",
+// TestRequireSession_CookieValid: cookie only (no bearer) â†’ 200, AuthMethod="cookie",
 // SessionID non-empty.
 func TestRequireSession_CookieValid(t *testing.T) {
 	store := testutil.NewTestDB(t)
@@ -336,7 +336,7 @@ func TestRequireSession_CookieValid(t *testing.T) {
 	sessID, cookieVal := makeEncryptedSessionCookie(t, sm, store, user.ID)
 
 	capture := &captureHandler{}
-	handler := mw.RequireSessionFunc(sm, jwtMgr)(capture)
+	handler := mw.RequireSessionFunc(sm, jwtMgr, nil)(capture)
 
 	req := httptest.NewRequest("GET", "/protected", nil)
 	req.AddCookie(&http.Cookie{Name: "shark_session", Value: cookieVal})
@@ -357,7 +357,7 @@ func TestRequireSession_CookieValid(t *testing.T) {
 	}
 }
 
-// TestRequireSession_NoAuth: no credentials → 401 with WWW-Authenticate header.
+// TestRequireSession_NoAuth: no credentials â†’ 401 with WWW-Authenticate header.
 func TestRequireSession_NoAuth(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	cfg := testutil.TestConfig()
@@ -365,7 +365,7 @@ func TestRequireSession_NoAuth(t *testing.T) {
 	sm := makeSessionManager(t, store, cfg)
 
 	capture := &captureHandler{}
-	handler := mw.RequireSessionFunc(sm, jwtMgr)(capture)
+	handler := mw.RequireSessionFunc(sm, jwtMgr, nil)(capture)
 
 	req := httptest.NewRequest("GET", "/protected", nil)
 	w := httptest.NewRecorder()
@@ -383,8 +383,8 @@ func TestRequireSession_NoAuth(t *testing.T) {
 	}
 }
 
-// TestRequireSession_BothPresent: valid bearer + valid cookie → 200, AuthMethod="jwt"
-// (bearer wins per §2.1 decision tree, cookie is ignored).
+// TestRequireSession_BothPresent: valid bearer + valid cookie â†’ 200, AuthMethod="jwt"
+// (bearer wins per Â§2.1 decision tree, cookie is ignored).
 func TestRequireSession_BothPresent(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	cfg := testutil.TestConfig()
@@ -406,7 +406,7 @@ func TestRequireSession_BothPresent(t *testing.T) {
 	}
 
 	capture := &captureHandler{}
-	handler := mw.RequireSessionFunc(sm, jwtMgr)(capture)
+	handler := mw.RequireSessionFunc(sm, jwtMgr, nil)(capture)
 
 	req := httptest.NewRequest("GET", "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+token)

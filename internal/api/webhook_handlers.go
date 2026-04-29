@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/rand"
@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // KnownWebhookEvents is the full set of emitted events. Admins register
@@ -119,7 +119,7 @@ func (s *Server) handleListWebhookEvents(w http.ResponseWriter, _ *http.Request)
 	for ev := range KnownWebhookEvents {
 		events = append(events, ev)
 	}
-	// Sort for a stable response — maps iterate in random order.
+	// Sort for a stable response â€” maps iterate in random order.
 	slices.Sort(events)
 	writeJSON(w, http.StatusOK, map[string]any{"events": events})
 }
@@ -239,7 +239,7 @@ func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	event := storage.WebhookEventTest
-	// Body is optional — keep backward compatibility with empty POST.
+	// Body is optional â€” keep backward compatibility with empty POST.
 	if r.ContentLength > 0 || r.Header.Get("Content-Type") != "" {
 		var req testWebhookRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, http.ErrBodyReadAfterClose) {

@@ -1,11 +1,11 @@
-package proxy
+﻿package proxy
 
 import (
 	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/sharkauth/sharkauth/internal/identity"
+	"github.com/shark-auth/shark/internal/identity"
 )
 
 // Identity is a package-local alias for identity.Identity so existing
@@ -48,7 +48,7 @@ func hasStrippedPrefix(key string) bool {
 
 // StripIdentityHeaders removes any X-User-*, X-Agent-*, or X-Shark-*
 // headers from h to prevent upstream-header spoofing by clients. Headers
-// whose canonical name appears in trusted are preserved — this is an
+// whose canonical name appears in trusted are preserved â€” this is an
 // escape hatch for unusual deployments and should be used sparingly.
 //
 // Comparison is case-insensitive for both the prefix match and the

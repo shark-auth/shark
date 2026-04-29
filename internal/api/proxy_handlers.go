@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/identity"
-	"github.com/sharkauth/sharkauth/internal/proxy"
+	"github.com/shark-auth/shark/internal/identity"
+	"github.com/shark-auth/shark/internal/proxy"
 )
 
 // proxyStatusResponse wraps a BreakerStats so the JSON is keyed under
-// "data" — matching the conventions of the other v2 admin endpoints that
+// "data" â€” matching the conventions of the other v2 admin endpoints that
 // the dashboard consumes.
 type proxyStatusResponse struct {
 	Data proxyStatusPayload `json:"data"`
@@ -38,7 +38,7 @@ type proxyStatusPayload struct {
 
 // proxyRuleView is the JSON-safe projection of a compiled proxy.Rule. We
 // mirror the user-facing YAML shape (path + methods + require/allow +
-// scopes) rather than echoing every internal Requirement field — the
+// scopes) rather than echoing every internal Requirement field â€” the
 // dashboard should show config-equivalent output so operators can copy it
 // back into sharkauth.yaml.
 type proxyRuleView struct {
@@ -49,7 +49,7 @@ type proxyRuleView struct {
 }
 
 // proxySimulateRequest is the POST body consumed by the simulator API. The
-// "identity" field is optional — omitting it models an anonymous request,
+// "identity" field is optional â€” omitting it models an anonymous request,
 // which is exactly how a dashboard operator tests whether a given public
 // path is actually reachable without credentials.
 type proxySimulateRequest struct {
@@ -180,7 +180,7 @@ func formatRequirement(req proxy.Requirement) string {
 // sortStrings sorts in place; kept local to avoid importing sort just for
 // the dashboard view.
 func sortStrings(ss []string) {
-	// Simple insertion sort — rule method lists are always <= 7 items in
+	// Simple insertion sort â€” rule method lists are always <= 7 items in
 	// practice (the standard HTTP verbs), so the allocation-free loop
 	// beats bringing in sort.Strings.
 	for i := 1; i < len(ss); i++ {
@@ -219,7 +219,7 @@ func (s *Server) handleProxySimulate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Construct a minimal synthetic http.Request for the engine. We don't
-	// wire headers or body — the engine only looks at method + URL.Path,
+	// wire headers or body â€” the engine only looks at method + URL.Path,
 	// so filling those is sufficient and keeps the simulator decoupled
 	// from the real ServeHTTP plumbing.
 	syntheticURL := &url.URL{Path: req.Path}

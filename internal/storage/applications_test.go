@@ -1,4 +1,4 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func newTestApp(t *testing.T, name string, isDefault bool) *storage.Application {
@@ -143,7 +143,7 @@ func TestApplicationDefaultUniqueIndex(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	ctx := context.Background()
 
-	// Insert the first default application — must succeed.
+	// Insert the first default application â€” must succeed.
 	first := newTestApp(t, "Default App", true)
 	if err := store.CreateApplication(ctx, first); err != nil {
 		t.Fatalf("CreateApplication (first default): %v", err)
@@ -158,7 +158,7 @@ func TestApplicationDefaultUniqueIndex(t *testing.T) {
 		t.Errorf("GetDefaultApplication ID: got %q, want %q", def.ID, first.ID)
 	}
 
-	// Insert a second application also marked is_default=1 — must fail due to partial unique index.
+	// Insert a second application also marked is_default=1 â€” must fail due to partial unique index.
 	second := newTestApp(t, "Second Default App", true)
 	err = store.CreateApplication(ctx, second)
 	if err == nil {
@@ -170,7 +170,7 @@ func TestApplicationEmptyURLSlices(t *testing.T) {
 	store := testutil.NewTestDB(t)
 	ctx := context.Background()
 
-	// Create an app with empty slices — they must round-trip as empty (not nil) slices.
+	// Create an app with empty slices â€” they must round-trip as empty (not nil) slices.
 	id, _ := gonanoid.New(21)
 	cid, _ := gonanoid.New(21)
 	now := time.Now().UTC().Truncate(time.Second)
@@ -180,11 +180,11 @@ func TestApplicationEmptyURLSlices(t *testing.T) {
 		ClientID:            "shark_app_" + cid,
 		ClientSecretHash:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 		ClientSecretPrefix:  "deadbeef",
-		AllowedCallbackURLs: nil, // nil → should be stored as "[]"
+		AllowedCallbackURLs: nil, // nil â†’ should be stored as "[]"
 		AllowedLogoutURLs:   []string{},
 		AllowedOrigins:      []string{},
 		IsDefault:           false,
-		Metadata:            nil, // nil → should be stored as "{}"
+		Metadata:            nil, // nil â†’ should be stored as "{}"
 		CreatedAt:           now,
 		UpdatedAt:           now,
 	}

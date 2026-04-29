@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -12,9 +12,9 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // emailRegex is a simple regex for email validation.
@@ -126,8 +126,9 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Hash password
-	passwordHash, err := auth.HashPassword(req.Password, s.Config.Auth.Argon2id)
+	passwordHash, err := s.PasswordHasher.Hash(req.Password, s.Config.Auth.Argon2id)
 	if err != nil {
+		slog.Error("signup: hash password failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
 			"message": "Internal server error",
@@ -152,6 +153,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.Store.CreateUser(r.Context(), user); err != nil {
+		slog.Error("signup: create user failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
 			"message": "Internal server error",
@@ -161,7 +163,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 
 	// Phase 6 F3: fire auth flow hook. Runs AFTER the user row lands so
 	// block/redirect outcomes leave the account in place but withhold the
-	// session — matches the documented "user created but login gated"
+	// session â€” matches the documented "user created but login gated"
 	// semantics admins rely on.
 	if s.runAuthFlow(w, r, storage.AuthFlowTriggerSignup, user, req.Password) {
 		return
@@ -170,6 +172,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	// Create session
 	sess, err := s.SessionManager.CreateSession(r.Context(), user.ID, r.RemoteAddr, r.UserAgent(), "password")
 	if err != nil {
+		slog.Error("signup: create session failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
 			"message": "Internal server error",
@@ -248,7 +251,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify password
-	match, err := auth.VerifyPassword(req.Password, *user.PasswordHash)
+	match, err := s.PasswordHasher.Verify(req.Password, *user.PasswordHash)
 	if err != nil || !match {
 		s.LockoutManager.RecordFailure(req.Email)
 		s.recordLoginFailure(r, user.ID, req.Email)
@@ -265,35 +268,47 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Update last_login_at
 	now := time.Now().UTC().Format(time.RFC3339)
 	user.LastLoginAt = &now
-	_ = s.Store.UpdateUser(r.Context(), user)
 
 	// If password needs rehash (e.g. bcrypt from Auth0 migration), rehash to argon2id
 	if auth.NeedsRehash(*user.PasswordHash) {
-		newHash, err := auth.HashPassword(req.Password, s.Config.Auth.Argon2id)
+		newHash, err := s.PasswordHasher.Hash(req.Password, s.Config.Auth.Argon2id)
 		if err == nil {
 			user.PasswordHash = &newHash
 			user.HashType = "argon2id"
-			user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-			_ = s.Store.UpdateUser(r.Context(), user)
+			user.UpdatedAt = now
 		}
 	}
 
-	// Phase 6 F3: fire auth flow hook. Runs after password (+ lockout) is
-	// cleared but before a session cookie is minted so block/redirect
-	// outcomes don't leak auth state to the client.
+	// Phase 6 F3: fire auth flow hook.
 	if s.runAuthFlow(w, r, storage.AuthFlowTriggerLogin, user, "") {
 		return
 	}
 
 	// Check if MFA is enabled
-	mfaPassed := true
-	if user.MFAEnabled {
-		mfaPassed = false
+	mfaPassed := !user.MFAEnabled
+
+	// Prepare session
+	sess := s.SessionManager.PrepareSessionWithMFA(user.ID, r.RemoteAddr, r.UserAgent(), "password", mfaPassed)
+
+	// Prepare audit log
+	audID, _ := gonanoid.New()
+	aud := &storage.AuditLog{
+		ID:         "aud_" + audID,
+		ActorID:    user.ID,
+		ActorType:  "user",
+		Action:     "user.login",
+		TargetType: "user",
+		TargetID:   user.ID,
+		IP:         r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		Metadata:   "{}",
+		Status:     "success",
+		CreatedAt:  now,
 	}
 
-	// Create session
-	sess, err := s.SessionManager.CreateSessionWithMFA(r.Context(), user.ID, r.RemoteAddr, r.UserAgent(), "password", mfaPassed)
-	if err != nil {
+	// Atomic operation
+	if err := s.Store.LoginAtomic(r.Context(), user, sess, aud); err != nil {
+		slog.Error("login: atomic operation failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error":   "internal_error",
 			"message": "Internal server error",
@@ -304,6 +319,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
 
+	// Real-time emission
+	if s.WebhookDispatcher != nil {
+		_ = s.WebhookDispatcher.Emit(r.Context(), "system.audit_log", aud)
+	}
+
 	if user.MFAEnabled {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"mfaRequired": true,
@@ -311,7 +331,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Issue JWT alongside cookie if enabled (§1.4).
+	// Issue JWT alongside cookie if enabled (Â§1.4).
 	resp := map[string]interface{}{}
 	for k, v := range userResponseMap(userToResponse(user)) {
 		resp[k] = v
@@ -487,7 +507,7 @@ func (s *Server) handlePasswordReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 6 F3: fire auth flow hook. The password has already rotated —
+	// Phase 6 F3: fire auth flow hook. The password has already rotated â€”
 	// block/redirect at this point gates the confirmation response only,
 	// which is the documented trade-off for "flow runs after the mutation".
 	if s.runAuthFlow(w, r, storage.AuthFlowTriggerPasswordReset, user, req.Password) {
@@ -597,7 +617,7 @@ func (s *Server) recordLoginFailure(r *http.Request, actorID, email string) {
 // Kept as a sibling (rather than changing the existing call sites' signature)
 // so all four current invocations continue to compile while still emitting
 // {email, failure_reason, attempt_count}. attempt_count comes from the
-// in-memory LockoutManager — best-effort, drops to 0 if unwired.
+// in-memory LockoutManager â€” best-effort, drops to 0 if unwired.
 func (s *Server) recordLoginFailureWithReason(r *http.Request, actorID, email, failureReason string) {
 	if s == nil || s.AuditLogger == nil {
 		return

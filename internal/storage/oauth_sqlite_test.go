@@ -1,12 +1,12 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // seedOAuthUser creates a minimal user for OAuth storage tests.
@@ -26,7 +26,7 @@ func seedOAuthUser(t *testing.T, store *storage.SQLiteStore, id string) {
 	}
 }
 
-// TestOAuthConsent_CRUD creates a consent, lists it, and revokes it — covering
+// TestOAuthConsent_CRUD creates a consent, lists it, and revokes it â€” covering
 // CreateOAuthConsent, ListConsentsByUserID, and RevokeOAuthConsent.
 func TestOAuthConsent_CRUD(t *testing.T) {
 	store := testutil.NewTestDB(t)
@@ -109,7 +109,7 @@ func TestOAuthConsent_CRUD(t *testing.T) {
 }
 
 // TestOAuthToken_ListAndDPoP creates tokens via CreateOAuthToken, lists them
-// by agent ID, then updates the DPoP JKT — covering ListOAuthTokensByAgentID,
+// by agent ID, then updates the DPoP JKT â€” covering ListOAuthTokensByAgentID,
 // UpdateOAuthTokenDPoPJKT, and scanOAuthTokenFromRows.
 func TestOAuthToken_ListAndDPoP(t *testing.T) {
 	store := testutil.NewTestDB(t)

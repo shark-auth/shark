@@ -18,7 +18,7 @@ type Secret struct {
 // GetSecret retrieves a named secret. Returns ("", sql.ErrNoRows) when absent.
 func (s *SQLiteStore) GetSecret(ctx context.Context, name string) (string, error) {
 	var value string
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT value FROM secrets WHERE name = ?`, name,
 	).Scan(&value)
 	if err == sql.ErrNoRows {
@@ -33,7 +33,7 @@ func (s *SQLiteStore) GetSecret(ctx context.Context, name string) (string, error
 // SetSecret inserts or replaces a named secret, updating rotated_at when the
 // row already exists.
 func (s *SQLiteStore) SetSecret(ctx context.Context, name, value string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO secrets (name, value, created_at)
 		 VALUES (?, ?, CURRENT_TIMESTAMP)
 		 ON CONFLICT(name) DO UPDATE SET
@@ -49,7 +49,7 @@ func (s *SQLiteStore) SetSecret(ctx context.Context, name, value string) error {
 
 // DeleteSecret removes a named secret. No-op when absent.
 func (s *SQLiteStore) DeleteSecret(ctx context.Context, name string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`DELETE FROM secrets WHERE name = ?`, name,
 	)
 	if err != nil {

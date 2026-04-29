@@ -1,4 +1,4 @@
-package cmd
+﻿package cmd
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	jwtlib "github.com/golang-jwt/jwt/v5"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/sharkauth/sharkauth/internal/proxy"
+	"github.com/shark-auth/shark/internal/proxy"
 )
 
 // jwksCache fetches and caches a Shark auth server's /.well-known/jwks.json
@@ -28,7 +28,7 @@ import (
 // forces a refresh on a kid miss (new key rotated in between scheduled
 // refreshes) before giving up and returning an invalid-token error.
 //
-// This is intentionally minimal — it reuses golang-jwt/jwt/v5 for parsing
+// This is intentionally minimal â€” it reuses golang-jwt/jwt/v5 for parsing
 // and verification, but speaks JWKS on the wire so the standalone binary
 // doesn't need any DB or shared process memory with the auth server.
 type jwksCache struct {
@@ -38,11 +38,11 @@ type jwksCache struct {
 	logger          *slog.Logger
 
 	// W15c: aud + iss are NOT validated by golang-jwt/v5 automatically on
-	// MapClaims — only exp/nbf/iat are. Callers must populate these so
+	// MapClaims â€” only exp/nbf/iat are. Callers must populate these so
 	// verifyBearer can pass WithAudience + WithIssuer to the parser. A
 	// token whose aud isn't in expectedAudiences or whose iss differs
 	// from expectedIssuer is rejected. Empty expectedAudiences disables
-	// the aud check (not recommended — the proxy CLI requires --audience
+	// the aud check (not recommended â€” the proxy CLI requires --audience
 	// at startup); empty expectedIssuer disables the iss check.
 	expectedAudiences []string
 	expectedIssuer    string
@@ -54,7 +54,7 @@ type jwksCache struct {
 
 	// W15c: rate-limit unknown-kid-driven refreshes. Without this, an
 	// attacker-controlled stream of tokens bearing random kids each
-	// triggers a full JWKS fetch against the auth server — turning the
+	// triggers a full JWKS fetch against the auth server â€” turning the
 	// proxy into a DoS amplifier. refreshGroup collapses concurrent
 	// refresh calls into a single HTTP round-trip, and
 	// minRefreshInterval clamps the rate at which kid-miss refreshes
@@ -137,7 +137,7 @@ func (c *jwksCache) refresh(ctx context.Context) error {
 
 	// W15c: cap body at 1 MiB to prevent a malicious or misbehaving auth
 	// server from OOMing the proxy with an unbounded JWKS response. The
-	// JWKS doc is a handful of small keys — 1 MiB is generous. We read one
+	// JWKS doc is a handful of small keys â€” 1 MiB is generous. We read one
 	// extra byte past the limit so we can distinguish "exactly at the
 	// limit" (fine) from "more than the limit" (rejected).
 	const maxJWKSBytes = 1 << 20
@@ -188,7 +188,7 @@ func (c *jwksCache) keyForKid(ctx context.Context, kid string) (any, error) {
 	c.mu.RUnlock()
 
 	// Rate-limit: if we tried recently, don't try again. The token's
-	// kid stays "unknown" until the window reopens — the caller maps
+	// kid stays "unknown" until the window reopens â€” the caller maps
 	// that to 401, which is the right behavior for a forged or stale
 	// kid anyway.
 	c.lastRefreshAttemptM.Lock()
@@ -284,7 +284,7 @@ func (c *jwksCache) verifyBearer(ctx context.Context, authHeader string) (proxy.
 	// W15c: audience + issuer validation. golang-jwt v5 only enforces
 	// these when explicitly opted in via WithAudience/WithIssuer. Without
 	// them a valid token minted by the auth server for a different
-	// audience or issuer would be accepted — CVE-shape.
+	// audience or issuer would be accepted â€” CVE-shape.
 	//
 	// Audience is checked as a set-intersection: the token is accepted
 	// when any of its `aud` values matches any of the expected audiences.
@@ -359,9 +359,9 @@ func (c *jwksCache) verifyBearer(ctx context.Context, authHeader string) (proxy.
 
 // extractAudiences pulls the aud claim from a MapClaims into a []string.
 // JWT allows aud to be either a single string or a list of strings (RFC
-// 7519 §4.1.3). Returns an error if aud is missing or malformed so the
+// 7519 Â§4.1.3). Returns an error if aud is missing or malformed so the
 // caller can reject rather than silently treat a token with no aud as
-// matching — which would defeat the purpose of the W15c check.
+// matching â€” which would defeat the purpose of the W15c check.
 func extractAudiences(claims jwtlib.MapClaims) ([]string, error) {
 	raw, ok := claims["aud"]
 	if !ok {
@@ -390,7 +390,7 @@ func extractAudiences(claims jwtlib.MapClaims) ([]string, error) {
 }
 
 // audienceMatches returns true when any value in tokenAuds appears in
-// expectedAuds. Set-intersection semantics — the token is "good enough"
+// expectedAuds. Set-intersection semantics â€” the token is "good enough"
 // if any of its audiences is one the proxy was told to trust.
 func audienceMatches(tokenAuds, expectedAuds []string) bool {
 	for _, t := range tokenAuds {

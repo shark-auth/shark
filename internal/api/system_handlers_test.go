@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"bytes"
@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
-// ─── GET /api/v1/admin/system/mode ──────────────────────────────────────────
+// â”€â”€â”€ GET /api/v1/admin/system/mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestHandleGetMode(t *testing.T) {
 	ts := testutil.NewTestServer(t)
@@ -28,7 +28,7 @@ func TestHandleGetMode(t *testing.T) {
 	if body.Mode == "" {
 		t.Fatal("expected non-empty mode")
 	}
-	// Test servers use :memory: — db_path should be that or a temp file path.
+	// Test servers use :memory: â€” db_path should be that or a temp file path.
 	if body.DBPath == "" {
 		t.Fatal("expected non-empty db_path")
 	}
@@ -47,7 +47,7 @@ func TestHandleGetMode_Unauthorized(t *testing.T) {
 	}
 }
 
-// ─── POST /api/v1/admin/system/swap-mode ─────────────────────────────────────
+// â”€â”€â”€ POST /api/v1/admin/system/swap-mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestHandleSwapMode_Valid(t *testing.T) {
 	ts := testutil.NewTestServer(t)
@@ -98,7 +98,7 @@ func TestHandleSwapMode_NoAuth(t *testing.T) {
 	}
 }
 
-// ─── POST /api/v1/admin/system/reset — target=key ────────────────────────────
+// â”€â”€â”€ POST /api/v1/admin/system/reset â€” target=key â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestHandleResetKey(t *testing.T) {
 	ts := testutil.NewTestServer(t)
@@ -119,7 +119,7 @@ func TestHandleResetKey(t *testing.T) {
 		t.Errorf("admin_key looks too short: %q", key)
 	}
 
-	// Old key should now be invalid — verify by hitting the mode endpoint.
+	// Old key should now be invalid â€” verify by hitting the mode endpoint.
 	oldKey := ts.AdminKey
 	req2, _ := http.NewRequest(http.MethodGet, ts.URL("/api/v1/admin/system/mode"), nil)
 	req2.Header.Set("Authorization", "Bearer "+oldKey)
@@ -133,7 +133,7 @@ func TestHandleResetKey(t *testing.T) {
 	}
 }
 
-// ─── POST /api/v1/admin/system/reset — target=prod confirmation ──────────────
+// â”€â”€â”€ POST /api/v1/admin/system/reset â€” target=prod confirmation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestHandleResetProd_MissingConfirmation(t *testing.T) {
 	ts := testutil.NewTestServer(t)
@@ -181,7 +181,7 @@ func TestHandleResetProd_CorrectConfirmation(t *testing.T) {
 	}
 }
 
-// ─── POST /api/v1/admin/system/reset — target=dev ────────────────────────────
+// â”€â”€â”€ POST /api/v1/admin/system/reset â€” target=dev â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestHandleResetDev(t *testing.T) {
 	ts := testutil.NewTestServer(t)
@@ -199,7 +199,7 @@ func TestHandleResetDev(t *testing.T) {
 	}
 }
 
-// ─── POST /api/v1/admin/system/reset — invalid target ────────────────────────
+// â”€â”€â”€ POST /api/v1/admin/system/reset â€” invalid target â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestHandleReset_InvalidTarget(t *testing.T) {
 	ts := testutil.NewTestServer(t)
@@ -212,7 +212,7 @@ func TestHandleReset_InvalidTarget(t *testing.T) {
 	}
 }
 
-// ─── Drain middleware ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Drain middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestDrainMiddleware_Returns503WhenDraining(t *testing.T) {
 	flag := &middleware.DrainFlag{}
@@ -253,19 +253,19 @@ func TestDrainMiddleware_PassesWhenNotDraining(t *testing.T) {
 	}
 }
 
-// ─── Localhost-only gate ──────────────────────────────────────────────────────
+// â”€â”€â”€ Localhost-only gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestLocalhostOnly_RejectsNonLoopback(t *testing.T) {
 	t.Setenv("SHARK_RESET_LOCALHOST_ONLY", "1")
 
 	ts := testutil.NewTestServer(t)
 
-	// httptest.NewServer uses 127.0.0.1 — this will pass loopback check.
+	// httptest.NewServer uses 127.0.0.1 â€” this will pass loopback check.
 	// To test rejection we need to simulate a non-loopback RemoteAddr.
 	// We do this by calling the helper directly rather than via HTTP.
 	// The loopback check is unit-tested here via the isLoopback helper indirectly.
 
-	// Send a real request to swap-mode — since httptest uses 127.0.0.1 it will
+	// Send a real request to swap-mode â€” since httptest uses 127.0.0.1 it will
 	// pass the loopback check. This verifies the env var doesn't break normal flow.
 	resp := ts.PostJSONWithAdminKey("/api/v1/admin/system/swap-mode", map[string]any{
 		"mode": "prod",

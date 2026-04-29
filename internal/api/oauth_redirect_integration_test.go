@@ -1,4 +1,4 @@
-//go:build integration
+﻿//go:build integration
 
 package api_test
 
@@ -16,9 +16,9 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/auth/providers"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/auth/providers"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // setupOAuthRedirectTest creates a test server with a mock GitHub provider

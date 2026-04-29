@@ -1,4 +1,4 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // newFlowID generates the "flow_<20-hex>" identifier the spec reserves for
@@ -36,7 +36,7 @@ func newFlowRunID(t *testing.T) string {
 	return "fr_" + hex.EncodeToString(buf)
 }
 
-// newTestAuthFlow produces a minimal AuthFlow — single require_email_verification
+// newTestAuthFlow produces a minimal AuthFlow â€” single require_email_verification
 // step, no conditions. Tests layer trigger/priority/step overrides on top.
 func newTestAuthFlow(t *testing.T, trigger string) *storage.AuthFlow {
 	t.Helper()

@@ -1,4 +1,4 @@
-package cli_test
+﻿package cli_test
 
 import (
 	"bytes"
@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil/cli"
+	"github.com/shark-auth/shark/internal/testutil/cli"
 )
 
 // TestE2E_ProxyRulesCRUD drives the proxy rules admin API end-to-end using an
 // in-process server (same harness as TestE2EServeFlow). Exercises create,
-// list, get, and delete via raw HTTP — mirroring what the CLI commands do
+// list, get, and delete via raw HTTP â€” mirroring what the CLI commands do
 // under the hood. This validates the admin API surface that Lane E CLI wraps.
 func TestE2E_ProxyRulesCRUD(t *testing.T) {
 	h := cli.Start(t)
@@ -103,11 +103,11 @@ func TestE2E_ProxyRulesCRUD(t *testing.T) {
 // well-formed YAML payload and returns imported > 0.
 //
 // Skipped: /admin/proxy/rules/import is not mounted in router.go (the YAML
-// importer was de-scoped pre-launch — only the JSON CRUD at /admin/proxy/rules/db
+// importer was de-scoped pre-launch â€” only the JSON CRUD at /admin/proxy/rules/db
 // ships in v0.1). Re-enable when the YAML import route lands. Tracked under
 // playbook v0.2 backlog.
 func TestE2E_ProxyRulesImport(t *testing.T) {
-	t.Skip("YAML import route not mounted in v0.1 — see comment above")
+	t.Skip("YAML import route not mounted in v0.1 â€” see comment above")
 	h := cli.Start(t)
 
 	yamlContent := `rules:

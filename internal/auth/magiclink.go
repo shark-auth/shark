@@ -1,4 +1,4 @@
-package auth
+﻿package auth
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/email"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 var (
@@ -202,7 +202,7 @@ func (m *MagicLinkManager) SendPasswordReset(ctx context.Context, emailAddr stri
 }
 
 // VerifyPasswordResetToken verifies a raw token and returns the associated email.
-// Unlike VerifyMagicLink, this does not create a session — the caller handles the password update.
+// Unlike VerifyMagicLink, this does not create a session â€” the caller handles the password update.
 func (m *MagicLinkManager) VerifyPasswordResetToken(ctx context.Context, rawToken string) (string, error) {
 	hash := sha256.Sum256([]byte(rawToken))
 	tokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
@@ -263,7 +263,7 @@ func (m *MagicLinkManager) SendEmailVerification(ctx context.Context, emailAddr 
 	}
 
 	// Use DB-configured redirect URL if set; fall back to built-in shark endpoint.
-	// NOTE: /hosted/default/verify is NOT shipped in this version — devs MUST configure
+	// NOTE: /hosted/default/verify is NOT shipped in this version â€” devs MUST configure
 	// their own verify_redirect_url via Admin > Branding > Email > Redirect URLs.
 	baseURLForVerify := strings.TrimRight(m.cfg.Server.BaseURL, "/")
 	fallbackVerifyURL := fmt.Sprintf("%s/api/v1/auth/verify-email", baseURLForVerify)
@@ -386,7 +386,7 @@ func (m *MagicLinkManager) VerifyMagicLink(ctx context.Context, rawToken string)
 			return nil, nil, fmt.Errorf("creating user: %w", err)
 		}
 	} else {
-		// Existing user — ensure email is verified
+		// Existing user â€” ensure email is verified
 		if !user.EmailVerified {
 			user.EmailVerified = true
 			user.UpdatedAt = time.Now().UTC().Format(time.RFC3339)

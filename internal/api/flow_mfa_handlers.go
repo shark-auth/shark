@@ -1,17 +1,17 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/authflow"
-	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/authflow"
+	"github.com/shark-auth/shark/internal/config"
 )
 
 // flowMFAVerifyRequest is the body for POST /api/v1/auth/flow/mfa/verify.
 type flowMFAVerifyRequest struct {
-	// FlowRunID is informational — not validated today; included so SDK callers
+	// FlowRunID is informational â€” not validated today; included so SDK callers
 	// can be forward-compatible when we add stateful flow-run resumption.
 	FlowRunID   string `json:"flow_run_id"`
 	ChallengeID string `json:"challenge_id"`
@@ -51,7 +51,7 @@ func (s *Server) handleFlowMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Consume the challenge — single-use, expires on consumption.
+	// Consume the challenge â€” single-use, expires on consumption.
 	if !authflow.GlobalChallengeStore.Consume(req.ChallengeID, req.UserID) {
 		writeJSON(w, http.StatusUnauthorized, errPayload("invalid_challenge", "Challenge not found, expired, or user mismatch"))
 		return

@@ -1,4 +1,4 @@
-// Package api — admin-key-authenticated email template CRUD, preview, send-test,
+﻿// Package api â€” admin-key-authenticated email template CRUD, preview, send-test,
 // and reset handlers. Part of Phase A (task A7) of the branding + hosted-
 // components plan. All routes live under /admin/email-templates with the same
 // AdminAPIKeyFromStore middleware gate as the rest of the admin group.
@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/email"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // isEmailTemplateNotFound detects the sentinel error the storage layer wraps
@@ -118,7 +118,7 @@ func (s *Server) handlePreviewEmailTemplate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Empty body is valid — decode best-effort so PATCH-style empty requests
+	// Empty body is valid â€” decode best-effort so PATCH-style empty requests
 	// still hit the default-branding + default-sample-data path.
 	var req previewRequest
 	if r.ContentLength > 0 {
@@ -156,7 +156,7 @@ func (s *Server) handlePreviewEmailTemplate(w http.ResponseWriter, r *http.Reque
 
 // handleSendTestEmail handles POST /admin/email-templates/{id}/send-test.
 // Renders the template with default sample data + resolved branding and hands
-// the result to the MagicLinkManager's underlying sender — the same pipe the
+// the result to the MagicLinkManager's underlying sender â€” the same pipe the
 // rest of the auth flows use, so a working /send-test proves the whole email
 // stack end to end.
 //
@@ -220,7 +220,7 @@ func (s *Server) handleSendTestEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleResetEmailTemplate handles POST /admin/email-templates/{id}/reset.
-// Looks up the V1 seed by id and UPDATEs the row with seed values — we
+// Looks up the V1 seed by id and UPDATEs the row with seed values â€” we
 // intentionally do NOT re-INSERT-OR-IGNORE because that's a no-op once the
 // row exists, and the point of reset is to overwrite user edits.
 func (s *Server) handleResetEmailTemplate(w http.ResponseWriter, r *http.Request) {
@@ -238,7 +238,7 @@ func (s *Server) handleResetEmailTemplate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Confirm the row actually exists before attempting an UPDATE — otherwise
+	// Confirm the row actually exists before attempting an UPDATE â€” otherwise
 	// the UPDATE silently matches zero rows and the caller can't tell.
 	if _, err := s.Store.GetEmailTemplate(r.Context(), id); err != nil {
 		if isEmailTemplateNotFound(err) {

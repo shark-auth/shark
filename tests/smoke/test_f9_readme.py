@@ -69,9 +69,9 @@ def test_git_plus_install_present():
 
 
 def test_no_hallucinated_install_sh():
-    """sharkauth.dev/install.sh was a hallucinated URL — must not appear."""
-    assert "sharkauth.dev/install.sh" not in _text(), (
-        "Hallucinated URL sharkauth.dev/install.sh must not appear in README"
+    """sharkauth.com/install.sh was a hallucinated URL — must not appear."""
+    assert "sharkauth.com/install.sh" not in _text(), (
+        "Hallucinated URL sharkauth.com/install.sh must not appear in README"
     )
 
 

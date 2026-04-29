@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/rand"
@@ -16,11 +16,11 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // setupTokenTTL is the lifetime of the one-time setup token.
-// 30 minutes — long enough for a human to read the terminal and click the URL.
+// 30 minutes â€” long enough for a human to read the terminal and click the URL.
 const setupTokenTTL = 30 * time.Minute
 
 // setupToken is the in-memory, one-shot first-boot setup credential.
@@ -43,7 +43,7 @@ var (
 // and returns the raw token for printing. Calling it again replaces any prior
 // token. Returns ("", nil) when the store already has admin users (not first boot).
 //
-// apiKey is the full admin API key generated during first boot — it will be
+// apiKey is the full admin API key generated during first boot â€” it will be
 // shown once on the /admin/setup page and then discarded.
 func (s *Server) MintSetupToken(apiKey string) (string, error) {
 	raw := make([]byte, 32)
@@ -66,7 +66,7 @@ func (s *Server) MintSetupToken(apiKey string) (string, error) {
 }
 
 // SetupTokenMiddleware accepts "Authorization: Setup <token>" on setup routes.
-// It validates the token but does NOT consume it — consumption happens in
+// It validates the token but does NOT consume it â€” consumption happens in
 // handleSetupAdminUser on success.
 func (s *Server) SetupTokenMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +101,7 @@ func (s *Server) validateSetupToken(supplied string) bool {
 }
 
 // handleSetupInfo returns the one-time admin API key to the setup page.
-// The key is served only once — subsequent calls return 410 Gone.
+// The key is served only once â€” subsequent calls return 410 Gone.
 // GET /api/v1/admin/setup/info  (protected by SetupTokenMiddleware)
 func (s *Server) handleSetupInfo(w http.ResponseWriter, r *http.Request) {
 	setupMu.Lock()
@@ -158,13 +158,13 @@ func (s *Server) handleSetupAdminUser(w http.ResponseWriter, r *http.Request) {
 	// Check if user already exists; create if not.
 	user, err := s.Store.GetUserByEmail(ctx, req.Email)
 	if err != nil {
-		// User doesn't exist — create them.
+		// User doesn't exist â€” create them.
 		id, _ := gonanoid.New()
 		now := time.Now().UTC().Format(time.RFC3339)
 		newUser := &storage.User{
 			ID:            "usr_" + id,
 			Email:         req.Email,
-			EmailVerified: true, // admin bootstrap — trust the operator
+			EmailVerified: true, // admin bootstrap â€” trust the operator
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		}
@@ -180,7 +180,7 @@ func (s *Server) handleSetupAdminUser(w http.ResponseWriter, r *http.Request) {
 	// Send magic-link.
 	var devInboxURL string
 	if s.MagicLinkManager == nil {
-		slog.Warn("setup: MagicLinkManager not wired — cannot send magic link")
+		slog.Warn("setup: MagicLinkManager not wired â€” cannot send magic link")
 		writeJSON(w, http.StatusServiceUnavailable, errPayload("not_configured", "Email not configured"))
 		return
 	}
@@ -201,17 +201,17 @@ func (s *Server) handleSetupAdminUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Consume the setup token — setup is complete.
+	// Consume the setup token â€” setup is complete.
 	setupMu.Lock()
 	if setupState != nil {
 		setupState.consumed = true
-		// Wipe the API key from memory — hash+prefix+suffix remain in DB.
+		// Wipe the API key from memory â€” hash+prefix+suffix remain in DB.
 		setupState.apiKey = ""
 	}
 	setupMu.Unlock()
 
 	slog.Info("setup: first-boot setup complete", "email", req.Email)
-	fmt.Printf("\n  Setup complete — magic link sent to %s\n\n", req.Email)
+	fmt.Printf("\n  Setup complete â€” magic link sent to %s\n\n", req.Email)
 
 	resp := setupAdminUserResponse{
 		Sent:        true,
@@ -221,7 +221,7 @@ func (s *Server) handleSetupAdminUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSetupStatus returns whether setup is still pending or already done.
-// GET /api/v1/admin/setup/status  (public — no auth needed)
+// GET /api/v1/admin/setup/status  (public â€” no auth needed)
 func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	setupMu.Lock()
 	tok := setupState

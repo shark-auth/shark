@@ -1,11 +1,11 @@
-//go:build e2e
+﻿//go:build e2e
 
-// Package e2e contains the Phase 3 golden-path integration tests (GP1–GP10).
+// Package e2e contains the Phase 3 golden-path integration tests (GP1â€“GP10).
 // Run with: go test -race -count=1 -tags=e2e ./internal/testutil/e2e/...
 //
 // Build tag rationale: these tests are slower (real DB + real JWT RSA ops) and
 // are excluded from plain `go test ./...` runs to keep the unit-test loop fast.
-// `make verify` runs them explicitly (§5.5).
+// `make verify` runs them explicitly (Â§5.5).
 package e2e
 
 import (
@@ -19,8 +19,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // --------------------------------------------------------------------------
@@ -114,7 +114,7 @@ func extractMagicLinkToken(t *testing.T, html string) string {
 }
 
 // --------------------------------------------------------------------------
-// GP1: Password login → token in response → GET /me with Bearer → 200
+// GP1: Password login â†’ token in response â†’ GET /me with Bearer â†’ 200
 // --------------------------------------------------------------------------
 
 func TestPhase3_GP1_BearerLoginAndMe(t *testing.T) {
@@ -133,7 +133,7 @@ func TestPhase3_GP1_BearerLoginAndMe(t *testing.T) {
 		t.Fatalf("GP1: login response missing token/access_token: %+v", loginBody)
 	}
 
-	// GET /me with Bearer — use a fresh client with no cookies to isolate Bearer path.
+	// GET /me with Bearer â€” use a fresh client with no cookies to isolate Bearer path.
 	req, _ := http.NewRequest("GET", ts.URL("/api/v1/auth/me"), nil)
 	req.Header.Set("Authorization", "Bearer "+bearerToken)
 	resp, err := http.DefaultClient.Do(req)
@@ -151,7 +151,7 @@ func TestPhase3_GP1_BearerLoginAndMe(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// GP2: Password login → shark_session cookie → GET /me cookie-only → 200
+// GP2: Password login â†’ shark_session cookie â†’ GET /me cookie-only â†’ 200
 // --------------------------------------------------------------------------
 
 func TestPhase3_GP2_CookieLoginAndMe(t *testing.T) {
@@ -173,7 +173,7 @@ func TestPhase3_GP2_CookieLoginAndMe(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// GP3: Both cookie + Bearer → 200, AuthMethod=jwt (Bearer wins)
+// GP3: Both cookie + Bearer â†’ 200, AuthMethod=jwt (Bearer wins)
 // --------------------------------------------------------------------------
 
 func TestPhase3_GP3_BothCredentials_BearerWins(t *testing.T) {
@@ -210,15 +210,15 @@ func TestPhase3_GP3_BothCredentials_BearerWins(t *testing.T) {
 	if result["email"] != "gp3@example.com" {
 		t.Errorf("GP3: expected email gp3@example.com, got %v", result["email"])
 	}
-	// User ID must be present — confirms the request was authenticated.
+	// User ID must be present â€” confirms the request was authenticated.
 	if _, ok := result["id"]; !ok {
 		t.Error("GP3: expected id in /me response")
 	}
 }
 
 // --------------------------------------------------------------------------
-// GP4: POST /auth/revoke own JWT → token revoked → with check_per_request=true,
-// next /me with same token → 401.
+// GP4: POST /auth/revoke own JWT â†’ token revoked â†’ with check_per_request=true,
+// next /me with same token â†’ 401.
 //
 // Approach: after login, enable check_per_request dynamically on the JWT manager
 // via SetCheckPerRequest(true), revoke the token via POST /auth/revoke, then
@@ -262,14 +262,14 @@ func TestPhase3_GP4_RevokeJWT_ThenBlocked(t *testing.T) {
 	revokeResp := ts.PostJSONWithBearer("/api/v1/auth/revoke", map[string]string{
 		"token": bearerToken,
 	}, bearerToken)
-	// The revoke endpoint returns 200 (not 204 as in the PHASE3.md draft — see deviation note).
+	// The revoke endpoint returns 200 (not 204 as in the PHASE3.md draft â€” see deviation note).
 	if revokeResp.StatusCode != http.StatusOK {
 		body := readAll(t, revokeResp)
 		t.Fatalf("GP4: expected 200 from revoke, got %d: %s", revokeResp.StatusCode, body)
 	}
 	revokeResp.Body.Close()
 
-	// Now GET /me with the same (now-revoked) token — must return 401.
+	// Now GET /me with the same (now-revoked) token â€” must return 401.
 	req2, _ := http.NewRequest("GET", ts.URL("/api/v1/auth/me"), nil)
 	req2.Header.Set("Authorization", "Bearer "+bearerToken)
 	resp2, err := http.DefaultClient.Do(req2)
@@ -284,8 +284,8 @@ func TestPhase3_GP4_RevokeJWT_ThenBlocked(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// GP5: Org owner creates "inviter" custom role with members:invite →
-// grants to member B → member B POSTs invitation → 201
+// GP5: Org owner creates "inviter" custom role with members:invite â†’
+// grants to member B â†’ member B POSTs invitation â†’ 201
 //
 // We use Bearer tokens throughout to avoid cookie-jar session conflicts between
 // the two users. The TestServer's cookie jar is shared, so both users log in
@@ -408,7 +408,7 @@ func TestPhase3_GP5_CustomRoleGrantsInviteAccess(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// GP6: Member WITHOUT members:invite → same endpoint → 403
+// GP6: Member WITHOUT members:invite â†’ same endpoint â†’ 403
 // --------------------------------------------------------------------------
 
 func TestPhase3_GP6_NoInvitePermission_403(t *testing.T) {
@@ -440,7 +440,7 @@ func TestPhase3_GP6_NoInvitePermission_403(t *testing.T) {
 		t.Skip("GP6: could not get Bearer token for member C; skipping")
 	}
 
-	// Member C (not in org, no invite permission) tries to POST /invitations → 403 or 404.
+	// Member C (not in org, no invite permission) tries to POST /invitations â†’ 403 or 404.
 	postResp := ts.PostJSONWithBearer(
 		fmt.Sprintf("/api/v1/organizations/%s/invitations", orgID),
 		map[string]string{"email": "gp6-target@example.com", "role": "member"},
@@ -455,7 +455,7 @@ func TestPhase3_GP6_NoInvitePermission_403(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// GP7: Create app via admin HTTP API → verify row exists.
+// GP7: Create app via admin HTTP API â†’ verify row exists.
 //
 // Note: PHASE3.md specifies `shark app create` CLI. We substitute with the
 // admin HTTP endpoint because:
@@ -495,10 +495,10 @@ func TestPhase3_GP7_AppCreate_RowExists(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// GP8: redirect_uri in allowlist → 302 redirect
+// GP8: redirect_uri in allowlist â†’ 302 redirect
 //
 // Substitution: PHASE3.md GP8 says "OAuth callback with redirect_uri". We use
-// the magic-link verify path instead (same redirect.Validate code path, §4.4).
+// the magic-link verify path instead (same redirect.Validate code path, Â§4.4).
 // The OAuth provider setup would require a real social OAuth stub; the magic-link
 // path exercises the identical redirect validator and is fully self-contained.
 // --------------------------------------------------------------------------
@@ -533,7 +533,7 @@ func TestPhase3_GP8_RedirectAllowlisted_302(t *testing.T) {
 	}
 	token := extractMagicLinkToken(t, msg.HTML)
 
-	// Verify with redirect_uri in the allowlist → 302.
+	// Verify with redirect_uri in the allowlist â†’ 302.
 	verifyURL := fmt.Sprintf("/api/v1/auth/magic-link/verify?token=%s&redirect_uri=%s",
 		url.QueryEscape(token),
 		url.QueryEscape("https://app.example.com/cb"),
@@ -551,7 +551,7 @@ func TestPhase3_GP8_RedirectAllowlisted_302(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// GP9: redirect_uri NOT in allowlist → 400, body contains "not allowed"
+// GP9: redirect_uri NOT in allowlist â†’ 400, body contains "not allowed"
 // --------------------------------------------------------------------------
 
 func TestPhase3_GP9_RedirectNotAllowlisted_400(t *testing.T) {
@@ -573,7 +573,7 @@ func TestPhase3_GP9_RedirectNotAllowlisted_400(t *testing.T) {
 	}
 	token := extractMagicLinkToken(t, msg.HTML)
 
-	// Verify with an evil redirect_uri that is NOT in the allowlist → 400.
+	// Verify with an evil redirect_uri that is NOT in the allowlist â†’ 400.
 	verifyURL := fmt.Sprintf("/api/v1/auth/magic-link/verify?token=%s&redirect_uri=%s",
 		url.QueryEscape(token),
 		url.QueryEscape("https://evil.example.com"),
@@ -590,11 +590,11 @@ func TestPhase3_GP9_RedirectNotAllowlisted_400(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// GP10: shark keys generate-jwt → JWKS has 1 key → --rotate → JWKS has 2 keys.
+// GP10: shark keys generate-jwt â†’ JWKS has 1 key â†’ --rotate â†’ JWKS has 2 keys.
 // Both keys verified (old kid still valid for existing tokens).
 //
 // We exercise this through the Manager API directly (same code path as the CLI)
-// because the CLI invokes RunE which opens its own DB — not the in-memory test DB.
+// because the CLI invokes RunE which opens its own DB â€” not the in-memory test DB.
 // --------------------------------------------------------------------------
 
 func TestPhase3_GP10_JWKSRotation_TwoKeys(t *testing.T) {

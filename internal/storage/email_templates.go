@@ -12,7 +12,7 @@ import (
 
 // ListEmailTemplates returns all email templates ordered by id.
 func (s *SQLiteStore) ListEmailTemplates(ctx context.Context) ([]*EmailTemplate, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, subject, preheader, header_text, body_paragraphs, cta_text, cta_url_template, footer_text, updated_at
 		FROM email_templates ORDER BY id`)
 	if err != nil {
@@ -39,7 +39,7 @@ func (s *SQLiteStore) ListEmailTemplates(ctx context.Context) ([]*EmailTemplate,
 
 // GetEmailTemplate returns one template by id.
 func (s *SQLiteStore) GetEmailTemplate(ctx context.Context, id string) (*EmailTemplate, error) {
-	row := s.db.QueryRowContext(ctx, `
+	row := s.reader.QueryRowContext(ctx, `
 		SELECT id, subject, preheader, header_text, body_paragraphs, cta_text, cta_url_template, footer_text, updated_at
 		FROM email_templates WHERE id = ?`, id)
 	t := &EmailTemplate{}
@@ -94,7 +94,7 @@ func (s *SQLiteStore) UpdateEmailTemplate(ctx context.Context, id string, fields
 	args = append(args, time.Now().UTC().Format(time.RFC3339))
 	args = append(args, id)
 	q := "UPDATE email_templates SET " + strings.Join(setParts, ", ") + " WHERE id = ?"
-	_, err := s.db.ExecContext(ctx, q, args...)
+	_, err := s.writer.ExecContext(ctx, q, args...)
 	return err
 }
 
@@ -104,7 +104,7 @@ func (s *SQLiteStore) SeedEmailTemplates(ctx context.Context) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, seed := range seeds {
 		pJSON, _ := json.Marshal(seed.BodyParagraphs)
-		_, err := s.db.ExecContext(ctx, `
+		_, err := s.writer.ExecContext(ctx, `
 			INSERT OR IGNORE INTO email_templates
 			(id, subject, preheader, header_text, body_paragraphs, cta_text, cta_url_template, footer_text, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,

@@ -21,7 +21,7 @@ func (s *SQLiteStore) CreateProxyRule(ctx context.Context, rule *ProxyRule) erro
 		return fmt.Errorf("marshal scopes: %w", err)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`INSERT INTO proxy_rules
 		 (id, app_id, name, pattern, methods, require, allow, scopes, enabled, priority, tier_match, m2m, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -42,14 +42,14 @@ const proxyRuleSelectCols = `id, app_id, name, pattern, methods, require, allow,
 
 // GetProxyRuleByID returns a single rule or sql.ErrNoRows when missing.
 func (s *SQLiteStore) GetProxyRuleByID(ctx context.Context, id string) (*ProxyRule, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.reader.QueryRowContext(ctx,
 		`SELECT `+proxyRuleSelectCols+` FROM proxy_rules WHERE id = ?`, id)
 	return scanProxyRuleRow(row)
 }
 
 // ListProxyRules returns all rules.
 func (s *SQLiteStore) ListProxyRules(ctx context.Context) ([]*ProxyRule, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT `+proxyRuleSelectCols+` FROM proxy_rules ORDER BY priority DESC, created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (s *SQLiteStore) ListProxyRules(ctx context.Context) ([]*ProxyRule, error) 
 
 // ListProxyRulesByAppID returns rules for a specific application.
 func (s *SQLiteStore) ListProxyRulesByAppID(ctx context.Context, appID string) ([]*ProxyRule, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.reader.QueryContext(ctx,
 		`SELECT `+proxyRuleSelectCols+` FROM proxy_rules WHERE app_id = ? ORDER BY priority DESC, created_at ASC`, appID)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (s *SQLiteStore) UpdateProxyRule(ctx context.Context, rule *ProxyRule) erro
 		return fmt.Errorf("marshal scopes: %w", err)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`UPDATE proxy_rules SET
 		   app_id = ?, name = ?, pattern = ?, methods = ?, require = ?, allow = ?,
 		   scopes = ?, enabled = ?, priority = ?, tier_match = ?, m2m = ?, updated_at = ?
@@ -114,7 +114,7 @@ func (s *SQLiteStore) UpdateProxyRule(ctx context.Context, rule *ProxyRule) erro
 
 // DeleteProxyRule deletes a rule by ID.
 func (s *SQLiteStore) DeleteProxyRule(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM proxy_rules WHERE id = ?`, id)
+	_, err := s.writer.ExecContext(ctx, `DELETE FROM proxy_rules WHERE id = ?`, id)
 	return err
 }
 

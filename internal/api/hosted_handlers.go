@@ -1,4 +1,4 @@
-// Package api — hosted SPA shell handler (Phase B, task B7).
+﻿// Package api â€” hosted SPA shell handler (Phase B, task B7).
 //
 // handleHostedPage renders the HTML shell that bootstraps the hosted auth
 // SPA at /hosted/{app_slug}/{page}. The shell inlines branding CSS vars,
@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sharkauth/sharkauth/internal/admin"
+	"github.com/shark-auth/shark/internal/admin"
 )
 
 // validHostedPages is the allowlist of page names the hosted SPA handles.
@@ -55,7 +55,7 @@ func init() {
 
 // findHostedBundle reads the embedded admin FS and returns the filename of
 // the hosted-*.js entry point. Returns an error when none is found. Safe to
-// call in tests — it operates on the embedded FS, not the filesystem.
+// call in tests â€” it operates on the embedded FS, not the filesystem.
 func findHostedBundle() (string, error) {
 	// The embedded FS lives in internal/admin. Reach into its dist/hosted/assets/ tree.
 	sub, err := fs.Sub(admin.DistFS(), "dist/hosted/assets")
@@ -144,7 +144,7 @@ func (s *Server) handleHostedPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Integration mode gate — only "hosted" and "proxy" serve the shell.
+	// 3. Integration mode gate â€” only "hosted" and "proxy" serve the shell.
 	switch app.IntegrationMode {
 	case "hosted", "proxy":
 		// allowed
@@ -296,7 +296,7 @@ func (s *Server) handleHostedPage(w http.ResponseWriter, r *http.Request) {
 // ResolveBranding seam as handleHostedPage).
 //
 // Route: GET /paywall/{app_slug}?tier=<required>&return=<url>
-// Public — not admin-gated. The required tier comes from the proxy
+// Public â€” not admin-gated. The required tier comes from the proxy
 // Decision.RequiredTier; the return URL is the original request URL so
 // the upgrade CTA can loop the caller back after payment.
 //
@@ -381,7 +381,7 @@ func (s *Server) handlePaywallPage(w http.ResponseWriter, r *http.Request) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <title>Upgrade required — {{.AppName}}</title>
+  <title>Upgrade required â€” {{.AppName}}</title>
   <style>
     :root {
       --shark-primary: {{.PrimaryColor}};
@@ -453,7 +453,7 @@ func sanitizeReturnURL(value string) string {
 	if v == "" {
 		return "/"
 	}
-	// Reject control chars / quotes / angle-brackets up front — these
+	// Reject control chars / quotes / angle-brackets up front â€” these
 	// should never appear in a legitimate URL.
 	for _, c := range v {
 		if c < 0x20 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '`' {
@@ -484,7 +484,7 @@ func buildUpgradeHref(returnURL, tier string) string {
 // handles the embedded space character defensively.
 func escapeQueryValue(s string) string {
 	// sanitizeTierLabel already stripped anything outside [a-zA-Z0-9 _-]
-	// so a simple space → %20 swap keeps the URL valid. All other
+	// so a simple space â†’ %20 swap keeps the URL valid. All other
 	// allowed characters are URL-safe.
 	return strings.ReplaceAll(s, " ", "%20")
 }
@@ -519,7 +519,7 @@ func (s *Server) handleHostedAssets(w http.ResponseWriter, r *http.Request) {
 // resolveAuthMethods returns the list of enabled auth methods from server config.
 // Assumption: all four methods are always present unless a method-specific config
 // explicitly disables it. Currently SharkAuth has no per-method enable flag at
-// the application level — the config drives which sub-systems are wired in at
+// the application level â€” the config drives which sub-systems are wired in at
 // server startup. We surface all four so the SPA renders the full UI; the
 // individual sub-handlers will return 404/error if a method isn't configured.
 func (s *Server) resolveAuthMethods() []string {

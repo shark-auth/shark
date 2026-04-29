@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 	"github.com/ory/fosite"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 //go:embed testmigrations/*.sql
@@ -493,7 +493,7 @@ func TestClientAssertionJWT(t *testing.T) {
 
 	jti := "client-assertion-jti-1"
 
-	// Initially not seen — should be valid.
+	// Initially not seen â€” should be valid.
 	if err := fs.ClientAssertionJWTValid(ctx, jti); err != nil {
 		t.Fatalf("expected JTI %q to be valid initially, got: %v", jti, err)
 	}
@@ -550,7 +550,7 @@ func TestDeleteRefreshTokenSession(t *testing.T) {
 		t.Fatalf("DeleteRefreshTokenSession: %v", err)
 	}
 
-	// After delete the token is revoked — Get should return ErrInactiveToken.
+	// After delete the token is revoked â€” Get should return ErrInactiveToken.
 	_, err := fs.GetRefreshTokenSession(ctx, sig, &fosite.DefaultSession{})
 	if err == nil {
 		t.Fatal("expected error after DeleteRefreshTokenSession")

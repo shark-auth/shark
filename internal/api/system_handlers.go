@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -11,15 +11,15 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Server-level drain state (used by swap-mode and reset)
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // DrainFlag is the server-level drain indicator wired into the drain middleware.
 // It is set to non-nil at NewServer time when the drain middleware is mounted.
@@ -44,9 +44,9 @@ func waitForDrain(timeout time.Duration) {
 	}
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/v1/admin/system/mode
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // handleGetMode returns the current active mode and DB path.
 func (s *Server) handleGetMode(w http.ResponseWriter, r *http.Request) {
@@ -58,9 +58,9 @@ func (s *Server) handleGetMode(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // POST /api/v1/admin/system/swap-mode
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // swapModeRequest is the body for POST /api/v1/admin/system/swap-mode.
 type swapModeRequest struct {
@@ -70,7 +70,7 @@ type swapModeRequest struct {
 // handleSwapMode performs a graceful-restart-equivalent mode swap.
 // Implementation note: true hot-drain with atomic.Pointer[Store] would require
 // threading a SwappableStore through every handler. Instead, we use the
-// "graceful restart" fallback: drain → write state → return new mode.
+// "graceful restart" fallback: drain â†’ write state â†’ return new mode.
 // The calling client (CLI or dashboard) must reconnect after the mode switch;
 // the server continues running on the current DB until the next startup.
 // This is documented in YAML_DEPRECATION_PLAN.md Phase C follow-up notes.
@@ -93,7 +93,7 @@ func (s *Server) handleSwapMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Persist state — takes effect on next server startup.
+	// Persist state â€” takes effect on next server startup.
 	if err := config.WriteModeState(req.Mode); err != nil {
 		writeJSON(w, http.StatusInternalServerError, errPayload("state_write_failed", err.Error()))
 		return
@@ -106,9 +106,9 @@ func (s *Server) handleSwapMode(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // POST /api/v1/admin/system/reset
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // resetRequest is the body for POST /api/v1/admin/system/reset.
 type resetRequest struct {
@@ -159,7 +159,7 @@ func (s *Server) handleResetKey(w http.ResponseWriter, r *http.Request) {
 
 	// Capture the current admin key prefix (best-effort) before revoke so
 	// the audit log can record the rotation pair. We pick the first active
-	// wildcard-scope key — there's typically exactly one.
+	// wildcard-scope key â€” there's typically exactly one.
 	oldKeyPrefix := ""
 	if existing, err := s.Store.ListAPIKeys(ctx); err == nil {
 		for _, k := range existing {
@@ -235,7 +235,7 @@ func (s *Server) handleResetKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"admin_key":  fullKey,
 		"key_prefix": keyPrefix,
-		"message":    "Admin key rotated. Store the new key — it will not be shown again.",
+		"message":    "Admin key rotated. Store the new key â€” it will not be shown again.",
 	})
 }
 
@@ -312,7 +312,7 @@ func (s *Server) handleResetDB(w http.ResponseWriter, r *http.Request, mode stri
 		// (active store, all user tables truncated) or removed the
 		// inactive DB file. We don't enumerate table names because
 		// WipeAllData is the canonical scope and lives behind the
-		// store interface — encoding the high-level scope keeps the
+		// store interface â€” encoding the high-level scope keeps the
 		// metadata stable across schema changes.
 		tablesAffected := "all"
 		if !isActive {
@@ -342,15 +342,15 @@ func (s *Server) handleResetDB(w http.ResponseWriter, r *http.Request, mode stri
 	}
 	if isActive {
 		resp["admin_key"] = fullKey
-		resp["masked_key"] = keyPrefix + "…" + keySuffix
-		resp["note"] = "New admin key shown once — store it now."
+		resp["masked_key"] = keyPrefix + "â€¦" + keySuffix
+		resp["note"] = "New admin key shown once â€” store it now."
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Helpers
-// ────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // resolveDBPathForMode returns the file path for the given mode's SQLite DB.
 // Looks at ~/.shark/state and falls back to conventional names.

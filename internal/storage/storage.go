@@ -191,6 +191,7 @@ type Store interface {
 
 	// AuditLogs
 	CreateAuditLog(ctx context.Context, log *AuditLog) error
+	CreateAuditLogsBatch(ctx context.Context, logs []*AuditLog) error
 	GetAuditLogByID(ctx context.Context, id string) (*AuditLog, error)
 	QueryAuditLogs(ctx context.Context, opts AuditLogQuery) ([]*AuditLog, error)
 	DeleteAuditLogsBefore(ctx context.Context, before time.Time) (int64, error)
@@ -389,6 +390,10 @@ type Store interface {
 	GetSecret(ctx context.Context, name string) (string, error)
 	SetSecret(ctx context.Context, name, value string) error
 	DeleteSecret(ctx context.Context, name string) error
+
+	// Atomic Operations (Consolidated Transactions for high performance)
+	SignupAtomic(ctx context.Context, user *User, sess *Session, log *AuditLog) error
+	LoginAtomic(ctx context.Context, user *User, sess *Session, log *AuditLog) error
 
 	// W17 Phase C system operations.
 	// DBPath returns the filesystem path of the open SQLite database file.

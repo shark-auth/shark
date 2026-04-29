@@ -1,4 +1,4 @@
-//go:build integration
+﻿//go:build integration
 
 package api_test
 
@@ -8,25 +8,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/rbac"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/rbac"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestOrgRBAC_FullFlow exercises the complete custom org-role lifecycle:
-//  1. Create org → 3 builtin roles seeded automatically
+//  1. Create org â†’ 3 builtin roles seeded automatically
 //  2. Create custom role `editor`
 //  3. AttachOrgPermission(editor, "org", "update")
 //  4. GrantOrgRole(userB, editor)
-//  5. HasOrgPermission(userB, orgID, "org", "update") → true
-//  6. PATCH org as userB → 200
+//  5. HasOrgPermission(userB, orgID, "org", "update") â†’ true
+//  6. PATCH org as userB â†’ 200
 //  7. RevokeOrgRole(userB, editor)
-//  8. PATCH org as userB → 403
+//  8. PATCH org as userB â†’ 403
 func TestOrgRBAC_FullFlow(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 	ctx := context.Background()
 
-	// ── Step 1: userA creates an org (seeds 3 builtin roles + grants owner to userA) ──
+	// â”€â”€ Step 1: userA creates an org (seeds 3 builtin roles + grants owner to userA) â”€â”€
 	userAID := loginFreshUser(t, ts, "owner-rbac@x.io")
 	createResp := ts.PostJSON("/api/v1/organizations", map[string]string{
 		"name": "RBACCorp", "slug": "rbac-corp",
@@ -50,7 +50,7 @@ func TestOrgRBAC_FullFlow(t *testing.T) {
 		t.Fatalf("expected 3 builtin roles after org creation, got %d", len(roles))
 	}
 
-	// ── Step 2: userA creates a custom role `editor` ──
+	// â”€â”€ Step 2: userA creates a custom role `editor` â”€â”€
 	createRoleResp := ts.PostJSON("/api/v1/organizations/"+orgID+"/roles", map[string]string{
 		"name":        "editor",
 		"description": "Can edit org settings",
@@ -68,13 +68,13 @@ func TestOrgRBAC_FullFlow(t *testing.T) {
 		t.Fatal("editor role ID is empty")
 	}
 
-	// ── Step 3: AttachOrgPermission(editor, "org", "update") ──
+	// â”€â”€ Step 3: AttachOrgPermission(editor, "org", "update") â”€â”€
 	rbacMgr := rbac.NewRBACManager(store)
 	if err := rbacMgr.AttachOrgPermission(ctx, editorRoleID, "org", "update"); err != nil {
 		t.Fatalf("AttachOrgPermission: %v", err)
 	}
 
-	// ── Step 4: Create userB and add them to the org, grant editor role ──
+	// â”€â”€ Step 4: Create userB and add them to the org, grant editor role â”€â”€
 	now := time.Now().UTC().Format(time.RFC3339)
 	userBID := loginFreshUser(t, ts, "editor-rbac@x.io")
 
@@ -93,7 +93,7 @@ func TestOrgRBAC_FullFlow(t *testing.T) {
 		t.Fatalf("GrantOrgRole: %v", err)
 	}
 
-	// ── Step 5: HasOrgPermission(userB, orgID, "org", "update") → true ──
+	// â”€â”€ Step 5: HasOrgPermission(userB, orgID, "org", "update") â†’ true â”€â”€
 	ok, err := rbacMgr.HasOrgPermission(ctx, userBID, orgID, "org", "update")
 	if err != nil {
 		t.Fatalf("HasOrgPermission: %v", err)
@@ -102,7 +102,7 @@ func TestOrgRBAC_FullFlow(t *testing.T) {
 		t.Fatal("expected userB to have org:update after editor role grant, got false")
 	}
 
-	// ── Step 6: PATCH org as userB → 200 ──
+	// â”€â”€ Step 6: PATCH org as userB â†’ 200 â”€â”€
 	// userB is already the active session from loginFreshUser above.
 	patchResp := ts.PatchJSON("/api/v1/organizations/"+orgID, map[string]string{
 		"name": "RBACCorp Updated",
@@ -112,12 +112,12 @@ func TestOrgRBAC_FullFlow(t *testing.T) {
 	}
 	patchResp.Body.Close()
 
-	// ── Step 7: RevokeOrgRole(userB, editor) ──
+	// â”€â”€ Step 7: RevokeOrgRole(userB, editor) â”€â”€
 	if err := rbacMgr.RevokeOrgRole(ctx, orgID, userBID, editorRoleID); err != nil {
 		t.Fatalf("RevokeOrgRole: %v", err)
 	}
 
-	// ── Step 8: PATCH org as userB → 403 ──
+	// â”€â”€ Step 8: PATCH org as userB â†’ 403 â”€â”€
 	patchResp2 := ts.PatchJSON("/api/v1/organizations/"+orgID, map[string]string{
 		"name": "RBACCorp Denied",
 	})

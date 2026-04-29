@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
-  <a href="https://github.com/sharkauth/sharkauth/releases/latest"><img src="https://img.shields.io/badge/version-v0.9.0-blue?style=flat-square" alt="Version"></a>
+  <a href="https://github.com/shark-auth/shark/releases/latest"><img src="https://img.shields.io/badge/version-v0.9.0-blue?style=flat-square" alt="Version"></a>
   <a href="#"><img src="https://img.shields.io/badge/go-1.22%2B-00ADD8?style=flat-square" alt="Go"></a>
   <a href="#"><img src="https://img.shields.io/badge/SQLite-embedded-003B57?style=flat-square" alt="SQLite"></a>
 </p>
@@ -66,7 +66,7 @@ You are the user. Your agent acts on your behalf. Both should be auditable end t
 
 ```bash
 # 1. Download the binary (Linux/macOS, arm64 + amd64)
-curl -fsSL https://github.com/sharkauth/sharkauth/releases/latest/download/shark-$(uname -s)-$(uname -m) -o shark
+curl -fsSL https://github.com/shark-auth/shark/releases/latest/download/shark-$(uname -s)-$(uname -m) -o shark
 chmod +x shark
 
 # 2. Boot. First-run prints an admin key on stdout.
@@ -295,7 +295,7 @@ This README documents what ships today. Nothing aspirational.
 
 ```bash
 # Binary
-curl -fsSL https://github.com/sharkauth/sharkauth/releases/latest/download/shark-$(uname -s)-$(uname -m) -o shark
+curl -fsSL https://github.com/shark-auth/shark/releases/latest/download/shark-$(uname -s)-$(uname -m) -o shark
 chmod +x shark
 ./shark serve
 
@@ -303,7 +303,7 @@ chmod +x shark
 docker run -p 8080:8080 -v $(pwd)/data:/data ghcr.io/sharkauth/sharkauth:latest
 
 # Build from source
-git clone https://github.com/sharkauth/sharkauth
+git clone https://github.com/shark-auth/shark
 cd sharkauth/admin && pnpm install && pnpm build && cd ..
 go build -o shark ./cmd/shark
 ./shark serve
@@ -321,8 +321,8 @@ Requires Go 1.22+ and Node 20+ to build from source.
 - DPoP primitives: [`documentation/sdk/dpop.md`](documentation/sdk/dpop.md)
 - Vault: [`documentation/sdk/vault.md`](documentation/sdk/vault.md)
 - OpenAPI 3.1 spec: `documentation/openapi.yaml`
-- Issues: https://github.com/sharkauth/sharkauth/issues
-- Discussions: https://github.com/sharkauth/sharkauth/discussions
+- Issues: https://github.com/shark-auth/shark/issues
+- Discussions: https://github.com/shark-auth/shark/discussions
 
 If you are an early integrator and want help wiring it up, open an issue. There is exactly one person at the wheel and they answer.
 

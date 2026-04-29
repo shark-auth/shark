@@ -1,4 +1,4 @@
-package cli_test
+﻿package cli_test
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil/cli"
+	"github.com/shark-auth/shark/internal/testutil/cli"
 )
 
 // TestE2EServeFlow exercises the full --dev-equivalent path: real listener,
@@ -80,7 +80,7 @@ func TestE2EServeFlow(t *testing.T) {
 		t.Fatal("expected at least one session after signup")
 	}
 
-	// Admin session list — should see the signup session with joined email.
+	// Admin session list â€” should see the signup session with joined email.
 	adminListResp := h.Do(h.AdminRequest("GET", "/api/v1/admin/sessions"))
 	if adminListResp.StatusCode != http.StatusOK {
 		t.Fatalf("admin list: %d", adminListResp.StatusCode)

@@ -1,18 +1,18 @@
-package vault
+﻿package vault
 
 import (
 	"sort"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // ProviderTemplate is a pre-configured OAuth 2.0 endpoint descriptor.
-// Admins pick a template + supply their own (client_id, client_secret) —
+// Admins pick a template + supply their own (client_id, client_secret) â€”
 // the template itself never carries credentials. Turning a template into a
 // *storage.VaultProvider goes through ApplyTemplate; actual persistence
 // (including secret encryption) still flows through Manager.CreateProvider.
 type ProviderTemplate struct {
-	// Name is the unique short key — e.g. "google_calendar", "slack",
+	// Name is the unique short key â€” e.g. "google_calendar", "slack",
 	// "github". Used as the VaultProvider.Name when the template is
 	// applied, and as the lookup key in the registry.
 	Name string `json:"name"`
@@ -35,8 +35,8 @@ type ProviderTemplate struct {
 	// a function of the provider type, not a per-install admin choice.
 	ExtraAuthParams map[string]string `json:"extra_auth_params,omitempty"`
 	// TokenResponseShape names the token-response unmarshaler to use.
-	// "" or "rfc6749" → standard golang.org/x/oauth2 path.
-	// "slack_v2"      → Slack's ok-flag + nested authed_user token.
+	// "" or "rfc6749" â†’ standard golang.org/x/oauth2 path.
+	// "slack_v2"      â†’ Slack's ok-flag + nested authed_user token.
 	TokenResponseShape string `json:"token_response_shape,omitempty"`
 }
 
@@ -114,7 +114,7 @@ var builtinTemplates = map[string]*ProviderTemplate{
 		DisplayName: "Notion",
 		AuthURL:     "https://api.notion.com/v1/oauth/authorize",
 		TokenURL:    "https://api.notion.com/v1/oauth/token",
-		// Notion's OAuth 2.0 flow does not use scopes — the integration's
+		// Notion's OAuth 2.0 flow does not use scopes â€” the integration's
 		// permissions are configured in the Notion admin UI at install time.
 		DefaultScopes: []string{},
 		IconURL:       "https://www.notion.so/front-static/favicon.ico",
@@ -146,7 +146,7 @@ var builtinTemplates = map[string]*ProviderTemplate{
 
 // Templates returns a copy of the built-in catalog keyed by Name. The map
 // is a shallow copy so callers can iterate/mutate without disturbing the
-// package-level registry, but the *ProviderTemplate pointers are shared —
+// package-level registry, but the *ProviderTemplate pointers are shared â€”
 // treat them as read-only.
 func Templates() map[string]*ProviderTemplate {
 	out := make(map[string]*ProviderTemplate, len(builtinTemplates))
@@ -164,7 +164,7 @@ func Template(name string) (*ProviderTemplate, bool) {
 }
 
 // ListTemplates returns the catalog sorted by DisplayName (case-sensitive,
-// stable) — the order an admin UI should render in the template picker.
+// stable) â€” the order an admin UI should render in the template picker.
 func ListTemplates() []*ProviderTemplate {
 	out := make([]*ProviderTemplate, 0, len(builtinTemplates))
 	for _, tpl := range builtinTemplates {
@@ -179,7 +179,7 @@ func ListTemplates() []*ProviderTemplate {
 // ApplyTemplate builds a *storage.VaultProvider from a template plus caller
 // overrides. The returned struct is ready to hand to Manager.CreateProvider
 // (which expects the caller to pass client_secret as a separate plaintext
-// argument — it is intentionally NOT set here, keeping the crypto boundary
+// argument â€” it is intentionally NOT set here, keeping the crypto boundary
 // with the Manager).
 //
 // Behaviour:
@@ -189,7 +189,7 @@ func ListTemplates() []*ProviderTemplate {
 //   - scopes, when non-nil and non-empty, overrides DefaultScopes; otherwise
 //     a fresh copy of DefaultScopes is used (so callers can't mutate the
 //     shared slice).
-//   - Active defaults to true — admins register templates to use them.
+//   - Active defaults to true â€” admins register templates to use them.
 //
 // Returns nil when tpl is nil; callers should validate before calling.
 func ApplyTemplate(tpl *ProviderTemplate, clientID, displayName string, scopes []string) *storage.VaultProvider {
@@ -232,7 +232,7 @@ func ApplyTemplate(tpl *ProviderTemplate, clientID, displayName string, scopes [
 		AuthURL:     tpl.AuthURL,
 		TokenURL:    tpl.TokenURL,
 		ClientID:    clientID,
-		// ClientSecretEnc is intentionally left empty — Manager.CreateProvider
+		// ClientSecretEnc is intentionally left empty â€” Manager.CreateProvider
 		// encrypts the plaintext secret the caller supplies separately.
 		Scopes:          effectiveScopes,
 		IconURL:         tpl.IconURL,

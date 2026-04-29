@@ -1,4 +1,4 @@
-package cmd
+﻿package cmd
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/demo"
+	"github.com/shark-auth/shark/internal/demo"
 )
 
 var (

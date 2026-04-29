@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
-	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/email"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // handleEmailVerifySend handles POST /api/v1/auth/email/verify/send
@@ -118,11 +118,11 @@ func (s *Server) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fire welcome email once — idempotent via UPDATE ... WHERE welcome_email_sent = 0
+	// Fire welcome email once â€” idempotent via UPDATE ... WHERE welcome_email_sent = 0
 	// at the store layer. If MarkWelcomeEmailSent returns sql.ErrNoRows the
 	// flag was already set by a prior verification (or the user row is gone),
 	// so we skip the send entirely. Any DB errors other than ErrNoRows are
-	// also silently skipped — a missed welcome isn't worth failing the
+	// also silently skipped â€” a missed welcome isn't worth failing the
 	// verify response on.
 	if err := s.Store.MarkWelcomeEmailSent(r.Context(), user.ID); err == nil {
 		branding, _ := s.Store.ResolveBranding(r.Context(), "")

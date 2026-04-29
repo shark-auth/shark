@@ -1,4 +1,4 @@
-package oauth
+﻿package oauth
 
 // HandleIntrospect implements RFC 7662 Token Introspection.
 // POST /oauth/introspect
@@ -19,11 +19,11 @@ import (
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
-// introspectResponse is the RFC 7662 §2.2 response object.
+// introspectResponse is the RFC 7662 Â§2.2 response object.
 // When active is false, no other members are included (marshalled separately).
 type introspectResponse struct {
 	Active    bool   `json:"active"`
@@ -61,7 +61,7 @@ func (s *Server) HandleIntrospect(w http.ResponseWriter, r *http.Request) {
 
 	tokenStr := r.FormValue("token")
 	if tokenStr == "" {
-		// Per RFC 7662 §2.1, missing token → active:false (not an error response).
+		// Per RFC 7662 Â§2.1, missing token â†’ active:false (not an error response).
 		writeInactiveToken(w)
 		return
 	}
@@ -129,14 +129,14 @@ func (s *Server) LookupBearer(ctx context.Context, tokenStr string) *storage.OAu
 // findTokenInDB resolves a raw token string to an OAuthToken record.
 //
 // For JWT access tokens (3-part dot-separated): extract the JTI claim and
-// look up by JTI — the most direct path.
+// look up by JTI â€” the most direct path.
 //
 // For opaque HMAC tokens (2-part dot-separated, format "key.sig"): the store
 // saves sha256(sig_part). Split on "." and hash the signature part.
 //
 // Final fallback: hash the full raw token string (covers edge cases).
 func (s *Server) findTokenInDB(ctx context.Context, tokenStr string) *storage.OAuthToken {
-	// 1. Try JWT path — extract JTI without signature verification.
+	// 1. Try JWT path â€” extract JTI without signature verification.
 	jti := extractJTIFromJWT(tokenStr)
 	if jti != "" {
 		if tok, err := s.RawStore.GetOAuthTokenByJTI(ctx, jti); err == nil {
@@ -167,7 +167,7 @@ func (s *Server) findTokenInDB(ctx context.Context, tokenStr string) *storage.OA
 
 // extractJTIFromJWT parses the token string as a JWT without verifying the
 // signature and returns the "jti" claim. Returns empty string on failure.
-// We do not verify here — we do an authoritative DB lookup instead.
+// We do not verify here â€” we do an authoritative DB lookup instead.
 func extractJTIFromJWT(tokenStr string) string {
 	parser := gojwt.NewParser(gojwt.WithoutClaimsValidation())
 	token, _, err := parser.ParseUnverified(tokenStr, gojwt.MapClaims{})
@@ -247,7 +247,7 @@ func (s *Server) validateClientCredentials(ctx context.Context, clientID, client
 	return clientID, false, nil
 }
 
-// writeInactiveToken writes {"active":false} per RFC 7662 §2.2.
+// writeInactiveToken writes {"active":false} per RFC 7662 Â§2.2.
 func writeInactiveToken(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

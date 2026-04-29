@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestAdminListUsers_SnakeCaseShape ensures the /api/v1/users admin response
@@ -61,7 +61,7 @@ func TestAdminListUsers_SnakeCaseShape(t *testing.T) {
 		t.Fatalf("expected at least 1 user in response, got total=%d len=%d", body.Total, len(body.Users))
 	}
 
-	// Find our seeded user — list may contain others from parallel tests in theory.
+	// Find our seeded user â€” list may contain others from parallel tests in theory.
 	var found *struct {
 		ID            string  `json:"id"`
 		EmailVerified bool    `json:"email_verified"`

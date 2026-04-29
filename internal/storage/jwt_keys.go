@@ -11,7 +11,7 @@ import (
 // InsertSigningKey inserts a new signing key row. Fails if an active key already
 // exists (UNIQUE constraint on kid + DB-level CHECK on status).
 func (s *SQLiteStore) InsertSigningKey(ctx context.Context, key *SigningKey) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO jwt_signing_keys (kid, algorithm, public_key_pem, private_key_pem, status)
 		 VALUES (?, ?, ?, ?, ?)`,
 		key.KID, key.Algorithm, key.PublicKeyPEM, key.PrivateKeyPEM, key.Status,
@@ -21,7 +21,7 @@ func (s *SQLiteStore) InsertSigningKey(ctx context.Context, key *SigningKey) err
 
 // GetActiveSigningKey returns the single active signing key, or sql.ErrNoRows.
 func (s *SQLiteStore) GetActiveSigningKey(ctx context.Context) (*SigningKey, error) {
-	return s.scanSigningKey(s.db.QueryRowContext(ctx,
+	return s.scanSigningKey(s.reader.QueryRowContext(ctx,
 		`SELECT id, kid, algorithm, public_key_pem, private_key_pem, created_at, rotated_at, status
 		 FROM jwt_signing_keys WHERE status = 'active' LIMIT 1`))
 }
@@ -29,14 +29,14 @@ func (s *SQLiteStore) GetActiveSigningKey(ctx context.Context) (*SigningKey, err
 // GetActiveSigningKeyByAlgorithm returns the active signing key for a specific
 // algorithm (e.g. "ES256", "RS256"), or sql.ErrNoRows if none exists.
 func (s *SQLiteStore) GetActiveSigningKeyByAlgorithm(ctx context.Context, algorithm string) (*SigningKey, error) {
-	return s.scanSigningKey(s.db.QueryRowContext(ctx,
+	return s.scanSigningKey(s.reader.QueryRowContext(ctx,
 		`SELECT id, kid, algorithm, public_key_pem, private_key_pem, created_at, rotated_at, status
 		 FROM jwt_signing_keys WHERE status = 'active' AND algorithm = ? LIMIT 1`, algorithm))
 }
 
 // GetSigningKeyByKID returns a key by its kid (active or retired).
 func (s *SQLiteStore) GetSigningKeyByKID(ctx context.Context, kid string) (*SigningKey, error) {
-	return s.scanSigningKey(s.db.QueryRowContext(ctx,
+	return s.scanSigningKey(s.reader.QueryRowContext(ctx,
 		`SELECT id, kid, algorithm, public_key_pem, private_key_pem, created_at, rotated_at, status
 		 FROM jwt_signing_keys WHERE kid = ?`, kid))
 }
@@ -44,7 +44,7 @@ func (s *SQLiteStore) GetSigningKeyByKID(ctx context.Context, kid string) (*Sign
 // RotateSigningKeys marks all active keys as retired (sets rotated_at=now), then
 // inserts the new key as active. Both operations run in a transaction.
 func (s *SQLiteStore) RotateSigningKeys(ctx context.Context, newKey *SigningKey) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.writer.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -81,13 +81,13 @@ func (s *SQLiteStore) ListJWKSCandidates(ctx context.Context, activeOnly bool, r
 		err  error
 	)
 	if activeOnly {
-		rows, err = s.db.QueryContext(ctx,
+		rows, err = s.reader.QueryContext(ctx,
 			`SELECT id, kid, algorithm, public_key_pem, private_key_pem, created_at, rotated_at, status
 			 FROM jwt_signing_keys WHERE status = 'active'
 			 ORDER BY created_at DESC`)
 	} else {
 		cutoff := retiredCutoff.UTC().Format(time.RFC3339)
-		rows, err = s.db.QueryContext(ctx,
+		rows, err = s.reader.QueryContext(ctx,
 			`SELECT id, kid, algorithm, public_key_pem, private_key_pem, created_at, rotated_at, status
 			 FROM jwt_signing_keys
 			 WHERE status = 'active'
@@ -140,7 +140,7 @@ func (s *SQLiteStore) scanSigningKeyRow(rows *sql.Rows) (*SigningKey, error) {
 
 // InsertRevokedJTI records a jti as revoked. Idempotent (INSERT OR IGNORE).
 func (s *SQLiteStore) InsertRevokedJTI(ctx context.Context, jti string, expiresAt time.Time) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT OR IGNORE INTO revoked_jti (jti, expires_at) VALUES (?, ?)`,
 		jti, expiresAt.UTC().Format(time.RFC3339),
 	)
@@ -150,7 +150,7 @@ func (s *SQLiteStore) InsertRevokedJTI(ctx context.Context, jti string, expiresA
 // IsRevokedJTI returns true if the jti exists in the revoked_jti table.
 func (s *SQLiteStore) IsRevokedJTI(ctx context.Context, jti string) (bool, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT COUNT(1) FROM revoked_jti WHERE jti = ?`, jti,
 	).Scan(&count)
 	if err != nil {
@@ -162,7 +162,7 @@ func (s *SQLiteStore) IsRevokedJTI(ctx context.Context, jti string) (bool, error
 // PruneExpiredRevokedJTI deletes revoked_jti rows whose expires_at is in the past.
 // This lazy cleanup prevents unbounded table growth without a background job.
 func (s *SQLiteStore) PruneExpiredRevokedJTI(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`DELETE FROM revoked_jti WHERE expires_at < datetime('now')`)
 	return err
 }

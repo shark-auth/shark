@@ -1,4 +1,4 @@
-package authflow_test
+﻿package authflow_test
 
 // Steps-wired tests for the three newly-wired step types:
 //   - assign_role
@@ -17,9 +17,9 @@ import (
 
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
-	"github.com/sharkauth/sharkauth/internal/authflow"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/authflow"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ func TestAuthflowStepAddToOrg_Idempotent(t *testing.T) {
 		t.Fatalf("first run want Continue, got %q", res1.Outcome)
 	}
 
-	// Second run — should be idempotent, no duplicate row, no error.
+	// Second run â€” should be idempotent, no duplicate row, no error.
 	res2, err := eng.Execute(context.Background(), fc)
 	if err != nil {
 		t.Fatalf("second execute: %v", err)
@@ -242,7 +242,7 @@ func TestAuthflowStepAddToOrg_Idempotent(t *testing.T) {
 func enrolledMFAUser(t *testing.T, store storage.Store) (*storage.User, string) {
 	t.Helper()
 
-	// Generate a real TOTP secret (no encryption in test — we pass plaintext directly).
+	// Generate a real TOTP secret (no encryption in test â€” we pass plaintext directly).
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      "SharkAuthTest",
 		AccountName: "mfa-user@test.example",
@@ -343,7 +343,7 @@ func TestAuthflowStepRequireMFA_VerifyResumesFlow(t *testing.T) {
 		Type: "require_mfa_challenge",
 	}})
 
-	// Step 1: run flow → get challenge ID.
+	// Step 1: run flow â†’ get challenge ID.
 	res, err := eng.Execute(context.Background(), &authflow.Context{
 		Trigger: "login",
 		User:    user,
@@ -365,7 +365,7 @@ func TestAuthflowStepRequireMFA_VerifyResumesFlow(t *testing.T) {
 		t.Fatalf("GenerateCode: %v", err)
 	}
 
-	// Step 3: simulate verify — Consume challenge and validate TOTP.
+	// Step 3: simulate verify â€” Consume challenge and validate TOTP.
 	if !authflow.GlobalChallengeStore.Consume(challengeID, user.ID) {
 		t.Fatalf("Consume challenge failed unexpectedly")
 	}

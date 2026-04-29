@@ -1,4 +1,4 @@
-// Package api — tests for PATCH /api/v1/admin/apps/{id} covering the
+﻿// Package api â€” tests for PATCH /api/v1/admin/apps/{id} covering the
 // A8 integration_mode + branding_override + proxy_login_fallback fields.
 package api_test
 
@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 type updateAppPayload struct {
@@ -110,7 +110,7 @@ func TestUpdateApplication_SetBrandingOverride(t *testing.T) {
 func TestUpdateApplication_InvalidProxyLoginFallback(t *testing.T) {
 	// Chosen behavior: custom_url is accepted; we only enforce the enum at
 	// the proxy_login_fallback level. Missing URL is accepted and stored
-	// as empty — matches "store whatever set" per the task spec.
+	// as empty â€” matches "store whatever set" per the task spec.
 	ts := testutil.NewTestServer(t)
 	id := seededAppID(t, ts)
 

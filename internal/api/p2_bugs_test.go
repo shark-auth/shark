@@ -1,9 +1,9 @@
-package api_test
+﻿package api_test
 
 // Tests for the three P2 dashboard UX bug-fixes:
-//   Task 1 — GET /api/v1/webhooks/events (TestAdminWebhookEventsEndpoint)
-//   Task 2 — GET /api/v1/admin/vault/connections?provider_id (TestAdminVaultConnectionsByProvider)
-//   Task 3 — GET /api/v1/admin/permissions/batch-usage (TestAdminPermissionsBatchUsage)
+//   Task 1 â€” GET /api/v1/webhooks/events (TestAdminWebhookEventsEndpoint)
+//   Task 2 â€” GET /api/v1/admin/vault/connections?provider_id (TestAdminVaultConnectionsByProvider)
+//   Task 3 â€” GET /api/v1/admin/permissions/batch-usage (TestAdminPermissionsBatchUsage)
 
 import (
 	"context"
@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/api"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/api"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // ---------------------------------------------------------------------------
-// Task 1 — webhook events catalogue endpoint
+// Task 1 â€” webhook events catalogue endpoint
 // ---------------------------------------------------------------------------
 
 func TestAdminWebhookEventsEndpoint(t *testing.T) {
@@ -63,7 +63,7 @@ func TestAdminWebhookEventsEndpoint(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 2 — vault connections provider_id filter
+// Task 2 â€” vault connections provider_id filter
 // ---------------------------------------------------------------------------
 
 func TestAdminVaultConnectionsByProvider(t *testing.T) {
@@ -121,7 +121,7 @@ func TestAdminVaultConnectionsByProvider(t *testing.T) {
 	seedConn(p1.ID, ub.ID)
 	seedConn(p2.ID, uc.ID)
 
-	// Unfiltered — returns all 3 connections.
+	// Unfiltered â€” returns all 3 connections.
 	all := ts.GetWithAdminKey("/api/v1/admin/vault/connections")
 	if all.StatusCode != http.StatusOK {
 		t.Fatalf("unfiltered: %d", all.StatusCode)
@@ -135,7 +135,7 @@ func TestAdminVaultConnectionsByProvider(t *testing.T) {
 		t.Errorf("expected at least 3 connections, got %d", allBody.Total)
 	}
 
-	// Filtered to p1 — must return exactly 2.
+	// Filtered to p1 â€” must return exactly 2.
 	p1Resp := ts.GetWithAdminKey("/api/v1/admin/vault/connections?provider_id=" + p1.ID)
 	if p1Resp.StatusCode != http.StatusOK {
 		t.Fatalf("filtered p1: %d", p1Resp.StatusCode)
@@ -154,7 +154,7 @@ func TestAdminVaultConnectionsByProvider(t *testing.T) {
 		}
 	}
 
-	// Filtered to p2 — must return exactly 1.
+	// Filtered to p2 â€” must return exactly 1.
 	p2Resp := ts.GetWithAdminKey("/api/v1/admin/vault/connections?provider_id=" + p2.ID)
 	if p2Resp.StatusCode != http.StatusOK {
 		t.Fatalf("filtered p2: %d", p2Resp.StatusCode)
@@ -170,7 +170,7 @@ func TestAdminVaultConnectionsByProvider(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 3 — permissions batch-usage endpoint
+// Task 3 â€” permissions batch-usage endpoint
 // ---------------------------------------------------------------------------
 
 func TestAdminPermissionsBatchUsage(t *testing.T) {
@@ -201,7 +201,7 @@ func TestAdminPermissionsBatchUsage(t *testing.T) {
 		}
 	}
 
-	// Attach: role1 → perm_a + perm_b; role2 → perm_b + perm_c.
+	// Attach: role1 â†’ perm_a + perm_b; role2 â†’ perm_b + perm_c.
 	attachments := [][2]string{
 		{"role_batch_1", "perm_batch_a"},
 		{"role_batch_1", "perm_batch_b"},

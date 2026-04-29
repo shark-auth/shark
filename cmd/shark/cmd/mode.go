@@ -1,4 +1,4 @@
-package cmd
+﻿package cmd
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/config"
+	"github.com/shark-auth/shark/internal/config"
 )
 
 var modeCmd = &cobra.Command{
@@ -15,9 +15,9 @@ var modeCmd = &cobra.Command{
 	Short: "Get or set the active mode (dev|prod)",
 	Long: `With no argument, prints the current mode.
 
-  shark mode        — prints current mode
-  shark mode dev    — sets mode to dev (takes effect on next server restart)
-  shark mode prod   — sets mode to prod (takes effect on next server restart)
+  shark mode        â€” prints current mode
+  shark mode dev    â€” sets mode to dev (takes effect on next server restart)
+  shark mode prod   â€” sets mode to prod (takes effect on next server restart)
 
 The mode is stored in ~/.shark/state. Use 'shark serve' to start the server
 in the active mode, or POST /api/v1/admin/system/swap-mode to persist without

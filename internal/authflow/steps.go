@@ -1,4 +1,4 @@
-package authflow
+﻿package authflow
 
 import (
 	"bytes"
@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // executeStep dispatches a single FlowStep to its typed executor.
 //
 // Returning an Error outcome here short-circuits the entire flow at the
-// engine loop — individual steps must not swallow a hard failure by
+// engine loop â€” individual steps must not swallow a hard failure by
 // returning Continue with a reason string. Use Continue only when the step
 // truly completed, or (for stubs) when the wiring hasn't landed yet and
 // surfacing an error would pointlessly break every flow that references it.
@@ -61,7 +61,7 @@ func (e *Engine) executeStep(ctx context.Context, step *storage.FlowStep, fc *Co
 
 // requireEmailVerification blocks when the user's email is unverified. If
 // the step config carries a "redirect" URL the block is upgraded to a
-// Redirect outcome — handy for sending users to a verification page
+// Redirect outcome â€” handy for sending users to a verification page
 // instead of a dead end.
 func (e *Engine) requireEmailVerification(_ context.Context, step *storage.FlowStep, fc *Context) StepResult {
 	if fc.User == nil {
@@ -78,7 +78,7 @@ func (e *Engine) requireEmailVerification(_ context.Context, step *storage.FlowS
 
 // requireMFAEnrollment blocks when the user has no MFA secret. Config key
 // "skip_if_enrolled" (default true) controls whether an already-enrolled
-// user flows past — a value of false is useful for admin-only flows that
+// user flows past â€” a value of false is useful for admin-only flows that
 // want to insist the user re-confirm enrollment.
 func (e *Engine) requireMFAEnrollment(_ context.Context, step *storage.FlowStep, fc *Context) StepResult {
 	if fc.User == nil {
@@ -116,7 +116,7 @@ func (e *Engine) requirePasswordStrength(_ context.Context, step *storage.FlowSt
 
 // executeRedirect is the literal "send the user somewhere else" step. The
 // "delay" config key is passed through untouched for the HTTP layer to
-// honour — this engine doesn't sleep on it.
+// honour â€” this engine doesn't sleep on it.
 func (e *Engine) executeRedirect(_ context.Context, step *storage.FlowStep, _ *Context) StepResult {
 	url := strFromConfig(step.Config, "url", "")
 	if url == "" {
@@ -127,7 +127,7 @@ func (e *Engine) executeRedirect(_ context.Context, step *storage.FlowStep, _ *C
 
 // executeWebhook POSTs (or other configured method) a JSON payload to the
 // configured URL and continues on 2xx. 4xx/5xx and network/timeout errors
-// produce an Error outcome — callers decide whether that should block auth
+// produce an Error outcome â€” callers decide whether that should block auth
 // (for critical audit hooks) or be tolerated.
 //
 // Payload sanitization: the User copy has PasswordHash and MFASecret
@@ -238,7 +238,7 @@ func (e *Engine) executeConditional(ctx context.Context, step *storage.FlowStep,
 //
 // Config:
 //
-//	allow_recovery (bool, default true) — no-op placeholder for v0.2 when
+//	allow_recovery (bool, default true) â€” no-op placeholder for v0.2 when
 //	recovery-code bypass is wired; kept in the schema now so existing configs
 //	don't break when the feature lands.
 func (e *Engine) requireMFAChallenge(_ context.Context, step *storage.FlowStep, fc *Context) StepResult {
@@ -284,15 +284,15 @@ func (e *Engine) executeSetMetadata(_ context.Context, step *storage.FlowStep, f
 //
 // Config:
 //
-//	role_id  (string, required) — ID of the role to assign.
-//	org_id   (string, optional) — reserved for v0.2 org-scoped assignment;
+//	role_id  (string, required) â€” ID of the role to assign.
+//	org_id   (string, optional) â€” reserved for v0.2 org-scoped assignment;
 //	                               ignored today because AssignRoleToUserInOrg
 //	                               is not yet in the storage interface.
 //
 // Idempotency: the underlying INSERT OR IGNORE means assigning an already-held
 // role is a no-op at the DB level and returns Continue.
 //
-// Failure: role not found → Error; store failure → Error.
+// Failure: role not found â†’ Error; store failure â†’ Error.
 func (e *Engine) executeAssignRole(ctx context.Context, step *storage.FlowStep, fc *Context) StepResult {
 	if fc.User == nil {
 		return StepResult{Outcome: Error, Reason: "assign_role: no user context"}
@@ -331,8 +331,8 @@ func (e *Engine) executeAssignRole(ctx context.Context, step *storage.FlowStep, 
 //
 // Config:
 //
-//	org_id   (string, required) — ID of the target organization.
-//	role_id  (string, optional) — org role to assign; defaults to "viewer".
+//	org_id   (string, required) â€” ID of the target organization.
+//	role_id  (string, optional) â€” org role to assign; defaults to "viewer".
 //	                               Note: this maps to OrganizationMember.Role,
 //	                               not the global roles table.
 //
@@ -350,7 +350,7 @@ func (e *Engine) executeAddToOrg(ctx context.Context, step *storage.FlowStep, fc
 
 	roleID := strFromConfig(step.Config, "role_id", "viewer")
 
-	// Idempotency check: already a member → succeed silently.
+	// Idempotency check: already a member â†’ succeed silently.
 	existing, err := e.store.GetOrganizationMember(ctx, orgID, fc.User.ID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return StepResult{Outcome: Error, Reason: "add_to_org: store error: " + err.Error()}
@@ -385,14 +385,14 @@ func (e *Engine) executeAddToOrg(ctx context.Context, step *storage.FlowStep, fc
 	return StepResult{Outcome: Continue}
 }
 
-// TODO(F2.1): wire custom_check — similar to webhook but with a
+// TODO(F2.1): wire custom_check â€” similar to webhook but with a
 // configurable pass/fail contract (not just 2xx = pass).
 func (e *Engine) executeCustomCheck(_ context.Context, _ *storage.FlowStep, fc *Context) StepResult {
 	fc.Logger.Warn("custom_check not yet fully implemented", "step", "custom_check")
 	return StepResult{Outcome: Continue}
 }
 
-// TODO(F2.1): wire delay — useful for rate-limit simulation and for
+// TODO(F2.1): wire delay â€” useful for rate-limit simulation and for
 // staggered webhook fan-outs. MVP skips the sleep so tests stay fast.
 func (e *Engine) executeDelay(_ context.Context, _ *storage.FlowStep, fc *Context) StepResult {
 	fc.Logger.Warn("delay not yet fully implemented", "step", "delay")
@@ -400,7 +400,7 @@ func (e *Engine) executeDelay(_ context.Context, _ *storage.FlowStep, fc *Contex
 }
 
 // emitAuditLog persists a single audit entry for a step side effect. Errors
-// are logged but not propagated — a dropped audit row must never block auth.
+// are logged but not propagated â€” a dropped audit row must never block auth.
 func (e *Engine) emitAuditLog(ctx context.Context, fc *Context, action string, meta map[string]any) error {
 	metaJSON, _ := json.Marshal(meta)
 
@@ -416,7 +416,7 @@ func (e *Engine) emitAuditLog(ctx context.Context, fc *Context, action string, m
 	// TargetID anchors the audit row to a specific subject so dashboard
 	// filters can drill in. For authflow steps the user is the only stable
 	// scope plumbed through Context (flow_id and run_id sit on the engine
-	// loop, not the StepContext) — fall back to "" if no user is bound.
+	// loop, not the StepContext) â€” fall back to "" if no user is bound.
 	targetID := ""
 	if fc.User != nil {
 		targetID = fc.User.ID
@@ -442,7 +442,7 @@ func (e *Engine) emitAuditLog(ctx context.Context, fc *Context, action string, m
 }
 
 // containsSpecial reports whether s has at least one non-alphanumeric
-// character. The rule here is intentionally simple — admins who need more
+// character. The rule here is intentionally simple â€” admins who need more
 // can layer their own custom_check step on top.
 func containsSpecial(s string) bool {
 	const special = "!@#$%^&*()_+-=[]{}|;:,.<>?/~`\"'\\"

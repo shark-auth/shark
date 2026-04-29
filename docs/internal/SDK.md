@@ -1,8 +1,8 @@
-# SharkAuth SDK & Config Strategy
+﻿# SharkAuth SDK & Config Strategy
 
 **Date:** 2026-04-13  
 **Updated:** 2026-04-25  
-**Status:** v0.9.0 — core SDK surfaces shipped; framework adapters in progress  
+**Status:** v0.9.0 â€” core SDK surfaces shipped; framework adapters in progress  
 **Goal:** Ship the most ergonomic auth SDK in the market
 
 ---
@@ -46,9 +46,9 @@ All clients accept `base_url` + `token` kwargs.
 7. [React SDK (`@sharkauth/react`)](#react-sdk-sharkauthreact)
 8. [Next.js SDK (`@sharkauth/next`)](#nextjs-sdk-sharkauthnext)
 9. [Svelte SDK (`@sharkauth/svelte`)](#svelte-sdk-sharkauthsvelte)
-10. [Admin SDK — Node (`@sharkauth/node`)](#admin-sdk--node-sharkauthnode)
-11. [Admin SDK — Python (`sharkauth-py`)](#admin-sdk--python-sharkauth-py)
-12. [Admin SDK — Go (`sharkauth-go`)](#admin-sdk--go-sharkauth-go)
+10. [Admin SDK â€” Node (`@sharkauth/node`)](#admin-sdk--node-sharkauthnode)
+11. [Admin SDK â€” Python (`sharkauth-py`)](#admin-sdk--python-sharkauth-py)
+12. [Admin SDK â€” Go (`sharkauth-go`)](#admin-sdk--go-sharkauth-go)
 13. [Mobile Strategy](#mobile-strategy)
 14. [Passkey/WebAuthn Handling](#passkeywebauthn-handling)
 15. [Session Architecture & Cross-Tab Sync](#session-architecture--cross-tab-sync)
@@ -79,7 +79,7 @@ All clients accept `base_url` + `token` kwargs.
 - **Pricing is the #1 complaint.** Per-user pricing becomes "downright predatory" at scale. MFA, custom roles, and user banning locked behind paid tiers.
 - **JavaScript-only.** Go SDK requires manual JWK caching. No .NET, Java, or meaningful non-JS support.
 - **No self-hosting.** Fully managed only. No data residency control. Deal-breaker for regulated industries.
-- **Heavy bundle.** Pre-built UI components bundled with auth logic. 5-second polling, Web Worker timers, BroadcastChannel, SafeLock, partitioned cookies — all running in the client.
+- **Heavy bundle.** Pre-built UI components bundled with auth logic. 5-second polling, Web Worker timers, BroadcastChannel, SafeLock, partitioned cookies â€” all running in the client.
 - **Dark patterns.** Fixed 7-day session duration only unlockable on paid plans.
 - **Slow support.** "You won't hear from their support for days."
 
@@ -127,7 +127,7 @@ All clients accept `base_url` + `token` kwargs.
 5. **Small SDK footprint.** Firebase at 80KB+ and SuperTokens at 435KB are cautionary tales.
 6. **Simple setup, deep when needed.** Clerk wins on "works in 5 minutes." Auth0 loses on "takes weeks."
 7. **No vendor lock-in.** Standard formats, easy migration, open source.
-8. **Enterprise features without enterprise pricing.** SCIM, SAML, RBAC — don't gate them.
+8. **Enterprise features without enterprise pricing.** SCIM, SAML, RBAC â€” don't gate them.
 9. **Transparent, readable documentation.** Auth0's docs are "really bad." Lucia's were legendary.
 10. **Active maintenance.** Lucia died from single-maintainer burnout. Auth0 support degraded post-acquisition.
 
@@ -149,11 +149,11 @@ The client SDK is literally a typed `fetch` wrapper with `credentials: 'include'
 
 ### 2. Single Binary, Zero External Dependencies
 
-`./shark serve` — one binary, one SQLite file, everything works. No Redis, no Postgres, no external services required. Compare to Auth0 (managed-only) or Better Auth (requires your own database setup).
+`./shark serve` â€” one binary, one SQLite file, everything works. No Redis, no Postgres, no external services required. Compare to Auth0 (managed-only) or Better Auth (requires your own database setup).
 
 ### 3. Go-Native = Every Language Gets an Admin SDK
 
-The backend is Go, the API is REST+JSON. Admin SDKs for Node, Python, Go, Ruby, Java are trivially thin — just typed HTTP wrappers. No complex protocol, no gRPC, no GraphQL.
+The backend is Go, the API is REST+JSON. Admin SDKs for Node, Python, Go, Ruby, Java are trivially thin â€” just typed HTTP wrappers. No complex protocol, no gRPC, no GraphQL.
 
 ### 4. Free Forever Self-Hosted
 
@@ -171,9 +171,9 @@ No per-user pricing. No feature gating. Every feature available in self-hosted. 
 
 **Three tiers of config complexity:**
 
-1. **Minimum viable** (3 lines) — works for 80% of use cases
-2. **Common customization** (10-15 lines) — email, OAuth, CORS
-3. **Full control** (50+ lines) — argon2id params, passkey attestation, audit retention
+1. **Minimum viable** (3 lines) â€” works for 80% of use cases
+2. **Common customization** (10-15 lines) â€” email, OAuth, CORS
+3. **Full control** (50+ lines) â€” argon2id params, passkey attestation, audit retention
 
 ### Tier 1: Minimum Viable Config
 
@@ -375,7 +375,7 @@ SHARKAUTH_OAUTH__GOOGLE__CLIENT_ID="..."
 SHARKAUTH_OAUTH__GOOGLE__CLIENT_SECRET="..."
 ```
 
-For Docker deployments, environment variables are the primary config method. The YAML file becomes optional — you can run SharkAuth with zero files:
+For Docker deployments, environment variables are the primary config method. The YAML file becomes optional â€” you can run SharkAuth with zero files:
 
 ```bash
 docker run -e SHARKAUTH_URL=https://auth.myapp.com \
@@ -469,7 +469,7 @@ const shark = new SharkAuth('https://auth.myapp.com', {
 const user = await shark.signUp({ email, password })
 const user = await shark.signUp({ email, password, name: 'Jane Doe' })
 
-// Login — returns discriminated union
+// Login â€” returns discriminated union
 const result = await shark.signIn({ email, password })
 
 if (result.mfaRequired) {
@@ -489,7 +489,7 @@ const user = await shark.getUser()
 await shark.signOut()
 ```
 
-### OAuth — One Line
+### OAuth â€” One Line
 
 ```typescript
 // Redirects to provider. That's it.
@@ -524,11 +524,11 @@ import { enablePasskeys } from '@sharkauth/passkey'
 // Extend shark instance with passkey methods
 const shark = enablePasskeys(new SharkAuth('https://auth.myapp.com'))
 
-// Register — full WebAuthn ceremony in one call
+// Register â€” full WebAuthn ceremony in one call
 await shark.passkey.register()
 await shark.passkey.register({ name: 'My YubiKey' })
 
-// Login — discoverable flow, one call
+// Login â€” discoverable flow, one call
 const user = await shark.passkey.signIn()
 
 // Login with email hint
@@ -879,7 +879,7 @@ export async function load({ cookies }) {
 
 ---
 
-## Admin SDK — Node (`@sharkauth/node`)
+## Admin SDK â€” Node (`@sharkauth/node`)
 
 For server-to-server operations. Uses API key authentication.
 
@@ -964,7 +964,7 @@ const { data } = await admin.users.auditLogs('usr_abc123', { limit: 20 })
 
 ---
 
-## Admin SDK — Python (`sharkauth-py`)
+## Admin SDK â€” Python (`sharkauth-py`)
 
 ```python
 from sharkauth import SharkAdmin
@@ -1030,7 +1030,7 @@ async def dashboard(user = Depends(get_user)):
 
 ---
 
-## Admin SDK — Go (`sharkauth-go`)
+## Admin SDK â€” Go (`sharkauth-go`)
 
 ```go
 package main
@@ -1040,7 +1040,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/sharkauth/sharkauth-go"
+    "github.com/shark-auth/shark-go"
 )
 
 func main() {
@@ -1089,7 +1089,7 @@ package main
 
 import (
     "net/http"
-    "github.com/sharkauth/sharkauth-go/middleware"
+    "github.com/shark-auth/shark-go/middleware"
 )
 
 func main() {
@@ -1147,7 +1147,7 @@ Use `@react-native-cookies/cookies` to persist cookies. Less clean, more fragile
 
 ### Recommendation
 
-Option A. Add the `/auth/token` endpoint. It's a 20-line handler that creates a session and returns the session ID as a bearer token instead of setting a cookie. The existing session middleware already validates session IDs — it just needs to also check the Authorization header.
+Option A. Add the `/auth/token` endpoint. It's a 20-line handler that creates a session and returns the session ID as a bearer token instead of setting a cookie. The existing session middleware already validates session IDs â€” it just needs to also check the Authorization header.
 
 ---
 
@@ -1299,7 +1299,7 @@ Server components (Next.js, SvelteKit) run on the server and don't have access t
 Each framework SDK provides a server-side helper that reads cookies from the request context and forwards them:
 
 ```typescript
-// Next.js — @sharkauth/next/server
+// Next.js â€” @sharkauth/next/server
 import { cookies } from 'next/headers'
 
 export async function getUser(): Promise<User | null> {

@@ -1,13 +1,13 @@
-openapi: 3.1.0
+﻿openapi: 3.1.0
 info:
   title: SharkAuth API
   version: 0.9.0
   summary: Open-source OAuth 2.1 authorization server with native agent delegation.
   description: |
     SharkAuth is a single-binary, open-source authentication platform purpose-built
-    for the agent era. It ships every primitive a modern auth product needs —
+    for the agent era. It ships every primitive a modern auth product needs â€”
     SSO (SAML + OIDC), passkeys (WebAuthn), TOTP MFA, magic links, social login,
-    organizations + RBAC, audit log, webhooks, reverse-proxy mode — plus
+    organizations + RBAC, audit log, webhooks, reverse-proxy mode â€” plus
     native RFC 8693 token-exchange with full agent delegation chains.
 
     ### Authentication
@@ -20,9 +20,9 @@ info:
 
     Two error envelopes coexist by surface:
 
-    1. **OAuth surface** (`/oauth/*`) — RFC 6749 §5.2 shape:
+    1. **OAuth surface** (`/oauth/*`) â€” RFC 6749 Â§5.2 shape:
        `{error, error_description, error_uri}`.
-    2. **Admin + Platform surfaces** — extended shape:
+    2. **Admin + Platform surfaces** â€” extended shape:
        `{error, code, message, docs_url, details}`.
 
     ### API Reference UI
@@ -31,7 +31,7 @@ info:
 
   contact:
     name: SharkAuth
-    url: https://github.com/sharkauth/sharkauth
+    url: https://github.com/shark-auth/shark
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
@@ -44,21 +44,21 @@ servers:
 
 tags:
   - name: oauth
-    description: OAuth 2.1 Authorization Server — token issuance, DCR, introspection, revocation, token exchange.
+    description: OAuth 2.1 Authorization Server â€” token issuance, DCR, introspection, revocation, token exchange.
   - name: agents
-    description: Agent (machine-to-machine OAuth client) lifecycle — register, rotate secrets/DPoP keys, policies, token revocation.
+    description: Agent (machine-to-machine OAuth client) lifecycle â€” register, rotate secrets/DPoP keys, policies, token revocation.
   - name: users
-    description: Human user management — CRUD, session/token revocation.
+    description: Human user management â€” CRUD, session/token revocation.
   - name: applications
-    description: OAuth application management — CRUD, secret rotation.
+    description: OAuth application management â€” CRUD, secret rotation.
   - name: audit
-    description: Audit log — query and CSV export.
+    description: Audit log â€” query and CSV export.
   - name: vault
-    description: Token Vault — third-party OAuth credential storage and agent-side retrieval.
+    description: Token Vault â€” third-party OAuth credential storage and agent-side retrieval.
   - name: flows
-    description: Auth Flow Builder — CRUD and test execution for custom auth flows.
+    description: Auth Flow Builder â€” CRUD and test execution for custom auth flows.
   - name: admin
-    description: Admin operations — health, config, bootstrap, dev-email.
+    description: Admin operations â€” health, config, bootstrap, dev-email.
 
 components:
   securitySchemes:
@@ -67,7 +67,7 @@ components:
       scheme: bearer
       bearerFormat: AdminAPIKey
       description: |
-        Admin API key — issued at first boot and stored at `data/admin.key.firstboot`.
+        Admin API key â€” issued at first boot and stored at `data/admin.key.firstboot`.
         Format: `sk_live_<random>`. Pass as `Authorization: Bearer sk_live_...`.
     oauth2:
       type: oauth2
@@ -397,7 +397,7 @@ components:
               example: shark_dcr_a1b2c3d4
             client_secret:
               type: string
-              description: Shown once — store immediately.
+              description: Shown once â€” store immediately.
             registration_access_token:
               type: string
               description: Bearer for RFC 7592 management endpoints.
@@ -412,9 +412,9 @@ components:
 
 paths:
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # WELL-KNOWN / DISCOVERY
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /.well-known/oauth-authorization-server:
     get:
@@ -440,7 +440,7 @@ paths:
                 userinfo_endpoint: http://localhost:8080/oauth/userinfo
                 revocation_endpoint: http://localhost:8080/oauth/revoke
                 introspection_endpoint: http://localhost:8080/oauth/introspect
-                # device_authorization_endpoint omitted — device flow disabled for v0.1
+                # device_authorization_endpoint omitted â€” device flow disabled for v0.1
                 grant_types_supported:
                   - authorization_code
                   - client_credentials
@@ -493,16 +493,16 @@ paths:
                     x: base64url-encoded-x
                     y: base64url-encoded-y
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # OAUTH 2.1 ENDPOINTS
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /oauth/register:
     post:
       operationId: dcrRegisterClient
       summary: Dynamic Client Registration (RFC 7591)
       description: |
-        Register a new OAuth 2.1 client (agent). No authentication required — the
+        Register a new OAuth 2.1 client (agent). No authentication required â€” the
         returned `registration_access_token` gates subsequent RFC 7592 management
         operations. This is the canonical agent-native registration path.
       tags: [oauth]
@@ -620,11 +620,11 @@ paths:
       summary: Token Endpoint
       description: |
         RFC 6749 / RFC 8693 token endpoint. Supported grant types:
-        - `client_credentials` — M2M tokens for agents
-        - `authorization_code` — Authorization Code + PKCE
-        - `refresh_token` — Refresh an access token
-        - `urn:ietf:params:oauth:grant-type:token-exchange` — RFC 8693 delegation
-        - ~~`urn:ietf:params:oauth:grant-type:device_code`~~ — **Coming v0.2** (returns `unsupported_grant_type`)
+        - `client_credentials` â€” M2M tokens for agents
+        - `authorization_code` â€” Authorization Code + PKCE
+        - `refresh_token` â€” Refresh an access token
+        - `urn:ietf:params:oauth:grant-type:token-exchange` â€” RFC 8693 delegation
+        - ~~`urn:ietf:params:oauth:grant-type:device_code`~~ â€” **Coming v0.2** (returns `unsupported_grant_type`)
 
         Attach a `DPoP:` proof header for RFC 9449 DPoP-bound tokens.
         The issued token will contain a `cnf.jkt` claim.
@@ -768,7 +768,7 @@ paths:
                   enum: [access_token, refresh_token]
       responses:
         '200':
-          description: Token revoked (or not found — always 200 per RFC 7009)
+          description: Token revoked (or not found â€” always 200 per RFC 7009)
 
   /oauth/introspect:
     post:
@@ -840,7 +840,7 @@ paths:
   /oauth/device:
     post:
       operationId: deviceAuthorizationRequest
-      summary: Device Authorization Request (RFC 8628) — Coming v0.2
+      summary: Device Authorization Request (RFC 8628) â€” Coming v0.2
       description: |
         **Disabled for v0.1.** Device Authorization Grant (RFC 8628) is not yet
         supported. This endpoint returns `501 Not Implemented` with
@@ -862,16 +862,16 @@ paths:
                   type: string
       responses:
         '501':
-          description: Not Implemented — device flow coming v0.2
+          description: Not Implemented â€” device flow coming v0.2
           content:
             application/json:
               example:
                 error: not_implemented
                 error_description: Device authorization grant (RFC 8628) is not yet supported. Coming in v0.2.
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # HEALTH
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /healthz:
     get:
@@ -895,9 +895,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  # ─────────────────────────────────────────────────────────────────────────
-  # ADMIN — BOOTSTRAP + SETUP
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # ADMIN â€” BOOTSTRAP + SETUP
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /admin/bootstrap/consume:
     post:
@@ -906,7 +906,7 @@ paths:
       description: |
         Single-use bootstrap token consume. The token is the one-time credential
         printed at first boot (stored at `data/admin.key.firstboot`). Exchanges it
-        for the permanent admin API key. No auth middleware — the token IS the credential.
+        for the permanent admin API key. No auth middleware â€” the token IS the credential.
       tags: [admin]
       security: []
       x-source: internal/api/admin_bootstrap_handlers.go
@@ -928,7 +928,7 @@ paths:
             application/json:
               example:
                 admin_key: sk_live_...
-                message: Bootstrap complete. Store the admin key — it will not be shown again.
+                message: Bootstrap complete. Store the admin key â€” it will not be shown again.
         '400':
           description: Token already consumed or invalid
           content:
@@ -965,7 +965,7 @@ paths:
     get:
       operationId: getAdminConfig
       summary: Get server configuration
-      description: Returns current runtime configuration (sanitised — secrets redacted).
+      description: Returns current runtime configuration (sanitised â€” secrets redacted).
       tags: [admin]
       security:
         - bearerAuth: []
@@ -995,7 +995,7 @@ paths:
           application/json:
             schema:
               type: object
-              description: Partial config object — only provided keys are updated.
+              description: Partial config object â€” only provided keys are updated.
       responses:
         '200':
           description: Updated config
@@ -1045,9 +1045,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # USERS
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /api/v1/users:
     get:
@@ -1259,9 +1259,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # AGENTS
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /api/v1/agents:
     get:
@@ -1429,7 +1429,7 @@ paths:
       summary: Rotate agent client secret
       description: |
         Generate a new `client_secret` for the agent. The old secret is
-        immediately invalidated. Returns the new secret — shown once.
+        immediately invalidated. Returns the new secret â€” shown once.
       tags: [agents]
       security:
         - bearerAuth: []
@@ -1546,7 +1546,7 @@ paths:
       description: |
         Returns the policy envelope for this agent: allowed scopes, token TTL,
         DPoP requirement, allowed grant types. Policies are enforced at token
-        issuance time — violations return `invalid_scope` or `unauthorized_client`.
+        issuance time â€” violations return `invalid_scope` or `unauthorized_client`.
       tags: [agents]
       security:
         - bearerAuth: []
@@ -1574,7 +1574,7 @@ paths:
       operationId: setAgentPolicies
       summary: Set agent policies
       description: |
-        Replace the full policy envelope for an agent. This is an upsert —
+        Replace the full policy envelope for an agent. This is an upsert â€”
         if no policy row exists yet, one is created.
       tags: [agents]
       security:
@@ -1617,9 +1617,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # APPLICATIONS
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /api/v1/admin/apps:
     get:
@@ -1789,9 +1789,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # AUDIT LOGS
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /api/v1/audit-logs:
     get:
@@ -1867,7 +1867,7 @@ paths:
       summary: Export audit logs as CSV
       description: |
         Streams a CSV of audit log entries for the given time range.
-        **Note: audit export is a v0.2 (W18-W19) feature — available in current build
+        **Note: audit export is a v0.2 (W18-W19) feature â€” available in current build
         but not prominently surfaced in the v0.1 launch UI.**
       tags: [audit]
       security:
@@ -1902,9 +1902,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # VAULT
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /api/v1/vault/providers:
     get:
@@ -2071,9 +2071,9 @@ paths:
         '302':
           description: Redirect to provider
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # AUTH FLOWS
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /api/v1/admin/flows:
     get:
@@ -2227,7 +2227,7 @@ paths:
           application/json:
             schema:
               type: object
-              description: Test input payload — shape depends on flow steps.
+              description: Test input payload â€” shape depends on flow steps.
       responses:
         '200':
           description: Flow execution trace
@@ -2255,9 +2255,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # ME (authenticated user self-service)
-  # ─────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /api/v1/auth/me:
     get:

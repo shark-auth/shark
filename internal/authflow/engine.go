@@ -1,10 +1,10 @@
-// Package authflow is the Phase 6 Auth Flow execution engine.
+﻿// Package authflow is the Phase 6 Auth Flow execution engine.
 //
 // F1 (storage layer) shipped the AuthFlow / FlowStep / AuthFlowRun types plus
 // SQLite persistence. This package is F2: the runtime that selects a flow for
 // a trigger, walks its steps in order, and reports a Result back to the
 // caller. Admin-configured flows live in the DB; step Type + Config strings
-// are interpreted here without code changes — wire once, configure many.
+// are interpreted here without code changes â€” wire once, configure many.
 //
 // Design notes
 //
@@ -14,8 +14,8 @@
 //     to persist.
 //   - The engine never panics on nil inputs: nil user, nil metadata map, nil
 //     http.Client and nil logger all default to safe values.
-//   - Timeline entries are populated for every executed step — including
-//     steps that Block or Error — so the dashboard History tab can show
+//   - Timeline entries are populated for every executed step â€” including
+//     steps that Block or Error â€” so the dashboard History tab can show
 //     exactly where a run halted.
 //   - Run records are persisted on Execute; ExecuteDryRun skips persistence
 //     so the admin "Test this flow" button doesn't pollute history.
@@ -31,7 +31,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // Outcome is what the engine decides after running a flow.
@@ -43,7 +43,7 @@ const (
 	Block    Outcome = "block"       // flow blocked execution (e.g., email unverified)
 	Redirect Outcome = "redirect"    // flow requests a redirect to RedirectURL
 	Error    Outcome = "error"       // runtime error (webhook timeout, etc.)
-	AwaitMFA Outcome = "awaiting_mfa" // flow paused — MFA challenge issued, waiting for TOTP code
+	AwaitMFA Outcome = "awaiting_mfa" // flow paused â€” MFA challenge issued, waiting for TOTP code
 )
 
 // Context carries per-execution state into each step.
@@ -59,7 +59,7 @@ type Context struct {
 	Request   *http.Request   // for IP, UA, headers (may be nil)
 	Metadata  map[string]any  // stage-accumulated state (readable by later steps)
 	StartedAt time.Time       // when the flow kicked off; engine fills if zero
-	Logger    *slog.Logger    // per-request logger (may be nil → engine default)
+	Logger    *slog.Logger    // per-request logger (may be nil â†’ engine default)
 	UserRoles []string        // role names assigned to the user (for user_has_role)
 }
 
@@ -150,7 +150,7 @@ func (e *Engine) WithNow(fn func() time.Time) *Engine {
 // persists a run record, and returns the aggregate Result.
 //
 // If no enabled flow exists for the trigger (or no conditions match),
-// Execute returns {Outcome: Continue} with no persistence — the caller
+// Execute returns {Outcome: Continue} with no persistence â€” the caller
 // proceeds as if no flow were configured.
 //
 // On step Block / Error / Redirect the flow short-circuits: subsequent
@@ -189,7 +189,7 @@ func (e *Engine) Execute(ctx context.Context, fc *Context) (*Result, error) {
 
 	if flow == nil {
 		result.FinishedAt = e.now()
-		return result, nil // no matching flow → Continue
+		return result, nil // no matching flow â†’ Continue
 	}
 
 	result.FlowID = flow.ID
@@ -214,7 +214,7 @@ func (e *Engine) Execute(ctx context.Context, fc *Context) (*Result, error) {
 //
 // Used by the /admin/flows/{id}/test endpoint so admins can preview a flow
 // against seeded mock data without polluting history. The flow is taken
-// directly (no lookup) and its Conditions are ignored — the caller has
+// directly (no lookup) and its Conditions are ignored â€” the caller has
 // already decided it's the one they want to test.
 func (e *Engine) ExecuteDryRun(ctx context.Context, flow *storage.AuthFlow, fc *Context) (*Result, error) {
 	e.prepareContext(fc)
@@ -262,7 +262,7 @@ func (e *Engine) runSteps(ctx context.Context, steps []storage.FlowStep, fc *Con
 }
 
 // executeStepWithTiming wraps executeStep so each dispatch appends a
-// Timeline entry — regardless of Continue / Block / Error outcome.
+// Timeline entry â€” regardless of Continue / Block / Error outcome.
 func (e *Engine) executeStepWithTiming(ctx context.Context, step *storage.FlowStep, fc *Context, index int, result *Result) StepResult {
 	started := e.now()
 	sub := e.executeStep(ctx, step, fc)
@@ -307,7 +307,7 @@ func mergeMetadata(fc *Context, patch map[string]any) {
 }
 
 // persistRun writes an auth_flow_runs row for the completed flow. Never
-// returns an error to the caller — storage failures are logged and the HTTP
+// returns an error to the caller â€” storage failures are logged and the HTTP
 // response still flows through (a dropped history row must not block auth).
 func (e *Engine) persistRun(ctx context.Context, flow *storage.AuthFlow, fc *Context, result *Result) error {
 	run := &storage.AuthFlowRun{
@@ -392,7 +392,7 @@ func secsFromConfig(cfg map[string]any, key string, def, max int) int {
 	return v
 }
 
-// sanitizeUser makes a webhook-safe copy of a User — PasswordHash and
+// sanitizeUser makes a webhook-safe copy of a User â€” PasswordHash and
 // MFASecret are cleared so a misbehaving webhook endpoint can never leak a
 // credential.
 func sanitizeUser(u *storage.User) map[string]any {

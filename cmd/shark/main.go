@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"embed"
@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/sharkauth/sharkauth/cmd/shark/cmd"
+	"github.com/shark-auth/shark/cmd/shark/cmd"
 )
 
 //go:embed migrations/*.sql

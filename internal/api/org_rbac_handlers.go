@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -8,10 +8,10 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sharkauth/sharkauth/internal/rbac"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/rbac"
+	"github.com/shark-auth/shark/internal/storage"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 // --- Request/Response types for org RBAC ---
@@ -70,7 +70,7 @@ func (s *Server) auditOrgRBAC(ctx context.Context, actor, action, orgID, targetI
 	s.auditOrgRBACWithMeta(ctx, actor, action, orgID, targetID, ip, ua, nil)
 }
 
-// auditOrgRBACWithMeta is the structured variant — accepts a metadata map
+// auditOrgRBACWithMeta is the structured variant â€” accepts a metadata map
 // JSON-encoded into AuditLog.Metadata. nil/empty meta yields "{}" so the
 // column never lands as literal NULL.
 func (s *Server) auditOrgRBACWithMeta(ctx context.Context, actor, action, orgID, targetID, ip, ua string, meta map[string]any) {

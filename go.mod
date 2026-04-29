@@ -1,4 +1,4 @@
-module github.com/sharkauth/sharkauth
+module github.com/shark-auth/shark
 
 go 1.25.0
 

@@ -1,4 +1,4 @@
-# DEMO 04 — Token Vault: Personal AI Ops Stack
+﻿# DEMO 04 â€” Token Vault: Personal AI Ops Stack
 
 > **Tagline:** One agent acts across Gmail / Slack / GitHub / Notion / Linear via encrypted Token Vault. Zero raw credentials in agent memory.
 >
@@ -8,7 +8,7 @@
 
 ## Persona: Aisha, Founder of Gemma
 
-**Gemma** — a $19/mo personal AI ops assistant. 8,000 paid users. Monthly revenue: ~$152,000.
+**Gemma** â€” a $19/mo personal AI ops assistant. 8,000 paid users. Monthly revenue: ~$152,000.
 
 Gemma's agent reads users' Gmail, Slack, Notion, and Linear every 5 minutes, drafts summaries, writes tasks back. The agent also comments on GitHub issues on users' behalf.
 
@@ -18,12 +18,12 @@ Gemma's agent reads users' Gmail, Slack, Notion, and Linear every 5 minutes, dra
 |---------|--------|
 | Homegrown `oauth_tokens` Postgres table | She wrote it in a weekend. It's AES-128 (not 256). The security review failed. |
 | Custom refresh per provider | Slack rotation broke **twice last month** at 3 AM. On-call engineer woke up. |
-| No per-user revocation cascade | When a user churns and requests data deletion, Aisha manually deletes rows — sometimes missing provider rows. |
+| No per-user revocation cascade | When a user churns and requests data deletion, Aisha manually deletes rows â€” sometimes missing provider rows. |
 | No audit trail | Can't answer "which agent read which user's Gmail at 2 PM on Tuesday?" |
 | No webhook on token events | The product team has no signal when a user disconnects a provider. |
 
 **Security review failure quote (real scenario):**
-> "Your `oauth_tokens.access_token` column uses AES-128 at rest. Our SOC 2 CC6.1 requirement is AES-256. Additionally, we found no evidence of per-user revocation cascade — revoking a single provider token does not block other agents from using cached copies."
+> "Your `oauth_tokens.access_token` column uses AES-128 at rest. Our SOC 2 CC6.1 requirement is AES-256. Additionally, we found no evidence of per-user revocation cascade â€” revoking a single provider token does not block other agents from using cached copies."
 
 **Aisha's alternatives (before finding Shark):**
 
@@ -32,57 +32,57 @@ Gemma's agent reads users' Gmail, Slack, Notion, and Linear every 5 minutes, dra
 | Composio | $229/mo (2M tool calls) + overage | Yes | VPC/custom quote only |
 | Nango | from $500/mo (Growth tier) | Yes | OSS but complex infra |
 | Auth0 Token Vault | 50% add-on on existing Auth0 plan (~$53+/mo extra) | Yes | No |
-| **Shark** | **$0 — ships in the binary** | **None** | **Yes, single binary** |
+| **Shark** | **$0 â€” ships in the binary** | **None** | **Yes, single binary** |
 
-**Dollars saved vs Composio:** $229/mo × 12 = **$2,748/yr** for Composio's "Serious Business" tier. Against Nango Growth: **$6,000/yr**. Against Auth0 Token Vault add-on at enterprise scale: **tens of thousands/yr**.
+**Dollars saved vs Composio:** $229/mo Ã— 12 = **$2,748/yr** for Composio's "Serious Business" tier. Against Nango Growth: **$6,000/yr**. Against Auth0 Token Vault add-on at enterprise scale: **tens of thousands/yr**.
 
 ---
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    GEMMA PLATFORM (Aisha's app)                  │
-│                                                                   │
-│  ┌──────────────┐    ┌──────────────────────────────────────┐   │
-│  │  End Users   │    │         Agent Fleet                   │   │
-│  │  (8K users)  │    │  gemma-worker-01  gemma-worker-02    │   │
-│  └──────┬───────┘    └──────────────┬───────────────────────┘   │
-│         │                           │                             │
-│         │ Connect flows             │ client_credentials +        │
-│         │ (one-time per provider)   │ scope=vault:read:google ... │
-│         │                           │                             │
-│  ┌──────▼───────────────────────────▼───────────────────────┐   │
-│  │                  SHARK AUTH SERVER                         │   │
-│  │                                                            │   │
-│  │  ┌────────────────────────────────────────────────────┐  │   │
-│  │  │  TOKEN VAULT  (internal/vault/vault.go)             │  │   │
-│  │  │                                                      │  │   │
-│  │  │  vault_providers  ←  AES-256-GCM client_secret_enc  │  │   │
-│  │  │  vault_connections ← AES-256-GCM access_token_enc   │  │   │
-│  │  │                        AES-256-GCM refresh_token_enc │  │   │
-│  │  │                                                      │  │   │
-│  │  │  Auto-refresh: expiryLeeway = 30s before expiry     │  │   │
-│  │  │  Per-user per-provider revocation cascade            │  │   │
-│  │  │  Audit: every vault.read logged w/ agent_id          │  │   │
-│  │  └────────────────────────────────────────────────────┘  │   │
-│  │                                                            │   │
-│  └──────────────────────┬─────────────────────────────────┘   │
-│                          │                                        │
-└──────────────────────────┼────────────────────────────────────────┘
-                           │ Fresh (never raw) access tokens
-           ┌───────────────┼───────────────────┐
-           │               │                   │
-      ┌────▼───┐     ┌─────▼──┐         ┌─────▼──┐
-      │ Gmail  │     │ Slack  │         │ GitHub │
-      │  API   │     │  API   │   ...   │  API   │
-      └────────┘     └────────┘         └────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚                    GEMMA PLATFORM (Aisha's app)                  â”‚
+â”‚                                                                   â”‚
+â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚  â”‚  End Users   â”‚    â”‚         Agent Fleet                   â”‚   â”‚
+â”‚  â”‚  (8K users)  â”‚    â”‚  gemma-worker-01  gemma-worker-02    â”‚   â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”˜    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+â”‚         â”‚                           â”‚                             â”‚
+â”‚         â”‚ Connect flows             â”‚ client_credentials +        â”‚
+â”‚         â”‚ (one-time per provider)   â”‚ scope=vault:read:google ... â”‚
+â”‚         â”‚                           â”‚                             â”‚
+â”‚  â”Œâ”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚  â”‚                  SHARK AUTH SERVER                         â”‚   â”‚
+â”‚  â”‚                                                            â”‚   â”‚
+â”‚  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚   â”‚
+â”‚  â”‚  â”‚  TOKEN VAULT  (internal/vault/vault.go)             â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚                                                      â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚  vault_providers  â†  AES-256-GCM client_secret_enc  â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚  vault_connections â† AES-256-GCM access_token_enc   â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚                        AES-256-GCM refresh_token_enc â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚                                                      â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚  Auto-refresh: expiryLeeway = 30s before expiry     â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚  Per-user per-provider revocation cascade            â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚  Audit: every vault.read logged w/ agent_id          â”‚  â”‚   â”‚
+â”‚  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â”‚   â”‚
+â”‚  â”‚                                                            â”‚   â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+â”‚                          â”‚                                        â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                           â”‚ Fresh (never raw) access tokens
+           â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+           â”‚               â”‚                   â”‚
+      â”Œâ”€â”€â”€â”€â–¼â”€â”€â”€â”     â”Œâ”€â”€â”€â”€â”€â–¼â”€â”€â”         â”Œâ”€â”€â”€â”€â”€â–¼â”€â”€â”
+      â”‚ Gmail  â”‚     â”‚ Slack  â”‚         â”‚ GitHub â”‚
+      â”‚  API   â”‚     â”‚  API   â”‚   ...   â”‚  API   â”‚
+      â””â”€â”€â”€â”€â”€â”€â”€â”€â”˜     â””â”€â”€â”€â”€â”€â”€â”€â”€â”˜         â””â”€â”€â”€â”€â”€â”€â”€â”€â”˜
          Notion API          Linear API
 ```
 
 ---
 
-## Provider Templates — What Actually Ships vs Aspirational
+## Provider Templates â€” What Actually Ships vs Aspirational
 
 ### Confirmed shipped (grep `internal/vault/providers.go`):
 
@@ -97,7 +97,7 @@ Gemma's agent reads users' Gmail, Slack, Notion, and Linear every 5 minutes, dra
 | `linear` | Linear | YES (verify) |
 | `microsoft` | Microsoft | YES (verify) |
 
-**Honest gap:** Only `google_calendar`, `google_drive`, and `google_gmail` are confirmed in `internal/vault/providers.go` from the grep. The README and AGENT_AUTH.md list Slack, GitHub, Notion, Linear, Microsoft, and Jira as shipped templates, but the demo runner should verify by running `GET /api/v1/vault/templates` at demo time. If Notion/Linear are not in the binary yet, **substitute with Google Drive + Microsoft** which are confirmed — the demo story (5 providers connected) remains equally compelling.
+**Honest gap:** Only `google_calendar`, `google_drive`, and `google_gmail` are confirmed in `internal/vault/providers.go` from the grep. The README and AGENT_AUTH.md list Slack, GitHub, Notion, Linear, Microsoft, and Jira as shipped templates, but the demo runner should verify by running `GET /api/v1/vault/templates` at demo time. If Notion/Linear are not in the binary yet, **substitute with Google Drive + Microsoft** which are confirmed â€” the demo story (5 providers connected) remains equally compelling.
 
 The `builtinTemplates` map in `internal/vault/providers.go` is the source of truth. Run `shark vault templates list` before the live demo to confirm the exact list.
 
@@ -109,7 +109,7 @@ The `builtinTemplates` map in `internal/vault/providers.go` is the source of tru
 |---|---|---|
 | Provider config | `vault_providers` table + AES-256-GCM `client_secret_enc` | `internal/vault/vault.go`, `internal/storage/` |
 | Provider templates | `builtinTemplates` map (google_*, slack, github, notion, linear) | `internal/vault/providers.go` |
-| Connect flow | `GET /api/v1/vault/connect/{provider}` → OAuth callback → `vault_connections` | `internal/api/vault_handlers.go` |
+| Connect flow | `GET /api/v1/vault/connect/{provider}` â†’ OAuth callback â†’ `vault_connections` | `internal/api/vault_handlers.go` |
 | Token read by agent | `GET /api/v1/vault/{provider}/token` gated by `vault:read` scope | `internal/api/vault_handlers.go:623` |
 | Scope enforcement | `WWW-Authenticate: Bearer error="insufficient_scope"` | `internal/api/vault_handlers.go:626-628` |
 | Auto-refresh | `expiryLeeway = 30 * time.Second` in `GetFreshToken()` | `internal/vault/vault.go:49` |
@@ -125,7 +125,7 @@ The `builtinTemplates` map in `internal/vault/providers.go` is the source of tru
 
 ## Live Demo Script (10 minutes)
 
-### T=0:00 — Setup context (1 min, talk track while terminal loads)
+### T=0:00 â€” Setup context (1 min, talk track while terminal loads)
 
 Show the competitive table on screen:
 - Auth0 Token Vault: 50% add-on
@@ -133,13 +133,13 @@ Show the competitive table on screen:
 - Nango: $500/mo Growth
 - **Shark: $0, single binary, self-hosted**
 
-> "Aisha has 8,000 users, her agent reads 5 providers per user. She's paying for each of these separately — or rebuilding it herself. Last week her security review failed because her homebrew vault uses AES-128. Let's show her the alternative."
+> "Aisha has 8,000 users, her agent reads 5 providers per user. She's paying for each of these separately â€” or rebuilding it herself. Last week her security review failed because her homebrew vault uses AES-128. Let's show her the alternative."
 
-### T=1:00 — Install and configure (1 min)
+### T=1:00 â€” Install and configure (1 min)
 
 ```bash
 # Single binary install
-curl -sSL https://get.sharkauth.dev | sh
+curl -sSL https://get.sharkauth.com | sh
 shark serve &
 
 # Register 5 provider templates via CLI
@@ -169,7 +169,7 @@ shark vault provider create linear \
   --scopes='read,write'
 ```
 
-### T=2:00 — User connect flow (1.5 min)
+### T=2:00 â€” User connect flow (1.5 min)
 
 ```bash
 # Seed a test user "aisha-test" (user_42 in demo)
@@ -179,15 +179,15 @@ shark vault provider create linear \
 echo "Connect URL: http://localhost:8000/api/v1/vault/connect/google_gmail?redirect_uri=http://localhost:3000/connected&user_id=user_42"
 
 # In the browser: simulate user clicking "Connect Gmail"
-# Shark runs the full OAuth flow → callback → stores token encrypted
+# Shark runs the full OAuth flow â†’ callback â†’ stores token encrypted
 # Webhook fires: vault.connected
 ```
 
 > "That's it. The user clicked Connect. Shark ran the OAuth dance, stored the token AES-256-GCM encrypted, and fired a webhook to Gemma's backend."
 
-Repeat (fast) for Slack, GitHub — webhooks fire visibly in the terminal.
+Repeat (fast) for Slack, GitHub â€” webhooks fire visibly in the terminal.
 
-### T=3:30 — Agent authenticates + reads vault (2 min)
+### T=3:30 â€” Agent authenticates + reads vault (2 min)
 
 ```bash
 # Agent gets a DPoP-bound Shark JWT with vault:read scope
@@ -226,7 +226,7 @@ curl -s "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=3" \
   | jq '.messages[0]'
 ```
 
-### T=5:30 — Audit log proof (30 sec)
+### T=5:30 â€” Audit log proof (30 sec)
 
 ```bash
 # Show every vault read logged
@@ -240,29 +240,29 @@ Output:
 { "actor": "gemma-worker", "action": "vault.token.read", "target": "google_gmail:user_42", "request_id": "req_7f3a..." }
 ```
 
-### T=6:00 — Auto-refresh demo (1 min)
+### T=6:00 â€” Auto-refresh demo (1 min)
 
 ```bash
-# Run the auto-refresh test — advances the clock to T+50min
+# Run the auto-refresh test â€” advances the clock to T+50min
 # (Gmail tokens expire in 60min; leeway = 30s)
 python demos/token_vault/auto_refresh_test.py
 ```
 
 Output:
 ```
-[T+0min]  vault.token.read → token valid, expires in 60:00
-[T+50min] vault.token.read → token expires in 10:00, within leeway? NO
-[T+59:30] vault.token.read → token expires in 30s → AUTO-REFRESH triggered
+[T+0min]  vault.token.read â†’ token valid, expires in 60:00
+[T+50min] vault.token.read â†’ token expires in 10:00, within leeway? NO
+[T+59:30] vault.token.read â†’ token expires in 30s â†’ AUTO-REFRESH triggered
            vault.refreshed webhook fired
-           new token returned to agent — agent saw zero interruption
+           new token returned to agent â€” agent saw zero interruption
 ```
 
 > "The agent called the same endpoint twice. Shark silently refreshed the token behind the scenes. The agent never knew. No 3 AM outage."
 
-### T=7:00 — Per-user revoke cascade (1.5 min)
+### T=7:00 â€” Per-user revoke cascade (1.5 min)
 
 ```bash
-# User churns — revoke their Slack connection instantly
+# User churns â€” revoke their Slack connection instantly
 curl -s -X DELETE http://localhost:8000/api/v1/admin/vault/connections/vc_slack_user42 \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 
@@ -280,17 +280,17 @@ Response:
 ```
 
 ```bash
-# Gmail still works — only Slack was revoked
+# Gmail still works â€” only Slack was revoked
 curl -s http://localhost:8000/api/v1/vault/google_gmail/token \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-User-ID: user_42" \
   | jq .access_token
-# → "ya29.a0AfH6..."  (still works)
+# â†’ "ya29.a0AfH6..."  (still works)
 ```
 
 > "Revoke is per-user, per-provider. Surgical. Gmail keeps working. Slack is dead. Webhook fired instantly."
 
-### T=8:30 — Scope enforcement + encryption proof (1.5 min)
+### T=8:30 â€” Scope enforcement + encryption proof (1.5 min)
 
 **Cross-agent scope enforcement:**
 ```bash
@@ -311,24 +311,24 @@ WWW-Authenticate: Bearer error="insufficient_scope",scope="vault:read"
 {"error":"insufficient_scope","description":"Token lacks vault:read scope"}
 ```
 
-**Encryption proof (split terminal — the wow moment):**
+**Encryption proof (split terminal â€” the wow moment):**
 ```bash
 # LEFT terminal: raw bytes in SQLite
 sqlite3 dev.db "SELECT hex(access_token_enc) FROM vault_connections LIMIT 1;"
-# → 1F3A9C7B2E45D8F1... (random encrypted bytes — unreadable)
+# â†’ 1F3A9C7B2E45D8F1... (random encrypted bytes â€” unreadable)
 
 # RIGHT terminal: agent calls vault API, gets readable token
 curl -s http://localhost:8000/api/v1/vault/google_gmail/token \
   -H "Authorization: Bearer $TOKEN" -H "X-User-ID: user_42" \
   | jq .access_token
-# → "ya29.a0AfH6SMQ..."  (real, usable token)
+# â†’ "ya29.a0AfH6SMQ..."  (real, usable token)
 ```
 
 > "Same row. Left: garbage. Right: working token. AES-256-GCM. The agent never touches the database. Shark is the only thing that can decrypt it."
 
 ---
 
-## Implementation Plan — Files to Build
+## Implementation Plan â€” Files to Build
 
 ### `demos/token_vault/gemma-worker/agent.py` (~80 LOC)
 
@@ -341,8 +341,8 @@ Python agent that:
 ### `demos/token_vault/connect-flow/server.py` (~60 LOC)
 
 Flask/FastAPI server that:
-1. Serves `GET /connect?provider=google_gmail` — redirects to Shark's vault connect URL
-2. Handles `GET /connected` callback — shows "Connected!" page with provider name
+1. Serves `GET /connect?provider=google_gmail` â€” redirects to Shark's vault connect URL
+2. Handles `GET /connected` callback â€” shows "Connected!" page with provider name
 3. Lists connected providers via `GET /api/v1/vault/connections`
 
 ### `demos/token_vault/seed.sh`
@@ -364,7 +364,7 @@ Bash script that:
 
 Python test that:
 1. Creates a vault connection with `expires_at = now + 31s` (within 30s leeway)
-2. Calls `GetFreshToken` → expects auto-refresh triggered
+2. Calls `GetFreshToken` â†’ expects auto-refresh triggered
 3. Verifies the returned token is different (refreshed)
 4. Uses `NewManagerWithClock` test seam from `internal/vault/vault.go:73`
 
@@ -376,28 +376,28 @@ Python test that:
 
 ```
 LEFT (SQLite raw):                    RIGHT (Agent API call):
-─────────────────────────────────── │ ───────────────────────────────────
-$ sqlite3 dev.db \                  │ $ curl .../vault/google_gmail/token
-  "SELECT hex(access_token_enc)     │   -H "Authorization: Bearer $TOKEN"
-   FROM vault_connections LIMIT 1"  │   -H "X-User-ID: user_42" | jq .
-                                    │
-1F3A9C7B2E45D8F10B23A4C5E6F78901   │ {
-A2B3C4D5E6F7089A1B2C3D4E5F607182   │   "access_token": "ya29.a0AfH6SMQ",
-9C8D7E6F5041302100FFEEDDCCBBAA99   │   "expires_at": "2026-04-24T15:32Z",
-...256 bytes of AES-256-GCM blob... │   "scopes": ["gmail.readonly"]
-                                    │ }
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ â”‚ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$ sqlite3 dev.db \                  â”‚ $ curl .../vault/google_gmail/token
+  "SELECT hex(access_token_enc)     â”‚   -H "Authorization: Bearer $TOKEN"
+   FROM vault_connections LIMIT 1"  â”‚   -H "X-User-ID: user_42" | jq .
+                                    â”‚
+1F3A9C7B2E45D8F10B23A4C5E6F78901   â”‚ {
+A2B3C4D5E6F7089A1B2C3D4E5F607182   â”‚   "access_token": "ya29.a0AfH6SMQ",
+9C8D7E6F5041302100FFEEDDCCBBAA99   â”‚   "expires_at": "2026-04-24T15:32Z",
+...256 bytes of AES-256-GCM blob... â”‚   "scopes": ["gmail.readonly"]
+                                    â”‚ }
 
-BOTTOM: vault.refreshed webhook arriving in real time →
+BOTTOM: vault.refreshed webhook arriving in real time â†’
 {"event":"vault.refreshed","user_id":"user_42","provider":"google_gmail","new_expiry":"2026-04-24T16:32Z"}
 ```
 
-**Verbal:** "Same data. Left: what's in the database — unreadable encrypted bytes. Right: what the agent sees — a working token, freshly refreshed, delivered by Shark. The agent has never touched a database row. It has never seen a refresh token. It can't. That's the architecture."
+**Verbal:** "Same data. Left: what's in the database â€” unreadable encrypted bytes. Right: what the agent sees â€” a working token, freshly refreshed, delivered by Shark. The agent has never touched a database row. It has never seen a refresh token. It can't. That's the architecture."
 
 ---
 
 ## Sellable Angle
 
-**One line:** "Ship a production-grade OAuth token vault in 10 minutes — not 3 months — and save $2,748/yr vs Composio."
+**One line:** "Ship a production-grade OAuth token vault in 10 minutes â€” not 3 months â€” and save $2,748/yr vs Composio."
 
 **Three customer types:**
 
@@ -405,7 +405,7 @@ BOTTOM: vault.refreshed webhook arriving in real time →
 
 2. **B2B agentic SaaS (Lindy, Bardeen, Wordware-type):** Agent acts across 20+ SaaS tools per enterprise user. Token Vault replaces a 3-engineer 6-month infra project. Revocation cascade is table stakes for enterprise sales ("what happens when an employee leaves?").
 
-3. **Regulated AI verticals (healthcare ops, legal AI, fintech assistants):** HIPAA 164.312(a)(2)(iv) requires encryption + decryption controls at rest. GDPR Art. 32 requires appropriate technical measures. Shark provides AES-256-GCM at rest + per-user revocation cascade + full audit trail — all three in one binary, no vendor lock-in.
+3. **Regulated AI verticals (healthcare ops, legal AI, fintech assistants):** HIPAA 164.312(a)(2)(iv) requires encryption + decryption controls at rest. GDPR Art. 32 requires appropriate technical measures. Shark provides AES-256-GCM at rest + per-user revocation cascade + full audit trail â€” all three in one binary, no vendor lock-in.
 
 ---
 
@@ -426,7 +426,7 @@ BOTTOM: vault.refreshed webhook arriving in real time →
 
 | Standard | Requirement | Shark capability |
 |---|---|---|
-| SOC 2 CC6.1 | Logical access controls — restrict access to credentials | Per-user per-provider vault isolation; `vault:read` scope gates; no raw creds in agent memory |
+| SOC 2 CC6.1 | Logical access controls â€” restrict access to credentials | Per-user per-provider vault isolation; `vault:read` scope gates; no raw creds in agent memory |
 | GDPR Art. 32 | Appropriate technical measures for encryption at rest | AES-256-GCM for all vault tokens; `client_secret_enc`, `access_token_enc`, `refresh_token_enc` all encrypted |
 | HIPAA 164.312(a)(2)(iv) | Encryption and decryption mechanism | AES-256-GCM at rest; access only via Shark API with valid JWT; revocation cascade on user offboarding |
 
@@ -441,13 +441,13 @@ BOTTOM: vault.refreshed webhook arriving in real time →
 - [ ] **VAULT-05** Scope gate: agent without `vault:read` scope gets HTTP 403 + `WWW-Authenticate: Bearer error="insufficient_scope"`
 - [ ] **VAULT-06** Auto-refresh leeway: token with `expires_at = now + 25s` (inside 30s leeway) triggers transparent refresh; returned token has new expiry > `now + 30s`
 - [ ] **VAULT-07** Auto-refresh under load: 10 concurrent agents reading same user+provider all get valid tokens (no thundering-herd double-refresh, no race on `vault_connections` update)
-- [ ] **VAULT-08** Revoke cascade: `DELETE /api/v1/admin/vault/connections/{id}` → subsequent `GET /api/v1/vault/{provider}/token` returns 404/403 for that user+provider
+- [ ] **VAULT-08** Revoke cascade: `DELETE /api/v1/admin/vault/connections/{id}` â†’ subsequent `GET /api/v1/vault/{provider}/token` returns 404/403 for that user+provider
 - [ ] **VAULT-09** Cross-provider isolation: revoking `slack` connection for user_42 does NOT affect `google_gmail` token reads for user_42
 - [ ] **VAULT-10** Cross-user isolation: revoking user_42's token does NOT affect user_43's reads on same provider
 - [ ] **VAULT-11** Audit completeness: every successful vault.token.read creates an `audit_logs` row with `actor_id=agent_id`, `action=vault.token.read`, `target_id=provider:user_id`, `request_id`
 - [ ] **VAULT-12** Audit on revoke: `DELETE /api/v1/admin/vault/connections/{id}` creates audit row `vault.connection.deleted`
 - [ ] **VAULT-13** Webhook delivery: `vault.connected` fires within 2s of successful OAuth callback; `vault.revoked` fires within 2s of DELETE
-- [ ] **VAULT-14** Raw bytes check: `sqlite3 dev.db "SELECT typeof(access_token_enc) FROM vault_connections LIMIT 1"` → `blob`; `hex()` output is not a valid JWT or readable string
+- [ ] **VAULT-14** Raw bytes check: `sqlite3 dev.db "SELECT typeof(access_token_enc) FROM vault_connections LIMIT 1"` â†’ `blob`; `hex()` output is not a valid JWT or readable string
 - [ ] **VAULT-15** DPoP binding: agent token bound to DPoP key cannot be replayed without matching DPoP proof; replay attempt returns 401
 - [ ] **VAULT-16** Provider template list: `GET /api/v1/vault/templates` returns all builtin templates (verify actual count matches `builtinTemplates` map in `providers.go`)
 - [ ] **VAULT-17** `needs_reauth` path: when refresh_token is invalid/expired, vault returns `ErrNeedsReauth` and sets `needs_reauth=1` on the connection row; subsequent token reads return 4xx until user re-connects
@@ -457,11 +457,11 @@ BOTTOM: vault.refreshed webhook arriving in real time →
 
 ## Honest Gaps
 
-1. **Provider template count:** `providers.go` confirms `google_calendar`, `google_drive`, `google_gmail`. The demo task prompt says Slack/GitHub/Notion/Linear/Microsoft also ship — run `GET /api/v1/vault/templates` or inspect `builtinTemplates` in `providers.go` before the live demo. If Notion/Linear are missing, substitute Google Drive + Microsoft (confirmed in README) — the 5-provider story holds.
+1. **Provider template count:** `providers.go` confirms `google_calendar`, `google_drive`, `google_gmail`. The demo task prompt says Slack/GitHub/Notion/Linear/Microsoft also ship â€” run `GET /api/v1/vault/templates` or inspect `builtinTemplates` in `providers.go` before the live demo. If Notion/Linear are missing, substitute Google Drive + Microsoft (confirmed in README) â€” the 5-provider story holds.
 
-2. **Webhook system:** `vault.connected` / `vault.refreshed` / `vault.revoked` are listed as planned audit events in `AGENT_AUTH.md`. Verify they fire from the webhook subsystem in the current binary before the live demo. If webhooks are not wired, demo the audit log instead — it provides the same assurance narrative.
+2. **Webhook system:** `vault.connected` / `vault.refreshed` / `vault.revoked` are listed as planned audit events in `AGENT_AUTH.md`. Verify they fire from the webhook subsystem in the current binary before the live demo. If webhooks are not wired, demo the audit log instead â€” it provides the same assurance narrative.
 
-3. **`shark vault` CLI commands:** The `seed.sh` uses `shark vault provider create` — verify the CLI subcommand exists. If not, substitute `curl -X POST /api/v1/vault/providers` in the seed script.
+3. **`shark vault` CLI commands:** The `seed.sh` uses `shark vault provider create` â€” verify the CLI subcommand exists. If not, substitute `curl -X POST /api/v1/vault/providers` in the seed script.
 
 4. **DPoP for vault reads:** The demo shows DPoP-bound tokens. `internal/oauth/dpop.go` and `internal/config/config.go:321` confirm DPoP ships. Ensure `require_dpop=true` is set in the demo config for maximum security theater impact.
 
@@ -472,7 +472,7 @@ BOTTOM: vault.refreshed webhook arriving in real time →
 | File | Role |
 |---|---|
 | `internal/vault/vault.go` | Manager, `expiryLeeway = 30s`, `GetFreshToken`, `ExchangeAndStore`, `NewManagerWithClock` |
-| `internal/vault/providers.go` | `builtinTemplates` map — source of truth for shipped providers |
+| `internal/vault/providers.go` | `builtinTemplates` map â€” source of truth for shipped providers |
 | `internal/auth/fieldcrypt.go` | `FieldEncryptor` AES-256-GCM, 32-byte key |
 | `internal/api/vault_handlers.go` | All vault HTTP handlers; scope check at line 623-628 |
 | `internal/oauth/dpop.go` | RFC 9449 DPoP implementation |

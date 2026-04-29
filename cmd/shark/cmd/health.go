@@ -1,4 +1,4 @@
-package cmd
+﻿package cmd
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
+	"github.com/shark-auth/shark/internal/cli"
 )
 
 var healthURL string
@@ -43,14 +43,14 @@ var healthCmd = &cobra.Command{
 				"status": "ok",
 				"url":    healthURL,
 			}
-			// Merge whatever fields /healthz returned (status, uptime_s, version, …).
+			// Merge whatever fields /healthz returned (status, uptime_s, version, â€¦).
 			for k, v := range body {
 				payload[k] = v
 			}
 			return writeJSON(cmd.OutOrStdout(), payload)
 		}
 
-		cli.PrintSuccess(cmd.OutOrStdout(), "ok — "+healthURL)
+		cli.PrintSuccess(cmd.OutOrStdout(), "ok â€” "+healthURL)
 		return nil
 	},
 }

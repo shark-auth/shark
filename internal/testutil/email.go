@@ -1,9 +1,9 @@
-package testutil
+﻿package testutil
 
 import (
 	"sync"
 
-	"github.com/sharkauth/sharkauth/internal/email"
+	"github.com/shark-auth/shark/internal/email"
 )
 
 // MemoryEmailSender captures sent emails in memory for testing.

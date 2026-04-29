@@ -181,13 +181,13 @@ def test_no_shark_init_in_public_docs():
 
 
 def test_no_install_sh_in_public_docs():
-    """Public docs must not reference sharkauth.dev/install.sh (hallucinated URL).
+    """Public docs must not reference sharkauth.com/install.sh (hallucinated URL).
 
-    Legit URLs like docs.sharkauth.dev are fine — we only flag the specific
+    Legit URLs like docs.sharkauth.com are fine — we only flag the specific
     install.sh distribution pattern that never existed.
     """
-    # Match: sharkauth.dev/install.sh  OR  bare install.sh curl-pipe patterns
-    # But NOT: docs.sharkauth.dev (legitimate docs subdomain)
+    # Match: sharkauth.com/install.sh  OR  bare install.sh curl-pipe patterns
+    # But NOT: docs.sharkauth.com (legitimate docs subdomain)
     _install_sh_pattern = re.compile(
         r"sharkauth\.dev/install\.sh"  # the hallucinated direct-install URL
         r"|curl\b.*\binstall\.sh"       # curl … install.sh pipe
@@ -200,7 +200,7 @@ def test_no_install_sh_in_public_docs():
                 if _install_sh_pattern.search(line):
                     hits.append(f"{fpath}:{lineno}: {line.rstrip()}")
     assert not hits, (
-        "Found sharkauth.dev/install.sh references in public docs:\n"
+        "Found sharkauth.com/install.sh references in public docs:\n"
         + "\n".join(hits)
     )
 

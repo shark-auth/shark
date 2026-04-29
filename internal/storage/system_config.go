@@ -20,7 +20,7 @@ type SystemConfigRow struct {
 // Returns ErrNotFound (sql.ErrNoRows) when the table has no row yet.
 func (s *SQLiteStore) GetSystemConfig(ctx context.Context) (string, error) {
 	var payload string
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader.QueryRowContext(ctx,
 		`SELECT payload FROM system_config WHERE id = 1`,
 	).Scan(&payload)
 	if err == sql.ErrNoRows {
@@ -40,7 +40,7 @@ func (s *SQLiteStore) SetSystemConfig(ctx context.Context, v any) error {
 	if err != nil {
 		return fmt.Errorf("storage: marshal system_config: %w", err)
 	}
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.writer.ExecContext(ctx,
 		`INSERT INTO system_config (id, payload, updated_at)
 		 VALUES (1, ?, CURRENT_TIMESTAMP)
 		 ON CONFLICT(id) DO UPDATE SET

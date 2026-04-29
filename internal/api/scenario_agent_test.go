@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestScenario_AutonomousArchivist demonstrates the "Autonomous Archivist" use case.

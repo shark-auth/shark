@@ -1,12 +1,12 @@
-package api_test
+﻿package api_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestSSOHandlers_CreateAndListConnections(t *testing.T) {

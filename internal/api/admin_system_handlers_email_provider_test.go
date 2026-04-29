@@ -1,11 +1,11 @@
-package api_test
+﻿package api_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestEmailProviderDevToggle verifies:
@@ -49,7 +49,7 @@ func TestEmailProviderDevToggle(t *testing.T) {
 		t.Fatalf("expected provider=resend after seed, got %q", p)
 	}
 
-	// Switch to dev — should auto-capture previous_provider=resend.
+	// Switch to dev â€” should auto-capture previous_provider=resend.
 	patchProvider(t, "dev")
 	p, prev := getEmail(t)
 	if p != "dev" {

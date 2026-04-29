@@ -1,4 +1,4 @@
-package middleware
+﻿package middleware
 
 import (
 	"context"
@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/cache"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 const (
@@ -47,7 +48,7 @@ func GetAPIKeyScopes(ctx context.Context) []string {
 //  7. Enforces rate limit via the provided TokenBucket
 //  8. Updates last_used_at asynchronously
 //  9. Sets key info in request context
-func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, requiredScope string) func(http.Handler) http.Handler {
+func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, authCache *cache.Cache, requiredScope string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// 1. Read Authorization header
@@ -72,6 +73,48 @@ func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, requiredS
 			// 2. Hash the key
 			keyHash := auth.HashAPIKey(rawKey)
 
+			var apiKeyID, apiKeyName string
+			var scopes []string
+
+			// Try cache first
+			if authCache != nil {
+				decision, found := authCache.Get("apikey:" + keyHash)
+				if found {
+					apiKeyID = decision.UserID
+					apiKeyName = decision.Tier
+					if decision.Permissions != nil {
+						scopes = make([]string, 0, len(decision.Permissions))
+						for scope := range decision.Permissions {
+							scopes = append(scopes, scope)
+						}
+					}
+					
+					if requiredScope != "" && !auth.CheckScope(scopes, requiredScope) {
+						writeJSONError(w, http.StatusForbidden, "forbidden", "API key lacks required scope: "+requiredScope)
+						return
+					}
+
+					// Update last_used_at (fire-and-forget, bounded) - in a real implementation we might 
+					// batch these to avoid DB hits, but keeping original logic here.
+					go func() { //#nosec G118 -- fire-and-forget last-used update; decoupled from request by design, bounded via WithTimeout
+						ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+						defer cancel()
+						if apiKey, err := store.GetAPIKeyByKeyHash(ctx, keyHash); err == nil {
+							now := time.Now().UTC().Format(time.RFC3339)
+							apiKey.LastUsedAt = &now
+							_ = store.UpdateAPIKey(ctx, apiKey)
+						}
+					}()
+
+					ctx := r.Context()
+					ctx = context.WithValue(ctx, APIKeyIDKey, apiKeyID)
+					ctx = context.WithValue(ctx, APIKeyScopesKey, scopes)
+					ctx = context.WithValue(ctx, APIKeyNameKey, apiKeyName)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
 			// 3. Look up by hash
 			apiKey, err := store.GetAPIKeyByKeyHash(r.Context(), keyHash)
 			if err != nil {
@@ -95,7 +138,6 @@ func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, requiredS
 			}
 
 			// 6. Check scope
-			var scopes []string
 			if err := json.Unmarshal([]byte(apiKey.Scopes), &scopes); err != nil {
 				writeJSONError(w, http.StatusInternalServerError, "internal_error", "Invalid key scopes")
 				return
@@ -116,6 +158,19 @@ func RequireAPIKey(store storage.Store, rateLimiter *auth.TokenBucket, requiredS
 					"message": "API key rate limit exceeded",
 				})
 				return
+			}
+
+			// Save to cache
+			if authCache != nil {
+				perms := make(map[string]bool)
+				for _, s := range scopes {
+					perms[s] = true
+				}
+				authCache.Set("apikey:"+keyHash, cache.AuthDecision{
+					UserID:      apiKey.ID,
+					Tier:        apiKey.Name,
+					Permissions: perms,
+				})
 			}
 
 			// 8. Update last_used_at (fire-and-forget, bounded).

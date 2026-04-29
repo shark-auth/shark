@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/ecdsa"
@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
 )
 
 // parsePEMPublicKey decodes a PKIX PEM-encoded RSA public key.

@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // brandingResponse mirrors the GET /admin/branding envelope.

@@ -1,4 +1,4 @@
-package jwt_test
+﻿package jwt_test
 
 import (
 	"context"
@@ -11,10 +11,10 @@ import (
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 const testSecret = "test-server-secret-that-is-at-least-32-bytes-long"
@@ -187,7 +187,7 @@ func TestValidate_Expired(t *testing.T) {
 	// expired token. We construct one by using gojwt with HS256 so it will
 	// fail at the alg-check step (not the expiry step).
 	// Better: issue a real token, then replace payload exp with a past time
-	// while keeping the same signature — this produces a signature mismatch error,
+	// while keeping the same signature â€” this produces a signature mismatch error,
 	// not expiry.
 	//
 	// The true expired-token test requires signing with RS256 and a past exp.
@@ -469,7 +469,7 @@ func TestKeyRotation_BothInJWKS(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
-// Lane A A6 — Claims bake Tier + Roles
+// Lane A A6 â€” Claims bake Tier + Roles
 // -----------------------------------------------------------------------------
 
 // userWithMetadata returns a fresh User, persisted in store, with the
@@ -489,7 +489,7 @@ func userWithMetadata(t *testing.T, store *storage.SQLiteStore, id, metadataJSON
 }
 
 // TestIssueSession_BakesTierAndRoles covers the happy path: user with
-// tier in metadata + two roles → Claims carry both, role names survive
+// tier in metadata + two roles â†’ Claims carry both, role names survive
 // the JSON round-trip in the expected order.
 func TestIssueSession_BakesTierAndRoles(t *testing.T) {
 	store := testutil.NewTestDB(t)
@@ -521,7 +521,7 @@ func TestIssueSession_BakesTierAndRoles(t *testing.T) {
 	if len(claims.Roles) != 2 {
 		t.Fatalf("Roles len = %d, want 2 (got %v)", len(claims.Roles), claims.Roles)
 	}
-	// Collect into a set — ordering depends on store iteration order
+	// Collect into a set â€” ordering depends on store iteration order
 	// which is not part of the contract.
 	got := map[string]bool{}
 	for _, r := range claims.Roles {
@@ -613,7 +613,7 @@ func TestIssueSession_DefaultTier(t *testing.T) {
 }
 
 // TestIssueSession_NoRolesReturnsEmpty verifies a user with zero role
-// assignments produces an empty (or absent) Roles slice — not a nil
+// assignments produces an empty (or absent) Roles slice â€” not a nil
 // panic, not a slice with stray entries.
 func TestIssueSession_NoRolesReturnsEmpty(t *testing.T) {
 	store := testutil.NewTestDB(t)

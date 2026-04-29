@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // tokenRegex extracts a token from a magic link URL in the email body.
@@ -63,7 +63,7 @@ func TestMagicLinkFlow(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// 5. Session should be active — GET /me should work
+	// 5. Session should be active â€” GET /me should work
 	resp = ts.Get("/api/v1/auth/me")
 	if resp.StatusCode != http.StatusOK {
 		body := readBody(t, resp)
@@ -98,7 +98,7 @@ func TestMagicLinkOneTimeUse(t *testing.T) {
 	msg := ts.EmailSender.LastMessage()
 	token := extractTokenFromEmail(t, msg.HTML)
 
-	// First verify — should succeed (302)
+	// First verify â€” should succeed (302)
 	resp = ts.Get("/api/v1/auth/magic-link/verify?token=" + url.QueryEscape(token))
 	if resp.StatusCode != http.StatusFound {
 		body := readBody(t, resp)
@@ -106,7 +106,7 @@ func TestMagicLinkOneTimeUse(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// Second verify — same token should return 400
+	// Second verify â€” same token should return 400
 	resp = ts.Get("/api/v1/auth/magic-link/verify?token=" + url.QueryEscape(token))
 	if resp.StatusCode != http.StatusBadRequest {
 		body := readBody(t, resp)

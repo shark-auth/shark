@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestAdminCreateUser exercises POST /api/v1/admin/users:
@@ -20,7 +20,7 @@ func TestAdminCreateUser(t *testing.T) {
 	ctx := context.Background()
 	_ = ctx
 
-	// 1. No admin key → 401
+	// 1. No admin key â†’ 401
 	req, _ := http.NewRequest(http.MethodPost, ts.URL("/api/v1/admin/users"),
 		bytes.NewReader([]byte(`{"email":"noauth@example.com"}`)))
 	req.Header.Set("Content-Type", "application/json")
@@ -33,7 +33,7 @@ func TestAdminCreateUser(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// 2. Invalid JSON body → 400
+	// 2. Invalid JSON body â†’ 400
 	req2, _ := http.NewRequest(http.MethodPost, ts.URL("/api/v1/admin/users"),
 		bytes.NewReader([]byte(`not json`)))
 	req2.Header.Set("Content-Type", "application/json")
@@ -47,14 +47,14 @@ func TestAdminCreateUser(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// 3. Missing email → 400
+	// 3. Missing email â†’ 400
 	resp = ts.PostJSONWithAdminKey("/api/v1/admin/users", map[string]any{"name": "no email"})
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing email: expected 400, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 
-	// 4. Valid create with password → 201
+	// 4. Valid create with password â†’ 201
 	createEmail := "created-by-admin@example.com"
 	resp = ts.PostJSONWithAdminKey("/api/v1/admin/users", map[string]any{
 		"email":    createEmail,
@@ -76,7 +76,7 @@ func TestAdminCreateUser(t *testing.T) {
 		t.Fatalf("response email mismatch: want %q got %q", createEmail, body.Email)
 	}
 
-	// 5. Duplicate email → 409
+	// 5. Duplicate email â†’ 409
 	resp = ts.PostJSONWithAdminKey("/api/v1/admin/users", map[string]any{
 		"email":    createEmail,
 		"password": "SuperSecret123!",

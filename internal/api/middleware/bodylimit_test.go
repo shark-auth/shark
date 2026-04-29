@@ -1,4 +1,4 @@
-package middleware_test
+﻿package middleware_test
 
 import (
 	"io"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 func TestMaxBodySize_Under(t *testing.T) {

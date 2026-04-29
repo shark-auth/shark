@@ -1,4 +1,4 @@
-package cmd
+﻿package cmd
 
 import (
 	"context"
@@ -16,9 +16,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // checkResult holds the outcome of a single doctor check.
@@ -52,7 +52,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 			r := checkResult{Name: "config", OK: false, Detail: msg}
 			_ = json.NewEncoder(cmd.OutOrStdout()).Encode(r)
 		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "✗ config              %s\n", msg)
+			fmt.Fprintf(cmd.OutOrStdout(), "âœ— config              %s\n", msg)
 		}
 		return fmt.Errorf("%w", errExit2)
 	}
@@ -89,11 +89,11 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		if useJSON {
 			_ = json.NewEncoder(cmd.OutOrStdout()).Encode(r)
 		} else {
-			sym := "✓"
+			sym := "âœ“"
 			if !r.OK {
-				sym = "✗"
+				sym = "âœ—"
 			} else if r.Warn {
-				sym = "⚠"
+				sym = "âš "
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s %-20s %s\n", sym, r.Name, r.Detail)
 		}
@@ -123,7 +123,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 
 // errExit1 / errExit2 are sentinel errors that main.go maps to exit codes.
 // cobra's RunE returns these; the caller in main.go checks os.Exit(1/2).
-// We rely on the existing pattern: non-nil error → exit 1 from cobra.
+// We rely on the existing pattern: non-nil error â†’ exit 1 from cobra.
 // For exit 2 we use a special wrapper that main.go can detect.
 var (
 	errExit1 = errCode{code: 1, msg: "one or more checks failed"}
@@ -203,7 +203,7 @@ func checkDBWritability(ctx context.Context, cfg *config.Config, store *storage.
 		return checkResult{Name: "db_writability", OK: false,
 			Detail: fmt.Sprintf("write sentinel: %v", err)}
 	}
-	_ = tx.Rollback() // intentional rollback — we never want to persist this
+	_ = tx.Rollback() // intentional rollback â€” we never want to persist this
 
 	// Report file size
 	info, _ := os.Stat(dbPath)
@@ -235,14 +235,14 @@ func checkMigrations(ctx context.Context, _ *config.Config, store *storage.SQLit
 			Detail: fmt.Sprintf("cannot query migrations: %v", err)}
 	}
 
-	// Check for pending (unapplied) rows — goose marks these as is_applied=0
+	// Check for pending (unapplied) rows â€” goose marks these as is_applied=0
 	var pending int
 	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM goose_db_version WHERE is_applied = 0`).Scan(&pending)
 
 	detail := fmt.Sprintf("applied=%d", count)
 	if pending > 0 {
 		return checkResult{Name: "migrations", OK: false,
-			Detail: fmt.Sprintf("%s pending=%d — run migrations before starting server", detail, pending)}
+			Detail: fmt.Sprintf("%s pending=%d â€” run migrations before starting server", detail, pending)}
 	}
 	return checkResult{Name: "migrations", OK: true, Detail: detail}
 }
@@ -283,7 +283,7 @@ func checkJWTKeys(ctx context.Context, store *storage.SQLiteStore, openErr error
 
 	if len(keys) == 0 {
 		return checkResult{Name: "jwt_keys", OK: false,
-			Detail: "no active signing keys — run `shark serve` to auto-generate"}
+			Detail: "no active signing keys â€” run `shark serve` to auto-generate"}
 	}
 
 	// build detail string; warn if any key >90 days old
@@ -300,7 +300,7 @@ func checkJWTKeys(ctx context.Context, store *storage.SQLiteStore, openErr error
 	detail := fmt.Sprintf("count=%d %s", len(keys), strings.Join(parts, " "))
 	if oldCount > 0 {
 		return checkResult{Name: "jwt_keys", OK: true, Warn: true,
-			Detail: detail + " — consider rotating (>90 days)"}
+			Detail: detail + " â€” consider rotating (>90 days)"}
 	}
 	return checkResult{Name: "jwt_keys", OK: true, Detail: detail}
 }
@@ -312,7 +312,7 @@ func checkPortBind(cfg *config.Config) checkResult {
 		pid := findPIDOnPort(cfg.Server.Port)
 		detail := fmt.Sprintf("port %d already in use", cfg.Server.Port)
 		if pid != "" {
-			detail += fmt.Sprintf(" — PID %s", pid)
+			detail += fmt.Sprintf(" â€” PID %s", pid)
 		}
 		return checkResult{Name: "port_bind", OK: false, Detail: detail}
 	}
@@ -358,10 +358,10 @@ func checkBaseURLReachability(cfg *config.Config) checkResult {
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
 		return checkResult{Name: "base_url", OK: true,
-			Detail: fmt.Sprintf("GET %s → %d", url, resp.StatusCode)}
+			Detail: fmt.Sprintf("GET %s â†’ %d", url, resp.StatusCode)}
 	}
 	return checkResult{Name: "base_url", OK: false,
-		Detail: fmt.Sprintf("GET %s → %d (expected 200)", url, resp.StatusCode)}
+		Detail: fmt.Sprintf("GET %s â†’ %d (expected 200)", url, resp.StatusCode)}
 }
 
 func checkAdminKey(ctx context.Context, cfg *config.Config, store *storage.SQLiteStore, openErr error) checkResult {
@@ -379,7 +379,7 @@ func checkAdminKey(ctx context.Context, cfg *config.Config, store *storage.SQLit
 		}
 	}
 
-	// No key file — check if at least one API key row (admin key) is present in DB
+	// No key file â€” check if at least one API key row (admin key) is present in DB
 	if openErr == nil && store != nil {
 		var count int
 		err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM api_keys`).Scan(&count)
@@ -390,7 +390,7 @@ func checkAdminKey(ctx context.Context, cfg *config.Config, store *storage.SQLit
 	}
 
 	return checkResult{Name: "admin_key", OK: false,
-		Detail: "admin.key.firstboot not found AND no api_keys in DB — run `shark serve` to initialise"}
+		Detail: "admin.key.firstboot not found AND no api_keys in DB â€” run `shark serve` to initialise"}
 }
 
 func checkSMTP(cfg *config.Config) checkResult {
@@ -416,7 +416,7 @@ func checkSMTP(cfg *config.Config) checkResult {
 	}
 	_ = conn.Close()
 
-	// Attempt TLS handshake (SMTPS port 465) — skip for STARTTLS ports
+	// Attempt TLS handshake (SMTPS port 465) â€” skip for STARTTLS ports
 	if port == 465 {
 		tlsConn, err := tls.DialWithDialer(
 			&net.Dialer{Timeout: 5 * time.Second},
@@ -437,7 +437,7 @@ func checkVault(cfg *config.Config) checkResult {
 	secret := cfg.Server.Secret
 	if secret == "" {
 		return checkResult{Name: "vault", OK: false,
-			Detail: "server.secret is empty — vault key derivation impossible"}
+			Detail: "server.secret is empty â€” vault key derivation impossible"}
 	}
 	enc, err := auth.NewFieldEncryptor(secret)
 	if err != nil {
@@ -457,7 +457,7 @@ func checkVault(cfg *config.Config) checkResult {
 	}
 	if decrypted != testPlain {
 		return checkResult{Name: "vault", OK: false,
-			Detail: "round-trip mismatch — key derivation is broken"}
+			Detail: "round-trip mismatch â€” key derivation is broken"}
 	}
 	return checkResult{Name: "vault", OK: true, Detail: "AES-256-GCM round-trip ok"}
 }

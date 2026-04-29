@@ -1,4 +1,4 @@
-package cmd
+﻿package cmd
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sharkauth/sharkauth/internal/cli"
-	"github.com/sharkauth/sharkauth/internal/server"
+	"github.com/shark-auth/shark/internal/cli"
+	"github.com/shark-auth/shark/internal/server"
 )
 
 var (

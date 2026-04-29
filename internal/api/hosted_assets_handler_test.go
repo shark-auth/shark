@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"io"
@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // writeBrandingAsset creates a file at data/assets/branding/<name> relative

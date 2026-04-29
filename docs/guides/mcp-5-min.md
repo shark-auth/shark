@@ -1,6 +1,6 @@
-# MCP Server Auth in 5 Minutes
+﻿# MCP Server Auth in 5 Minutes
 
-Add token-gated auth to any MCP server using SharkAuth as the OAuth 2.1 AS. This guide covers the full cold-start path: DCR → device flow → scope-protected resource. No pre-shared secrets required.
+Add token-gated auth to any MCP server using SharkAuth as the OAuth 2.1 AS. This guide covers the full cold-start path: DCR â†’ device flow â†’ scope-protected resource. No pre-shared secrets required.
 
 **Audience:** MCP server authors who want standards-based auth without running a cloud service.
 
@@ -21,7 +21,7 @@ Estimated time: 5 minutes.
 ### From source
 
 ```bash
-git clone https://github.com/sharkauth/sharkauth
+git clone https://github.com/shark-auth/shark
 cd sharkauth
 go build -o bin/shark ./cmd/shark
 ```
@@ -30,7 +30,7 @@ go build -o bin/shark ./cmd/shark
 
 ```bash
 # Linux / macOS
-curl -Lo shark https://github.com/sharkauth/sharkauth/releases/latest/download/shark_$(uname -s)_$(uname -m)
+curl -Lo shark https://github.com/shark-auth/shark/releases/latest/download/shark_$(uname -s)_$(uname -m)
 chmod +x shark
 sudo mv shark /usr/local/bin/shark
 ```
@@ -79,7 +79,7 @@ curl -s http://localhost:8080/.well-known/oauth-authorization-server | jq '{issu
 
 ## 3. Register your MCP server as an OAuth application (DCR)
 
-RFC 7591 dynamic client registration — no admin credentials needed at registration time.
+RFC 7591 dynamic client registration â€” no admin credentials needed at registration time.
 
 ```bash
 curl -sS -X POST http://localhost:8080/oauth/register \
@@ -118,12 +118,12 @@ export MCP_CLIENT_SECRET="cs_live_..."
 
 This is the part your MCP server needs to implement. Two requirements from RFC 9728:
 
-1. `GET /.well-known/oauth-protected-resource` — return AS pointer
-2. On unauthenticated requests — return `401` + `WWW-Authenticate: Bearer resource_metadata=<url>`
+1. `GET /.well-known/oauth-protected-resource` â€” return AS pointer
+2. On unauthenticated requests â€” return `401` + `WWW-Authenticate: Bearer resource_metadata=<url>`
 
 ```python
 #!/usr/bin/env python3
-# mcp_server.py — minimal protected MCP server
+# mcp_server.py â€” minimal protected MCP server
 import json, os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import urllib.request, urllib.error
@@ -239,7 +239,7 @@ curl -si http://localhost:9000/tools/hello | head -5
 
 RFC 8628 device flow lets a headless agent get a user-approved token without a browser redirect.
 
-### Step 1 — Request device code
+### Step 1 â€” Request device code
 
 ```bash
 curl -sS -X POST http://localhost:8080/oauth/device \
@@ -258,7 +258,7 @@ curl -sS -X POST http://localhost:8080/oauth/device \
 }
 ```
 
-### Step 2 — User approves
+### Step 2 â€” User approves
 
 Display to the user (or log it):
 
@@ -269,7 +269,7 @@ Enter code: SHARK-ABCD
 
 In dev mode, visit the URL in a browser, enter the code, and click Approve.
 
-### Step 3 — Poll for token
+### Step 3 â€” Poll for token
 
 ```bash
 DEVICE_CODE="GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS"
@@ -372,10 +372,10 @@ elif self.path == "/tools/write-op":
 
 ## Next steps
 
-- **DPoP binding** — pass `resource=mcp://localhost:9000/my-server` at token request and a `DPoP:` proof header for audience-bound, key-confirmed tokens. See [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449).
-- **Token exchange** — chain agents with downscoped tokens. See [agent-delegation.md](./agent-delegation.md).
-- **Production config** — configure `server.base_url` via the dashboard (Settings) or `shark admin config`, switch email provider. See README.
-- **Dashboard** — `http://localhost:8080/admin` — view registered clients, audit logs, active sessions.
+- **DPoP binding** â€” pass `resource=mcp://localhost:9000/my-server` at token request and a `DPoP:` proof header for audience-bound, key-confirmed tokens. See [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449).
+- **Token exchange** â€” chain agents with downscoped tokens. See [agent-delegation.md](./agent-delegation.md).
+- **Production config** â€” configure `server.base_url` via the dashboard (Settings) or `shark admin config`, switch email provider. See README.
+- **Dashboard** â€” `http://localhost:8080/admin` â€” view registered clients, audit logs, active sessions.
 
 ## Troubleshooting
 
@@ -383,6 +383,6 @@ elif self.path == "/tools/write-op":
 
 **`invalid_client` on device code request.** The `client_id` must be registered with `grant_types` containing `urn:ietf:params:oauth:grant-type:device_code`.
 
-**`401` from introspection.** Pass `Authorization: Basic <base64(client_id:client_secret)>` — introspection requires a registered client to authenticate.
+**`401` from introspection.** Pass `Authorization: Basic <base64(client_id:client_secret)>` â€” introspection requires a registered client to authenticate.
 
 **MCP server not returning `WWW-Authenticate`.** RFC 9728 requires this on every unauthenticated request. MCP-aware clients rely on it for discovery.

@@ -1,11 +1,11 @@
-package api_test
+﻿package api_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestEmailConfigInviteRedirectURL_RoundTrip(t *testing.T) {
@@ -40,7 +40,7 @@ func TestEmailConfigInviteRedirectURL_RoundTrip(t *testing.T) {
 		t.Errorf("PATCH response: expected %q, got %q", want, patched.InviteRedirectURL)
 	}
 
-	// GET again — persisted.
+	// GET again â€” persisted.
 	getResp2 := ts.GetWithAdminKey("/api/v1/admin/email-config")
 	if getResp2.StatusCode != http.StatusOK {
 		t.Fatalf("GET email-config (2nd): %d", getResp2.StatusCode)

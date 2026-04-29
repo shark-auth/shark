@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/sharkauth/sharkauth/internal/api"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/api"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // createHostedApp inserts an application with the given slug and integration
@@ -217,7 +217,7 @@ func TestFindHostedBundle(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	bs := string(body)
-	// The embedded bundle is hosted-CzpeAm29.js — check the path is present.
+	// The embedded bundle is hosted-CzpeAm29.js â€” check the path is present.
 	if !strings.Contains(bs, "/admin/hosted/assets/hosted-") {
 		t.Fatalf("body missing bundle script tag; got: %s", bs[:min(len(bs), 1000)])
 	}

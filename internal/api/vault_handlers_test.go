@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
-	"github.com/sharkauth/sharkauth/internal/vault"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
+	"github.com/shark-auth/shark/internal/vault"
 )
 
 // Minimal shape we care about in admin API responses for providers.
@@ -154,7 +154,7 @@ func TestCreateVaultProvider_DuplicateName(t *testing.T) {
 func TestCreateVaultProvider_MissingAuth(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// No admin key header — should 401.
+	// No admin key header â€” should 401.
 	resp := ts.PostJSON("/api/v1/vault/providers", map[string]any{
 		"template":      "slack",
 		"client_id":     "x",
@@ -308,7 +308,7 @@ func TestVaultConnectStart_RedirectsToProvider(t *testing.T) {
 }
 
 // TestVaultCallback_ExchangesAndStores is intentionally skipped at the HTTP
-// level in this task — exercising it requires swapping the provider's token
+// level in this task â€” exercising it requires swapping the provider's token
 // URL mid-flight (the vault package builds oauth2.Config straight from the
 // provider row). T6's smoke suite covers this path end-to-end; here we stop
 // at the state-validation boundary, which is the interesting handler logic.
@@ -443,7 +443,7 @@ func TestVaultCallback_ProviderError(t *testing.T) {
 	_ = loginFreshUser(t, ts, "cberror@x.io")
 	p := seedVaultProvider(t, ts, "linear", "Linear")
 
-	// Error params take precedence over state validation — no cookie needed.
+	// Error params take precedence over state validation â€” no cookie needed.
 	resp := vaultCallbackGet(t, ts, p.Name,
 		"error=access_denied&error_description=user+cancelled", nil)
 	defer resp.Body.Close()
@@ -465,7 +465,7 @@ func TestVaultGetToken_RequiresBearer(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 	seedVaultProvider(t, ts, "slack", "Slack")
 
-	// No Authorization header → 401.
+	// No Authorization header â†’ 401.
 	resp := ts.Get("/api/v1/vault/slack/token")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -588,7 +588,7 @@ func TestVaultRoutePrecedence_ProvidersBeatsWildcard(t *testing.T) {
 	// If the wildcard had won, /vault/providers would have tried bearer auth
 	// and returned 401 + WWW-Authenticate. Make sure that header isn't set.
 	if resp.Header.Get("WWW-Authenticate") != "" {
-		t.Error("unexpected WWW-Authenticate on /vault/providers — wildcard leaked")
+		t.Error("unexpected WWW-Authenticate on /vault/providers â€” wildcard leaked")
 	}
 
 	// And /vault/templates too.
@@ -650,7 +650,7 @@ func TestCreateVaultProvider_ExtraAuthParams_Manual(t *testing.T) {
 func TestCreateVaultProvider_ExtraAuthParams_Template(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// Create a linear provider via template — should inherit prompt=consent from template.
+	// Create a linear provider via template â€” should inherit prompt=consent from template.
 	resp := ts.PostJSONWithAdminKey("/api/v1/vault/providers", map[string]any{
 		"template":      "linear",
 		"client_id":     "linear-client-id",

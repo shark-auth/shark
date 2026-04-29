@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -9,22 +9,23 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/sharkauth/sharkauth/internal/admin"
-	"github.com/sharkauth/sharkauth/internal/audit"
-	"github.com/sharkauth/sharkauth/internal/auth"
-	jwtpkg "github.com/sharkauth/sharkauth/internal/auth/jwt"
-	"github.com/sharkauth/sharkauth/internal/authflow"
-	"github.com/sharkauth/sharkauth/internal/config"
-	"github.com/sharkauth/sharkauth/internal/email"
-	"github.com/sharkauth/sharkauth/internal/oauth"
-	"github.com/sharkauth/sharkauth/internal/proxy"
-	rbacpkg "github.com/sharkauth/sharkauth/internal/rbac"
-	"github.com/sharkauth/sharkauth/internal/sso"
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/vault"
-	"github.com/sharkauth/sharkauth/internal/webhook"
+	"github.com/shark-auth/shark/internal/admin"
+	"github.com/shark-auth/shark/internal/audit"
+	"github.com/shark-auth/shark/internal/auth"
+	jwtpkg "github.com/shark-auth/shark/internal/auth/jwt"
+	"github.com/shark-auth/shark/internal/authflow"
+	"github.com/shark-auth/shark/internal/cache"
+	"github.com/shark-auth/shark/internal/config"
+	"github.com/shark-auth/shark/internal/email"
+	"github.com/shark-auth/shark/internal/oauth"
+	"github.com/shark-auth/shark/internal/proxy"
+	rbacpkg "github.com/shark-auth/shark/internal/rbac"
+	"github.com/shark-auth/shark/internal/sso"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/vault"
+	"github.com/shark-auth/shark/internal/webhook"
 
-	mw "github.com/sharkauth/sharkauth/internal/api/middleware"
+	mw "github.com/shark-auth/shark/internal/api/middleware"
 )
 
 // Server holds dependencies for the HTTP API.
@@ -33,6 +34,7 @@ type Server struct {
 	Config            *config.Config
 	Router            chi.Router
 	SessionManager    *auth.SessionManager
+	PasswordHasher    *auth.Hasher
 	PasskeyManager    *auth.PasskeyManager
 	OAuthManager      *auth.OAuthManager
 	MagicLinkManager  *auth.MagicLinkManager
@@ -46,6 +48,7 @@ type Server struct {
 	WebhookDispatcher *webhook.Dispatcher
 	OAuthServer       *oauth.Server
 	VaultManager      *vault.Manager
+	AuthCache         *cache.Cache
 	// FlowEngine runs admin-configured auth flows at signup/login/etc.
 	// trigger points. nil-safe at the call sites so tests that don't need
 	// flows can skip initialisation entirely.
@@ -137,6 +140,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		Store:          store,
 		Config:         cfg,
 		SessionManager: sm,
+		PasswordHasher: auth.NewHasher(0),
 		magicLinkRL:    newMagicLinkRateLimiter(60 * time.Second),
 		RateLimiter:    auth.NewTokenBucket(),
 		LockoutManager: auth.NewLockoutManager(5, 15*time.Minute),
@@ -144,6 +148,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 		VaultManager:   vault.NewManager(store, fe),
 		startTime:      time.Now().UTC(),
 		AppResolver:    &DBAppResolver{Store: store},
+		AuthCache:      cache.New(5 * time.Minute),
 	}
 
 	// Apply options
@@ -210,11 +215,11 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	r.Use(middleware.Recoverer)
 	r.Use(mw.MaxBodySize(1 << 20)) // 1 MB request body limit
 	r.Use(mw.SecurityHeaders())
-	r.Use(mw.RateLimit(100, 100)) // 100 req/s burst, 100 tokens
+	r.Use(mw.RateLimit(1000, 2000)) // 1000 req/s, 2000 burst
 	r.Use(mw.Drain(globalDrain))  // Phase C: returns 503 during DB swap/reset
 
 	// CORS (must be before route handlers).
-	// CORSRelaxed injects "*" so all origins are accepted — local dev only.
+	// CORSRelaxed injects "*" so all origins are accepted â€” local dev only.
 	corsOrigins := cfg.Server.CORSOrigins
 	if cfg.Server.CORSRelaxed {
 		corsOrigins = []string{"*"}
@@ -226,20 +231,20 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 	// Health check
 	r.Get("/healthz", s.handleHealthz)
 
-	// API reference docs (Scalar UI) — public, no auth
+	// API reference docs (Scalar UI) â€” public, no auth
 	r.Get("/api/docs", s.handleAPIDocs)
 	r.Get("/api/docs/openapi.yaml", s.handleAPISpec)
-	// Canonical spec URL — shorter alias used by smoke tests + external tooling
+	// Canonical spec URL â€” shorter alias used by smoke tests + external tooling
 	r.Get("/api/openapi.yaml", s.handleAPISpec)
 
-	// JWKS endpoint (RFC 7517) — public, no auth, top-level
+	// JWKS endpoint (RFC 7517) â€” public, no auth, top-level
 	r.Get("/.well-known/jwks.json", s.HandleJWKS)
 
 	// RFC 8414 OAuth Authorization Server Metadata (MCP discovery entrypoint)
 	r.Get("/.well-known/oauth-authorization-server", oauth.MetadataHandler(cfg.Server.BaseURL))
 
 	// Branding asset serve (A6). Public, content-addressed, immutable-cached.
-	// Mounted at root scope — NOT under /api/v1 or /admin — so logos can be
+	// Mounted at root scope â€” NOT under /api/v1 or /admin â€” so logos can be
 	// embedded in outbound emails and external sites without auth. Must sit
 	// before the proxy catch-all at the bottom so chi's trie routes /assets/*
 	// here rather than forwarding it upstream.
@@ -257,13 +262,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/logout", s.handleLogout)
 			// GET /me: allowed without email verification (so frontend can check status)
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 				r.Use(mw.RequireMFA)
 				r.Get("/me", s.handleMe)
 			})
 			// DELETE /me: requires verified email
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 				r.Use(mw.RequireMFA)
 				r.Use(requireVerified)
 				r.Delete("/me", s.handleDeleteMe)
@@ -271,7 +276,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// Email verification
 			r.Route("/email", func(r chi.Router) {
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 					r.Post("/verify/send", s.handleEmailVerifySend)
 				})
 				r.Get("/verify", s.handleEmailVerify)
@@ -287,7 +292,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Route("/passkey", func(r chi.Router) {
 				// Registration requires auth + verified email
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 					r.Use(requireVerified)
 					r.Post("/register/begin", s.handlePasskeyRegisterBegin)
 					r.Post("/register/finish", s.handlePasskeyRegisterFinish)
@@ -297,7 +302,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Post("/login/finish", s.handlePasskeyLoginFinish)
 				// Credential management requires auth + verified email
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 					r.Use(requireVerified)
 					r.Get("/credentials", s.handlePasskeyCredentialsList)
 					r.Delete("/credentials/{id}", s.handlePasskeyCredentialDelete)
@@ -318,7 +323,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Post("/reset", s.handlePasswordReset)
 				// Authenticated: change password (requires verified email)
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 					r.Use(mw.RequireMFA)
 					r.Use(requireVerified)
 					r.Post("/change", s.handleChangePassword)
@@ -329,13 +334,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Route("/mfa", func(r chi.Router) {
 				// Challenge and recovery: require session only (login flow, no email check)
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 					r.Post("/challenge", s.handleMFAChallenge)
 					r.Post("/recovery", s.handleMFARecovery)
 				})
 				// Enroll, verify, disable, recovery-codes: require full session + verified email
 				r.Group(func(r chi.Router) {
-					r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+					r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 					r.Use(mw.RequireMFA)
 					r.Use(requireVerified)
 					r.Post("/enroll", s.handleMFAEnroll)
@@ -345,7 +350,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				})
 			})
 
-			// Flow-step MFA verify (public — called during paused flow before session exists)
+			// Flow-step MFA verify (public â€” called during paused flow before session exists)
 			r.Route("/flow", func(r chi.Router) {
 				r.Post("/mfa/verify", s.handleFlowMFAVerify)
 			})
@@ -355,33 +360,33 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 			// Self-service session management
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 				r.Get("/sessions", s.handleListMySessions)
 				r.Delete("/sessions/{id}", s.handleRevokeMySession)
 			})
 
 			// Consent management (session auth - user manages their own consents)
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 				r.Get("/consents", s.handleListConsents)
 				r.Delete("/consents/{id}", s.handleRevokeConsent)
 			})
 
 			// JWT self-revoke (session-auth, cookie OR JWT)
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 				r.Post("/revoke", s.handleUserRevoke)
 			})
 		})
 
-		// Organizations (user-facing — session cookie auth)
+		// Organizations (user-facing â€” session cookie auth)
 		r.Route("/organizations", func(r chi.Router) {
-			r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+			r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 			r.Post("/", s.handleCreateOrganization)
 			r.Get("/", s.handleListMyOrganizations)
 			r.Post("/invitations/{token}/accept", s.handleAcceptOrgInvitation)
 
-			// Per-org routes — all under {id} for backward compatibility.
+			// Per-org routes â€” all under {id} for backward compatibility.
 			// RequireOrgPermission reads {id} as fallback when {org_id} is absent.
 			r.Route("/{id}", func(r chi.Router) {
 				r.Get("/", s.handleGetOrganization)
@@ -422,15 +427,15 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/", s.handleCreatePermission)
 			r.Get("/", s.handleListPermissions)
 			r.Delete("/{id}", s.handleDeletePermission)
-			// Reverse lookup — which roles/users have this permission?
+			// Reverse lookup â€” which roles/users have this permission?
 			r.Get("/{id}/roles", s.handleListRolesByPermission)
 			r.Get("/{id}/users", s.handleListUsersByPermission)
 		})
 
-		// Auth check — accepts both admin key + user_id (path 1) and
+		// Auth check â€” accepts both admin key + user_id (path 1) and
 		// session/JWT auth (path 2, user resolved from context).
 		r.Group(func(r chi.Router) {
-			r.Use(mw.AdminOrSessionFunc(s.Store, s.RateLimiter, sm, s.JWTManager))
+			r.Use(mw.AdminOrSessionFunc(s.Store, s.RateLimiter, sm, s.JWTManager, s.AuthCache))
 			r.Post("/auth/check", s.handleAuthCheck)
 		})
 
@@ -458,13 +463,13 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/{id}/verify/send", s.handleAdminEmailVerifySend)
 			// W1.5 Edit 1: list agents belonging to or authorized by a user.
 			r.Get("/{id}/agents", s.handleUserAgents)
-			// W1.5 Edit 2: cascade revoke — admin key only.
+			// W1.5 Edit 2: cascade revoke â€” admin key only.
 			r.Post("/{id}/revoke-agents", s.handleCascadeRevokeAgents)
 		})
 
-		// /me/agents — session-cookie auth, returns agents for the calling user.
+		// /me/agents â€” session-cookie auth, returns agents for the calling user.
 		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+			r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 			r.Get("/me/agents", s.handleMeAgents)
 		})
 
@@ -558,7 +563,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/admin/auth/revoke-jti", s.handleAdminRevokeJTI)
 		})
 
-		// Vault — third-party OAuth token storage.
+		// Vault â€” third-party OAuth token storage.
 		// Admin routes manage the provider catalog + credential rotation; user
 		// routes run the connect/disconnect flow with a session cookie; the
 		// per-user token retrieval endpoint accepts an OAuth 2.1 bearer from
@@ -577,7 +582,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 
 			// User-facing connect flow + connection management (session auth).
 			r.Group(func(r chi.Router) {
-				r.Use(mw.RequireSessionFunc(sm, s.JWTManager))
+				r.Use(mw.RequireSessionFunc(sm, s.JWTManager, s.AuthCache))
 				r.Get("/connect/{provider}", s.handleVaultConnectStart)
 				r.Get("/callback/{provider}", s.handleVaultCallback)
 				r.Get("/connections", s.handleListVaultConnections)
@@ -585,18 +590,18 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			})
 
 			// Agent token retrieval (OAuth bearer). Must come AFTER the static
-			// prefixes above — chi's trie prefers exact matches, so "providers",
+			// prefixes above â€” chi's trie prefers exact matches, so "providers",
 			// "templates", "connect", "callback", "connections" all win the
 			// route race before this wildcard is considered.
 			r.Get("/{provider}/token", s.handleVaultGetToken)
 		})
 
-		// Bootstrap token consume (T15) — NO auth middleware. The token in the
+		// Bootstrap token consume (T15) â€” NO auth middleware. The token in the
 		// request body IS the credential; the handler validates it against an
 		// in-memory single-use hash minted at startup. Mounted before the
 		// /admin group below so AdminAPIKeyFromStore doesn't gate it.
 		r.Post("/admin/bootstrap/consume", s.handleBootstrapConsume)
-		// First-boot key display — public, returns 404 once admin is bootstrapped.
+		// First-boot key display â€” public, returns 404 once admin is bootstrapped.
 		r.Get("/admin/firstboot/key", s.handleFirstbootKey)
 
 		// First-boot setup endpoints (Phase T15). setup/status is public;
@@ -627,7 +632,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/email-preview/{template}", s.handleAdminEmailPreview)
 			r.Post("/auth/rotate-signing-key", s.handleAdminRotateSigningKey)
 
-			// Phase C — mode + reset endpoints.
+			// Phase C â€” mode + reset endpoints.
 			r.Get("/system/mode", s.handleGetMode)
 			r.Post("/system/swap-mode", s.handleSwapMode)
 			r.Post("/system/reset", s.handleReset)
@@ -639,7 +644,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Delete("/vault/connections/{id}", s.handleAdminDeleteVaultConnection)
 			r.Post("/vault/connections/_seed_demo", s.handleAdminSeedDemoVaultConnection)
 
-			// Batch permission usage — replaces 2×N per-row API calls from
+			// Batch permission usage â€” replaces 2Ã—N per-row API calls from
 			// the PermissionsTab with a single request. Kept in /admin group
 			// so the same AdminAPIKeyFromStore middleware gate applies.
 			r.Get("/permissions/batch-usage", s.handlePermissionsBatchUsage)
@@ -654,7 +659,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// dashboard "authorize agent on behalf of user" flow).
 			r.Post("/consents", s.handleAdminGrantConsent)
 
-			// may_act grants — operator-issued delegation rows backing the
+			// may_act grants â€” operator-issued delegation rows backing the
 			// dashboard's edge drawer. Listed/queried by from_id/to_id, revoked
 			// individually. The exchange handler correlates audit rows to these
 			// via metadata.grant_id.
@@ -662,7 +667,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/may-act", s.handleCreateMayActGrant)
 			r.Delete("/may-act/{id}", s.handleRevokeMayActGrant)
 
-			// Device flow hidden for v0.1 — not battle-tested. Re-enable when implementation lands.
+			// Device flow hidden for v0.1 â€” not battle-tested. Re-enable when implementation lands.
 			// Admin device-code queue + override decision endpoints. Used by
 			// the dashboard to triage pending device flows when the user
 			// can't reach the verify URL themselves.
@@ -677,7 +682,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// avoid muddying the per-user permission model. Mirrors the
 			// /admin/sessions, /admin/apps, /admin/flows pattern.
 			// Admin user creation (T04). Other /users/* admin routes live under
-			// the /api/v1/users group (admin-key auth) above — this endpoint
+			// the /api/v1/users group (admin-key auth) above â€” this endpoint
 			// is mounted under /admin to match the dashboard's admin-key URL
 			// convention and keep create distinct from the list/patch flow.
 			r.Post("/users", s.handleAdminCreateUser)
@@ -719,14 +724,14 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 				r.Post("/{id}/reset", s.handleResetEmailTemplate)
 			})
 
-			// Email redirect URL config — GET/PATCH /admin/email-config
+			// Email redirect URL config â€” GET/PATCH /admin/email-config
 			r.Get("/email-config", s.handleGetEmailConfig)
 			r.Patch("/email-config", s.handlePatchEmailConfig)
 
 			// Dev inbox routes are always mounted; handler-level guard checks
 			// email.provider == "dev" (DB-backed runtime config, W17) so the
 			// surface is live whenever the operator switches to the dev
-			// provider — regardless of whether --dev was passed at startup.
+			// provider â€” regardless of whether --dev was passed at startup.
 			r.Get("/dev/emails", s.handleListDevEmails)
 			r.Get("/dev/emails/{id}", s.handleGetDevEmail)
 			r.Delete("/dev/emails", s.handleDeleteAllDevEmails)
@@ -739,7 +744,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Get("/proxy/rules", s.handleProxyRules)
 			r.Post("/proxy/simulate", s.handleProxySimulate)
 
-			// Phase 6.6 / Wave D — DB-backed proxy rule overrides. Always
+			// Phase 6.6 / Wave D â€” DB-backed proxy rule overrides. Always
 			// available regardless of proxy enable state so admins can
 			// stage rules before flipping the proxy on; mutations refresh
 			// the live engine via Engine.SetRules when the engine exists.
@@ -749,7 +754,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Patch("/proxy/rules/db/{id}", s.handleUpdateProxyRule)
 			r.Delete("/proxy/rules/db/{id}", s.handleDeleteProxyRule)
 
-			// PROXYV1_5 §4.9 — lifecycle control. Separate /lifecycle/*
+			// PROXYV1_5 Â§4.9 â€” lifecycle control. Separate /lifecycle/*
 			// namespace so the legacy /proxy/status (breaker stats) route
 			// keeps its existing semantics for the pre-v1.5 dashboard.
 			r.Get("/proxy/lifecycle", s.handleProxyLifecycleStatus)
@@ -757,11 +762,11 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			r.Post("/proxy/stop", s.handleProxyLifecycleStop)
 			r.Post("/proxy/reload", s.handleProxyLifecycleReload)
 
-			// PROXYV1_5 §4.10 — per-user tier mutator. Tier gates paywall
+			// PROXYV1_5 Â§4.10 â€” per-user tier mutator. Tier gates paywall
 			// rule matching at the proxy and feeds the Claims baker.
 			r.Patch("/users/{id}/tier", s.handleSetUserTier)
 
-			// PROXYV1_5 §4.11 — design token overrides on branding. Deep
+			// PROXYV1_5 Â§4.11 â€” design token overrides on branding. Deep
 			// design tokens live in branding.metadata so they survive the
 			// existing GetBranding/ResolveBranding path unchanged.
 			r.Patch("/branding/design-tokens", s.handleSetDesignTokens)
@@ -787,7 +792,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// Authorize endpoints: optionally wrap with session middleware so
 			// the user identity is available when a session cookie is present.
 			r.Group(func(r chi.Router) {
-				r.Use(mw.OptionalSessionFunc(sm, s.JWTManager))
+				r.Use(mw.OptionalSessionFunc(sm, s.JWTManager, s.AuthCache))
 				r.Get("/authorize", s.OAuthServer.HandleAuthorize)
 				r.Post("/authorize", s.OAuthServer.HandleAuthorizeDecision)
 			})
@@ -801,36 +806,36 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 			// Token Introspection (RFC 7662) and Revocation (RFC 7009)
 			r.Post("/introspect", s.OAuthServer.HandleIntrospect)
 			r.Post("/revoke", s.OAuthServer.HandleRevoke)
-			// Device flow hidden for v0.1 — not battle-tested. Re-enable when implementation lands.
+			// Device flow hidden for v0.1 â€” not battle-tested. Re-enable when implementation lands.
 			// Device Authorization Grant (RFC 8628)
 			// r.Post("/device", s.OAuthServer.HandleDeviceAuthorization)
 			// r.Group(func(r chi.Router) {
-			// 	r.Use(mw.OptionalSessionFunc(sm, s.JWTManager))
+			// 	r.Use(mw.OptionalSessionFunc(sm, s.JWTManager, s.AuthCache))
 			// 	r.Get("/device/verify", s.OAuthServer.HandleDeviceVerify)
 			// 	r.Post("/device/verify", s.OAuthServer.HandleDeviceApprove)
 			// })
 		})
 	}
 
-	// Hosted SPA shell (Phase B, task B7). Public — no auth required. Must be
+	// Hosted SPA shell (Phase B, task B7). Public â€” no auth required. Must be
 	// mounted before /admin/* so chi's trie routes /admin/hosted/assets/* here
 	// rather than falling through to the admin dashboard SPA fallback.
 	r.Get("/hosted/{app_slug}/{page}", s.handleHostedPage)
 	r.Get("/admin/hosted/assets/*", s.handleHostedAssets)
 
-	// Paywall upgrade page (PROXYV1_5 §4.7). Public — the proxy redirects
+	// Paywall upgrade page (PROXYV1_5 Â§4.7). Public â€” the proxy redirects
 	// unauthed/tier-mismatched callers here with ?tier=X&return=<url> and
 	// the 402 response is intentionally cache-less + user-scope-less so a
 	// CDN in front can't serve a stale copy to a different caller.
 	r.Get("/paywall/{app_slug}", s.handlePaywallPage)
 
-	// Admin dashboard (Phase 4) — embedded HTML/React bundle, SPA fallback.
+	// Admin dashboard (Phase 4) â€” embedded HTML/React bundle, SPA fallback.
 	r.Handle("/admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))
 	r.Handle("/admin/*", http.StripPrefix("/admin/", admin.Handler()))
 
 	// Phase 6 P4: reverse proxy catch-all. Mounted last so every /api/v1/*,
 	// /oauth/*, /admin/*, /.well-known/* route above wins via chi's trie
-	// precedence. Only active when the proxy is configured — when
+	// precedence. Only active when the proxy is configured â€” when
 	// ProxyHandler is nil we skip the handler entirely, keeping the router
 	// in its exact pre-P4 shape for deployments that don't use the proxy.
 	if s.ProxyHandler != nil {
@@ -848,7 +853,7 @@ func NewServer(store storage.Store, cfg *config.Config, opts ...ServerOption) *S
 //
 // Failures during compilation are surfaced as panics. The proxy's rule
 // list lives in user YAML, so a bad rule is a config error the operator
-// should fix on next boot — starting the server in a partly-wired state
+// should fix on next boot â€” starting the server in a partly-wired state
 // would hide the problem behind silent 404s.
 func (s *Server) initProxy() {
 	cfg := s.Config
@@ -868,7 +873,7 @@ func (s *Server) initProxy() {
 	s.ProxyEngine = engine
 
 	// Wave D: layer DB-backed override rules on top of the YAML bootstrap.
-	// Best-effort — if the table doesn't exist yet (first run before the
+	// Best-effort â€” if the table doesn't exist yet (first run before the
 	// migration applied) or load fails, the proxy keeps the YAML-only set
 	// and we surface the error in logs rather than panicking.
 	if err := s.refreshProxyEngineFromDB(context.Background()); err != nil {
@@ -904,7 +909,7 @@ func (s *Server) initProxy() {
 	h.SetIssuer(cfg.Server.BaseURL)
 	s.ProxyHandler = h
 
-	// PROXYV1_5 §4.9: wire the lifecycle Manager so admin routes can
+	// PROXYV1_5 Â§4.9: wire the lifecycle Manager so admin routes can
 	// Start/Stop/Reload the subsystem at runtime. The builder closure
 	// materialises listeners on demand from s.ProxyListeners; if the
 	// caller hasn't provided any (legacy single-listener mount), Start
@@ -922,7 +927,7 @@ func (s *Server) initProxy() {
 // proxyAuthMiddleware resolves the inbound request's identity (via
 // BreakerResolver composing JWT + live-session resolvers) and stashes it
 // on the request context so ReverseProxy.ServeHTTP can read it. On any
-// resolve error we treat the request as anonymous — the rules engine
+// resolve error we treat the request as anonymous â€” the rules engine
 // will deny if the matched rule requires authentication, and the proxy
 // will translate that into a 401 (unauthenticated) or 403 (authenticated-
 // but-unauthorized) based on the resolved identity.
@@ -952,7 +957,7 @@ func (s *Server) ProxyAuthMiddlewareFor(breaker *proxy.Breaker) func(http.Handle
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			id, err := composite.Resolve(r)
 			if err != nil {
-				// Downgrade to anonymous — the rules engine is the single
+				// Downgrade to anonymous â€” the rules engine is the single
 				// source of truth for whether that's allowed for this path.
 				// Logging here is intentionally at Debug: a flood of failed
 				// resolves (e.g. during an auth outage) shouldn't spam the

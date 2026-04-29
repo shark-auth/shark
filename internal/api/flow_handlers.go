@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/rand"
@@ -13,8 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/sharkauth/sharkauth/internal/authflow"
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/authflow"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // validAuthFlowTriggers enumerates the trigger names the engine knows how to
@@ -84,7 +84,7 @@ func flowToResponse(f *storage.AuthFlow) flowResponse {
 }
 
 // flowRunResponse is the on-wire shape of a persisted run. Metadata is
-// caller-controlled — the engine only ever writes what step MetadataPatch
+// caller-controlled â€” the engine only ever writes what step MetadataPatch
 // sets, but we document the surface explicitly so future sanitisation has
 // a single place to land.
 type flowRunResponse struct {
@@ -336,7 +336,7 @@ func (s *Server) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	// Explicit existence check so we can respond 404 vs 204 — DeleteAuthFlow
+	// Explicit existence check so we can respond 404 vs 204 â€” DeleteAuthFlow
 	// is a no-op on unknown id without surfacing the absence.
 	if _, err := s.Store.GetAuthFlowByID(r.Context(), id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -355,7 +355,7 @@ func (s *Server) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTestFlow runs a flow against caller-supplied mock data via
-// Engine.ExecuteDryRun. No persistence — the test endpoint must never
+// Engine.ExecuteDryRun. No persistence â€” the test endpoint must never
 // pollute the run history the dashboard reads.
 func (s *Server) handleTestFlow(w http.ResponseWriter, r *http.Request) {
 	if s.FlowEngine == nil {
@@ -375,7 +375,7 @@ func (s *Server) handleTestFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req testFlowRequest
-	// Tolerate empty body — admins might just want to smoke the wiring.
+	// Tolerate empty body â€” admins might just want to smoke the wiring.
 	if r.Body != nil && r.ContentLength != 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -460,7 +460,7 @@ func (s *Server) runAuthFlow(w http.ResponseWriter, r *http.Request, trigger str
 	result, err := s.FlowEngine.Execute(r.Context(), fc)
 	if err != nil {
 		slog.Default().Warn("auth flow execution failed", "trigger", trigger, "err", err)
-		return false // non-fatal — let auth proceed
+		return false // non-fatal â€” let auth proceed
 	}
 	switch result.Outcome {
 	case authflow.Continue:
@@ -522,7 +522,7 @@ func validateFlowPayload(name, trigger string, steps []storage.FlowStep) error {
 
 // validateSteps checks the slice is non-empty and every step has a known
 // Type. Branch steps (type=conditional) recursively validate their nested
-// then/else blocks — a malformed conditional is just as fatal as a bad
+// then/else blocks â€” a malformed conditional is just as fatal as a bad
 // top-level step.
 func validateSteps(steps []storage.FlowStep) error {
 	if len(steps) == 0 {

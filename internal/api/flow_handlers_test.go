@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // --- helpers ---
@@ -175,7 +175,7 @@ func TestUpdateFlow_PartialUpdate(t *testing.T) {
 
 	id, _ := createFlowViaAPI(t, ts, basicSignupFlowBody())
 
-	// Patch only enabled — name + steps + priority must survive.
+	// Patch only enabled â€” name + steps + priority must survive.
 	resp := ts.PatchJSONWithAdminKey("/api/v1/admin/flows/"+id, map[string]any{
 		"enabled": false,
 	})
@@ -398,7 +398,7 @@ func TestListFlowRuns_NotFound_404(t *testing.T) {
 func TestSignup_FlowBlocksUnverifiedEmail(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
-	// Install a flow that blocks unverified signups — which every fresh
+	// Install a flow that blocks unverified signups â€” which every fresh
 	// signup is by default.
 	createFlowViaAPI(t, ts, basicSignupFlowBody())
 
@@ -416,7 +416,7 @@ func TestSignup_FlowBlocksUnverifiedEmail(t *testing.T) {
 		t.Fatalf("error=%q, want flow_blocked", body["error"])
 	}
 
-	// The flow runs AFTER CreateUser — the row should exist even though the
+	// The flow runs AFTER CreateUser â€” the row should exist even though the
 	// session was withheld. This is the documented contract: admins can
 	// unblock and the user doesn't have to re-signup.
 	if _, err := ts.Store.GetUserByEmail(context.Background(), "flow.blocked@example.com"); err != nil {
@@ -425,11 +425,11 @@ func TestSignup_FlowBlocksUnverifiedEmail(t *testing.T) {
 }
 
 // TestUpdateFlow_ConditionalBranchesPreserved asserts that nested then/else
-// branches survive a full PATCH → GET round-trip without data loss.
+// branches survive a full PATCH â†’ GET round-trip without data loss.
 //
 // Acceptance criteria:
 //  1. Conditional + webhook in then: PATCH stores it, GET reads it back intact.
-//  2. else branch is empty → omitted from response (omitempty) but not corrupted.
+//  2. else branch is empty â†’ omitted from response (omitempty) but not corrupted.
 //  3. Multi-level nesting: conditional inside then branch also survives.
 //  4. Explicit else steps also survive.
 func TestUpdateFlow_ConditionalBranchesPreserved(t *testing.T) {
@@ -456,7 +456,7 @@ func TestUpdateFlow_ConditionalBranchesPreserved(t *testing.T) {
 			t.Fatalf("create status=%d", cr.StatusCode)
 		}
 
-		// PATCH — resend same steps (simulates builder save).
+		// PATCH â€” resend same steps (simulates builder save).
 		patchResp := ts.PatchJSONWithAdminKey("/api/v1/admin/flows/"+id, map[string]any{
 			"steps": []map[string]any{
 				{
@@ -494,7 +494,7 @@ func TestUpdateFlow_ConditionalBranchesPreserved(t *testing.T) {
 		if then[0].(map[string]any)["type"] != "webhook" {
 			t.Fatalf("then[0].type=%v, want webhook", then[0].(map[string]any)["type"])
 		}
-		// else must be absent or empty — must NOT be a non-empty slice.
+		// else must be absent or empty â€” must NOT be a non-empty slice.
 		if elseRaw, hasElse := cond["else"]; hasElse {
 			elseSlice, ok := elseRaw.([]any)
 			if !ok || len(elseSlice) != 0 {
@@ -572,7 +572,7 @@ func TestUpdateFlow_ConditionalBranchesPreserved(t *testing.T) {
 
 		// PATCH round-trip.
 		patchResp := ts.PatchJSONWithAdminKey("/api/v1/admin/flows/"+id, map[string]any{
-			"enabled": false, // no-op patch — triggers re-fetch
+			"enabled": false, // no-op patch â€” triggers re-fetch
 		})
 		if patchResp.StatusCode != http.StatusOK {
 			t.Fatalf("patch status=%d", patchResp.StatusCode)

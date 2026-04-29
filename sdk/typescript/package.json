@@ -1,5 +1,5 @@
 {
-  "name": "@sharkauth/node",
+  "name": "@sharkauth/sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for SharkAuth agent-auth primitives",
   "type": "module",

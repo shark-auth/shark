@@ -1,4 +1,4 @@
-package api_test
+﻿package api_test
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/sharkauth/sharkauth/internal/auth"
-	"github.com/sharkauth/sharkauth/internal/auth/providers"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/auth"
+	"github.com/shark-auth/shark/internal/auth/providers"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 func TestOAuthGitHubCallback(t *testing.T) {

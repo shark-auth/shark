@@ -1,10 +1,10 @@
-package testutil
+﻿package testutil
 
 import (
 	"embed"
 	"testing"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 //go:embed migrations/*.sql

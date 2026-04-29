@@ -1,4 +1,4 @@
-package storage_test
+﻿package storage_test
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharkauth/sharkauth/internal/storage"
-	"github.com/sharkauth/sharkauth/internal/testutil"
+	"github.com/shark-auth/shark/internal/storage"
+	"github.com/shark-auth/shark/internal/testutil"
 )
 
 // TestMarkWelcomeEmailSent_Idempotent verifies the store-layer guarantee
@@ -32,18 +32,18 @@ func TestMarkWelcomeEmailSent_Idempotent(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	// First call — flag flips 0 -> 1, no error.
+	// First call â€” flag flips 0 -> 1, no error.
 	if err := store.MarkWelcomeEmailSent(ctx, user.ID); err != nil {
 		t.Fatalf("first MarkWelcomeEmailSent: expected nil, got %v", err)
 	}
 
-	// Second call — already 1, UPDATE matches zero rows, returns ErrNoRows.
+	// Second call â€” already 1, UPDATE matches zero rows, returns ErrNoRows.
 	err := store.MarkWelcomeEmailSent(ctx, user.ID)
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("second MarkWelcomeEmailSent: expected sql.ErrNoRows, got %v", err)
 	}
 
-	// Same behavior for a user that doesn't exist — no match, ErrNoRows.
+	// Same behavior for a user that doesn't exist â€” no match, ErrNoRows.
 	err = store.MarkWelcomeEmailSent(ctx, "usr_does_not_exist")
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("missing user: expected sql.ErrNoRows, got %v", err)

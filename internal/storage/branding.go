@@ -12,7 +12,7 @@ import (
 
 // GetBranding returns a branding row by id (e.g. "global").
 func (s *SQLiteStore) GetBranding(ctx context.Context, id string) (*BrandingConfig, error) {
-	row := s.db.QueryRowContext(ctx, `
+	row := s.reader.QueryRowContext(ctx, `
 		SELECT COALESCE(logo_url,''), COALESCE(logo_sha,''), primary_color, secondary_color,
 		       font_family, footer_text, email_from_name, email_from_address
 		FROM branding WHERE id = ?`, id)
@@ -71,13 +71,13 @@ func (s *SQLiteStore) UpdateBranding(ctx context.Context, id string, fields map[
 	args = append(args, time.Now().UTC().Format(time.RFC3339))
 	args = append(args, id)
 	q := "UPDATE branding SET " + strings.Join(setParts, ", ") + " WHERE id = ?"
-	_, err := s.db.ExecContext(ctx, q, args...)
+	_, err := s.writer.ExecContext(ctx, q, args...)
 	return err
 }
 
 // SetBrandingLogo sets logo url + sha on the branding row.
 func (s *SQLiteStore) SetBrandingLogo(ctx context.Context, id, url, sha string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE branding SET logo_url = ?, logo_sha = ?, updated_at = ? WHERE id = ?`,
 		url, sha, time.Now().UTC().Format(time.RFC3339), id)
 	return err
@@ -85,7 +85,7 @@ func (s *SQLiteStore) SetBrandingLogo(ctx context.Context, id, url, sha string) 
 
 // ClearBrandingLogo nulls out logo url + sha.
 func (s *SQLiteStore) ClearBrandingLogo(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`UPDATE branding SET logo_url = NULL, logo_sha = NULL, updated_at = ? WHERE id = ?`,
 		time.Now().UTC().Format(time.RFC3339), id)
 	return err
@@ -103,7 +103,7 @@ func (s *SQLiteStore) ResolveBranding(ctx context.Context, appID string) (*Brand
 	}
 
 	var override sql.NullString
-	err = s.db.QueryRowContext(ctx,
+	err = s.reader.QueryRowContext(ctx,
 		`SELECT branding_override FROM applications WHERE id = ?`, appID).Scan(&override)
 	if errors.Is(err, sql.ErrNoRows) || !override.Valid || override.String == "" {
 		return global, nil

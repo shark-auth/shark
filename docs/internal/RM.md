@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src="https://www.sharkauth.com/shark_whitebg_text_logo.svg" alt="Shark" height="180" />
 </p>
 
@@ -39,7 +39,7 @@ Every other OSS auth system was built before AI agents existed. We built for age
 - **MCP-native OAuth 2.1.** `/.well-known/oauth-authorization-server`, dynamic client registration (RFC 7591), resource indicators (RFC 8707), device flow (RFC 8628), DPoP (RFC 9449), token exchange (RFC 8693). MCP clients auto-discover everything.
 - **Token Vault.** Managed OAuth tokens for Google, Slack, GitHub, Notion, Linear, Jira, Microsoft. Agents request fresh tokens via bearer delegation. Shark handles refresh, encryption (AES-256-GCM), rotation. Agents never see a refresh token.
 - **One binary, zero config.** `shark serve` boots a full auth system with an admin dashboard. No Postgres, no Redis, no Docker compose files.
-- **Every feature, free forever.** SSO (SAML + OIDC), organizations, webhooks, RBAC, audit logs, impersonation, migration tools — all in the binary. No enterprise paywalls.
+- **Every feature, free forever.** SSO (SAML + OIDC), organizations, webhooks, RBAC, audit logs, impersonation, migration tools â€” all in the binary. No enterprise paywalls.
 - **Any language, any framework.** REST API + auth proxy with agent scope enforcement. Go, Python, Ruby, PHP, Java, Rust. If it speaks HTTP, it works with Shark.
 
 ---
@@ -67,7 +67,7 @@ shark init
 
 Generates `sharkauth.yaml` and prints your admin API key. **One question** (base URL), done. Email defaults to the shark.email testing tier so the server boots end-to-end with zero extra setup.
 
-> shark.email is **testing-only** (rate-limited, sender locked to `noreply@shark.email`, no SLA). Switch to your own provider before any user-facing flow: `shark email setup`, edit `email:` in `sharkauth.yaml`, or use Settings → Email in the dashboard.
+> shark.email is **testing-only** (rate-limited, sender locked to `noreply@shark.email`, no SLA). Switch to your own provider before any user-facing flow: `shark email setup`, edit `email:` in `sharkauth.yaml`, or use Settings â†’ Email in the dashboard.
 
 ### Run
 
@@ -106,7 +106,7 @@ await shark.signIn({ email: "alice@example.com", password: "securepass" });
 const user = await shark.getUser(); // null if not authenticated
 ```
 
-### Integrate (Zero Code — Proxy Mode)
+### Integrate (Zero Code â€” Proxy Mode)
 
 ```bash
 shark proxy --upstream http://localhost:3000
@@ -132,7 +132,7 @@ Your backend reads headers. No SDK. No auth code. Any language.
 | Feature                  | Description                                                                        |
 | ------------------------ | ---------------------------------------------------------------------------------- |
 | **Email / password**     | Argon2id hashing. Password policy enforcement. Bcrypt migration for Auth0 imports. |
-| **OAuth / social login** | Google, GitHub, Apple, Discord — extensible provider registry.                     |
+| **OAuth / social login** | Google, GitHub, Apple, Discord â€” extensible provider registry.                     |
 | **Passkeys (WebAuthn)**  | FIDO2-compliant passwordless auth. Multiple credentials per user.                  |
 | **Magic links**          | Passwordless email login. Rate-limited, anti-enumeration.                          |
 | **MFA (TOTP)**           | Google Authenticator compatible. 10 single-use recovery codes.                     |
@@ -143,7 +143,7 @@ Your backend reads headers. No SDK. No auth code. Any language.
 
 | Feature               | Description                                                                                               |
 | --------------------- | --------------------------------------------------------------------------------------------------------- |
-| **Agent identities**  | First-class `agent_` entities — not users, not service accounts. Own lifecycle, permissions, audit trail. |
+| **Agent identities**  | First-class `agent_` entities â€” not users, not service accounts. Own lifecycle, permissions, audit trail. |
 | **OAuth 2.1 server**  | Authorization code + PKCE, client credentials, device flow, token exchange. MCP-native.                   |
 | **MCP compatibility** | `/.well-known/oauth-authorization-server`, resource indicators, dynamic client registration, CIMD.        |
 | **Token Vault**       | Managed OAuth tokens for third-party APIs (Google, Slack, GitHub). Agents never touch raw credentials.    |
@@ -168,9 +168,9 @@ Your backend reads headers. No SDK. No auth code. Any language.
 | Feature                 | Description                                                                                        |
 | ----------------------- | -------------------------------------------------------------------------------------------------- |
 | **Admin dashboard**     | Svelte SPA embedded in the binary. Users, sessions, roles, SSO, audit, settings.                   |
-| **Auth proxy**          | `shark proxy --upstream` — zero-code auth for any backend via header injection.                    |
+| **Auth proxy**          | `shark proxy --upstream` â€” zero-code auth for any backend via header injection.                    |
 | **OIDC provider**       | Shark as an identity provider. "Sign in with [YourApp]." Federation between instances.             |
-| **Pre-built UI**        | `<shark-sign-in>`, `<shark-user-button>` — web components that work in any framework.              |
+| **Pre-built UI**        | `<shark-sign-in>`, `<shark-user-button>` â€” web components that work in any framework.              |
 | **Visual flow builder** | Drag-and-drop auth flow customization. Export as YAML.                                             |
 | **Compliance toolkit**  | GDPR export, right to erasure, SOC2 access review reports, session geography.                      |
 | **Migration tools**     | `shark migrate auth0`, `shark migrate clerk`, `shark migrate supabase`. Password hashes preserved. |
@@ -180,12 +180,12 @@ Your backend reads headers. No SDK. No auth code. Any language.
 
 | Feature             | Description                                                                      |
 | ------------------- | -------------------------------------------------------------------------------- |
-| **10-second start** | `shark init && shark serve` — running with a dashboard in seconds.               |
-| **Dev mode**        | `shark serve --dev` — emails captured in Dev Inbox, no SMTP required.            |
+| **10-second start** | `shark init && shark serve` â€” running with a dashboard in seconds.               |
+| **Dev mode**        | `shark serve --dev` â€” emails captured in Dev Inbox, no SMTP required.            |
 | **CLI**             | `shark users list`, `shark keys rotate`, `shark migrate auth0 export.json`       |
 | **< 5KB SDK**       | Cookie-based sessions = no JWT parsing, no token refresh. Tiny client.           |
 | **Error docs**      | Every error includes a `docs_url` for instant troubleshooting.                   |
-| **Any language**    | REST API. Proxy mode. Go, Python, Ruby, PHP, Java, Rust, .NET — all first-class. |
+| **Any language**    | REST API. Proxy mode. Go, Python, Ruby, PHP, Java, Rust, .NET â€” all first-class. |
 
 ---
 
@@ -265,7 +265,7 @@ shark serve
     |
     +-- HTTP Server (chi router)
     |     +-- Global middleware (rate limit, CORS, security headers, logging)
-    |     +-- /api/v1/* (REST API — 60+ endpoints)
+    |     +-- /api/v1/* (REST API â€” 60+ endpoints)
     |     +-- /oauth/* (OAuth 2.1 authorization server)
     |     +-- /admin/* (embedded Svelte dashboard)
     |     +-- /.well-known/* (OIDC/OAuth discovery, JWKS)
@@ -336,7 +336,7 @@ npm install @sharkauth/vue       # Vue composables + components
 ### Pre-Built UI Components
 
 ```html
-<!-- Works in any framework — React, Vue, Svelte, Angular, vanilla HTML -->
+<!-- Works in any framework â€” React, Vue, Svelte, Angular, vanilla HTML -->
 <script src="https://cdn.sharkauth.com/ui.js"></script>
 
 <shark-sign-in
@@ -347,13 +347,13 @@ npm install @sharkauth/vue       # Vue composables + components
 </shark-sign-in>
 ```
 
-Customize in the dashboard visual editor. Click "Copy Code." The code is yours — not a locked component.
+Customize in the dashboard visual editor. Click "Copy Code." The code is yours â€” not a locked component.
 
 ### Admin SDKs
 
 ```bash
 npm install @sharkauth/node      # Node.js admin SDK
-pip install git+https://github.com/sharkauth/sharkauth#subdirectory=sdk/python  # Python SDK (PyPI release coming after dogfood validation)
+pip install git+https://github.com/shark-auth/shark#subdirectory=sdk/python  # Python SDK (PyPI release coming after dogfood validation)
 go get github.com/shark-auth/go   # Go admin SDK
 ```
 
@@ -443,7 +443,7 @@ Every config value can be overridden with environment variables: `SHARKAUTH_SERV
 
 ## Cloud
 
-[Shark Cloud](https://sharkauth.com) runs the same binary you self-host. Each tenant gets their own SQLite database — not a row filter, a real physical database. Your data never touches anyone else's.
+[Shark Cloud](https://sharkauth.com) runs the same binary you self-host. Each tenant gets their own SQLite database â€” not a row filter, a real physical database. Your data never touches anyone else's.
 
 ```bash
 # Migrate from self-hosted to cloud (or back) in one command
@@ -520,7 +520,7 @@ curl https://auth.example.com/api/v1/vault/google_calendar/token \
 
 ```bash
 curl https://auth.example.com/.well-known/oauth-authorization-server
-# Returns RFC 8414 metadata — MCP clients auto-discover everything
+# Returns RFC 8414 metadata â€” MCP clients auto-discover everything
 ```
 
 ---
@@ -802,7 +802,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-[MIT](LICENSE) — use Shark however you want. No AGPL, no CLA, no strings.
+[MIT](LICENSE) â€” use Shark however you want. No AGPL, no CLA, no strings.
 
 ---
 
