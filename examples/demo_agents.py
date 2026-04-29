@@ -187,19 +187,19 @@ class SharkClaw(App):
             oauth = OAuthClient(base_url=Config.BASE_URL)
             prover = DPoPProver.generate()
 
-            # Seed User
+            # Seed User (Alice is the owner in the DB, but not a token hop)
             u_email = f"alice_{int(time.time())}@acme.com"
             user = client.users.create_user(u_email, name="Alice (CEO)", email_verified=True)
-            self.add_agent_to_sidebar("Alice (CEO)", user["id"][:8])
-            self.update_agent_status(user["id"][:8], "Alive")
+            self.current_user_id = user["id"]
 
-            # Agent 1
+            # Agent 1: The Root of the Delegation Chain
             pm = client.agents.register_agent(app_id="acme", name="PM-Orchestrator", created_by=user["id"],
                                              scopes=["vault:read", "market:analyze", "data:fetch"],
                                              auth_method="client_secret_post",
                                              grant_types=["client_credentials", "urn:ietf:params:oauth:grant-type:token-exchange"])
             self.add_agent_to_sidebar("PM-Orchestrator", pm["id"][:8])
             self.update_agent_status(pm["id"][:8], "Alive")
+            self.pm_agent_registered_id = pm["id"]
 
             # Agent 2
             res = client.agents.register_agent(app_id="acme", name="Market-Researcher", created_by=user["id"],
@@ -218,26 +218,36 @@ class SharkClaw(App):
             self.update_agent_status(fetcher["id"][:8], "Alive")
 
             # --- 2. Delegation ---
+            # Step 1: PM Authenticates (The Root Token)
+            self.append_chat("Alice", "PM, run the Monterrey reliability deep-scan.", "white")
+            await asyncio.sleep(2)
+            
             pm_token = oauth.get_token_with_dpop(grant_type="client_credentials", dpop_prover=prover,
                                                client_id=pm["client_id"], client_secret=pm["client_secret"],
                                                scope="vault:read market:analyze data:fetch")
             
-            self.append_chat("Alice", "Analyze Monterrey steel reliability. Deep crawl.", "white")
-            await asyncio.sleep(1)
-            self.append_chat("PM-Agent", "Orchestrating... Delegating analysis to Market-Researcher.", "magenta")
+            self.append_chat("PM-Agent", "Initializing chain. Delegating analysis to Market-Researcher.", "magenta")
+            await asyncio.sleep(3)
             
+            # Step 2: PM -> Researcher
             res_token = oauth.token_exchange(subject_token=pm_token.access_token, dpop_prover=prover,
                                             scope="market:analyze data:fetch",
                                             client_id=res["client_id"], client_secret=res["client_secret"])
             
-            await asyncio.sleep(1)
-            self.append_chat("Researcher", "Received. Handing off raw scraping to Data-Fetcher.", "yellow")
+            self.append_chat("Researcher", "Task received. Handing off raw scraping to Data-Fetcher.", "yellow")
+            await asyncio.sleep(3)
 
+            # Step 3: Researcher -> Fetcher
             fetcher_token = oauth.token_exchange(subject_token=res_token.access_token, dpop_prover=prover,
                                                 scope="data:fetch",
                                                 client_id=fetcher["client_id"], client_secret=fetcher["client_secret"])
 
-            self.append_chat("Auth", f"Deep Chain Verified: [Alice] → [PM] → [Res] → [Fetcher]. DPoP Active.", "blue")
+            self.append_chat("Auth", "Cryptographic Trust Tree established: [PM] → [Res] → [Fetcher].", "blue")
+            self.current_fetcher_token = fetcher_token.access_token
+            self.current_fetch_id = fetcher["id"]
+            await asyncio.sleep(4)
+
+
 
             # --- 3. The Rogue Event ---
             malicious_input = (
