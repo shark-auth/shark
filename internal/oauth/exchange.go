@@ -1,4 +1,4 @@
-﻿package oauth
+package oauth
 
 // HandleTokenExchange implements RFC 8693 Token Exchange for agent-to-agent
 // delegation. Grant type: urn:ietf:params:oauth:grant-type:token-exchange
@@ -9,7 +9,6 @@
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
@@ -342,24 +341,34 @@ func (s *Server) Sign(claims gojwt.MapClaims) (string, error) {
 //  2. Otherwise (no kid), fall back to the current active ES256 key.
 func (s *Server) parseSubjectJWT(ctx context.Context, tokenStr string) (gojwt.MapClaims, error) {
 	parsed, err := gojwt.ParseWithClaims(tokenStr, gojwt.MapClaims{}, func(t *gojwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*gojwt.SigningMethodECDSA); !ok {
+		// Accept both ES256 (OAuth native) and RS256 (JWTManager native)
+		switch t.Method.(type) {
+		case *gojwt.SigningMethodECDSA, *gojwt.SigningMethodRSA:
+			// OK
+		default:
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
+
 		// Prefer kid-based lookup so tokens signed with a recently-rotated (but
 		// not yet expired) key remain verifiable after admin key rotation.
 		if kid, ok := t.Header["kid"].(string); ok && kid != "" {
 			key, lookupErr := s.RawStore.GetSigningKeyByKID(ctx, kid)
 			if lookupErr == nil {
-				return parseECPublicKeyPEM(key.PublicKeyPEM)
+				return parsePublicKeyPEM(key.PublicKeyPEM)
 			}
-			// KID not in DB â€” fall through to active-key lookup.
+			// KID not in DB — fall through to active-key lookup.
 		}
-		// No kid or kid not found: try the current active ES256 key.
-		key, err := s.RawStore.GetActiveSigningKeyByAlgorithm(ctx, "ES256")
+
+		// No kid or kid not found: try the current active key matching the algorithm.
+		alg, _ := t.Header["alg"].(string)
+		if alg == "" {
+			alg = "ES256" // Fallback to ES256 if not specified
+		}
+		key, err := s.RawStore.GetActiveSigningKeyByAlgorithm(ctx, alg)
 		if err != nil {
-			return nil, fmt.Errorf("get active ES256 key: %w", err)
+			return nil, fmt.Errorf("get active %s key: %w", alg, err)
 		}
-		return parseECPublicKeyPEM(key.PublicKeyPEM)
+		return parsePublicKeyPEM(key.PublicKeyPEM)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parse JWT: %w", err)
@@ -374,8 +383,8 @@ func (s *Server) parseSubjectJWT(ctx context.Context, tokenStr string) (gojwt.Ma
 	return claims, nil
 }
 
-// parseECPublicKeyPEM decodes a PEM-encoded ECDSA public key (PKIX).
-func parseECPublicKeyPEM(pemStr string) (*ecdsa.PublicKey, error) {
+// parsePublicKeyPEM decodes a PEM-encoded public key (PKIX). Supports RSA and ECDSA.
+func parsePublicKeyPEM(pemStr string) (interface{}, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
 		return nil, fmt.Errorf("no PEM block found in public key")
@@ -384,11 +393,7 @@ func parseECPublicKeyPEM(pemStr string) (*ecdsa.PublicKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse PKIX public key: %w", err)
 	}
-	ecPub, ok := pub.(*ecdsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("key is not ECDSA")
-	}
-	return ecPub, nil
+	return pub, nil
 }
 
 // ---------------------------------------------------------------------------

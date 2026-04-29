@@ -62,13 +62,19 @@ func main() {
 
 	adminKey, err := loadAdminKey(*adminKeyFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bench: load admin key: %v\n", err)
-		os.Exit(1)
+		fmt.Printf("bench: could not load admin key from %s: %v\n", *adminKeyFile, err)
+		fmt.Print("bench: enter admin api key manually: ")
+		fmt.Scanln(&adminKey)
+		adminKey = strings.TrimSpace(adminKey)
+		if adminKey == "" {
+			fmt.Fprintf(os.Stderr, "bench: admin key required to run benchmarks\n")
+			os.Exit(1)
+		}
 	}
 
 	fmt.Printf("bench: target=%s profile=%s concurrency=%d duration=%s dpop=%s\n",
 		*targetURL, *profile, *concurrency, *duration, *dpopMode)
-	fmt.Printf("bench: admin key loaded (%d bytes)\n", len(adminKey))
+	fmt.Printf("bench: admin key ready (%d bytes)\n", len(adminKey))
 
 	c := client.New(*targetURL, *concurrency)
 	prover, err := client.NewProver(*dpopMode)
