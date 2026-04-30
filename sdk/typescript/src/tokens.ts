@@ -120,6 +120,12 @@ export async function verifyAgentToken(
 export function decodeAgentToken(token: string): AgentTokenClaims {
   try {
     const payload = jose.decodeJwt(token);
+    
+    // Validate required claims for Shark agent tokens
+    if (!payload.sub || !payload.aud || !payload.iss || !payload.exp || !payload.iat) {
+      throw new TokenError("missing required claims (sub, aud, iss, exp, iat)");
+    }
+
     return {
       sub: String(payload.sub),
       aud: Array.isArray(payload.aud) ? payload.aud : String(payload.aud),

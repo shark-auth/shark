@@ -148,8 +148,10 @@ func randomJTI(t *testing.T) string {
 }
 
 // newCache returns a fresh JTI cache for each test.
-func newCache() *DPoPJTICache {
-	return NewDPoPJTICache()
+func newCache(t *testing.T) *DPoPJTICache {
+	// Use an in-memory SQLite store from testutil to satisfy the interface
+	store := testutil.NewTestDB(t)
+	return NewDPoPJTICache(store)
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +161,7 @@ func newCache() *DPoPJTICache {
 func TestDPoP_ValidProof(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	proof := buildECProof(t, proofParams{
 		priv:   priv,
@@ -168,7 +170,7 @@ func TestDPoP_ValidProof(t *testing.T) {
 		htu:    "https://auth.example.com/oauth/token",
 	})
 
-	jkt, err := ValidateDPoPProof(proof, "POST", "https://auth.example.com/oauth/token", "", cache)
+	jkt, err := ValidateDPoPProof(context.Background(), proof, "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err != nil {
 		t.Fatalf("expected valid proof, got error: %v", err)
 	}
@@ -185,7 +187,7 @@ func TestDPoP_ValidProof(t *testing.T) {
 func TestDPoP_WrongMethod(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	proof := buildECProof(t, proofParams{
 		priv:   priv,
@@ -194,7 +196,7 @@ func TestDPoP_WrongMethod(t *testing.T) {
 		htu:    "https://auth.example.com/oauth/token",
 	})
 
-	_, err := ValidateDPoPProof(proof, "POST", "https://auth.example.com/oauth/token", "", cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected error for wrong method")
 	}
@@ -206,7 +208,7 @@ func TestDPoP_WrongMethod(t *testing.T) {
 func TestDPoP_WrongURL(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	proof := buildECProof(t, proofParams{
 		priv:   priv,
@@ -215,7 +217,7 @@ func TestDPoP_WrongURL(t *testing.T) {
 		htu:    "https://auth.example.com/oauth/token",
 	})
 
-	_, err := ValidateDPoPProof(proof, "POST", "https://other.example.com/oauth/token", "", cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "POST", "https://other.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected error for wrong URL")
 	}
@@ -227,7 +229,7 @@ func TestDPoP_WrongURL(t *testing.T) {
 func TestDPoP_ExpiredIat(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	oldIat := time.Now().UTC().Add(-90 * time.Second) // 90s in the past
 
@@ -239,7 +241,7 @@ func TestDPoP_ExpiredIat(t *testing.T) {
 		iat:    oldIat,
 	})
 
-	_, err := ValidateDPoPProof(proof, "POST", "https://auth.example.com/oauth/token", "", cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected error for expired iat")
 	}
@@ -251,7 +253,7 @@ func TestDPoP_ExpiredIat(t *testing.T) {
 func TestDPoP_FutureIat(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	futureIat := time.Now().UTC().Add(90 * time.Second) // 90s in the future
 
@@ -263,7 +265,7 @@ func TestDPoP_FutureIat(t *testing.T) {
 		iat:    futureIat,
 	})
 
-	_, err := ValidateDPoPProof(proof, "POST", "https://auth.example.com/oauth/token", "", cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected error for future iat")
 	}
@@ -275,7 +277,7 @@ func TestDPoP_FutureIat(t *testing.T) {
 func TestDPoP_InvalidTyp(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	proof := buildECProof(t, proofParams{
 		priv:   priv,
@@ -285,7 +287,7 @@ func TestDPoP_InvalidTyp(t *testing.T) {
 		typ:    "JWT", // wrong typ
 	})
 
-	_, err := ValidateDPoPProof(proof, "POST", "https://auth.example.com/oauth/token", "", cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected error for invalid typ")
 	}
@@ -300,7 +302,7 @@ func TestDPoP_HMACAlg_Rejected(t *testing.T) {
 	// Instead we craft the raw JWT string with a manipulated header.
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	// Use ES256 for signing but claim HS256 in the header — ValidateDPoPProof
 	// must reject HS256 before even attempting to verify the signature.
@@ -312,7 +314,7 @@ func TestDPoP_HMACAlg_Rejected(t *testing.T) {
 		alg:    "HS256", // alg field set in header; our override puts it in header["alg"]
 	})
 
-	_, err := ValidateDPoPProof(proof, "POST", "https://auth.example.com/oauth/token", "", cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected error for HS256 alg")
 	}
@@ -324,7 +326,7 @@ func TestDPoP_HMACAlg_Rejected(t *testing.T) {
 func TestDPoP_ReplayedJTI(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 	jti := "fixed-jti-replay-test"
 
 	// First use should succeed.
@@ -335,7 +337,7 @@ func TestDPoP_ReplayedJTI(t *testing.T) {
 		htu:    "https://auth.example.com/oauth/token",
 		jti:    jti,
 	})
-	if _, err := ValidateDPoPProof(proof1, "POST", "https://auth.example.com/oauth/token", "", cache); err != nil {
+	if _, err := ValidateDPoPProof(context.Background(), proof1, "POST", "https://auth.example.com/oauth/token", "", cache); err != nil {
 		t.Fatalf("first proof should succeed: %v", err)
 	}
 
@@ -347,7 +349,7 @@ func TestDPoP_ReplayedJTI(t *testing.T) {
 		htu:    "https://auth.example.com/oauth/token",
 		jti:    jti,
 	})
-	_, err := ValidateDPoPProof(proof2, "POST", "https://auth.example.com/oauth/token", "", cache)
+	_, err := ValidateDPoPProof(context.Background(), proof2, "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected replay error on second use of same jti")
 	}
@@ -359,7 +361,7 @@ func TestDPoP_ReplayedJTI(t *testing.T) {
 func TestDPoP_WithAth(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	accessToken := "my-opaque-access-token"
 	h := sha256.Sum256([]byte(accessToken))
@@ -373,7 +375,7 @@ func TestDPoP_WithAth(t *testing.T) {
 		ath:    ath,
 	})
 
-	_, err := ValidateDPoPProof(proof, "GET", "https://api.example.com/resource", ath, cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "GET", "https://api.example.com/resource", ath, cache)
 	if err != nil {
 		t.Fatalf("expected valid proof with ath, got: %v", err)
 	}
@@ -382,7 +384,7 @@ func TestDPoP_WithAth(t *testing.T) {
 func TestDPoP_WrongAth(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	realToken := "real-access-token"
 	fakeToken := "tampered-access-token"
@@ -401,7 +403,7 @@ func TestDPoP_WrongAth(t *testing.T) {
 
 	// But the caller presents realToken.
 	realAth := HashAccessTokenForDPoP(realToken)
-	_, err := ValidateDPoPProof(proof, "GET", "https://api.example.com/resource", realAth, cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "GET", "https://api.example.com/resource", realAth, cache)
 	if err == nil {
 		t.Fatal("expected ath mismatch error")
 	}
@@ -522,8 +524,8 @@ func TestHashAccessTokenForDPoP(t *testing.T) {
 
 // TestDPoP_MissingHeader checks that an empty proofJWT returns an error.
 func TestDPoP_MissingHeader(t *testing.T) {
-	cache := newCache()
-	_, err := ValidateDPoPProof("", "POST", "https://auth.example.com/oauth/token", "", cache)
+	cache := newCache(t)
+	_, err := ValidateDPoPProof(context.Background(), "", "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err == nil {
 		t.Fatal("expected error for missing proof")
 	}
@@ -532,7 +534,7 @@ func TestDPoP_MissingHeader(t *testing.T) {
 // TestRequireDPoPMiddleware_BearerPassthrough verifies that the middleware
 // does not interfere with plain Bearer tokens (it is opt-in via the DPoP scheme).
 func TestRequireDPoPMiddleware_BearerPassthrough(t *testing.T) {
-	cache := newCache()
+	cache := newCache(t)
 	mw := RequireDPoPMiddleware(cache)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -553,7 +555,7 @@ func TestRequireDPoPMiddleware_BearerPassthrough(t *testing.T) {
 // TestRequireDPoPMiddleware_NoAuthHeader exercises the empty-Authorization
 // pass-through path.
 func TestRequireDPoPMiddleware_NoAuthHeader(t *testing.T) {
-	cache := newCache()
+	cache := newCache(t)
 	mw := RequireDPoPMiddleware(cache)
 
 	called := false
@@ -577,7 +579,7 @@ func TestRequireDPoPMiddleware_NoAuthHeader(t *testing.T) {
 // TestRequireDPoPMiddleware_MissingProof verifies 401 when a DPoP-scheme
 // authorization header has no accompanying DPoP header.
 func TestRequireDPoPMiddleware_MissingProof(t *testing.T) {
-	cache := newCache()
+	cache := newCache(t)
 	mw := RequireDPoPMiddleware(cache)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -604,7 +606,7 @@ func TestRequireDPoPMiddleware_MissingProof(t *testing.T) {
 func TestRequireDPoPMiddleware_ValidProof(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	accessToken := "my-access-token-abc"
 	ath := HashAccessTokenForDPoP(accessToken)
@@ -647,7 +649,7 @@ func TestRequireDPoPMiddleware_ValidProof(t *testing.T) {
 // TestRequireDPoPMiddleware_InvalidProof verifies that a malformed or wrong
 // DPoP proof is rejected with 401.
 func TestRequireDPoPMiddleware_InvalidProof(t *testing.T) {
-	cache := newCache()
+	cache := newCache(t)
 	mw := RequireDPoPMiddleware(cache)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -692,7 +694,7 @@ func TestJWKToRSAPublicKey(t *testing.T) {
 		t.Fatalf("sign RSA proof: %v", err)
 	}
 
-	jkt, err := ValidateDPoPProof(signed, "POST", "https://auth.example.com/oauth/token", "", newCache())
+	jkt, err := ValidateDPoPProof(context.Background(), signed, "POST", "https://auth.example.com/oauth/token", "", newCache(t))
 	if err != nil {
 		t.Fatalf("RSA proof should validate: %v", err)
 	}
@@ -706,7 +708,7 @@ func TestJWKToRSAPublicKey(t *testing.T) {
 func TestDPoP_HTUQueryIgnored(t *testing.T) {
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
-	cache := newCache()
+	cache := newCache(t)
 
 	// Proof was built with a query string appended to htu (should be ignored).
 	proof := buildECProof(t, proofParams{
@@ -716,7 +718,7 @@ func TestDPoP_HTUQueryIgnored(t *testing.T) {
 		htu:    "https://auth.example.com/oauth/token?foo=bar",
 	})
 
-	_, err := ValidateDPoPProof(proof, "POST", "https://auth.example.com/oauth/token", "", cache)
+	_, err := ValidateDPoPProof(context.Background(), proof, "POST", "https://auth.example.com/oauth/token", "", cache)
 	if err != nil {
 		t.Fatalf("expected query string to be ignored in htu comparison, got: %v", err)
 	}
