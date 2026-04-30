@@ -199,15 +199,16 @@ func (s *SQLiteStore) scanAgent(row *sql.Row) (*Agent, error) {
 	var redirectURIs, grantTypes, responseTypes, scopes, metadata string
 	var createdAt, updatedAt string
 	var active int
+	var jwks, jwksURI, logoURI, homepageURI sql.NullString
 	var createdBy sql.NullString
 	var oldSecretHash sql.NullString
 	var oldSecretExpiresAt sql.NullString
 
 	err := row.Scan(
 		&a.ID, &a.Name, &a.Description, &a.ClientID, &a.ClientSecretHash,
-		&a.ClientType, &a.AuthMethod, &a.JWKS, &a.JWKSURI,
+		&a.ClientType, &a.AuthMethod, &jwks, &jwksURI,
 		&redirectURIs, &grantTypes, &responseTypes, &scopes,
-		&a.TokenLifetime, &metadata, &a.LogoURI, &a.HomepageURI,
+		&a.TokenLifetime, &metadata, &logoURI, &homepageURI,
 		&active, &createdBy,
 		&createdAt, &updatedAt,
 		&oldSecretHash, &oldSecretExpiresAt,
@@ -217,6 +218,18 @@ func (s *SQLiteStore) scanAgent(row *sql.Row) (*Agent, error) {
 		return nil, err
 	}
 
+	if jwks.Valid {
+		a.JWKS = jwks.String
+	}
+	if jwksURI.Valid {
+		a.JWKSURI = jwksURI.String
+	}
+	if logoURI.Valid {
+		a.LogoURI = logoURI.String
+	}
+	if homepageURI.Valid {
+		a.HomepageURI = homepageURI.String
+	}
 	if createdBy.Valid {
 		a.CreatedBy = createdBy.String
 	}
@@ -267,15 +280,16 @@ func (s *SQLiteStore) scanAgentFromRows(rows *sql.Rows) (*Agent, error) {
 	var redirectURIs, grantTypes, responseTypes, scopes, metadata string
 	var createdAt, updatedAt string
 	var active int
+	var jwks, jwksURI, logoURI, homepageURI sql.NullString
 	var createdBy sql.NullString
 	var oldSecretHash sql.NullString
 	var oldSecretExpiresAt sql.NullString
 
 	err := rows.Scan(
 		&a.ID, &a.Name, &a.Description, &a.ClientID, &a.ClientSecretHash,
-		&a.ClientType, &a.AuthMethod, &a.JWKS, &a.JWKSURI,
+		&a.ClientType, &a.AuthMethod, &jwks, &jwksURI,
 		&redirectURIs, &grantTypes, &responseTypes, &scopes,
-		&a.TokenLifetime, &metadata, &a.LogoURI, &a.HomepageURI,
+		&a.TokenLifetime, &metadata, &logoURI, &homepageURI,
 		&active, &createdBy,
 		&createdAt, &updatedAt,
 		&oldSecretHash, &oldSecretExpiresAt,
@@ -284,6 +298,18 @@ func (s *SQLiteStore) scanAgentFromRows(rows *sql.Rows) (*Agent, error) {
 		return nil, err
 	}
 
+	if jwks.Valid {
+		a.JWKS = jwks.String
+	}
+	if jwksURI.Valid {
+		a.JWKSURI = jwksURI.String
+	}
+	if logoURI.Valid {
+		a.LogoURI = logoURI.String
+	}
+	if homepageURI.Valid {
+		a.HomepageURI = homepageURI.String
+	}
 	if createdBy.Valid {
 		a.CreatedBy = createdBy.String
 	}

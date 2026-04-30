@@ -21,19 +21,23 @@ GOFLAGS := -trimpath -ldflags="$(LDFLAGS)"
 
 all: build
 
+# Frontend installation
+frontend-install:
+	@echo ">> installing frontend dependencies"
+	@cd admin && npm install
+
 # Frontend build
-# Linux: uses pnpm with memory limit
-# Windows: uses npm run build (as per previous Makefile.windows) or pnpm if available
 frontend-build:
 	@echo ">> building frontend (admin)"
 	@cd admin && $(if $(filter Windows_NT,$(OS)),npm run build,NODE_OPTIONS=--max-old-space-size=4096 pnpm build)
 
 # Binary build
-binary-build:
+# binary-build now depends on frontend-build to ensure assets are always up to date
+binary-build: frontend-build
 	@echo ">> building binary -> $(BINARY)"
 	go build $(GOFLAGS) -o $(BINARY) $(PKG)
 
-build: frontend-build binary-build
+build: binary-build
 
 test:
 	go test -race -count=1 ./...

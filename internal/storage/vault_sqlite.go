@@ -412,12 +412,12 @@ func (s *SQLiteStore) ListAgentsByVaultRetrieval(ctx context.Context, connection
 
 	var actorIDs []string
 	for rows.Next() {
-		var id string
+		var id sql.NullString
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		if id != "" {
-			actorIDs = append(actorIDs, id)
+		if id.Valid && id.String != "" {
+			actorIDs = append(actorIDs, id.String)
 		}
 	}
 

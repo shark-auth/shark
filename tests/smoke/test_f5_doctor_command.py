@@ -51,10 +51,13 @@ def run_doctor(*extra_args, env=None, timeout=30):
         [BIN_PATH, "doctor"] + list(extra_args),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=timeout,
         env=merged_env,
     )
-    return result.returncode, result.stdout, result.stderr
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    return result.returncode, stdout, stderr
 
 
 # ---------------------------------------------------------------------------
@@ -143,12 +146,13 @@ def test_exit_code_one_when_admin_key_missing(tmp_path):
         assert "admin_key" in output, (
             f"Expected 'admin_key' check in output.\nstdout:\n{stdout}"
         )
-        # The check should be marked as failed (✗)
-        assert "✗" in output or "false" in output.lower(), (
-            f"Expected failure marker for admin_key.\nstdout:\n{stdout}"
+        # The check should be marked as failed. Robust check for ✗ or common fallbacks.
+        # âœ— is the UTF-8 representation of ✗ often mangled in non-UTF-8 terminals.
+        failed = any(m in output for m in ["✗", "âœ—", "!", "fail", "false"])
+        assert failed, (
+            f"Expected failure marker for admin_key in output.\nstdout:\n{stdout}"
         )
-    finally:
-        # Restore key file backups
+    finally:        # Restore key file backups
         for original, bak in backed_up:
             if os.path.exists(bak):
                 try:

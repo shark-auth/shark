@@ -33,6 +33,7 @@ def run(args, *, expect_code=0):
         [BIN_PATH] + args,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if expect_code is not None:
         assert result.returncode == expect_code, (
@@ -154,7 +155,7 @@ class TestUserCLI:
         env = {**os.environ, "SHARK_ADMIN_TOKEN": token, "SHARK_URL": BASE_URL}
         r = subprocess.run(
             [BIN_PATH, "user", "list", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0
 
@@ -165,7 +166,7 @@ class TestUserCLI:
         # create
         r = subprocess.run(
             [BIN_PATH, "user", "create", "--email", "clicreate@example.com", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0, r.stderr
         data = json.loads(r.stdout)
@@ -175,7 +176,7 @@ class TestUserCLI:
         # show
         r2 = subprocess.run(
             [BIN_PATH, "user", "show", uid, "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r2.returncode == 0
         assert uid in r2.stdout
@@ -183,14 +184,14 @@ class TestUserCLI:
         # update
         r3 = subprocess.run(
             [BIN_PATH, "user", "update", uid, "--name", "CLI Test User", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r3.returncode == 0
 
         # delete
         r4 = subprocess.run(
             [BIN_PATH, "user", "delete", uid, "--yes", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r4.returncode == 0
 
@@ -201,7 +202,7 @@ class TestSSOCLI:
         env = {**os.environ, "SHARK_ADMIN_TOKEN": token, "SHARK_URL": BASE_URL}
         r = subprocess.run(
             [BIN_PATH, "sso", "list", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0
 
@@ -211,7 +212,7 @@ class TestSSOCLI:
 
         r = subprocess.run(
             [BIN_PATH, "sso", "create", "--name", "cli-test-sso", "--type", "oidc", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0, r.stderr
         data = json.loads(r.stdout)
@@ -222,14 +223,14 @@ class TestSSOCLI:
         # show
         r2 = subprocess.run(
             [BIN_PATH, "sso", "show", sso_id, "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r2.returncode == 0
 
         # delete
         r3 = subprocess.run(
             [BIN_PATH, "sso", "delete", sso_id, "--yes", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r3.returncode == 0
 
@@ -242,7 +243,7 @@ class TestAPIKeyCLI:
         # create
         r = subprocess.run(
             [BIN_PATH, "api-key", "create", "--name", "cli-test-key", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0, r.stderr
         data = json.loads(r.stdout)
@@ -253,14 +254,14 @@ class TestAPIKeyCLI:
         # list
         r2 = subprocess.run(
             [BIN_PATH, "api-key", "list", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r2.returncode == 0
 
         # revoke
         r3 = subprocess.run(
             [BIN_PATH, "api-key", "revoke", kid, "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r3.returncode == 0
 
@@ -274,7 +275,7 @@ class TestAgentExtendedCLI:
         # register
         r = subprocess.run(
             [BIN_PATH, "agent", "register", "--name", "cli-show-test", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0, r.stderr
         data = json.loads(r.stdout)
@@ -285,7 +286,7 @@ class TestAgentExtendedCLI:
         # show
         r2 = subprocess.run(
             [BIN_PATH, "agent", "show", aid, "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r2.returncode == 0
         assert aid in r2.stdout
@@ -293,21 +294,21 @@ class TestAgentExtendedCLI:
         # rotate-secret
         r3 = subprocess.run(
             [BIN_PATH, "agent", "rotate-secret", aid, "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r3.returncode == 0
 
         # revoke-tokens
         r4 = subprocess.run(
             [BIN_PATH, "agent", "revoke-tokens", aid, "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r4.returncode == 0
 
         # delete
         r5 = subprocess.run(
             [BIN_PATH, "agent", "delete", aid, "--yes", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r5.returncode == 0
 
@@ -318,7 +319,7 @@ class TestSessionCLI:
         env = {**os.environ, "SHARK_ADMIN_TOKEN": token, "SHARK_URL": BASE_URL}
         r = subprocess.run(
             [BIN_PATH, "session", "list", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0
 
@@ -329,7 +330,7 @@ class TestAuditExportCLI:
         env = {**os.environ, "SHARK_ADMIN_TOKEN": token, "SHARK_URL": BASE_URL}
         r = subprocess.run(
             [BIN_PATH, "audit", "export", "--since", "2026-01-01T00:00:00Z", "--until", "2027-01-01T00:00:00Z"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         # May be empty CSV but should not error.
         assert r.returncode == 0, r.stderr
@@ -341,7 +342,7 @@ class TestAdminConfigDump:
         env = {**os.environ, "SHARK_ADMIN_TOKEN": token, "SHARK_URL": BASE_URL}
         r = subprocess.run(
             [BIN_PATH, "admin", "config", "dump"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0
         # Should be valid JSON
@@ -354,7 +355,7 @@ class TestConsentListCLI:
         env = {**os.environ, "SHARK_ADMIN_TOKEN": token, "SHARK_URL": BASE_URL}
         r = subprocess.run(
             [BIN_PATH, "consents", "list", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0
 
@@ -365,6 +366,6 @@ class TestAuthConfigShowCLI:
         env = {**os.environ, "SHARK_ADMIN_TOKEN": token, "SHARK_URL": BASE_URL}
         r = subprocess.run(
             [BIN_PATH, "auth", "config", "show", "--json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
         assert r.returncode == 0

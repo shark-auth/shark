@@ -2,41 +2,171 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>{{.Header}}</title>
     <style>
-      body{margin:0;padding:0;background:#fcfcfc;font-family:-apple-system,system-ui,sans-serif}
-      .container{max-width:500px;margin:0 auto;padding:48px 16px}
-      .card{background:#ffffff;border:1px solid #eeeeee;border-radius:2px;padding:40px;box-shadow:none}
-      .logo{max-height:36px;margin-bottom:32px;filter:grayscale(1)}
-      h1{margin:0 0 20px;font-size:20px;color:#000000;font-weight:600;letter-spacing:-0.01em}
-      p{margin:0 0 16px;color:#111111;line-height:1.6;font-size:13.5px}
-      .btn{display:inline-block;background:{{.Branding.PrimaryColor}};color:#ffffff;padding:10px 20px;border-radius:2px;text-decoration:none;font-weight:600;font-size:13px;margin:24px 0}
-      .footer{margin-top:32px;padding-top:24px;border-top:1px solid #f0f0f0;font-size:12px;color:#666666;line-height:1.5}
-      .preheader{display:none;max-height:0;overflow:hidden;opacity:0;color:transparent}
-      .secured-by{margin-bottom:24px;text-align:center;opacity:0.8;display:flex;align-items:center;justify-content:center;gap:8px}
-      .secured-by span{font-size:9px;font-weight:600;color:#000;text-transform:uppercase;letter-spacing:0.12em}
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100% !important;
+        background-color: #f6f6f6;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrapper {
+        width: 100%;
+        table-layout: fixed;
+        background-color: #f6f6f6;
+        padding-bottom: 40px;
+      }
+      .main {
+        max-width: 560px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        border: 1px solid #e5e5e5;
+        border-radius: 4px;
+        margin-top: 40px;
+      }
+      .content {
+        padding: 48px;
+      }
+      .logo {
+        height: 32px;
+        margin-bottom: 32px;
+        display: block;
+      }
+      .logo.placeholder {
+        width: 32px;
+        height: 32px;
+        background: #000;
+        border-radius: 4px;
+      }
+      h1 {
+        margin: 0 0 24px;
+        font-size: 24px;
+        line-height: 32px;
+        font-weight: 700;
+        color: #000000;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0 0 20px;
+        font-size: 15px;
+        line-height: 24px;
+        color: #444444;
+      }
+      .btn-wrapper {
+        margin: 32px 0;
+      }
+      .btn {
+        display: inline-block;
+        padding: 12px 24px;
+        background-color: {{.Branding.PrimaryColor}};
+        color: #ffffff !important;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 4px;
+      }
+      .footer {
+        padding: 0 48px;
+        margin-top: 32px;
+        font-size: 12px;
+        line-height: 20px;
+        color: #888888;
+      }
+      .footer-inner {
+        padding-top: 24px;
+        border-top: 1px solid #e5e5e5;
+      }
+      .secured-by {
+        text-align: center;
+        padding: 32px 0 0;
+      }
+      .secured-by span {
+        font-size: 10px;
+        font-weight: 700;
+        color: #000000;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+      .preheader {
+        display: none;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body, .wrapper {
+          background-color: #000000 !important;
+        }
+        .main {
+          background-color: #0a0a0a !important;
+          border-color: #1a1a1a !important;
+        }
+        h1 {
+          color: #ffffff !important;
+        }
+        p {
+          color: #a0a0a0 !important;
+        }
+        .footer-inner {
+          border-color: #1a1a1a !important;
+        }
+        .secured-by span {
+          color: #ffffff !important;
+        }
+        .logo {
+           filter: invert(1);
+        }
+        .logo.placeholder {
+           background: #fff;
+        }
+      }
     </style>
   </head>
   <body>
     <div class="preheader">{{.Preheader}}</div>
-    <div class="container">
+    <div class="wrapper">
       <div class="secured-by">
         <span>Secured by Shark Auth</span>
       </div>
-      <div class="card">
-        {{if .Branding.LogoURL}}<img
-          class="logo"
-          src="{{.Branding.LogoURL}}"
-          alt=""
-        />{{end}}
-        <h1>{{.Header}}</h1>
-        {{range .Paragraphs}}
-        <p>{{.}}</p>
-        {{end}} {{if .CTAText}}<a class="btn" href="{{.CTAURL}}">{{.CTAText}}</a
-        >{{end}} {{if .Footer}}
-        <div class="footer">{{.Footer}}</div>
-        {{end}}
+      <div class="main">
+        <div class="content">
+          {{if .Branding.LogoURL}}
+            <img class="logo" src="{{.Branding.LogoURL}}" alt="" />
+          {{else}}
+            <div class="logo">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16 2L4 16L16 30L28 16L16 2Z" fill="currentColor"/>
+                <path d="M16 8L10 16L16 24L22 16L16 8Z" fill="white" fill-opacity="0.3"/>
+              </svg>
+            </div>
+          {{end}}
+          
+          <h1>{{.Header}}</h1>
+          
+          {{range .Paragraphs}}
+            <p>{{.}}</p>
+          {{end}}
+
+          {{if .CTAText}}
+            <div class="btn-wrapper">
+              <a class="btn" href="{{.CTAURL}}">{{.CTAText}}</a>
+            </div>
+          {{end}}
+
+          {{if .Footer}}
+            <div class="footer-inner" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e5e5;">
+              <div style="font-size: 12px; line-height: 20px; color: #888888;">{{.Footer}}</div>
+            </div>
+          {{end}}
+        </div>
       </div>
     </div>
   </body>

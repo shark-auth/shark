@@ -198,6 +198,9 @@ def test_bulk_revoke_tokens_marked_revoked_in_token_list(create_agent, admin_hea
         json={"client_id_pattern": pattern, "reason": "token list check"},
     )
 
+    # Wait for background revocation to complete
+    time.sleep(0.5)
+
     resp = requests.get(
         f"{BASE_URL}/api/v1/agents/{agent['id']}/tokens",
         headers=admin_headers,

@@ -61,50 +61,22 @@ One `grant_id` correlates every token, every hop, and every resource touched. Re
 
 ### 4. Zero Infrastructure Overhead
 
-Shark is a single ~30MB Go binary. No Postgres, no Redis, no Docker required. It runs on a Raspberry Pi as easily as it runs on a Kubernetes cluster.
+Shark is a single ~40MB Go binary. No Postgres, no Redis, no Docker required. It runs on a Raspberry Pi as easily as it runs on a Kubernetes cluster.
 
-### 5. Human Auth is Table Stakes
+### 5. Open Source (MIT)
 
-Shark ships with all human auth primitives: Passkeys (FIDO2), Magic Links, MFA (TOTP), Enterprise SSO (SAML 2.0, OIDC) in beta and are rapidly improving.
+SharkAuth is 100% open source. Built with idiomatic, clean Go. We welcome contributors who want to build the future of identity.
 
-### 6. Beautiful Admin Dashboard
-
-## Shark ships with a built-in React admin dashboard that allows you to manage all of your users, tokens, and grants.
+---
 
 ## Features
 
 | Category       | Highlights                                                                                                             |
 | :------------- | :--------------------------------------------------------------------------------------------------------------------- |
-| **Agent Auth** | RFC 8693 Token Exchange, RFC 9449 DPoP, `may_act_grants`, Token Vault (Google, Slack, GitHub), Device Flow (RFC 8628). |
+| **Agent Auth** | RFC 8693 Token Exchange, RFC 9449 DPoP, `may_act_grants`, Token Vault (Google, Slack, GitHub).                         |
 | **Human Auth** | Passkeys (FIDO2), Magic Links, MFA (TOTP), Enterprise SSO (SAML 2.0, OIDC), Argon2id passwords.                        |
-| **Platform**   | Multi-tenant Organizations, Wildcard RBAC (`users:*`), Webhooks (HMAC-signed), Audit Logs (CSV export).                |
+| **Platform**   | Zero-Code Auth Proxy, Multi-tenant Orgs, Wildcard RBAC (`users:*`), Webhooks (HMAC-signed), Audit Logs.                |
 | **Admin UI**   | Beautiful React-based dashboard embedded in the binary. One-click revocation for every session, token, and grant.      |
-
-> [!TIP]
-> Check out [sharkauth.com/docs](https://sharkauth.com/docs) for the full API reference and integration guides.
-
----
-
-## Battle-Ready Admin UI
-
-SharkAuth isn't just an API. It's a full-featured management system.
-
-<p align="center">
-  <img src="docs/images/dashboard-home.png" width="700" alt="SharkAuth Admin Dashboard" />
-</p>
-
----
-
-## Competitive Comparison
-
-| Feature                     | **SharkAuth** | Auth0 | Clerk | Ory / Hydra  |
-| :-------------------------- | :-----------: | :---: | :---: | :----------: |
-| **Agent-Native Primitives** |    **Yes**    |  No   |  No   |   Partial    |
-| **Native DPoP Support**     |    **Yes**    |  Yes  |  No   |      No      |
-| **Self-Hosted (OSS)**       |    **MIT**    |  No   |  No   |  Apache 2.0  |
-| **Single Binary**           |    **Yes**    |  --   |  --   | No (2+ svcs) |
-| **Built-in Token Vault**    |    **Yes**    |  Yes  |  No   |      No      |
-| **Price (Self-Hosted)**     |    **$0**     |  N/A  |  N/A  |      $0      |
 
 ---
 
@@ -112,12 +84,11 @@ SharkAuth isn't just an API. It's a full-featured management system.
 
 We're moving fast. Here is what's coming next:
 
-- **Zero-Code Auth Proxy**: A high-performance gateway to inject identity headers into any upstream app without changing a line of code.
 - **Visual Flow Builder**: Drag-and-drop customization for complex auth flows (MFA → SSO → Org Select).
 - **Advanced Revocation Patterns**: Pattern-based bulk revocation (e.g., "kill all tokens for this agent template").
 - **Shark Email**: Email delivery service for magic links, MFA codes, and notifications.
-- **Shark Agentic**: Management layer designed for AI agents to integrate your app with SharkAuth. No human coding, inspired by InsForge.
 - **Shark Cloud**: Managed global infrastructure with plans ranging from free to enterprise.
+- **Postgres Mode**: Optional external DB support for planet-scale deployments.
 
 ---
 

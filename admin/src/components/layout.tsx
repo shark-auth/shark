@@ -53,8 +53,9 @@ export const NAV = [
     { id: 'impersonation', label: 'Impersonation', icon: 'Impersonate', ph: 9 },
     { id: 'compliance', label: 'Exporting logs', icon: 'Compliance' },
     { id: 'migrations', label: 'Migrations', icon: 'Migration', ph: 9 },
-    { id: 'email', label: 'Email', icon: 'Mail' },
+    { id: 'emails', label: 'Emails', icon: 'Mail' },
     { id: 'branding', label: 'Branding', icon: 'Brand' },
+
   ]},
 ];
 

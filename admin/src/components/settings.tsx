@@ -296,6 +296,10 @@ export function Settings() {
         api_key:           config.email?.api_key || '',
         from:              config.email?.from || '',
         from_name:         config.email?.from_name || '',
+        host:              config.email?.host || '',
+        port:              config.email?.port || '',
+        username:          config.email?.username || '',
+        password:          config.email?.password || '',
         previous_provider: config.email?.previous_provider || '',
       },
       audit: {
@@ -333,6 +337,10 @@ export function Settings() {
         api_key:           config.email?.api_key || '',
         from:              config.email?.from || '',
         from_name:         config.email?.from_name || '',
+        host:              config.email?.host || '',
+        port:              config.email?.port || '',
+        username:          config.email?.username || '',
+        password:          config.email?.password || '',
         previous_provider: config.email?.previous_provider || '',
       },
       audit:  {
@@ -563,11 +571,33 @@ export function Settings() {
               </Field>
               <Field label={form.email.provider === 'smtp' ? 'SMTP password' : 'API key'} hint={emailKeySet ? 'Set · paste a new value to replace' : 'Required for non-dev providers'}>
                 <MaskedInput
-                  value={form.email.api_key}
+                  value={form.email.provider === 'smtp' ? form.email.password : form.email.api_key}
                   hasValue={emailKeySet}
-                  onChange={(v) => set('email.api_key', v)}
+                  onChange={(v) => {
+                    if (form.email.provider === 'smtp') {
+                      set('email.password', v);
+                    } else {
+                      set('email.api_key', v);
+                    }
+                  }}
                   placeholder={emailKeySet ? '••••••••' : 're_••• or smtp password'}/>
               </Field>
+              {form.email.provider === 'smtp' && (
+                <>
+                  <Field label="SMTP Host">
+                    <Input value={form.email.host} mono
+                      onChange={(v) => set('email.host', v)} placeholder="smtp.example.com"/>
+                  </Field>
+                  <Field label="SMTP Port">
+                    <Input value={form.email.port} mono
+                      onChange={(v) => set('email.port', v)} placeholder="587"/>
+                  </Field>
+                  <Field label="SMTP Username">
+                    <Input value={form.email.username} mono
+                      onChange={(v) => set('email.username', v)} placeholder="user@example.com"/>
+                  </Field>
+                </>
+              )}
               <Field label="From address" hint="Verified sender · must match your provider domain">
                 <Input value={form.email.from} mono
                   onChange={(v) => set('email.from', v)} placeholder="auth@example.com"/>

@@ -121,9 +121,9 @@ func isHTTPSURL(u string) bool {
 	return true
 }
 
-// auditVault centralises audit logging for vault ops. Best-effort â€” audit
+// auditVault centralises audit logging for vault ops. Best-effort — audit
 // failures never block the request path.
-func (s *Server) auditVault(r *http.Request, actorType, action, targetType, targetID string, meta map[string]any) {
+func (s *Server) auditVault(r *http.Request, actorType, action, targetType, targetID string, meta map[string]any, explicitActorID ...string) {
 	if s.AuditLogger == nil {
 		return
 	}
@@ -137,6 +137,9 @@ func (s *Server) auditVault(r *http.Request, actorType, action, targetType, targ
 	actor := mw.GetUserID(r.Context())
 	if actor == "" {
 		actor = actorID(r.Context())
+	}
+	if len(explicitActorID) > 0 && explicitActorID[0] != "" {
+		actor = explicitActorID[0]
 	}
 	_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
 		ActorID:    actor,
@@ -779,7 +782,8 @@ func (s *Server) handleVaultGetToken(w http.ResponseWriter, r *http.Request) {
 			"provider_id":   provider.ID,
 			"provider_name": provider.Name,
 			"user_id":       tok.UserID,
-		})
+		},
+		tok.AgentID)
 
 	resp := map[string]any{
 		"access_token": access,
@@ -1144,7 +1148,19 @@ func (s *Server) handleAdminDeleteVaultConnection(w http.ResponseWriter, r *http
 	}
 
 	// Layer 5 cascade: revoke tokens of all agents that ever fetched from this vault connection.
-	agents, _ := s.Store.ListAgentsByVaultRetrieval(r.Context(), connID)
+	agents, err := s.Store.ListAgentsByVaultRetrieval(r.Context(), connID)
+	if err != nil {
+		// Log but don't fail the primary disconnect operation.
+		// Failure to cascade is a secondary integrity issue.
+		if s.AuditLogger != nil {
+			_ = s.AuditLogger.Log(r.Context(), &storage.AuditLog{
+				Action: "vault.disconnect_cascade.failure",
+				Status: "error",
+				Metadata: fmt.Sprintf(`{"error": %q, "connection_id": %q}`, err.Error(), connID),
+			})
+		}
+	}
+
 	revokedAgentIDs := make([]string, 0, len(agents))
 	totalRevoked := int64(0)
 	for _, ag := range agents {

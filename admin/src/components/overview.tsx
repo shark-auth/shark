@@ -249,8 +249,13 @@ export function Overview({ setPage } = {}) {
   }
 
   function mapTrends(t) {
-    const signupCounts = Array.isArray(t?.signups_by_day) ? t.signups_by_day.map(p => p.count) : null;
-    return { users: signupCounts, sessions: null, mfa: null, failed: null, keys: null };
+    return {
+      users: Array.isArray(t?.signups_by_day) ? t.signups_by_day.map(p => p.count) : null,
+      sessions: Array.isArray(t?.sessions_by_day) ? t.sessions_by_day.map(p => p.count) : null,
+      mfa: Array.isArray(t?.mfa_by_day) ? t.mfa_by_day.map(p => p.count) : null,
+      failed: Array.isArray(t?.failed_by_day) ? t.failed_by_day.map(p => p.count) : null,
+      keys: Array.isArray(t?.api_keys_by_day) ? t.api_keys_by_day.map(p => p.count) : null,
+    };
   }
 
   const AUTH_COLORS = { password: '#e4e4e4', oauth: '#888', passkey: '#555', magic_link: '#3a3a3a' };
@@ -324,13 +329,13 @@ export function Overview({ setPage } = {}) {
   const ACTIVE_AGENT_TOOLTIP = 'Active = issued ≥1 token in the last 7 days, not deactivated';
 
   const metrics = [
-    { k: 'Users', v: stats.users.total.toLocaleString(), sub: `+${stats.users.delta7d} last 7d`, trend: trends.users },
-    { k: 'Active sessions', v: stats.sessions.active.toLocaleString(), sub: '—', trend: trends.sessions },
-    { k: 'MFA adoption', v: Math.round(stats.mfa.pct * 100) + '%', sub: `${stats.mfa.enabled.toLocaleString()} enabled`, trend: trends.mfa },
-    { k: 'Failed logins 24h', v: stats.failedLogins24h.count, sub: '—', trend: trends.failed, good: true },
-    { k: 'API keys active', v: stats.apiKeys.count, sub: `${stats.apiKeys.expiring} expiring`, trend: trends.keys, warn: true },
-    { k: 'Total agents', v: agentTotal, sub: `+${agentThisWeek === null ? '…' : agentThisWeek === 'err' ? '?' : agentThisWeek} this week`, trend: agentSparkline, agent: true, agentLoading: agentMetricsLoading, agentError: agentMetricsError },
-    { k: 'Active agents', v: agentActive, sub: null, trend: agentSparkline, agent: true, agentLoading: agentMetricsLoading, agentError: agentMetricsError, activeTooltip: ACTIVE_AGENT_TOOLTIP },
+    { k: 'Users', v: stats.users.total.toLocaleString(), sub: `+${stats.users.delta7d} last 7d`, trend: trends.users, path: 'users' },
+    { k: 'Active sessions', v: stats.sessions.active.toLocaleString(), sub: '—', trend: trends.sessions, path: 'sessions' },
+    { k: 'MFA adoption', v: Math.round(stats.mfa.pct * 100) + '%', sub: `${stats.mfa.enabled.toLocaleString()} enabled`, trend: trends.mfa, path: 'users', extra: { mfa: 'true' } },
+    { k: 'Failed logins 24h', v: stats.failedLogins24h.count, sub: '—', trend: trends.failed, good: true, path: 'audit', extra: { status: 'failure', action: 'user.login' } },
+    { k: 'API keys active', v: stats.apiKeys.count, sub: `${stats.apiKeys.expiring} expiring`, trend: trends.keys, warn: true, path: 'keys' },
+    { k: 'Total agents', v: agentTotal, sub: `+${agentThisWeek === null ? '…' : agentThisWeek === 'err' ? '?' : agentThisWeek} this week`, trend: agentSparkline, agent: true, agentLoading: agentMetricsLoading, agentError: agentMetricsError, path: 'agents' },
+    { k: 'Active agents', v: agentActive, sub: null, trend: agentSparkline, agent: true, agentLoading: agentMetricsLoading, agentError: agentMetricsError, activeTooltip: ACTIVE_AGENT_TOOLTIP, path: 'agents' },
   ];
 
   function SkeletonBox({ w, h, style }) {
@@ -406,7 +411,7 @@ export function Overview({ setPage } = {}) {
               else if (m.v !== null && m.v !== undefined && m.v !== 'err') displayVal = typeof m.v === 'number' ? m.v.toLocaleString() : m.v;
 
               return (
-                <div key={i} className="card" style={{ padding: 12 }}>
+                <div key={i} className="card hoverable" style={{ padding: 12, cursor: 'pointer' }} onClick={() => setPage(m.path, m.extra)}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
                       {m.k}
@@ -439,8 +444,23 @@ export function Overview({ setPage } = {}) {
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, marginTop: 20 }}>
           <div className="card">
             <div className="card-header">Auth method · 30d</div>
-            <div className="card-body">
-              {authData ? <Donut segments={authData} size={100} thickness={16}/> : <div className="faint" style={{ padding: 24, textAlign: 'center' }}>No sessions yet.</div>}
+            <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '20px 24px' }}>
+              {authData ? (
+                <>
+                  <Donut segments={authData} size={100} thickness={16}/>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                    {authData.map((s, i) => (
+                      <div key={i} className="row" style={{ gap: 8, fontSize: 12 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.color }}/>
+                        <span style={{ flex: 1, color: 'var(--fg-muted)' }}>{s.label}</span>
+                        <span className="mono" style={{ fontWeight: 600 }}>{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="faint" style={{ flex: 1, textAlign: 'center', padding: 24 }}>No sessions yet.</div>
+              )}
             </div>
           </div>
 
@@ -669,45 +689,40 @@ function AgentSecurityCard({ setPage }) {
   );
 }
 
-function AgentSelfRegisterCard({ setPage }) {
-  const navigate = () => {
-    if (typeof setPage === 'function') setPage('agents');
-  };
-  return (
-    <div
-      onClick={navigate}
-      style={{
-        borderBottom: '1px solid var(--hairline)',
-        padding: '12px 14px',
-        cursor: 'pointer',
-        transition: 'background 0.1s',
-      }}
-      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
-      onMouseLeave={e => e.currentTarget.style.background = ''}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-muted)', fontWeight: 600 }}>
-          Agent Self-Registration
-        </span>
-        <span className="chip agent sm">moat</span>
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.55 }}>
-        Agents can verify and register themselves autonomously via <span className="mono" style={{ fontSize: 11 }}>POST /oauth/register</span> (RFC 7591 DCR). No human in the loop — your product provisions agent identities at scale.
-      </div>
-      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--fg-dim)', fontFamily: 'var(--font-mono)' }}>
-        View agents →
-      </div>
-    </div>
-  );
-}
-
 function AttentionPanel({ healthRaw, stats, onRefresh, setPage }) {
+  const alerts = [];
+  if (stats.failedLogins24h.count > 10) {
+    alerts.push({ text: `High failed logins: ${stats.failedLogins24h.count} (24h)`, type: 'warn', path: 'audit', extra: { status: 'failure', action: 'user.login' } });
+  }
+  if (stats.apiKeys.expiring > 0) {
+    alerts.push({ text: `${stats.apiKeys.expiring} API keys expiring soon`, type: 'info', path: 'keys' });
+  }
+  if (healthRaw?.db?.status !== 'healthy' && healthRaw?.db?.status) {
+    alerts.push({ text: `Database status: ${healthRaw.db.status}`, type: 'danger' });
+  }
+
   return (
     <div className="card" style={{ alignSelf: 'start', position: 'sticky', top: 0 }}>
       <div className="card-header">Attention <button className="btn ghost sm" onClick={onRefresh}><Icon.Refresh width={11}/></button></div>
       <AgentSecurityCard setPage={setPage}/>
-      <AgentSelfRegisterCard setPage={setPage}/>
-      <div style={{ padding: 12, fontSize: 13, color: 'var(--fg-muted)' }}>All systems healthy.</div>
+      <div className="col" style={{ gap: 1 }}>
+        {alerts.length === 0 ? (
+          <div style={{ padding: 12, fontSize: 13, color: 'var(--fg-muted)' }}>All systems healthy.</div>
+        ) : alerts.map((a, i) => (
+          <div key={i} 
+               onClick={() => a.path && setPage(a.path, a.extra)}
+               style={{ 
+                 padding: '10px 14px', 
+                 fontSize: 13, 
+                 borderBottom: '1px solid var(--hairline)',
+                 background: a.type === 'danger' ? 'var(--danger-bg)' : a.type === 'warn' ? 'var(--warn-bg)' : 'transparent',
+                 color: a.type === 'danger' ? 'var(--danger)' : a.type === 'warn' ? 'var(--warn)' : 'var(--fg)',
+                 cursor: a.path ? 'pointer' : 'default',
+               }}>
+            {a.text}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

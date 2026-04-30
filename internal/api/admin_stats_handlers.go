@@ -123,9 +123,13 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 // Default 30d (max 90d) keeps the result set small enough to serialize
 // without streaming.
 type trendsResponse struct {
-	Days           int               `json:"days"`
-	SignupsByDay   []dayBucket       `json:"signups_by_day"`
-	AuthMethods    []methodBreakdown `json:"auth_methods"`
+	Days            int               `json:"days"`
+	SignupsByDay    []dayBucket       `json:"signups_by_day"`
+	SessionsByDay   []dayBucket       `json:"sessions_by_day"`
+	MFAByDay        []dayBucket       `json:"mfa_by_day"`
+	FailedByDay     []dayBucket       `json:"failed_by_day"`
+	APIKeysByDay    []dayBucket       `json:"api_keys_by_day"`
+	AuthMethods     []methodBreakdown `json:"auth_methods"`
 }
 
 type dayBucket struct {
@@ -152,13 +156,32 @@ func (s *Server) handleAdminStatsTrends(w http.ResponseWriter, r *http.Request) 
 
 	since := time.Now().UTC().AddDate(0, 0, -days)
 
-	daily, err := s.Store.GroupUsersCreatedByDay(ctx, days)
+	// Fetch all daily trends
+	signups, err := s.Store.GroupUsersCreatedByDay(ctx, days)
 	if err != nil {
 		internal(w, err)
 		return
 	}
-	// Fill zero-count days so the frontend chart is continuous without extra logic.
-	filled := fillDailyGaps(daily, days)
+	sessions, err := s.Store.GroupSessionsCreatedByDay(ctx, days)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	mfa, err := s.Store.GroupMFAEnabledByDay(ctx, days)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	failed, err := s.Store.GroupFailedLoginsByDay(ctx, days)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+	apiKeys, err := s.Store.GroupAPIKeysCreatedByDay(ctx, days)
+	if err != nil {
+		internal(w, err)
+		return
+	}
 
 	methods, err := s.Store.GroupSessionsByAuthMethodSince(ctx, since)
 	if err != nil {
@@ -166,7 +189,14 @@ func (s *Server) handleAdminStatsTrends(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp := trendsResponse{Days: days, SignupsByDay: filled}
+	resp := trendsResponse{
+		Days:            days,
+		SignupsByDay:    fillDailyGaps(signups, days),
+		SessionsByDay:   fillDailyGaps(sessions, days),
+		MFAByDay:        fillDailyGaps(mfa, days),
+		FailedByDay:     fillDailyGaps(failed, days),
+		APIKeysByDay:    fillDailyGaps(apiKeys, days),
+	}
 	for _, m := range methods {
 		resp.AuthMethods = append(resp.AuthMethods, methodBreakdown{
 			AuthMethod: m.AuthMethod,

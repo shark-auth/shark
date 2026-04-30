@@ -5,6 +5,7 @@ import { Login } from './login'
 import { Sidebar, TopBar } from './layout'
 import { Overview } from './overview'
 import { Users } from './users'
+import { MailEditor } from './MailEditor'
 import { Sessions } from './sessions'
 import { Organizations } from './organizations'
 import { Agents } from './agents_manage'
@@ -192,6 +193,7 @@ export function App() {
     migrations: Migrations,
     email: EmailSettings,
     branding: Branding,
+    emails: MailEditor,
     'get-started': GetStarted,
     'delegation-chains': DelegationChains,
   }[page] || Overview;

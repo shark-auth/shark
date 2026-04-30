@@ -78,7 +78,7 @@ func (h *SSOHandlers) CreateConnection(w http.ResponseWriter, r *http.Request) {
 func (h *SSOHandlers) ListConnections(w http.ResponseWriter, r *http.Request) {
 	conns, err := h.manager.ListConnections(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to list SSO connections"})
 		return
 	}
 	writeJSON(w, http.StatusOK, conns)
@@ -342,3 +342,4 @@ func (h *SSOHandlers) SSOAutoRoute(w http.ResponseWriter, r *http.Request) {
 func ssoPathParam(r *http.Request, name string) string {
 	return chi.URLParam(r, name)
 }
+

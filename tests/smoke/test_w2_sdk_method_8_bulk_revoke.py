@@ -30,6 +30,7 @@ def _register_agent(agents: AgentsClient, name: str) -> dict:
         app_id="smoke_w2m8",
         name=name,
         scopes=["read"],
+        token_endpoint_auth_method="client_secret_post",
     )
 
 

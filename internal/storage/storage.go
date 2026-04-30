@@ -59,6 +59,10 @@ type Store interface {
 	CountSSOIdentitiesByConnection(ctx context.Context) (map[string]int, error)
 	GroupSessionsByAuthMethodSince(ctx context.Context, since time.Time) ([]MethodCount, error)
 	GroupUsersCreatedByDay(ctx context.Context, days int) ([]DayCount, error)
+	GroupSessionsCreatedByDay(ctx context.Context, days int) ([]DayCount, error)
+	GroupMFAEnabledByDay(ctx context.Context, days int) ([]DayCount, error)
+	GroupFailedLoginsByDay(ctx context.Context, days int) ([]DayCount, error)
+	GroupAPIKeysCreatedByDay(ctx context.Context, days int) ([]DayCount, error)
 
 	// DevEmails (dev-mode inbox)
 	CreateDevEmail(ctx context.Context, e *DevEmail) error

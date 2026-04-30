@@ -51,17 +51,6 @@ def server():
     if not os.path.exists(BIN_PATH):
         pytest.fail(f"Binary {BIN_PATH} not found. Build it first: go build -o {BIN_PATH} ./cmd/shark")
 
-    # Apply migrations before starting the server
-    conn = sqlite3.connect(DB_PATH)
-    migrations_dir = "cmd/shark/migrations"
-    if os.path.isdir(migrations_dir):
-        migration_files = [f for f in os.listdir(migrations_dir) if f.endswith(".sql")]
-        migration_files.sort(key=lambda x: int(x.split("_")[0]))
-        for migration_file in migration_files:
-            with open(os.path.join(migrations_dir, migration_file), "r") as f:
-                conn.executescript(f.read())
-    conn.close()
-
     # W17: no yaml file, no --config flag. Server boots from defaults; first boot
     # auto-generates server.secret + JWT signing key + admin API key (printed to stdout).
     with open("server.log", "w") as log:

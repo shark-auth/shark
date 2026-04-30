@@ -1711,8 +1711,117 @@ func (s *SQLiteStore) GroupUsersCreatedByDay(ctx context.Context, days int) ([]D
 		}
 		out = append(out, d)
 	}
-	return out, rows.Err()
-}
+	return out, nil
+	}
+
+	func (s *SQLiteStore) GroupSessionsCreatedByDay(ctx context.Context, days int) ([]DayCount, error) {
+	if days <= 0 {
+		days = 30
+	}
+	since := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT substr(created_at, 1, 10) AS day, COUNT(*) FROM sessions
+		 WHERE created_at >= ?
+		 GROUP BY day ORDER BY day ASC`,
+		since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []DayCount
+	for rows.Next() {
+		var d DayCount
+		if err := rows.Scan(&d.Date, &d.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, nil
+	}
+
+	func (s *SQLiteStore) GroupMFAEnabledByDay(ctx context.Context, days int) ([]DayCount, error) {
+	if days <= 0 {
+		days = 30
+	}
+	since := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT substr(mfa_verified_at, 1, 10) AS day, COUNT(*) FROM users
+		 WHERE mfa_verified_at IS NOT NULL AND mfa_verified_at >= ?
+		 GROUP BY day ORDER BY day ASC`,
+		since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []DayCount
+	for rows.Next() {
+		var d DayCount
+		if err := rows.Scan(&d.Date, &d.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, nil
+	}
+
+	func (s *SQLiteStore) GroupFailedLoginsByDay(ctx context.Context, days int) ([]DayCount, error) {
+	if days <= 0 {
+		days = 30
+	}
+	since := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT substr(created_at, 1, 10) AS day, COUNT(*) FROM audit_logs
+		 WHERE action = 'user.login' AND status = 'failure' AND created_at >= ?
+		 GROUP BY day ORDER BY day ASC`,
+		since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []DayCount
+	for rows.Next() {
+		var d DayCount
+		if err := rows.Scan(&d.Date, &d.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, nil
+	}
+
+	func (s *SQLiteStore) GroupAPIKeysCreatedByDay(ctx context.Context, days int) ([]DayCount, error) {
+	if days <= 0 {
+		days = 30
+	}
+	since := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT substr(created_at, 1, 10) AS day, COUNT(*) FROM api_keys
+		 WHERE created_at >= ?
+		 GROUP BY day ORDER BY day ASC`,
+		since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []DayCount
+	for rows.Next() {
+		var d DayCount
+		if err := rows.Scan(&d.Date, &d.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, nil
+	}
+
 
 // --- Admin session listing ---
 

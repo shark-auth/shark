@@ -37,7 +37,8 @@ function normalizeSession(s) {
   const authMethod = s.auth_method || s.method || '';
   const mfaRaw = s.mfa_verified != null ? s.mfa_verified : (s.mfa_passed != null ? s.mfa_passed : s.mfa);
   // mfa: keep as string type name if present, coerce bool true → 'verified', false → null
-  const mfa = mfaRaw === true ? 'verified' : (mfaRaw === false ? null : mfaRaw || null);
+  // Fix: explicitly check for true to avoid 'true' being returned for users without MFA
+  const mfa = (mfaRaw === true || mfaRaw === 'true') ? 'verified' : null;
   // timestamps: API returns ISO strings, mock returns ms epoch numbers
   const toMs = (v) => {
     if (!v) return 0;

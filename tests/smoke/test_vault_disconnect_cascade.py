@@ -115,34 +115,37 @@ def test_vault_disconnect_cascade(admin_key, db_conn):
     cur.execute(
         """
         INSERT INTO agents
-            (id, name, client_id, secret_hash, redirect_uris, grant_types,
-             scopes, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            (id, name, description, client_id, client_secret_hash, client_type,
+             auth_method, jwks, jwks_uri, redirect_uris, grant_types,
+             response_types, scopes, token_lifetime, metadata, logo_uri,
+             homepage_uri, active, created_by, created_at, updated_at)
+        VALUES (?, ?, '', ?, ?, 'confidential', 'client_secret_basic', NULL, NULL,
+                '[]', '["client_credentials"]', '["code"]', ?, 900, '{}', NULL,
+                NULL, 1, NULL, ?, ?)
         """,
         (
             agent_id,
             f"cascade_agent_{agent_id}",
             client_id,
             "sha256_placeholder",
-            "[]",
-            '["client_credentials"]',
             "vault:read",
             now,
             now,
         ),
     )
 
-    # 4. Insert a live oauth_token for that agent (token_type=access_token)
+    # 4. Insert a live oauth_token for that agent (token_type=access)
     cur.execute(
         """
         INSERT INTO oauth_tokens
-            (id, client_id, token_type, token_hash, jti,
+            (id, client_id, agent_id, token_type, token_hash, jti,
              scope, expires_at, created_at)
-        VALUES (?, ?, 'access_token', ?, ?, 'vault:read', ?, ?)
+        VALUES (?, ?, ?, 'access', ?, ?, 'vault:read', ?, ?)
         """,
         (
             token_id,
             client_id,
+            agent_id,
             f"hash_{token_id}",
             f"jti_{token_id}",
             future,
@@ -192,28 +195,34 @@ def test_vault_disconnect_cascade(admin_key, db_conn):
     )
 
     # 7. Verify vault.disconnect_cascade audit event was emitted
-    audit_resp = requests.get(
-        f"{BASE_URL}/api/v1/admin/audit-logs",
-        headers=headers,
-        params={"action": "vault.disconnect_cascade", "limit": 10},
-        timeout=10,
-    )
-    assert audit_resp.status_code == 200, (
-        f"Audit log query failed: {audit_resp.status_code} {audit_resp.text}"
-    )
+    # Background audit logger may take a moment to persist — retry loop.
+    cascade_events = []
+    for _ in range(10):
+        audit_resp = requests.get(
+            f"{BASE_URL}/api/v1/admin/audit-logs",
+            headers=headers,
+            params={"action": "vault.disconnect_cascade", "limit": 10},
+            timeout=10,
+        )
+        assert audit_resp.status_code == 200, (
+            f"Audit log query failed: {audit_resp.status_code} {audit_resp.text}"
+        )
 
-    audit_body = audit_resp.json()
-    # Response is either a list or {data: [...]}
-    if isinstance(audit_body, list):
-        events = audit_body
-    else:
-        events = audit_body.get("data", audit_body.get("items", audit_body.get("audit_logs", [])))
+        audit_body = audit_resp.json()
+        if isinstance(audit_body, list):
+            events = audit_body
+        else:
+            events = audit_body.get("data", audit_body.get("items", audit_body.get("audit_logs", [])))
 
-    cascade_events = [
-        e for e in events
-        if e.get("action") == "vault.disconnect_cascade"
-        and e.get("target_id") == conn_id
-    ]
+        cascade_events = [
+            e for e in events
+            if e.get("action") == "vault.disconnect_cascade"
+            and e.get("target_id") == conn_id
+        ]
+        if cascade_events:
+            break
+        time.sleep(0.5)
+
     assert len(cascade_events) >= 1, (
         f"No vault.disconnect_cascade audit event found for connection {conn_id}. "
         f"Events returned: {events}"

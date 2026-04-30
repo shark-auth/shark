@@ -154,6 +154,9 @@ a { color: inherit; text-decoration: none; }
 }
 .card-body { padding: 12px; }
 
+.card.hoverable { transition: background 60ms ease-out, border-color 60ms ease-out; }
+.card.hoverable:hover { background: var(--surface-2); border-color: var(--hairline-bright); }
+
 /* table */
 .tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
 .tbl th {

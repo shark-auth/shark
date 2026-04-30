@@ -604,6 +604,10 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 			APIKey           *string `json:"api_key"`
 			From             *string `json:"from"`
 			FromName         *string `json:"from_name"`
+			Host             *string `json:"host"`
+			Port             *int    `json:"port"`
+			Username         *string `json:"username"`
+			Password         *string `json:"password"`
 			PreviousProvider *string `json:"previous_provider"`
 		} `json:"email"`
 		Server struct {
@@ -678,6 +682,22 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 	}
 	if req.Email.FromName != nil {
 		cfg.Email.FromName = *req.Email.FromName
+	}
+	if req.Email.Host != nil {
+		cfg.Email.Host = *req.Email.Host
+		cfg.SMTP.Host = *req.Email.Host
+	}
+	if req.Email.Port != nil {
+		cfg.Email.Port = *req.Email.Port
+		cfg.SMTP.Port = *req.Email.Port
+	}
+	if req.Email.Username != nil {
+		cfg.Email.Username = *req.Email.Username
+		cfg.SMTP.Username = *req.Email.Username
+	}
+	if req.Email.Password != nil && *req.Email.Password != "********" {
+		cfg.Email.Password = *req.Email.Password
+		cfg.SMTP.Password = *req.Email.Password
 	}
 	if req.Server.CORSRelaxed != nil {
 		cfg.Server.CORSRelaxed = *req.Server.CORSRelaxed

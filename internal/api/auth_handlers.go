@@ -131,6 +131,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	type signupResult struct {
 		user *storage.User
 		sess *storage.Session
+		aud  *storage.AuditLog
 	}
 
 	res, err, _ := s.SignupSF.Do(req.Email, func() (interface{}, error) {
@@ -185,7 +186,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 
-		return &signupResult{user: user, sess: sess}, nil
+		return &signupResult{user: user, sess: sess, aud: aud}, nil
 	})
 
 	if err != nil {
@@ -207,6 +208,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	result := res.(*signupResult)
 	user := result.user
 	sess := result.sess
+	aud := result.aud
 
 	// Phase 6 F3: fire auth flow hook.
 	if s.runAuthFlow(w, r, storage.AuthFlowTriggerSignup, user, req.Password) {
@@ -215,6 +217,11 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 
 	// Set session cookie
 	s.SessionManager.SetSessionCookie(w, sess.ID)
+
+	// Real-time emission
+	if s.WebhookDispatcher != nil {
+		_ = s.WebhookDispatcher.Emit(r.Context(), "system.audit_log", aud)
+	}
 
 	s.emit(r.Context(), storage.WebhookEventUserCreated, userPublic(user))
 
@@ -324,7 +331,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if MFA is enabled
+	// Check if MFA is enabled. When enabled, the session is initially
+	// "MFA pending" (mfaPassed=false) until the second factor is verified.
+	// When disabled, we transition straight to active (mfaPassed=true).
+	// NOTE: Fixed regression where 'true' was returned even when user HAD MFA
+	// but hadn't verified it yet in this request.
 	mfaPassed := !user.MFAEnabled
 
 	// Prepare session

@@ -421,8 +421,9 @@ export function GetStarted({ setPage }) {
           {track === 'human'
             ? 'Add human sign-in to your product: email, social, magic link, SSO, passkeys.'
             : track === 'both'
-            ? 'Full integration: agent DPoP-bound tokens + human sign-in. Agent track first â€” it is the moat.'
+            ? 'Full integration: agent DPoP-bound tokens + human sign-in. Agent track first.'
             : 'Auth for products that give customers their own agents. Get to first DPoP-bound token in 5 minutes.'}
+
         </div>
 
         {/* â”€â”€ Section accordion body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}

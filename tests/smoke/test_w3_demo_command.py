@@ -11,7 +11,7 @@ def test_demo_delegation_with_trace_runs(server, admin_key):
          "--base-url", "http://localhost:8080",
          "--admin-key", admin_key,
          "--plain", "--fast"],
-        capture_output=True, text=True, timeout=60,
+        capture_output=True, text=True, encoding="utf-8", timeout=60,
     )
     assert res.returncode == 0, f"stdout: {res.stdout}\nstderr: {res.stderr}"
     out = res.stdout
