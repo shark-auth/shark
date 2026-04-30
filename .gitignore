@@ -120,6 +120,7 @@ shark.new
 playbook/
 gstack/
 .impeccable.md
+docs/
 
 # Agent temporary files
 /home/raul/.gemini/tmp/shark/
