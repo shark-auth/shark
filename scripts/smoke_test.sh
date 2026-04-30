@@ -1,4 +1,6 @@
 #!/bin/bash
+# DEPRECATED: This script is legacy. Use 'pytest tests/smoke/' for all new development and CI.
+# -----------------------------------------------------------------------------------------
 # Shark smoke test — cross-platform (Windows/MSYS2 + Linux + macOS).
 set -u
 

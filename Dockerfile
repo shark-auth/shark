@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y ca-certificates tzdata wget && rm -rf /
 WORKDIR /app
 
 # Copy the precompiled binary
-COPY shark sharkauth
+ARG BINARY=shark
+COPY ${BINARY} sharkauth
 RUN chmod +x sharkauth
 
 RUN mkdir -p /app/data

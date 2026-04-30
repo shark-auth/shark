@@ -140,9 +140,9 @@ No email config needed. Magic links print to stdout. In-memory database. Perfect
 ### Integrate (TypeScript)
 
 ```typescript
-import { createSharkClient } from "@sharkauth/js";
+import { SharkClient } from "@sharkauth/sdk";
 
-const shark = createSharkClient({ baseUrl: "http://localhost:8080" });
+const shark = new SharkClient({ baseUrl: "http://localhost:8080" });
 
 // Sign in with DPoP protection
 const session = await shark.signIn({ email: "alice@co.io", password: "..." });

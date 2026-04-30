@@ -1,0 +1,52 @@
+name: Publish TypeScript SDK
+
+on:
+  push:
+    tags:
+      - 'ts-sdk-v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm --filter @sharkauth/sdk build
+
+      - name: Test
+        run: pnpm --filter @sharkauth/sdk test
+
+      - name: Publish to npm
+        run: pnpm --filter @sharkauth/sdk publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify post-publish availability
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#ts-sdk-v}"
+          echo "Verifying @sharkauth/sdk@${VERSION} on npm…"
+          for i in 1 2 3; do
+            if npm view "@sharkauth/sdk@${VERSION}" version 2>/dev/null | grep -q "${VERSION}"; then
+              echo "@sharkauth/sdk@${VERSION} available on npm."
+              exit 0
+            fi
+            echo "Attempt ${i}/3 failed — sleeping 30s…"
+            sleep 30
+          done
+          echo "ERROR: @sharkauth/sdk@${VERSION} not yet visible on npm after 3 attempts."
+          exit 1

@@ -1,4 +1,4 @@
-﻿//go:build e2e
+//go:build e2e
 
 // Package e2e contains the Phase 3 golden-path integration tests (GP1â€“GP10).
 // Run with: go test -race -count=1 -tags=e2e ./internal/testutil/e2e/...
@@ -6,6 +6,8 @@
 // Build tag rationale: these tests are slower (real DB + real JWT RSA ops) and
 // are excluded from plain `go test ./...` runs to keep the unit-test loop fast.
 // `make verify` runs them explicitly (Â§5.5).
+// Package e2e implements end-to-end tests for the shark server.
+// Deprecated: use tests/smoke/ suite for E2E testing.
 package e2e
 
 import (

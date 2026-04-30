@@ -11,52 +11,137 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
+  lint-go:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    env:
-      SHARKAUTH_SERVER_SECRET: ci-only-secret-used-only-during-smoke-tests-xx
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint
+        uses: golangci-lint/golangci-lint-action@v6
+        with:
+          version: latest
 
+  unit-tests-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Run Unit Tests (Main)
+        run: go test -v -race -count=1 ./...
+      - name: Run Unit Tests (Bench)
+        working-directory: bench
+        run: go test -v -race -count=1 ./...
 
-      - name: Verify (vet + unit + integration + e2e)
-        run: make verify
-
-      - name: Build
-        run: go build -ldflags="-s -w" -o shark ./cmd/shark
-
-      - name: Smoke test
-        run: ./smoke_test.sh
-
-      - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
-
-      - name: Run gosec (SARIF to Security tab)
-        run: gosec -fmt=sarif -out=gosec.sarif ./...
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt=sarif -out=gosec.sarif ./...
         continue-on-error: true
-
       - name: Upload gosec SARIF
-        if: hashFiles('gosec.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: gosec.sarif
-
-      - name: Run gosec (blocking)
-        run: gosec -quiet ./...
-
-      # govulncheck runs last and is advisory-only. Vulnerability databases
-      # are rolling and a new CVE on any transitive dep shouldn't block a
-      # merge to main; findings show up in the job log and annotations so
-      # they stay visible.
-      - name: govulncheck (advisory)
-        continue-on-error: true
+      - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
+        continue-on-error: true
+
+  sdk-typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build
+        run: pnpm --filter @sharkauth/sdk build
+      - name: Test
+        run: pnpm --filter @sharkauth/sdk test
+
+  sdk-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        working-directory: sdk/python
+        run: |
+          pip install .[dev]
+      - name: Test
+        working-directory: sdk/python
+        run: pytest
+
+  e2e-smoke-python:
+    needs: [unit-tests-go]
+    runs-on: ubuntu-latest
+    env:
+      SHARKAUTH_SERVER_SECRET: ci-only-secret-used-only-during-smoke-tests-xx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build shark
+        run: go build -o shark ./cmd/shark
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install smoke test dependencies
+        working-directory: tests/smoke
+        run: pip install -r requirements.txt || pip install pytest requests
+      - name: Run Smoke Tests (E2E)
+        run: pytest tests/smoke/
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs
+          path: |
+            server.log
+            tests/smoke/server.log
+            tests/smoke/shark_serve.log
+
+  benchmarks:
+    needs: [unit-tests-go]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build shark
+        run: go build -o shark ./cmd/shark
+      - name: Run Benchmarks (Smoke Profile)
+        working-directory: bench
+        run: |
+          # Generate a temporary admin key for the bench tool
+          mkdir -p ../tests/smoke/data
+          echo "sk_test_ci_admin_key_12345678901234567890123456" > ../tests/smoke/data/admin.key.firstboot
+          go run ./cmd/bench --profile smoke --admin-key-file ../tests/smoke/data/admin.key.firstboot

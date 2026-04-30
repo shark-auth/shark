@@ -19,8 +19,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install build tools
-        run: pip install build twine
+      - name: Install dependencies
+        run: pip install .[dev] build twine
+
+      - name: Run tests
+        run: pytest
 
       - name: Build wheel + sdist
         run: python -m build
