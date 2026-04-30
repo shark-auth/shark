@@ -33,11 +33,11 @@ export function MailEditor() {
     try {
       const [tResp, bResp] = await Promise.all([
         API.get('/admin/email-templates'),
-        API.get('/admin/branding/global')
+        API.get('/admin/branding')
       ])
       const list = tResp.data || []
       setTemplates(list)
-      setBranding(bResp)
+      setBranding(bResp.branding || {})
       if (selected !== 'appearance' && selected !== 'redirects') {
         const row = list.find(t => t.id === selected)
         if (row) setDraft(row)
@@ -53,10 +53,11 @@ export function MailEditor() {
   }, [])
 
   React.useEffect(() => {
-    if (selected === 'appearance' || selected === 'redirects' || !selected) return
+    if (selected === 'redirects' || !selected) return
+    const previewTarget = selected === 'appearance' ? 'magic_link' : selected
     const h = setTimeout(async () => {
       try {
-        const r = await API.post(`/admin/email-templates/${selected}/preview`, {})
+        const r = await API.post(`/admin/email-templates/${previewTarget}/preview`, {})
         setPreviewHTML(r.html || '')
       } catch (err) {
         console.warn('email preview render failed', err)
@@ -92,7 +93,7 @@ export function MailEditor() {
 
   const updateBranding = async (fields: any) => {
     try {
-      await API.patch('/admin/branding/global', fields)
+      await API.patch('/admin/branding', fields)
       setBranding((b: any) => ({ ...b, ...fields }))
       toast.success('Appearance updated')
     } catch (e: any) {
@@ -317,7 +318,7 @@ export function MailEditor() {
         flexDirection: 'column',
         position: 'relative'
       }}>
-        {selected !== 'appearance' && selected !== 'redirects' ? (
+        {selected !== 'redirects' ? (
           <>
             <div style={{ 
               position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', 
@@ -327,8 +328,12 @@ export function MailEditor() {
             }}>
               <button className={`btn sm ${previewMode === 'light' ? 'primary' : 'ghost'}`} style={{ height: 24, fontSize: 10 }} onClick={() => setPreviewMode('light')}>LIGHT</button>
               <button className={`btn sm ${previewMode === 'dark' ? 'primary' : 'ghost'}`} style={{ height: 24, fontSize: 10 }} onClick={() => setPreviewMode('dark')}>DARK</button>
-              <div style={{ width: 1, background: 'var(--hairline-strong)', margin: '4px 2px' }}/>
-              <button className="btn ghost sm" style={{ height: 24, fontSize: 10 }} onClick={sendTest} disabled={sending}>{sending ? '...' : 'SEND TEST'}</button>
+              {selected !== 'appearance' && (
+                <>
+                  <div style={{ width: 1, background: 'var(--hairline-strong)', margin: '4px 2px' }}/>
+                  <button className="btn ghost sm" style={{ height: 24, fontSize: 10 }} onClick={sendTest} disabled={sending}>{sending ? '...' : 'SEND TEST'}</button>
+                </>
+              )}
             </div>
             <div style={{ 
               flex: 1, 
@@ -347,9 +352,6 @@ export function MailEditor() {
               }}>
                 <iframe title="Preview" srcDoc={finalPreviewHTML} style={{ width: '100%', height: '100%', border: 'none' }} sandbox="allow-same-origin" />
               </div>
-            </div>
-            <div style={{ padding: '16px', borderTop: '1px solid var(--hairline)', fontSize: 11, color: 'var(--fg-dim)', textAlign: 'center' }}>
-              High-fidelity rendering via Shark Engine · 60fps refresh
             </div>
           </>
         ) : (
@@ -384,6 +386,23 @@ function NavButton({ id, label, icon, active, onClick }) {
 }
 
 function AppearanceEditor({ branding, uploading, onUpload, onRemove, onUpdate }) {
+  const [draft, setDraft] = React.useState(branding)
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    setDraft(branding)
+  }, [branding])
+
+  const patch = (fields: any) => {
+    setDraft((d: any) => ({ ...d, ...fields }))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    await onUpdate(draft)
+    setSaving(false)
+  }
+
   return (
     <div className="col" style={{ gap: 24 }}>
       <Field label="Brand Logo" sub="Displayed at the top of all transactional emails">
@@ -399,7 +418,12 @@ function AppearanceEditor({ branding, uploading, onUpload, onRemove, onUpdate })
             <div className="row" style={{ gap: 8 }}>
               <button className="btn sm primary" style={{ position: 'relative' }} disabled={uploading}>
                 {uploading ? 'Uploading...' : 'Upload new'}
-                <input type="file" accept="image/*" style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} onChange={e => e.target.files?.[0] && onUpload(e.target.files[0])} />
+                <input type="file" accept="image/*" style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} onChange={e => {
+                  if (e.target.files?.[0]) {
+                    onUpload(e.target.files[0])
+                  }
+                  e.target.value = ''
+                }} />
               </button>
               {branding.logo_url && <button className="btn sm ghost" onClick={onRemove}>Remove</button>}
             </div>
@@ -409,16 +433,19 @@ function AppearanceEditor({ branding, uploading, onUpload, onRemove, onUpdate })
       </Field>
       <Field label="Primary Brand Color" sub="Used for action buttons and header highlights">
         <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-          <input type="color" style={{ width: 40, height: 40, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} value={branding.primary_color || '#000000'} onChange={e => onUpdate({ primary_color: e.target.value })} />
-          <input type="text" className="mono" style={{ ...inputStyle, width: 120 }} value={branding.primary_color || ''} onChange={e => onUpdate({ primary_color: e.target.value })} />
+          <input type="color" style={{ width: 40, height: 40, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} value={draft.primary_color || '#000000'} onChange={e => patch({ primary_color: e.target.value })} />
+          <input type="text" className="mono" style={{ ...inputStyle, width: 120 }} value={draft.primary_color || ''} onChange={e => patch({ primary_color: e.target.value })} />
         </div>
       </Field>
       <Field label="Email From Name" sub="The sender name displayed in user inboxes">
-        <input type="text" style={inputStyle} value={branding.email_from_name || ''} placeholder="SharkAuth" onChange={e => onUpdate({ email_from_name: e.target.value })} />
+        <input type="text" style={inputStyle} value={draft.email_from_name || ''} placeholder="SharkAuth" onChange={e => patch({ email_from_name: e.target.value })} />
       </Field>
       <Field label="Email From Address" sub="The reply-to and sender address">
-        <input type="email" style={inputStyle} value={branding.email_from_address || ''} placeholder="noreply@sharkauth.com" onChange={e => onUpdate({ email_from_address: e.target.value })} />
+        <input type="email" style={inputStyle} value={draft.email_from_address || ''} placeholder="noreply@sharkauth.com" onChange={e => patch({ email_from_address: e.target.value })} />
       </Field>
+      <button className="btn primary sm" style={{ alignSelf: 'flex-start', height: 32, padding: '0 20px' }} onClick={handleSave} disabled={saving}>
+        {saving ? 'Saving...' : 'Save Appearance'}
+      </button>
     </div>
   )
 }
@@ -459,16 +486,16 @@ function EmailRedirectConfig() {
   return (
     <div className="col" style={{ gap: 24 }}>
       <Field label="Verify Email Redirect" sub="Users land here after confirming their email">
-        <input type="url" style={inputStyle} value={cfg.verify_redirect_url} placeholder="https://app.com/verified" onChange={e => setCfg(c => ({ ...c, verify_redirect_url: e.target.value }))} />
+        <input type="url" style={inputStyle} value={cfg.verify_redirect_url} placeholder="https://app.com/verified" onChange={e => setCfg(c => ({ ...c, verify_redirect_url: e.target.value }))} spellCheck={false} />
       </Field>
       <Field label="Password Reset Redirect" sub="Where users are sent to choose a new password">
-        <input type="url" style={inputStyle} value={cfg.reset_redirect_url} placeholder="https://app.com/reset-password" onChange={e => setCfg(c => ({ ...c, reset_redirect_url: e.target.value }))} />
+        <input type="url" style={inputStyle} value={cfg.reset_redirect_url} placeholder="https://app.com/reset-password" onChange={e => setCfg(c => ({ ...c, reset_redirect_url: e.target.value }))} spellCheck={false} />
       </Field>
       <Field label="Magic Link Redirect" sub="Default landing page after magic link sign-in">
-        <input type="url" style={inputStyle} value={cfg.magic_link_redirect_url} placeholder="https://app.com/dashboard" onChange={e => setCfg(c => ({ ...c, magic_link_redirect_url: e.target.value }))} />
+        <input type="url" style={inputStyle} value={cfg.magic_link_redirect_url} placeholder="https://app.com/dashboard" onChange={e => setCfg(c => ({ ...c, magic_link_redirect_url: e.target.value }))} spellCheck={false} />
       </Field>
       <Field label="Organization Invite Redirect" sub="Where users accept their team invitations">
-        <input type="url" style={inputStyle} value={cfg.invite_redirect_url} placeholder="https://app.com/invites" onChange={e => setCfg(c => ({ ...c, invite_redirect_url: e.target.value }))} />
+        <input type="url" style={inputStyle} value={cfg.invite_redirect_url} placeholder="https://app.com/invites" onChange={e => setCfg(c => ({ ...c, invite_redirect_url: e.target.value }))} spellCheck={false} />
       </Field>
       <button className="btn primary sm" style={{ alignSelf: 'flex-start', height: 32, padding: '0 20px' }} onClick={save} disabled={saving}>
         {saving ? 'Saving...' : 'Save Redirects'}

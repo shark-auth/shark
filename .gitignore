@@ -4,6 +4,8 @@
 /sharkauth.exe
 /sharkauth
 bin/
+/shark_optimized.exe
+/shark
 
 # Database
 data/
@@ -50,6 +52,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .venv/
+.venv_smoke/
 .pytest_cache/
 
 # Test
@@ -66,13 +69,6 @@ resp.json
 failure_report.txt
 smoke_full.exit
 gosec_results.json
-
-# Assets / Media (clutter)
-*.png
-*.svg
-*.mp4
-*.jpg
-*.jpeg
 
 # Temp
 *.txt
@@ -124,3 +120,12 @@ shark.new
 playbook/
 gstack/
 .impeccable.md
+
+# Agent temporary files
+/home/raul/.gemini/tmp/shark/
+
+# Additional ignores for scripts and assets
+replace_strings.py
+slurp
+sharky.svg
+sharkyrectangular.svg

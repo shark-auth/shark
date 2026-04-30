@@ -392,8 +392,8 @@ export function Overview({ setPage } = {}) {
           >nvm</button>
         </div>
       )}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, padding: 16, flex: 1, overflow: 'auto' }}>
-      <div className="col" style={{ minWidth: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16, flex: 1, overflow: 'auto' }}>
+      <div className="col" style={{ minWidth: 0, gap: 16 }}>
         {showHero ? <MagicalMomentTile onGo={goConfigureProxy} onSkip={dismissHero}/> : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
             {statsLoading ? Array.from({ length: 7 }).map((_, i) => (
@@ -441,7 +441,7 @@ export function Overview({ setPage } = {}) {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, marginTop: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16 }}>
           <div className="card">
             <div className="card-header">Auth method · 30d</div>
             <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '20px 24px' }}>
@@ -464,23 +464,23 @@ export function Overview({ setPage } = {}) {
             </div>
           </div>
 
-          <div className="card" style={{ minWidth: 0 }}>
-            <div className="card-header">
+          <div className="card" style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="card-header" style={{ flexShrink: 0 }}>
               <span>Recent activity</span>
               <span className={"chip " + (streamStatus === 'live' ? 'success' : streamStatus === 'reconnecting' ? 'warn' : 'faint')}>
                 <span className={"dot " + (streamStatus === 'live' ? 'success pulse' : streamStatus === 'reconnecting' ? 'warn pulse' : 'faint')}/> {streamStatus}
               </span>
             </div>
-            <div style={{ overflow: 'hidden' }}>
-              <table className="tbl" style={{ fontSize: 13 }}>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <table className="tbl" style={{ fontSize: 13, width: '100%', tableLayout: 'fixed' }}>
                 <tbody>
                   {activity.length === 0 ? <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center' }}><div className="faint">Waiting for events…</div></td></tr> : activity.map((a, i) => (
                     <tr key={i}>
                       <td style={{ width: 60, color: 'var(--fg-muted)', fontSize: 11 }}>{relTime(a.t)}</td>
                       <td style={{ width: 80 }}><span className="chip sm">{a.actor}</span></td>
-                      <td className="mono" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</td>
+                      <td className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</td>
                       <td className="mono">{a.action}</td>
-                      <td className="mono faint" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.meta}</td>
+                      <td className="mono faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.meta}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -489,20 +489,23 @@ export function Overview({ setPage } = {}) {
           </div>
         </div>
 
-        <div className="card" style={{ marginTop: 16 }}>
-          <div className="card-header">System health</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
-            {(health || []).map((x, i) => (
-              <div key={i} style={{ padding: 12, borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none', borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none' }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--fg-muted)' }}>{x.k}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>{x.v}</div>
-                <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{x.sub}</div>
-              </div>
-            ))}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 16 }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="card-header" style={{ flexShrink: 0 }}>System health</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', flex: 1 }}>
+              {(health || []).map((x, i) => (
+                <div key={i} style={{ padding: 12, borderRight: i % 4 !== 3 ? '1px solid var(--hairline)' : 'none', borderTop: i >= 4 ? '1px solid var(--hairline)' : 'none' }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--fg-muted)' }}>{x.k}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>{x.v}</div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{x.sub}</div>
+                </div>
+              ))}
+            </div>
           </div>
+          <AttentionPanel healthRaw={healthRaw} stats={stats} onRefresh={refreshHealth} setPage={setPage}/>
+          <UpdateProberPanel healthRaw={healthRaw} />
         </div>
       </div>
-      <AttentionPanel healthRaw={healthRaw} stats={stats} onRefresh={refreshHealth} setPage={setPage}/>
     </div>
     </div>
   );
@@ -702,26 +705,154 @@ function AttentionPanel({ healthRaw, stats, onRefresh, setPage }) {
   }
 
   return (
-    <div className="card" style={{ alignSelf: 'start', position: 'sticky', top: 0 }}>
-      <div className="card-header">Attention <button className="btn ghost sm" onClick={onRefresh}><Icon.Refresh width={11}/></button></div>
-      <AgentSecurityCard setPage={setPage}/>
-      <div className="col" style={{ gap: 1 }}>
-        {alerts.length === 0 ? (
-          <div style={{ padding: 12, fontSize: 13, color: 'var(--fg-muted)' }}>All systems healthy.</div>
-        ) : alerts.map((a, i) => (
-          <div key={i} 
-               onClick={() => a.path && setPage(a.path, a.extra)}
-               style={{ 
-                 padding: '10px 14px', 
-                 fontSize: 13, 
-                 borderBottom: '1px solid var(--hairline)',
-                 background: a.type === 'danger' ? 'var(--danger-bg)' : a.type === 'warn' ? 'var(--warn-bg)' : 'transparent',
-                 color: a.type === 'danger' ? 'var(--danger)' : a.type === 'warn' ? 'var(--warn)' : 'var(--fg)',
-                 cursor: a.path ? 'pointer' : 'default',
-               }}>
-            {a.text}
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="card-header" style={{ flexShrink: 0 }}>
+        Attention 
+        <button className="btn ghost sm" onClick={onRefresh}><Icon.Refresh width={11}/></button>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="col" style={{ gap: 1 }}>
+          {alerts.length === 0 ? (
+            <div style={{ padding: 12, fontSize: 13, color: 'var(--fg-muted)' }}>All systems healthy.</div>
+          ) : alerts.map((a, i) => (
+            <div key={i} 
+                 onClick={() => a.path && setPage(a.path, a.extra)}
+                 style={{ 
+                   padding: '10px 14px', 
+                   fontSize: 13, 
+                   borderBottom: '1px solid var(--hairline)',
+                   background: a.type === 'danger' ? 'var(--danger-bg)' : a.type === 'warn' ? 'var(--warn-bg)' : 'transparent',
+                   color: a.type === 'danger' ? 'var(--danger)' : a.type === 'warn' ? 'var(--warn)' : 'var(--fg)',
+                   cursor: a.path ? 'pointer' : 'default',
+                 }}>
+              {a.text}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpdateProberPanel({ healthRaw }) {
+  const [status, setStatus] = React.useState('checking');
+  const [latestVersion, setLatestVersion] = React.useState(null);
+  const activeVersion = healthRaw?.version || 'unknown';
+
+  React.useEffect(() => {
+    if (!healthRaw) return;
+    
+    // We only check if we actually have an active version to compare against, 
+    // and it's not a generic dev string, though we can still check registry anyway.
+    let cancelled = false;
+    
+    fetch('https://api.github.com/repos/sharkauth/shark/releases/latest')
+      .then(res => {
+        if (!res.ok) throw new Error('Registry unavailable');
+        return res.json();
+      })
+      .then(data => {
+        if (cancelled) return;
+        const latest = data.tag_name ? data.tag_name.replace(/^v/, '') : null;
+        if (!latest) throw new Error('No latest release');
+        
+        setLatestVersion(latest);
+        
+        const active = activeVersion.replace(/^v/, '');
+        
+        if (active === 'unknown' || active === '0.0.0-dev') {
+          // Local/dev builds
+          setStatus('unknown');
+          return;
+        }
+
+        // Basic semver compare (Major.Minor.Patch)
+        const [aMaj, aMin, aPat] = active.split('.').map(n => parseInt(n, 10) || 0);
+        const [lMaj, lMin, lPat] = latest.split('.').map(n => parseInt(n, 10) || 0);
+
+        if (lMaj > aMaj) {
+          setStatus('outdated'); // Major update
+        } else if (lMaj === aMaj && lMin > aMin) {
+          setStatus('update-available'); // Minor update
+        } else if (lMaj === aMaj && lMin === aMin && lPat > aPat) {
+          setStatus('update-available'); // Patch update
+        } else {
+          setStatus('up-to-date');
+        }
+      })
+      .catch(err => {
+        if (!cancelled) setStatus('error');
+      });
+
+    return () => { cancelled = true; };
+  }, [healthRaw, activeVersion]);
+
+  // Derive visual properties based on status
+  let dotColor = 'var(--fg-muted)';
+  let chipClass = 'faint';
+  let chipText = 'Checking';
+  let statusText = 'Querying release registry...';
+
+  if (status === 'up-to-date') {
+    dotColor = 'var(--success)';
+    chipClass = 'success';
+    chipText = 'Up to date';
+    statusText = `Binary is current (v${activeVersion})`;
+  } else if (status === 'update-available') {
+    dotColor = 'var(--warn)';
+    chipClass = 'warn';
+    chipText = 'Update';
+    statusText = `v${latestVersion} is available`;
+  } else if (status === 'outdated') {
+    dotColor = 'var(--danger)';
+    chipClass = 'danger';
+    chipText = 'Outdated';
+    statusText = `Critical update v${latestVersion} available`;
+  } else if (status === 'error') {
+    dotColor = 'var(--warn)';
+    chipClass = 'warn';
+    chipText = 'Offline';
+    statusText = 'Could not reach registry';
+  } else if (status === 'unknown') {
+    dotColor = 'var(--fg-dim)';
+    chipClass = 'faint';
+    chipText = 'Dev build';
+    statusText = `Unreleased binary (v${activeVersion})`;
+  }
+
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="card-header" style={{ flexShrink: 0 }}>
+        <span>Update prober</span>
+        <span className={`chip ${chipClass}`}>
+           {chipText}
+        </span>
+      </div>
+      <div style={{ flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+        <div className="col" style={{ gap: 2 }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--fg-dim)', letterSpacing: '0.05em' }}>Current binary</div>
+          <div className="row" style={{ alignItems: 'baseline', gap: 6 }}>
+            <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+              {activeVersion !== 'unknown' ? `v${activeVersion}` : '—'}
+            </span>
+            {healthRaw?.commit && healthRaw.commit !== 'none' && (
+              <span className="mono faint" style={{ fontSize: 10 }}>({healthRaw.commit})</span>
+            )}
           </div>
-        ))}
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--fg-dim)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ flexShrink: 0, width: 6, height: 6, borderRadius: '50%', background: dotColor }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {statusText}
+          </span>
+        </div>
+
+        {healthRaw?.build_date && healthRaw.build_date !== 'unknown' && (
+          <div style={{ fontSize: 10, color: 'var(--fg-faint)', borderTop: '1px solid var(--hairline)', paddingTop: 8, marginTop: 2 }}>
+            Build date: {new Date(healthRaw.build_date).toLocaleDateString()}
+          </div>
+        )}
       </div>
     </div>
   );

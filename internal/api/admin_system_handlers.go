@@ -22,6 +22,8 @@ import (
 type adminHealthResponse struct {
 	Status         string            `json:"status"`
 	Version        string            `json:"version"`
+	Commit         string            `json:"commit"`
+	BuildDate      string            `json:"build_date"`
 	UptimeSeconds  int64             `json:"uptime_seconds"`
 	DB             healthDBSection   `json:"db"`
 	Migrations     healthMigrations  `json:"migrations"`
@@ -340,6 +342,8 @@ func (s *Server) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	resp := adminHealthResponse{
 		Status:        "ok",
 		Version:       resolveAppVersion(),
+		Commit:        version.Commit,
+		BuildDate:     version.BuildTime,
 		UptimeSeconds: int64(time.Since(s.startTime).Seconds()),
 		DB: healthDBSection{
 			Driver: "sqlite",
