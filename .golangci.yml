@@ -1,0 +1,35 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - revive
+    - gosec
+
+linters-settings:
+  govet:
+    check-shadowing: true
+  gosec:
+    excludes:
+      - G104 # errcheck handles this better usually
+  revive:
+    rules:
+      - name: package-comments
+        disabled: true
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - internal/testutil/e2e
+    - sdk/

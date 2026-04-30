@@ -184,7 +184,7 @@ describe("VaultClient.disconnect()", () => {
     const vault = new VaultClient({ authUrl: "https://auth.example", accessToken: "sk_live_x", adminKey: "sk_live_x" });
     const result = await vault.disconnect("conn_abc");
     const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    expect(url).toContain("/api/v1/vault/connections/conn_abc");
+    expect(url).toContain("/api/v1/admin/vault/connections/conn_abc");
     expect((init as RequestInit).method).toBe("DELETE");
     expect(result.connection_id).toBe("conn_abc");
   });
@@ -198,7 +198,7 @@ describe("VaultClient.listConnections()", () => {
     const vault = new VaultClient({ authUrl: "https://auth.example", accessToken: "sk_live_x" });
     const result = await vault.listConnections();
     const [url] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
-    expect(url).toContain("/api/v1/vault/connections");
+    expect(url).toContain("/api/v1/admin/vault/connections");
     expect(result.total).toBe(1);
   });
 });
