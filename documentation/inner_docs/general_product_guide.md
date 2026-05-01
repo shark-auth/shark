@@ -334,7 +334,7 @@ Every primitive has a screen. Every screen has a working revoke button.
 
 
 
-**Competitive cost comparison at 100K MAU:** Clerk ~$1,020/mo. Auth0 ~$2,500/mo. SharkAuth Cloud: $19/mo. SharkAuth Self-Hosted: $0.
+**Competitive cost comparison at 100K MAU:** Clerk ~$1,020/mo. Auth0 ~$2,500/mo. SharkAuth Cloud: $49/mo for Pro (10K MAU, 100 agents). SharkAuth Self-Hosted: $0.
 
 ---
 
