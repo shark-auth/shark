@@ -22,7 +22,6 @@ export function MailEditor() {
   const [draft, setDraft] = React.useState<any>(null)
   const [branding, setBranding] = React.useState<any>(null)
   const [previewHTML, setPreviewHTML] = React.useState('')
-  const [previewMode, setPreviewMode] = React.useState<'light' | 'dark'>('light')
   const [saving, setSaving] = React.useState(false)
   const [sending, setSending] = React.useState(false)
   const [resetting, setResetting] = React.useState(false)
@@ -198,7 +197,7 @@ export function MailEditor() {
 
   const finalPreviewHTML = `
     <style>
-      :root { color-scheme: ${previewMode}; }
+      :root { color-scheme: light; }
       body { transition: background 0.2s ease-in-out; }
     </style>
     ${previewHTML}
@@ -326,13 +325,8 @@ export function MailEditor() {
               padding: 4, borderRadius: 6, border: '1px solid var(--hairline-strong)',
               boxShadow: 'var(--shadow-lg)'
             }}>
-              <button className={`btn sm ${previewMode === 'light' ? 'primary' : 'ghost'}`} style={{ height: 24, fontSize: 10 }} onClick={() => setPreviewMode('light')}>LIGHT</button>
-              <button className={`btn sm ${previewMode === 'dark' ? 'primary' : 'ghost'}`} style={{ height: 24, fontSize: 10 }} onClick={() => setPreviewMode('dark')}>DARK</button>
               {selected !== 'appearance' && (
-                <>
-                  <div style={{ width: 1, background: 'var(--hairline-strong)', margin: '4px 2px' }}/>
-                  <button className="btn ghost sm" style={{ height: 24, fontSize: 10 }} onClick={sendTest} disabled={sending}>{sending ? '...' : 'SEND TEST'}</button>
-                </>
+                <button className="btn ghost sm" style={{ height: 24, fontSize: 10 }} onClick={sendTest} disabled={sending}>{sending ? '...' : 'SEND TEST'}</button>
               )}
             </div>
             <div style={{ 
@@ -346,7 +340,7 @@ export function MailEditor() {
             }}>
               <div style={{ 
                 width: '100%', maxWidth: 600, height: '90%', 
-                background: previewMode === 'light' ? '#fff' : '#000',
+                background: '#fff',
                 borderRadius: 8, overflow: 'hidden', boxShadow: '0 40px 80px rgba(0,0,0,0.5)',
                 border: '1px solid var(--hairline-bright)', transition: 'all 0.3s ease-in-out'
               }}>
