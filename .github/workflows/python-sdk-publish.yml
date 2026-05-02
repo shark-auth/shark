@@ -1,9 +1,11 @@
 name: Publish Python SDK
 
 on:
-  push:
-    tags:
-      - 'py-sdk-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Python SDK version to publish, for example 0.1.0
+        required: true
 
 jobs:
   publish:
@@ -22,7 +24,7 @@ jobs:
       - name: Verify tag matches pyproject version
         shell: bash
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#py-sdk-v}"
+          TAG_VERSION="${{ inputs.version }}"
           PROJECT_VERSION="$(python - <<'PY'
 import tomllib
 with open("pyproject.toml", "rb") as f:
@@ -55,7 +57,7 @@ PY
       - name: Verify post-publish availability
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#py-sdk-v}"
+          VERSION="${{ inputs.version }}"
           echo "Verifying shark-auth==${VERSION} on PyPI…"
           for i in 1 2 3; do
             if pip install --index-url https://pypi.org/simple/ "shark-auth==${VERSION}" --dry-run 2>&1 | grep -q "Would install"; then
