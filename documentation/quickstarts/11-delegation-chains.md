@@ -33,7 +33,7 @@ Configure in the dashboard under **Agents → [agent name] → Delegation Polici
 
 **screenshot: delegation canvas with 3-hop chain — Alice → Agent A → Agent B — with may_act policy editor visible**
 
-Or via the admin API (see [`/documentation/api/agents.md#may-act`](/documentation/api/agents.md)).
+Or via the admin API (see [`Delegation and agents`](../sdk/delegation-and-agents.md)).
 
 ## 3-hop chain walkthrough
 
@@ -260,5 +260,5 @@ The SDK raises `OAuthError` with `error="invalid_scope"`.
 - `DelegationTokenClaims.parse()` → `claims.py` — no signature verification, pure `act` chain walk
 - `decode_agent_token()` → `tokens.py` — full signature verification via JWKS
 - `OAuthClient.token_exchange()` → `oauth.py` — RFC 8693 exchange with DPoP binding
-- API reference: [`/documentation/api/oauth.md#token-exchange`](/documentation/api/oauth.md)
+- API reference: [`../sdk/token-exchange.md`](../sdk/token-exchange.md)
 - Five-layer revocation: [10 — Five-Layer Revocation](./10-five-layer-revocation.md)

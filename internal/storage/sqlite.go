@@ -35,14 +35,17 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	writer.SetConnMaxLifetime(time.Hour)
 
 	// 2. Initialize Reader Pool (Concurrent Readers)
-	reader, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		writer.Close()
-		return nil, fmt.Errorf("opening reader sqlite: %w", err)
+	reader := writer
+	if !isInMemoryDSN(dsn) {
+		reader, err = sql.Open("sqlite", dsn)
+		if err != nil {
+			writer.Close()
+			return nil, fmt.Errorf("opening reader sqlite: %w", err)
+		}
+		reader.SetMaxOpenConns(25)
+		reader.SetMaxIdleConns(5)
+		reader.SetConnMaxLifetime(time.Hour)
 	}
-	reader.SetMaxOpenConns(25)
-	reader.SetMaxIdleConns(5)
-	reader.SetConnMaxLifetime(time.Hour)
 
 	// 3. Configure Pragmas on both pools
 	configure := func(db *sql.DB, label string) error {
@@ -68,13 +71,19 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		reader.Close()
 		return nil, err
 	}
-	if err := configure(reader, "reader"); err != nil {
-		writer.Close()
-		reader.Close()
-		return nil, err
+	if reader != writer {
+		if err := configure(reader, "reader"); err != nil {
+			writer.Close()
+			reader.Close()
+			return nil, err
+		}
 	}
 
 	return &SQLiteStore{writer: writer, reader: reader, path: dsn}, nil
+}
+
+func isInMemoryDSN(dsn string) bool {
+	return dsn == ":memory:" || strings.HasPrefix(dsn, "file::memory:") || strings.Contains(dsn, "mode=memory")
 }
 
 // DB returns the underlying writer *sql.DB for compatibility with migrations.
@@ -90,6 +99,9 @@ func (s *SQLiteStore) DBPath() string {
 // Close closes both database connection pools.
 func (s *SQLiteStore) Close() error {
 	errW := s.writer.Close()
+	if s.reader == s.writer {
+		return errW
+	}
 	errR := s.reader.Close()
 	if errW != nil {
 		return errW
@@ -1712,9 +1724,9 @@ func (s *SQLiteStore) GroupUsersCreatedByDay(ctx context.Context, days int) ([]D
 		out = append(out, d)
 	}
 	return out, nil
-	}
+}
 
-	func (s *SQLiteStore) GroupSessionsCreatedByDay(ctx context.Context, days int) ([]DayCount, error) {
+func (s *SQLiteStore) GroupSessionsCreatedByDay(ctx context.Context, days int) ([]DayCount, error) {
 	if days <= 0 {
 		days = 30
 	}
@@ -1739,9 +1751,9 @@ func (s *SQLiteStore) GroupUsersCreatedByDay(ctx context.Context, days int) ([]D
 		out = append(out, d)
 	}
 	return out, nil
-	}
+}
 
-	func (s *SQLiteStore) GroupMFAEnabledByDay(ctx context.Context, days int) ([]DayCount, error) {
+func (s *SQLiteStore) GroupMFAEnabledByDay(ctx context.Context, days int) ([]DayCount, error) {
 	if days <= 0 {
 		days = 30
 	}
@@ -1766,9 +1778,9 @@ func (s *SQLiteStore) GroupUsersCreatedByDay(ctx context.Context, days int) ([]D
 		out = append(out, d)
 	}
 	return out, nil
-	}
+}
 
-	func (s *SQLiteStore) GroupFailedLoginsByDay(ctx context.Context, days int) ([]DayCount, error) {
+func (s *SQLiteStore) GroupFailedLoginsByDay(ctx context.Context, days int) ([]DayCount, error) {
 	if days <= 0 {
 		days = 30
 	}
@@ -1793,9 +1805,9 @@ func (s *SQLiteStore) GroupUsersCreatedByDay(ctx context.Context, days int) ([]D
 		out = append(out, d)
 	}
 	return out, nil
-	}
+}
 
-	func (s *SQLiteStore) GroupAPIKeysCreatedByDay(ctx context.Context, days int) ([]DayCount, error) {
+func (s *SQLiteStore) GroupAPIKeysCreatedByDay(ctx context.Context, days int) ([]DayCount, error) {
 	if days <= 0 {
 		days = 30
 	}
@@ -1820,8 +1832,7 @@ func (s *SQLiteStore) GroupUsersCreatedByDay(ctx context.Context, days int) ([]D
 		out = append(out, d)
 	}
 	return out, nil
-	}
-
+}
 
 // --- Admin session listing ---
 

@@ -112,7 +112,7 @@ Event types relevant to compliance:
 | `user.agents_revoked` | Cascade: all user's agents and tokens revoked |
 | `agent.dpop_key_rotated` | DPoP key rotation — old key tokens gone |
 
-See [`/documentation/api/audit-logs.md`](/documentation/api/audit-logs.md) for the full event schema.
+See [`../sdk/audit-logs.md`](../sdk/audit-logs.md) for the full event schema.
 
 ## Step 5 — Webhook to security tooling
 
@@ -179,5 +179,5 @@ for tok in tokens:
 
 - Full revocation model (all 5 layers): [10 — Five-Layer Revocation](./10-five-layer-revocation.md)
 - Delegation chains in depth: [11 — Delegation Chains](./11-delegation-chains.md)
-- Audit log API reference: [`/documentation/api/audit-logs.md`](/documentation/api/audit-logs.md)
-- Webhook API reference: [`/documentation/api/webhooks.md`](/documentation/api/webhooks.md)
+- Audit log API reference: [`../sdk/audit-logs.md`](../sdk/audit-logs.md)
+- Webhook API reference: [`../sdk/webhooks.md`](../sdk/webhooks.md)

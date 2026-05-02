@@ -14,6 +14,7 @@ else
 endif
 
 PKG     := ./cmd/shark
+GO_PACKAGES := ./cmd/... ./internal/... ./tests/...
 LDFLAGS := -s -w -X github.com/shark-auth/shark/internal/version.Version=0.1.0 -X "github.com/shark-auth/shark/internal/version.Commit=$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)" -X "github.com/shark-auth/shark/internal/version.BuildTime=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)"
 GOFLAGS := -trimpath -ldflags="$(LDFLAGS)"
 
@@ -40,17 +41,17 @@ binary-build: frontend-build
 build: binary-build
 
 test:
-	go test -race -count=1 ./...
+	go test -race -count=1 $(GO_PACKAGES)
 
 # Basic verification
 verify:
-	go vet ./...
-	go test -count=1 ./...
+	go vet $(GO_PACKAGES)
+	go test -count=1 $(GO_PACKAGES)
 
 # Full verification for release/CI
 # Integration and E2E tests are often skipped on local Windows dev unless specifically requested
 verify-full: verify
-	go test -race -count=1 -tags=integration ./...
+	go test -race -count=1 -tags=integration $(GO_PACKAGES)
 	$(if $(filter Windows_NT,$(OS)),,@go test -race -count=1 -tags=e2e ./internal/testutil/e2e/...)
 
 lint:

@@ -1,12 +1,12 @@
-﻿package api
+package api
 
 import (
 	"encoding/json"
 	"net/http"
 	"time"
 
-	"github.com/shark-auth/shark/internal/auth"
 	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/auth"
 )
 
 // mfaEnrollResponse is the response body for POST /api/v1/auth/mfa/enroll.
@@ -96,6 +96,7 @@ func (s *Server) handleMFAEnroll(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	s.evictSessionAuth(mw.GetSessionID(r.Context()))
 
 	writeJSON(w, http.StatusOK, mfaEnrollResponse{
 		Secret: secret,
@@ -275,6 +276,7 @@ func (s *Server) handleMFAChallenge(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	s.evictSessionAuth(sessionID)
 
 	writeJSON(w, http.StatusOK, userToResponse(user))
 }
@@ -336,6 +338,7 @@ func (s *Server) handleMFARecovery(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	s.evictSessionAuth(sessionID)
 
 	user, err := s.Store.GetUserByID(r.Context(), userID)
 	if err != nil {

@@ -210,7 +210,7 @@ class SharkClaw(App):
                                            client_id=pm["client_id"], client_secret=pm["client_secret"],
                                            scope="vault:read market:analyze data:fetch")
         
-        jkt = pm_token.access_token_claims.get("cnf", {}).get("jkt", "N/A")
+        jkt = pm_token.raw.get("cnf", {}).get("jkt", "N/A")
         self.append_chat("PM", f"Root DPoP Token acquired. [dim]jkt:{jkt[:12]}...[/]", "magenta")
         await asyncio.sleep(2)
         
@@ -218,11 +218,13 @@ class SharkClaw(App):
         self.update_agent_status(fetcher["id"][:4], "Thinking...")
         self.append_chat("PM", "Exchanging for leaf-token (depth=2). Lineage: [dim]PM[/]", "magenta")
         
-        fetcher_token = oauth.token_exchange(subject_token=pm_token.access_token, dpop_prover=prover,
-                                            scope="data:fetch",
-                                            client_id=fetcher["client_id"], client_secret=fetcher["client_secret"])
+        fetcher_token = oauth.token_exchange(
+            subject_token=pm_token.access_token,
+            dpop_prover=prover,
+            scope="data:fetch",
+        )
         
-        act = fetcher_token.access_token_claims.get("act", {})
+        act = fetcher_token.raw.get("act", {})
         self.append_chat("AUTH", f"Lineage secured: [dim]{json.dumps(act)}[/]", "green")
         await asyncio.sleep(2)
 

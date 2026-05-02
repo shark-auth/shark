@@ -75,8 +75,12 @@ an Agent glyph and a suggestion to register via `/agents/new` or
 
 ## CLI Parity
 
-```
-shark agent list --mine
+There is no CLI command for per-user agent listing. Use the dashboard or the SDK:
+
+```python
+from shark_auth import UsersClient
+users = UsersClient("https://auth.example.com", token="sk_live_...")
+result = users.list_agents("usr_abc", filter="created")
 ```
 
 ## Notes

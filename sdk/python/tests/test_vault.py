@@ -4,75 +4,83 @@ from __future__ import annotations
 
 import pytest
 from pytest_httpserver import HTTPServer
+from werkzeug.wrappers import Response
 
-from shark_auth import VaultClient
+from shark_auth import DPoPProver, VaultClient
 from shark_auth.errors import VaultError
 
 
-def test_get_fresh_token_happy_path(httpserver: HTTPServer):
-    httpserver.expect_request(
-        "/admin/vault/connections/conn_abc/token",
-        method="GET",
-        headers={"Authorization": "Bearer agent_token_xyz"},
-    ).respond_with_json(
-        {
-            "access_token": "ya29.fresh",
-            "expires_at": 1999999999,
-            "provider": "google",
-            "scopes": ["gmail.readonly", "calendar.events"],
-        }
-    )
+def _prover() -> DPoPProver:
+    return DPoPProver.generate()
 
-    vault = VaultClient(auth_url=httpserver.url_for(""), access_token="agent_token_xyz")
-    tok = vault.get_fresh_token("conn_abc")
+
+def test_fetch_token_happy_path(httpserver: HTTPServer):
+    def handler(request):
+        assert request.headers["Authorization"] == "DPoP agent_token_xyz"
+        assert request.headers["DPoP"]
+        return Response(
+            '{"access_token":"ya29.fresh","token_type":"Bearer","expires_at":"2026-05-01T00:00:00Z","provider":"google"}',
+            mimetype="application/json",
+        )
+
+    httpserver.expect_request(
+        "/api/v1/vault/google/token", method="GET"
+    ).respond_with_handler(handler)
+
+    vault = VaultClient(auth_url=httpserver.url_for(""))
+    tok = vault.fetch_token(
+        provider="google", bearer_token="agent_token_xyz", prover=_prover()
+    )
     assert tok.access_token == "ya29.fresh"
-    assert tok.expires_at == 1999999999
+    assert tok.token_type == "Bearer"
+    assert tok.expires_at == "2026-05-01T00:00:00Z"
     assert tok.provider == "google"
-    assert tok.scopes == ["gmail.readonly", "calendar.events"]
 
 
-def test_scopes_as_space_delimited_string(httpserver: HTTPServer):
+def test_fetch_token_defaults_token_type_and_provider(httpserver: HTTPServer):
     httpserver.expect_request(
-        "/admin/vault/connections/conn_x/token", method="GET"
+        "/api/v1/vault/github/token", method="GET"
     ).respond_with_json(
-        {"access_token": "t", "scope": "read write", "provider": "github"}
+        {"access_token": "t"}
     )
-    vault = VaultClient(auth_url=httpserver.url_for(""), access_token="at")
-    tok = vault.get_fresh_token("conn_x")
-    assert tok.scopes == ["read", "write"]
+    vault = VaultClient(auth_url=httpserver.url_for(""))
+    tok = vault.fetch_token(provider="github", bearer_token="at", prover=_prover())
+    assert tok.access_token == "t"
+    assert tok.token_type == "Bearer"
+    assert tok.provider == "github"
 
 
 def test_404_raises_not_found(httpserver: HTTPServer):
     httpserver.expect_request(
-        "/admin/vault/connections/missing/token", method="GET"
+        "/api/v1/vault/missing/token", method="GET"
     ).respond_with_json({"error": "not_found"}, status=404)
-    vault = VaultClient(auth_url=httpserver.url_for(""), access_token="at")
+    vault = VaultClient(auth_url=httpserver.url_for(""))
     with pytest.raises(VaultError) as exc:
-        vault.get_fresh_token("missing")
+        vault.fetch_token(provider="missing", bearer_token="at", prover=_prover())
     assert exc.value.status_code == 404
 
 
 def test_401_raises_unauthorized(httpserver: HTTPServer):
     httpserver.expect_request(
-        "/admin/vault/connections/conn/token", method="GET"
+        "/api/v1/vault/google/token", method="GET"
     ).respond_with_json({"error": "unauthorized"}, status=401)
-    vault = VaultClient(auth_url=httpserver.url_for(""), access_token="at")
+    vault = VaultClient(auth_url=httpserver.url_for(""))
     with pytest.raises(VaultError) as exc:
-        vault.get_fresh_token("conn")
+        vault.fetch_token(provider="google", bearer_token="at", prover=_prover())
     assert exc.value.status_code == 401
 
 
 def test_403_raises_forbidden(httpserver: HTTPServer):
     httpserver.expect_request(
-        "/admin/vault/connections/conn/token", method="GET"
+        "/api/v1/vault/google/token", method="GET"
     ).respond_with_json({"error": "forbidden"}, status=403)
-    vault = VaultClient(auth_url=httpserver.url_for(""), access_token="at")
+    vault = VaultClient(auth_url=httpserver.url_for(""))
     with pytest.raises(VaultError) as exc:
-        vault.get_fresh_token("conn")
+        vault.fetch_token(provider="google", bearer_token="at", prover=_prover())
     assert exc.value.status_code == 403
 
 
-def test_empty_connection_id_rejected():
+def test_get_fresh_token_is_removed():
     vault = VaultClient(auth_url="https://x.example", access_token="at")
-    with pytest.raises(VaultError):
-        vault.get_fresh_token("")
+    with pytest.raises(VaultError, match="get_fresh_token has been removed"):
+        vault.get_fresh_token("conn_abc")

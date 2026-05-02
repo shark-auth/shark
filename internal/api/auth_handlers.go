@@ -13,8 +13,8 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/shark-auth/shark/internal/auth"
 	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/auth"
 	"github.com/shark-auth/shark/internal/storage"
 )
 
@@ -41,7 +41,7 @@ type passwordResetSendRequest struct {
 
 // passwordReset is the request body for POST /api/v1/auth/password/reset.
 type passwordReset struct {
-	Token string `json:"token"`
+	Token    string `json:"token"`
 	Password string `json:"password"`
 }
 
@@ -162,8 +162,9 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 			user.Name = &req.Name
 		}
 
-		// Prepare session object
-		sess := s.SessionManager.PrepareSession(user.ID, r.RemoteAddr, r.UserAgent(), "password")
+		// Fresh password signups have no MFA configured yet, so the initial
+		// session is fully authenticated and can enroll MFA.
+		sess := s.SessionManager.PrepareSessionWithMFA(user.ID, r.RemoteAddr, r.UserAgent(), "password", true)
 
 		// Prepare audit log
 		audID, _ := gonanoid.New()
@@ -418,6 +419,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	sessionID, err := s.SessionManager.GetSessionFromRequest(r)
 	if err == nil && sessionID != "" {
 		_ = s.Store.DeleteSession(ctx, sessionID)
+		s.evictSessionAuth(sessionID)
 	}
 
 	s.SessionManager.ClearSessionCookie(w)

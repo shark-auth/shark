@@ -199,7 +199,7 @@ def test_vault_disconnect_cascade(admin_key, db_conn):
     cascade_events = []
     for _ in range(10):
         audit_resp = requests.get(
-            f"{BASE_URL}/api/v1/admin/audit-logs",
+            f"{BASE_URL}/api/v1/audit-logs",
             headers=headers,
             params={"action": "vault.disconnect_cascade", "limit": 10},
             timeout=10,

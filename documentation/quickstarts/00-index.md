@@ -56,6 +56,6 @@ client.http        # DPoPHTTPClient
 
 ## Related documentation
 
-- API reference: `/documentation/api/`
+- SDK reference: `../sdk/`
 - CLI reference: `/documentation/cli/`
 - Five-layer revocation design: [`playbook/00-design.md`](../../playbook/00-design.md)

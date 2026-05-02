@@ -1,4 +1,4 @@
-﻿package oauth
+package oauth
 
 // HandleIntrospect implements RFC 7662 Token Introspection.
 // POST /oauth/introspect
@@ -16,8 +16,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	gojwt "github.com/golang-jwt/jwt/v5"
 
 	"github.com/shark-auth/shark/internal/auth"
 	"github.com/shark-auth/shark/internal/storage"
@@ -128,19 +126,23 @@ func (s *Server) LookupBearer(ctx context.Context, tokenStr string) *storage.OAu
 
 // findTokenInDB resolves a raw token string to an OAuthToken record.
 //
-// For JWT access tokens (3-part dot-separated): extract the JTI claim and
-// look up by JTI â€” the most direct path.
+// For JWT access tokens (3-part dot-separated): verify the token signature,
+// then use the signed JTI claim for the DB lookup.
 //
 // For opaque HMAC tokens (2-part dot-separated, format "key.sig"): the store
 // saves sha256(sig_part). Split on "." and hash the signature part.
 //
 // Final fallback: hash the full raw token string (covers edge cases).
 func (s *Server) findTokenInDB(ctx context.Context, tokenStr string) *storage.OAuthToken {
-	// 1. Try JWT path â€” extract JTI without signature verification.
-	jti := extractJTIFromJWT(tokenStr)
-	if jti != "" {
-		if tok, err := s.RawStore.GetOAuthTokenByJTI(ctx, jti); err == nil {
-			return tok
+	// 1. Try JWT path. Never trust a JTI from an unsigned parse; otherwise an
+	// attacker can craft an arbitrary JWT-shaped string with a known JTI.
+	if strings.Count(tokenStr, ".") == 2 {
+		if claims, err := s.parseSubjectJWT(ctx, tokenStr); err == nil {
+			if jti, _ := claims["jti"].(string); jti != "" {
+				if tok, err := s.RawStore.GetOAuthTokenByJTI(ctx, jti); err == nil {
+					return tok
+				}
+			}
 		}
 	}
 
@@ -163,23 +165,6 @@ func (s *Server) findTokenInDB(ctx context.Context, tokenStr string) *storage.OA
 	}
 
 	return nil
-}
-
-// extractJTIFromJWT parses the token string as a JWT without verifying the
-// signature and returns the "jti" claim. Returns empty string on failure.
-// We do not verify here â€” we do an authoritative DB lookup instead.
-func extractJTIFromJWT(tokenStr string) string {
-	parser := gojwt.NewParser(gojwt.WithoutClaimsValidation())
-	token, _, err := parser.ParseUnverified(tokenStr, gojwt.MapClaims{})
-	if err != nil {
-		return ""
-	}
-	claims, ok := token.Claims.(gojwt.MapClaims)
-	if !ok {
-		return ""
-	}
-	jti, _ := claims["jti"].(string)
-	return jti
 }
 
 // authenticateClient validates the caller's identity for introspect/revoke endpoints.
@@ -210,6 +195,13 @@ func (s *Server) authenticateClient(r *http.Request) (clientID string, isAdmin b
 							return "", false, errors.New("api key expired")
 						}
 					}
+				}
+				var scopes []string
+				if err := json.Unmarshal([]byte(apiKey.Scopes), &scopes); err != nil {
+					return "", false, errors.New("invalid admin api key scopes")
+				}
+				if !auth.CheckScope(scopes, "*") {
+					return "", false, errors.New("api key lacks admin scope")
 				}
 				return "__admin__", true, nil
 			}

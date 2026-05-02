@@ -7,7 +7,7 @@ Official SharkAuth client libraries. Two languages, identical surface. Honest en
 | Python     | `shark-auth`           | `from shark_auth import Client`  |
 | TypeScript | `@sharkauth/sdk`       | `import { SharkClient } from '@sharkauth/sdk'` |
 
-Both wrap the same HTTP API. If a method exists in one, it exists in the other under the camelCase / snake_case equivalent.
+Both wrap the same HTTP API. Most methods exist in both SDKs under the camelCase / snake_case equivalent, but a few parity gaps remain (see table below).
 
 ## Sections
 
@@ -108,5 +108,5 @@ Tracking and the full post-launch backlog live in `sdk/HANDOFF.md`. Other notabl
 | Crypto               | `cryptography`, `PyJWT`      | `globalThis.crypto.subtle`, `jose` |
 | Token exchange       | `OAuthClient.token_exchange` | `exchangeToken(...)` (free fn)     |
 | Webhook signature    | `verify_signature`           | `verifySignature` (async)          |
-| JWT verify           | `decode_agent_token` (full)  | `decodeAgentToken` (decode only)   |
+| JWT verify           | `decode_agent_token` (full)  | Not yet exported — decode manually   |
 | Browser-safe         | n/a                          | yes, except DPoP key PEM round-trip |

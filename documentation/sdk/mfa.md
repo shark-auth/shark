@@ -13,7 +13,7 @@ from shark_auth import AuthClient, MFAClient, compute_totp
 
 auth = AuthClient("https://auth.example.com")
 auth.login("alice@example.com", "Strong-Pwd-2026")
-mfa = MFAClient("https://auth.example.com", session=auth.session)
+mfa = MFAClient("https://auth.example.com", session=auth._session)
 ```
 
 ```typescript

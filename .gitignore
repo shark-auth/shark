@@ -38,6 +38,8 @@ Thumbs.db
 
 # Go
 vendor/
+.go-release-cache/
+.go-tmp/
 
 # Node (dashboard, admin, SDK)
 node_modules/
@@ -71,6 +73,8 @@ smoke_full.exit
 gosec_results.json
 
 # Temp
+.tmp/
+.opencode/
 *.txt
 *.jsonl
 install_id
@@ -99,6 +103,9 @@ tests/smoke/cookies.txt
 admin.key.firstboot
 *.firstboot
 
+# SDK release scratch
+sdk/python/.venv_release/
+
 # Demo / scratch outputs at repo root
 /demo-report.html
 /fuckup.md
@@ -120,7 +127,7 @@ shark.new
 playbook/
 gstack/
 .impeccable.md
-docs/
+/docs/
 
 # Agent temporary files
 /home/raul/.gemini/tmp/shark/

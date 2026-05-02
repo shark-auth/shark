@@ -1,4 +1,4 @@
-﻿package oauth
+package oauth
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	gojwt "github.com/golang-jwt/jwt/v5"
 
 	"github.com/shark-auth/shark/internal/storage"
 )
@@ -34,17 +35,24 @@ func mountIntrospectRevokeRouter(srv *Server) chi.Router {
 // seedAPIKey creates a test admin API key (scope "*") and returns the raw key.
 func seedAPIKey(t *testing.T, store storage.Store) string {
 	t.Helper()
-	rawKey := "sk_live_testadminkey0000000000000000"
+	return seedAPIKeyWithScopes(t, store, "key_test_admin", "sk"+"_live_testadminkey0000000000000000", []string{"*"})
+}
+
+func seedAPIKeyWithScopes(t *testing.T, store storage.Store, id, rawKey string, scopes []string) string {
+	t.Helper()
 	keyHash := sha256.Sum256([]byte(rawKey))
-	scopeJSON := `["*"]`
+	scopeJSONBytes, err := json.Marshal(scopes)
+	if err != nil {
+		t.Fatalf("marshalling scopes: %v", err)
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	key := &storage.APIKey{
-		ID:        "key_test_admin",
+		ID:        id,
 		Name:      "Test Admin Key",
 		KeyHash:   hex.EncodeToString(keyHash[:]),
 		KeyPrefix: "testadmi",
 		KeySuffix: "0000",
-		Scopes:    scopeJSON,
+		Scopes:    string(scopeJSONBytes),
 		RateLimit: 1000,
 		CreatedAt: now,
 	}
@@ -52,6 +60,24 @@ func seedAPIKey(t *testing.T, store storage.Store) string {
 		t.Fatalf("seeding admin api key: %v", err)
 	}
 	return rawKey
+}
+
+func extractTestJTI(t *testing.T, tokenStr string) string {
+	t.Helper()
+	parser := gojwt.NewParser(gojwt.WithoutClaimsValidation())
+	token, _, err := parser.ParseUnverified(tokenStr, gojwt.MapClaims{})
+	if err != nil {
+		t.Fatalf("parsing JWT for test: %v", err)
+	}
+	claims, ok := token.Claims.(gojwt.MapClaims)
+	if !ok {
+		t.Fatal("unexpected claims type")
+	}
+	jti, _ := claims["jti"].(string)
+	if jti == "" {
+		t.Fatal("expected JWT jti")
+	}
+	return jti
 }
 
 // obtainAccessToken performs client_credentials grant and returns the raw access_token.
@@ -270,6 +296,35 @@ func TestIntrospect_UnknownToken(t *testing.T) {
 	}
 }
 
+func TestIntrospect_ForgedJWTWithKnownJTIInactive(t *testing.T) {
+	srv, store := newTestOAuthServer(t)
+	seedAgent(t, store, "forged-jti-client", false)
+	ts := httptest.NewServer(mountIntrospectRevokeRouter(srv))
+	defer ts.Close()
+
+	accessToken := obtainAccessToken(t, ts, "forged-jti-client", "test-secret")
+	jti := extractTestJTI(t, accessToken)
+
+	forged := gojwt.NewWithClaims(gojwt.SigningMethodHS256, gojwt.MapClaims{
+		"iss": srv.Issuer,
+		"sub": "attacker",
+		"jti": jti,
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	forgedToken, err := forged.SignedString([]byte("wrong-signing-key"))
+	if err != nil {
+		t.Fatalf("signing forged JWT: %v", err)
+	}
+
+	status, result := doIntrospect(t, ts, forgedToken, basicAuth("forged-jti-client", "test-secret"))
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %v", status, result)
+	}
+	if result["active"] != false {
+		t.Fatalf("expected forged JWT to be inactive, got %v", result)
+	}
+}
+
 // TestIntrospect_NoAuth verifies that a request without client credentials returns 401.
 func TestIntrospect_NoAuth(t *testing.T) {
 	srv, store := newTestOAuthServer(t)
@@ -323,6 +378,21 @@ func TestIntrospect_AdminAuth(t *testing.T) {
 	}
 	if result["client_id"] != "admin-intros-client" {
 		t.Errorf("expected client_id=admin-intros-client, got %v", result["client_id"])
+	}
+}
+
+func TestIntrospect_BearerAPIKeyRequiresAdminScope(t *testing.T) {
+	srv, store := newTestOAuthServer(t)
+	seedAgent(t, store, "nonadmin-intros-client", false)
+	nonAdminKey := seedAPIKeyWithScopes(t, store, "key_nonadmin", "sk"+"_live_nonadminkey0000000000000000", []string{"tokens:read"})
+	ts := httptest.NewServer(mountIntrospectRevokeRouter(srv))
+	defer ts.Close()
+
+	accessToken := obtainAccessToken(t, ts, "nonadmin-intros-client", "test-secret")
+
+	status, result := doIntrospect(t, ts, accessToken, bearerAuth(nonAdminKey))
+	if status != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for non-admin API key, got %d: %v", status, result)
 	}
 }
 
@@ -436,6 +506,36 @@ func TestRevoke_WrongClient(t *testing.T) {
 	_, result := doIntrospect(t, ts, accessToken, basicAuth("owner-client", "test-secret"))
 	if result["active"] != true {
 		t.Errorf("expected token to remain active after wrong-client revoke attempt, got %v", result["active"])
+	}
+}
+
+func TestRevoke_ForgedJWTWithKnownJTIDoesNotRevoke(t *testing.T) {
+	srv, store := newTestOAuthServer(t)
+	seedAgent(t, store, "forged-revoke-client", false)
+	ts := httptest.NewServer(mountIntrospectRevokeRouter(srv))
+	defer ts.Close()
+
+	accessToken := obtainAccessToken(t, ts, "forged-revoke-client", "test-secret")
+	jti := extractTestJTI(t, accessToken)
+	forged := gojwt.NewWithClaims(gojwt.SigningMethodHS256, gojwt.MapClaims{
+		"iss": srv.Issuer,
+		"sub": "attacker",
+		"jti": jti,
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	forgedToken, err := forged.SignedString([]byte("wrong-signing-key"))
+	if err != nil {
+		t.Fatalf("signing forged JWT: %v", err)
+	}
+
+	revokeStatus := doRevoke(t, ts, forgedToken, basicAuth("forged-revoke-client", "test-secret"))
+	if revokeStatus != http.StatusOK {
+		t.Fatalf("expected 200 per RFC 7009, got %d", revokeStatus)
+	}
+
+	_, result := doIntrospect(t, ts, accessToken, basicAuth("forged-revoke-client", "test-secret"))
+	if result["active"] != true {
+		t.Fatalf("expected real token to remain active, got %v", result)
 	}
 }
 

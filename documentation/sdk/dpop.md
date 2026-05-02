@@ -68,15 +68,11 @@ const headers = {
 ```python
 from shark_auth import DPoPHTTPClient
 
-http = DPoPHTTPClient(
-    base_url="https://api.example.com",
-    prover=prover,
-    access_token=token.access_token,
-)
+http = DPoPHTTPClient(base_url="https://api.example.com")
 
-resp = http.get("/calendar/events")
-http.post("/calendar/events", json={"title": "Demo"})
-http.delete("/calendar/events/123")
+resp = http.get_with_dpop("/calendar/events", token=token.access_token, prover=prover)
+http.post_with_dpop("/calendar/events", token=token.access_token, prover=prover, json={"title": "Demo"})
+http.delete_with_dpop("/calendar/events/123", token=token.access_token, prover=prover)
 ```
 
 Handles `Authorization: DPoP <token>` and a fresh `DPoP` proof on every call. The proof is bound to the exact `method` + URL.

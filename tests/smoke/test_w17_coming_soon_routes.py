@@ -16,7 +16,7 @@ BASE = "http://localhost:8080"
 def test_audit_endpoint_still_reachable(admin_key):
     """Compliance placeholder hints users to /audit; that page must still work."""
     r = requests.get(
-        f"{BASE}/api/v1/admin/audit-logs?limit=1",
+        f"{BASE}/api/v1/audit-logs?limit=1",
         headers={"Authorization": f"Bearer {admin_key}"},
     )
     assert r.status_code == 200, r.text
@@ -25,7 +25,7 @@ def test_audit_endpoint_still_reachable(admin_key):
 
 
 def test_audit_endpoint_unauth_returns_401(admin_key):
-    r = requests.get(f"{BASE}/api/v1/admin/audit-logs?limit=1")
+    r = requests.get(f"{BASE}/api/v1/audit-logs?limit=1")
     assert r.status_code == 401
 
 

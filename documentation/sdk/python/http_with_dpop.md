@@ -80,9 +80,8 @@ SHA-256 + base64url encoding internally.
 ## Example Usage — the Killer 10-liner
 
 ```python
-from shark_auth import Client
+from shark_auth import Client, OAuthClient
 from shark_auth.dpop import DPoPProver
-from shark_auth.tokens import get_token_with_dpop
 
 # 1. Generate (or load) your keypair — keep the prover alive for the session.
 prover = DPoPProver.generate()
@@ -91,13 +90,14 @@ prover = DPoPProver.generate()
 client = Client(base_url="https://auth.example.com", token="sk_live_...")
 
 # 3. Exchange credentials for a DPoP-bound access token (Method 1).
-token_resp = get_token_with_dpop(
-    base_url=client.base_url,
-    agent_id="agt_abc123",
+oauth = OAuthClient(base_url=client.base_url)
+token_resp = oauth.get_token_with_dpop(
+    grant_type="client_credentials",
+    dpop_prover=prover,
+    client_id="agt_abc123",
     client_secret="cs_...",
-    prover=prover,
 )
-access_token = token_resp["access_token"]
+access_token = token_resp.access_token
 
 # 4. Hit any DPoP-protected endpoint — proof is built and attached automatically.
 resp = client.http.get_with_dpop("/api/v1/auth/me", token=access_token, prover=prover)

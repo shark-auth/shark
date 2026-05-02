@@ -158,17 +158,14 @@ func TestPingLoop_MockServer_Shape(t *testing.T) {
 	if !strings.HasPrefix(got.userAgent, "SharkAuth/v1.2.3") {
 		t.Errorf("User-Agent = %q, want prefix SharkAuth/v1.2.3", got.userAgent)
 	}
-	for _, k := range []string{"install_id", "version", "os", "arch", "uptime_s", "started_at", "go_version"} {
+	for _, k := range []string{"install_id"} {
 		if _, ok := got.payload[k]; !ok {
 			t.Errorf("payload missing key %q; got %v", k, got.payload)
 		}
 	}
-	if v, _ := got.payload["version"].(string); v != "v1.2.3" {
-		t.Errorf("payload.version = %q, want v1.2.3", v)
-	}
 
 	// Sanity: no fields we explicitly promise not to send.
-	for _, forbidden := range []string{"user_count", "app_count", "request_count", "hostname", "ip"} {
+	for _, forbidden := range []string{"version", "os", "arch", "uptime_s", "started_at", "go_version", "user_count", "app_count", "request_count", "hostname", "ip"} {
 		if _, ok := got.payload[forbidden]; ok {
 			t.Errorf("payload must not include %q", forbidden)
 		}

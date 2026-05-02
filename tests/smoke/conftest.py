@@ -17,6 +17,31 @@ DB_PATH = _shark_db_env if _shark_db_env else "shark.db"
 KEY_PATH = os.path.join(os.path.dirname(DB_PATH) or ".", "admin.key.firstboot")
 BIN_PATH = "./shark.exe" if os.name == 'nt' else "./shark"
 
+LAUNCH_SMOKE_FILES = {
+    "test_auth.py",
+    "test_user_sessions.py",
+    "test_agent_flow_dcr.py",
+    "test_agent_flow_dpop.py",
+    "test_agent_flow_pkce.py",
+    "test_agent_flow_token_exchange.py",
+    "test_audit_no_random.py",
+    "test_stats_audit.py",
+    "test_cascade_revoke.py",
+    "test_vault_disconnect_cascade.py",
+    "test_webhooks_crud_and_delivery.py",
+}
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "launch: v0.1 launch-gate smoke coverage")
+
+
+def pytest_collection_modifyitems(config, items):
+    launch = pytest.mark.launch
+    for item in items:
+        if os.path.basename(str(item.fspath)) in LAUNCH_SMOKE_FILES:
+            item.add_marker(launch)
+
 def kill_port(port):
     if os.name == 'nt':
         try:

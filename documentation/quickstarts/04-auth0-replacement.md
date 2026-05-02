@@ -78,20 +78,20 @@ POST /api/v1/auth/login
 ```python
 from shark_auth import MagicLinkClient
 
-ml = MagicLinkClient(base_url="http://localhost:8080", token="sk_live_...")
-ml.send(email="user@example.com", redirect_url="https://app.example.com/auth/callback")
+ml = MagicLinkClient("http://localhost:8080")
+ml.send_magic_link("user@example.com", redirect_uri="https://app.example.com/auth/callback")
 ```
 
 The user clicks the link → SharkAuth validates the one-time token → redirects to your `redirect_url` with a session token.
 
-See [`/documentation/api/auth.md`](/documentation/api/auth.md) for the full human auth API.
+See [`../sdk/authentication.md`](../sdk/authentication.md) for the full human auth API.
 
 ## Step 3 — Use SharkAuth as the OAuth provider for your apps
 
 Register your frontend or mobile app as an Application:
 
 ```bash
-shark app create --name "my-react-app" --redirect-uris "https://app.example.com/callback"
+shark app create --name "my-react-app" --callback "https://app.example.com/callback"
 ```
 
 Your app initiates the authorization code flow (PKCE):
@@ -176,6 +176,6 @@ Detailed migration guide with Auth0 schema mapping is deferred to v0.2. The high
 ## Next steps
 
 - Full agent provisioning flow: [01 — Customer Agents](./01-customer-agents.md)
-- Human auth API reference: [`/documentation/api/auth.md`](/documentation/api/auth.md)
-- OAuth provider reference: [`/documentation/api/oauth.md`](/documentation/api/oauth.md)
+- Human auth API reference: [`../sdk/authentication.md`](../sdk/authentication.md)
+- OAuth provider reference: [`../sdk/oauth-clients.md`](../sdk/oauth-clients.md)
 - CLI reference: [`/documentation/cli/`](/documentation/cli/)

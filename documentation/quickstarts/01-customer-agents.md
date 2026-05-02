@@ -40,7 +40,7 @@ Alternatively via CLI:
 shark app create --name "my-saas-backend"
 ```
 
-See [`/documentation/cli/app.md`](/documentation/cli/app.md) for full CLI reference.
+See [`./cli/03-applications.md`](./cli/03-applications.md) for full CLI reference.
 
 ## Step 3 — Implement signup: provision a per-customer agent
 
@@ -90,7 +90,7 @@ def get_agent_token(client_id: str, client_secret: str) -> tuple:
     return token, prover
 ```
 
-`OAuthClient.get_token_with_dpop()` → [`/documentation/api/oauth.md#get_token_with_dpop`](/documentation/api/oauth.md)
+`OAuthClient.get_token_with_dpop()` → [`../sdk/oauth-clients.md`](../sdk/oauth-clients.md)
 
 ## Step 5 — Agent calls an external resource
 
@@ -114,7 +114,7 @@ GET http://localhost:8080/.well-known/jwks.json
 
 No SharkAuth SDK required on the resource server — any RFC 7517-compliant JWKS validator works.
 
-See [`/documentation/api/jwks.md`](/documentation/api/jwks.md) for the JWKS endpoint spec.
+The JWKS endpoint is live at `GET /.well-known/jwks.json`.
 
 ## Step 6 — Customer cancels: cascade revoke all their agents
 
@@ -181,7 +181,7 @@ Every step above emits an audit event queryable at `GET /api/v1/audit-logs`. Exa
 { "event": "user.agents_revoked",  "actor_id": "usr_alice_id",  "metadata": { "revoked_count": 1 } }
 ```
 
-See [`/documentation/api/audit-logs.md`](/documentation/api/audit-logs.md).
+See [`../sdk/audit-logs.md`](../sdk/audit-logs.md).
 
 ## Next steps
 

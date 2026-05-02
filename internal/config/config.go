@@ -31,7 +31,6 @@ type Config struct {
 	Telemetry     TelemetryConfig     `koanf:"telemetry"`
 }
 
-
 // TelemetryConfig holds anonymous install-ping settings.
 type TelemetryConfig struct {
 	Enabled  bool   `koanf:"enabled"`
@@ -128,28 +127,28 @@ func (p *ProxyConfig) StripIncomingOrDefault() bool {
 }
 
 type EmailConfig struct {
-	Provider         string `koanf:"provider"`
-	APIKey           string `koanf:"api_key"`
-	From             string `koanf:"from"`
-	FromName         string `koanf:"from_name"`
-	Host             string `koanf:"host"`
-	Port             int    `koanf:"port"`
-	Username         string `koanf:"username"`
-	Password         string `koanf:"password"`
+	Provider string `koanf:"provider"`
+	APIKey   string `koanf:"api_key"`
+	From     string `koanf:"from"`
+	FromName string `koanf:"from_name"`
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
 	// PreviousProvider stores the last non-dev provider so the dev-inbox
 	// toggle is reversible without losing the original provider setting.
 	PreviousProvider string `koanf:"previous_provider"`
 }
 
 type ServerConfig struct {
-	Port         int      `koanf:"port"`
-	Secret       string   `koanf:"secret"`
-	BaseURL      string   `koanf:"base_url"`
-	CORSOrigins  []string `koanf:"cors_origins"`
+	Port        int      `koanf:"port"`
+	Secret      string   `koanf:"secret"`
+	BaseURL     string   `koanf:"base_url"`
+	CORSOrigins []string `koanf:"cors_origins"`
 	// CORSRelaxed, when true, makes the CORS middleware accept any Origin.
 	// Intended for local development only — toggle via Settings → Server.
-	CORSRelaxed  bool     `koanf:"cors_relaxed"`
-	DevMode      bool     `koanf:"-"`
+	CORSRelaxed bool `koanf:"cors_relaxed"`
+	DevMode     bool `koanf:"-"`
 }
 
 type StorageConfig struct {
@@ -349,48 +348,48 @@ func interpolateEnvVars(k *koanf.Koanf) {
 func Load(path string) (*Config, error) {
 	k := koanf.New(".")
 	defaults := map[string]interface{}{
-		"server.port":              8080,
-		"server.base_url":         "http://localhost:8080",
-		"storage.path":            "./data/sharkauth.db",
-		"auth.session_lifetime":    "30d",
-		"auth.password_min_length": 8,
-		"auth.argon2id.memory":      16384,
-		"auth.argon2id.iterations":  1,
-		"auth.argon2id.parallelism": 1,
-		"auth.argon2id.salt_length": 16,
-		"auth.argon2id.key_length":  32,
-		"passkeys.rp_name":         "SharkAuth",
-		"passkeys.attestation":     "none",
-		"passkeys.resident_key":    "preferred",
-		"passkeys.user_verification": "preferred",
-		"magic_link.token_lifetime": "10m",
-		"magic_link.redirect_url":      "http://localhost:3000/auth/callback",
-		"password_reset.token_lifetime": "30m",
-		"password_reset.redirect_url":  "http://localhost:3000/auth/reset-password",
-		"smtp.port":               587,
-		"smtp.from_name":          "SharkAuth",
-		"mfa.issuer":              "SharkAuth",
-		"mfa.recovery_codes":      10,
-		"api_keys.default_rate_limit": 1000,
-		"api_keys.key_max_lifetime":   "365d",
-		"audit.retention":         "0",
-		"audit.cleanup_interval":  "1h",
-		"auth.jwt.enabled":                   true,
-		"auth.jwt.mode":                      "session",
-		"auth.jwt.audience":                  "shark",
-		"auth.jwt.access_token_ttl":          "15m",
-		"auth.jwt.refresh_token_ttl":         "30d",
-		"auth.jwt.clock_skew":                "30s",
+		"server.port":                           8080,
+		"server.base_url":                       "http://localhost:8080",
+		"storage.path":                          "./data/sharkauth.db",
+		"auth.session_lifetime":                 "30d",
+		"auth.password_min_length":              8,
+		"auth.argon2id.memory":                  16384,
+		"auth.argon2id.iterations":              1,
+		"auth.argon2id.parallelism":             1,
+		"auth.argon2id.salt_length":             16,
+		"auth.argon2id.key_length":              32,
+		"passkeys.rp_name":                      "SharkAuth",
+		"passkeys.attestation":                  "none",
+		"passkeys.resident_key":                 "preferred",
+		"passkeys.user_verification":            "preferred",
+		"magic_link.token_lifetime":             "10m",
+		"magic_link.redirect_url":               "http://localhost:3000/auth/callback",
+		"password_reset.token_lifetime":         "30m",
+		"password_reset.redirect_url":           "http://localhost:3000/auth/reset-password",
+		"smtp.port":                             587,
+		"smtp.from_name":                        "SharkAuth",
+		"mfa.issuer":                            "SharkAuth",
+		"mfa.recovery_codes":                    10,
+		"api_keys.default_rate_limit":           1000,
+		"api_keys.key_max_lifetime":             "365d",
+		"audit.retention":                       "0",
+		"audit.cleanup_interval":                "1h",
+		"auth.jwt.enabled":                      true,
+		"auth.jwt.mode":                         "session",
+		"auth.jwt.audience":                     "shark",
+		"auth.jwt.access_token_ttl":             "15m",
+		"auth.jwt.refresh_token_ttl":            "30d",
+		"auth.jwt.clock_skew":                   "30s",
 		"auth.jwt.revocation.check_per_request": false,
-		"telemetry.enabled":  true,
-		"telemetry.endpoint": "https://telemetry.shark-auth.com/v1/ping",
-		"oauth_server.enabled":                true,
-		"oauth_server.signing_algorithm":      "ES256",
-		"oauth_server.access_token_lifetime":  "15m",
-		"oauth_server.refresh_token_lifetime": "30d",
-		"oauth_server.auth_code_lifetime":     "60s",
-		"oauth_server.device_code_lifetime":   "15m",
-		"oauth_server.require_dpop":           false,
+		"telemetry.enabled":                     true,
+		"telemetry.endpoint":                    "https://sharkauth.com/telemetry",
+		"oauth_server.enabled":                  true,
+		"oauth_server.signing_algorithm":        "ES256",
+		"oauth_server.access_token_lifetime":    "15m",
+		"oauth_server.refresh_token_lifetime":   "30d",
+		"oauth_server.auth_code_lifetime":       "60s",
+		"oauth_server.device_code_lifetime":     "15m",
+		"oauth_server.require_dpop":             false,
 	}
 	for key, val := range defaults {
 		if err := k.Set(key, val); err != nil {

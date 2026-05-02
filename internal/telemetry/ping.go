@@ -65,13 +65,17 @@ func StartPingLoop(ctx context.Context, cfg Config, logger *slog.Logger) {
 }
 
 func runOnce(ctx context.Context, cfg Config, logger *slog.Logger) {
+	runLoop(ctx, cfg, logger, http.DefaultClient, 30*time.Second)
+}
+
+func runLoop(ctx context.Context, cfg Config, logger *slog.Logger, client *http.Client, initialDelay time.Duration) {
 	markerPath := cfg.InstallIDPath + ".done"
 
 	// Wait a bit after boot so we don't compete with startup logs/IO.
 	select {
 	case <-ctx.Done():
 		return
-	case <-time.After(30 * time.Second):
+	case <-time.After(initialDelay):
 	}
 
 	installID, isNew, err := loadOrCreateInstallID(cfg.InstallIDPath)
@@ -84,7 +88,7 @@ func runOnce(ctx context.Context, cfg Config, logger *slog.Logger) {
 	// But per user vision: "ping ... on first run of the binary and never again."
 	// We interpret this as: if we haven't successfully pinged yet, try now.
 
-	if err := sendPing(ctx, http.DefaultClient, cfg, installID); err != nil {
+	if err := sendPing(ctx, client, cfg, installID); err != nil {
 		logger.Debug("telemetry: ping attempt failed (will retry on next boot)", "error", err)
 		return
 	}

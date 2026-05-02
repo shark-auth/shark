@@ -59,6 +59,8 @@ except VaultError as e:
 ## SharkAPIError fields
 
 ```python
+from shark_auth.proxy_rules import SharkAPIError
+
 try:
     c.organizations.create(name="...")
 except SharkAPIError as e:

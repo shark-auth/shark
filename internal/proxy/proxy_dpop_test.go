@@ -1,4 +1,4 @@
-﻿package proxy
+package proxy
 
 import (
 	"crypto/ecdsa"
@@ -14,8 +14,10 @@ import (
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 
+	"github.com/shark-auth/shark/cmd/shark/migrations"
 	"github.com/shark-auth/shark/internal/identity"
 	"github.com/shark-auth/shark/internal/oauth"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // The DPoP tests live in their own file so the crypto + JWK helpers they
@@ -109,10 +111,24 @@ func serveDPoPProxy(t *testing.T, upstream string) (*httptest.Server, *oauth.DPo
 	if err != nil {
 		t.Fatalf("New proxy: %v", err)
 	}
-	cache := oauth.NewDPoPJTICache()
+	cache := newDPoPCache(t)
 	p.SetDPoPCache(cache)
 
 	return httptest.NewServer(p), cache
+}
+
+func newDPoPCache(t *testing.T) *oauth.DPoPJTICache {
+	t.Helper()
+	store, err := storage.NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("creating test db: %v", err)
+	}
+	if err := storage.RunMigrations(store.DB(), migrations.FS, "."); err != nil {
+		store.Close()
+		t.Fatalf("running migrations: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	return oauth.NewDPoPJTICache(store)
 }
 
 // dpopRequest builds an http.Request with DPoP + Authorization headers,
@@ -151,7 +167,7 @@ func TestReverseProxy_DPoP_ValidProofPasses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	p.SetDPoPCache(oauth.NewDPoPJTICache())
+	p.SetDPoPCache(newDPoPCache(t))
 
 	bearer := "test-access-token"
 	ath := oauth.HashAccessTokenForDPoP(bearer)
@@ -194,7 +210,7 @@ func TestReverseProxy_DPoP_BadProofRejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	p.SetDPoPCache(oauth.NewDPoPJTICache())
+	p.SetDPoPCache(newDPoPCache(t))
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/resource", nil)
@@ -234,7 +250,7 @@ func TestReverseProxy_DPoP_BadHtuRejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	p.SetDPoPCache(oauth.NewDPoPJTICache())
+	p.SetDPoPCache(newDPoPCache(t))
 
 	bearer := "tok"
 	ath := oauth.HashAccessTokenForDPoP(bearer)
@@ -275,7 +291,7 @@ func TestReverseProxy_DPoP_ReplayRejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	p.SetDPoPCache(oauth.NewDPoPJTICache())
+	p.SetDPoPCache(newDPoPCache(t))
 
 	bearer := "tok"
 	ath := oauth.HashAccessTokenForDPoP(bearer)
@@ -329,7 +345,7 @@ func TestReverseProxy_DPoP_NonDPoPBearerSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	p.SetDPoPCache(oauth.NewDPoPJTICache())
+	p.SetDPoPCache(newDPoPCache(t))
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/resource", nil)

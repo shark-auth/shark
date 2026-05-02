@@ -86,8 +86,8 @@ const org = await c.organizations.create(
 
 const app = await c.apps.create({
   name: "acme-inbox",
-  integrationMode: "custom",
-  redirectUris: ["https://app.example.com/cb"],
+  integration_mode: "custom",
+  redirect_uris: ["https://app.example.com/cb"],
 });
 
 const agent = await c.agents.registerAgent({

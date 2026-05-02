@@ -50,7 +50,7 @@ shark admin config dump > config-snapshot-$(date +%Y%m%d).json
 
 ## `shark auth config show`
 
-Show the current authentication configuration (alias of `admin config dump` scoped to auth settings).
+Show the current server configuration. Alias of `shark admin config dump` — both commands fetch the full live config via `GET /api/v1/admin/config`.
 
 ### Synopsis
 ```bash

@@ -24,7 +24,7 @@ from shark_auth import VaultClient
 
 vault = VaultClient(
     base_url="https://auth.example.com",
-    admin_api_key="sk_live_admin",   # for admin ops (list, disconnect)
+    admin_key="sk_live_admin",   # for admin ops (list, disconnect)
 )
 ```
 

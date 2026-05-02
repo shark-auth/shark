@@ -53,7 +53,7 @@ def dcr_register(agent_name: str) -> dict:
     return creds
 ```
 
-See [`/documentation/api/oauth.md#dcr`](/documentation/api/oauth.md) for the full DCR spec.
+See [`../sdk/dcr.md`](../sdk/dcr.md) for the full DCR spec.
 
 ## Step 3 — Agent requests a DPoP-bound, audience-restricted token
 
@@ -130,7 +130,7 @@ claims = decode_agent_token(
 )
 ```
 
-See [`/documentation/api/jwks.md`](/documentation/api/jwks.md).
+The JWKS endpoint is live at `GET /.well-known/jwks.json`.
 
 ## Full cold-start flow
 
@@ -201,4 +201,4 @@ See [10 — Five-Layer Revocation](./10-five-layer-revocation.md) for the full r
 - Delegation chains (agent acts on behalf of user): [11 — Delegation Chains](./11-delegation-chains.md)
 - Internal platform with audit trails: [03 — Internal Platform](./03-internal-platform.md)
 - Full revocation model: [10 — Five-Layer Revocation](./10-five-layer-revocation.md)
-- API reference: [`/documentation/api/oauth.md`](/documentation/api/oauth.md)
+- API reference: [`../sdk/oauth-clients.md`](../sdk/oauth-clients.md)

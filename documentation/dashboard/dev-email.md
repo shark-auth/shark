@@ -57,8 +57,11 @@ This means the banner always reflects the delivery state visible in the inbox ta
 
 ## CLI Equivalent
 
-```sh
-shark dev email tail
+There is no CLI command for dev-email tail. Use the dashboard or poll the admin API directly:
+
+```bash
+curl -H "Authorization: Bearer $SHARK_ADMIN_TOKEN" \
+  "$SHARK_URL/api/v1/admin/dev/emails"
 ```
 
 ## Activation

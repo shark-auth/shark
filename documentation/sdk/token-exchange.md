@@ -128,8 +128,12 @@ for hop in claims.delegation_chain():
 ```
 
 ```typescript
-import { decodeAgentToken } from "@sharkauth/sdk";
-const claims = decodeAgentToken(child.accessToken);
+// decodeAgentToken is not yet exported from @sharkauth/sdk.
+// Decode manually with a JWT library (e.g. jose) or the Node buffer method:
+const parts = child.accessToken.split(".");
+const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+console.log(payload.sub);      // original user
+console.log(payload.act);      // actor chain
 ```
 
 `delegation_chain()` returns hops outermost-first. An empty list means the token is direct (no delegation).

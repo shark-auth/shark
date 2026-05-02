@@ -19,6 +19,21 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Verify tag matches pyproject version
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#py-sdk-v}"
+          PROJECT_VERSION="$(python - <<'PY'
+import tomllib
+with open("pyproject.toml", "rb") as f:
+    print(tomllib.load(f)["project"]["version"])
+PY
+)"
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "Tag version $TAG_VERSION does not match pyproject.toml version $PROJECT_VERSION"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: pip install .[dev] build twine
 
@@ -27,6 +42,9 @@ jobs:
 
       - name: Build wheel + sdist
         run: python -m build
+
+      - name: Check distribution metadata
+        run: twine check dist/*
 
       - name: Upload to PyPI
         env:

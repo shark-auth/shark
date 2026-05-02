@@ -44,7 +44,7 @@ print(created["key"])  # the only time you see this value
 const created = await keys.create({
   name: "ci-bot",
   scopes: ["agents:write", "users:read"],
-  expiresAt: "2027-01-01T00:00:00Z",
+  expires_at: "2027-01-01T00:00:00Z",
 });
 console.log(created.key);
 ```

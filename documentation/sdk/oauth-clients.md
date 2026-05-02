@@ -46,12 +46,12 @@ import { OAuthClient, pkcePair } from "@sharkauth/sdk";
 
 const { verifier, challenge } = await pkcePair();
 const url = OAuthClient.buildAuthorizeUrl({
-  clientId: "my-app",
-  redirectUri: "https://app.example.com/cb",
+  client_id: "my-app",
+  redirect_uri: "https://app.example.com/cb",
   scope: "openid profile",
   state: "csrf-xyz",
-  codeChallenge: challenge,
-  baseUrl: "https://auth.example.com",
+  code_challenge: challenge,
+  base_url: "https://auth.example.com",
 });
 ```
 
@@ -80,12 +80,13 @@ print(token.access_token, token.refresh_token)
 ```
 
 ```typescript
-// TS SDK does not yet ship a getTokenAuthorizationCode helper directly on OAuthClient.
-// Use SharkClient.fetch or POST /oauth/token form-encoded yourself, or use exchangeToken
-// for the server-to-server cases.
+const token = await oauth.getTokenAuthorizationCode(
+  "auth_xyz",
+  "https://app.example.com/cb",
+  verifier,
+  "my-app",
+);
 ```
-
-The TS surface is missing this helper today — it's tracked as a parity gap.
 
 ## Refresh
 
@@ -97,7 +98,7 @@ new = oauth.refresh_token(
 ```
 
 ```typescript
-// Same gap as above — POST /oauth/token form-encoded for now.
+const newToken = await oauth.refreshToken(old.refreshToken, "my-app");
 ```
 
 ## DPoP-bound token request

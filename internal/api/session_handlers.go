@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -102,6 +102,7 @@ func (s *Server) handleRevokeMySession(w http.ResponseWriter, r *http.Request) {
 		internal(w, err)
 		return
 	}
+	s.evictSessionAuth(sessID)
 	s.auditSessionRevoke(r.Context(), "user", userID, userID, sessID, ipOf(r), uaOf(r))
 	s.emit(r.Context(), storage.WebhookEventSessionRevoked, map[string]string{
 		"session_id": sessID, "user_id": userID, "revoked_by": "user",
@@ -186,6 +187,7 @@ func (s *Server) handleAdminDeleteSession(w http.ResponseWriter, r *http.Request
 		internal(w, err)
 		return
 	}
+	s.evictSessionAuth(sessID)
 	s.auditSessionRevoke(r.Context(), "admin", actor, sess.UserID, sessID, ipOf(r), uaOf(r))
 	s.emit(r.Context(), storage.WebhookEventSessionRevoked, map[string]string{
 		"session_id": sessID, "user_id": sess.UserID, "revoked_by": "admin",
@@ -236,6 +238,7 @@ func (s *Server) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request
 	// tokens were invalidated.
 	ip, ua := ipOf(r), uaOf(r)
 	for _, id := range ids {
+		s.evictSessionAuth(id)
 		s.auditSessionRevoke(r.Context(), "admin", actor, userID, id, ip, ua)
 		s.emit(r.Context(), storage.WebhookEventSessionRevoked, map[string]string{
 			"session_id": id, "user_id": userID, "revoked_by": "admin",
@@ -258,6 +261,9 @@ func (s *Server) handleAdminRevokeAllSessions(w http.ResponseWriter, r *http.Req
 		internal(w, err)
 		return
 	}
+	if s.AuthCache != nil {
+		s.AuthCache.Clear()
+	}
 
 	// Single audit entry summarising the bulk action.
 	s.auditSessionRevoke(r.Context(), "admin", actor, "all", "all", ipOf(r), uaOf(r))
@@ -274,8 +280,8 @@ func (s *Server) auditSessionRevoke(ctx context.Context, actorType, actorID, tar
 		return
 	}
 	meta, _ := json.Marshal(map[string]string{
-		"session_id":      sessionID,
-		"target_user_id":  targetUserID,
+		"session_id":     sessionID,
+		"target_user_id": targetUserID,
 	})
 	_ = s.AuditLogger.Log(ctx, &storage.AuditLog{
 		ActorID:    actorID,
@@ -288,6 +294,12 @@ func (s *Server) auditSessionRevoke(ctx context.Context, actorType, actorID, tar
 		Metadata:   string(meta),
 		Status:     "success",
 	})
+}
+
+func (s *Server) evictSessionAuth(sessionID string) {
+	if s.AuthCache != nil && sessionID != "" {
+		s.AuthCache.Delete("session:" + sessionID)
+	}
 }
 
 // handlePurgeExpiredSessions handles POST /api/v1/admin/sessions/purge-expired.

@@ -13,7 +13,7 @@ def test_session_list_and_revocation(auth_session, smoke_user):
     assert resp.status_code == 200
     sessions = resp.json().get("data", [])
     assert len(sessions) >= 1
-    sess_id = sessions[0]["id"]
+    sess_id = next(s["id"] for s in sessions if s.get("current"))
     
     # Revoke (different session)
     # We'll create a second session for this
@@ -21,7 +21,8 @@ def test_session_list_and_revocation(auth_session, smoke_user):
     s2.post(f"{BASE_URL}/api/v1/auth/login", json={"email": smoke_user["email"], "password": smoke_user["password"]})
     resp = s2.get(f"{BASE_URL}/api/v1/auth/sessions")
     s2_sessions = resp.json().get("data", [])
-    s2_sess_id = next(s for s in s2_sessions if s["id"] != sess_id)["id"]
+    s2_sess_id = next(s["id"] for s in s2_sessions if s.get("current"))
+    assert s2_sess_id != sess_id
     
     # Delete S2 from S1
     resp = auth_session.delete(f"{BASE_URL}/api/v1/auth/sessions/{s2_sess_id}")

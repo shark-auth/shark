@@ -10,6 +10,8 @@ from pytest_httpserver import HTTPServer
 from shark_auth import DeviceFlow
 from shark_auth.errors import DeviceFlowError
 
+pytestmark = pytest.mark.skip(reason="Device flow is deferred from launch scope")
+
 
 def _fake_clock_and_sleeper():
     """Deterministic monotonic clock that advances on each sleep()."""

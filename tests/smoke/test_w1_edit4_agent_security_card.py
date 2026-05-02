@@ -5,7 +5,7 @@ Verifies that the endpoints consumed by the Agent Security attention card
 return expected fields.
 
 Endpoints under test:
-  GET /api/v1/admin/audit-logs?action=token.exchange&from=<iso>&limit=200
+  GET /api/v1/audit-logs?action=token.exchange&from=<iso>&limit=200
   GET /api/v1/agents?limit=200
   GET /api/v1/agents/{id}/tokens
 
@@ -36,7 +36,7 @@ def test_audit_logs_token_exchange_fields(admin_key):
         "%Y-%m-%dT%H:%M:%SZ"
     )
     resp = requests.get(
-        f"{BASE}/api/v1/admin/audit-logs",
+        f"{BASE}/api/v1/audit-logs",
         params={"action": "token.exchange", "from": since, "limit": "200"},
         headers=_auth(admin_key),
         timeout=10,
@@ -100,7 +100,7 @@ def test_audit_logs_unauth_returns_401():
         "%Y-%m-%dT%H:%M:%SZ"
     )
     resp = requests.get(
-        f"{BASE}/api/v1/admin/audit-logs",
+        f"{BASE}/api/v1/audit-logs",
         params={"action": "token.exchange", "from": since, "limit": "10"},
         headers={"Authorization": "Bearer invalid-key-for-smoke-test"},
         timeout=10,

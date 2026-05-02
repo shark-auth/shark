@@ -135,7 +135,7 @@ user = auth.verify_magic_link(token)
 import { MagicLinkClient } from "@sharkauth/sdk";
 
 const ml = new MagicLinkClient({ baseUrl: "https://auth.example.com" });
-await ml.sendMagicLink("alice@example.com", { redirectUri: "https://app.example.com/cb" });
+await ml.sendMagicLink("alice@example.com", "https://app.example.com/cb");
 const user = await auth.verifyMagicLink(token);
 ```
 

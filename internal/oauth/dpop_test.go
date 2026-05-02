@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -16,6 +17,9 @@ import (
 	"time"
 
 	gojwt "github.com/golang-jwt/jwt/v5"
+
+	"github.com/shark-auth/shark/cmd/shark/migrations"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // ---------------------------------------------------------------------------
@@ -149,8 +153,15 @@ func randomJTI(t *testing.T) string {
 
 // newCache returns a fresh JTI cache for each test.
 func newCache(t *testing.T) *DPoPJTICache {
-	// Use an in-memory SQLite store from testutil to satisfy the interface
-	store := testutil.NewTestDB(t)
+	store, err := storage.NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("creating test db: %v", err)
+	}
+	if err := storage.RunMigrations(store.DB(), migrations.FS, "."); err != nil {
+		store.Close()
+		t.Fatalf("running migrations: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
 	return NewDPoPJTICache(store)
 }
 

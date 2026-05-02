@@ -1,10 +1,9 @@
-﻿package oauth
+package oauth
 
 import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"embed"
 	"encoding/hex"
 	"fmt"
 	"net/url"
@@ -14,11 +13,9 @@ import (
 
 	"github.com/ory/fosite"
 
+	"github.com/shark-auth/shark/cmd/shark/migrations"
 	"github.com/shark-auth/shark/internal/storage"
 )
-
-//go:embed testmigrations/*.sql
-var testMigrationsFS embed.FS
 
 // newTestFositeStore creates a FositeStore backed by an in-memory SQLite DB
 // with all migrations applied.
@@ -28,7 +25,7 @@ func newTestFositeStore(t *testing.T) (*FositeStore, storage.Store) {
 	if err != nil {
 		t.Fatalf("creating test db: %v", err)
 	}
-	if err := storage.RunMigrations(db.DB(), testMigrationsFS, "testmigrations"); err != nil {
+	if err := storage.RunMigrations(db.DB(), migrations.FS, "."); err != nil {
 		db.Close()
 		t.Fatalf("running migrations: %v", err)
 	}
@@ -53,21 +50,21 @@ func seedAgent(t *testing.T, store storage.Store, clientID string, public bool) 
 	}
 
 	agent := &storage.Agent{
-		ID:            "agent_" + clientID,
-		Name:          "Test Agent " + clientID,
-		Description:   "A test agent",
-		ClientID:      clientID,
+		ID:               "agent_" + clientID,
+		Name:             "Test Agent " + clientID,
+		Description:      "A test agent",
+		ClientID:         clientID,
 		ClientSecretHash: secretHash,
-		ClientType:    clientType,
-		AuthMethod:    authMethod,
-		RedirectURIs:  []string{"https://example.com/callback"},
-		GrantTypes:    []string{"authorization_code", "client_credentials"},
-		ResponseTypes: []string{"code"},
-		Scopes:        []string{"openid", "profile"},
-		TokenLifetime: 900,
-		Active:        true,
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
+		ClientType:       clientType,
+		AuthMethod:       authMethod,
+		RedirectURIs:     []string{"https://example.com/callback"},
+		GrantTypes:       []string{"authorization_code", "client_credentials"},
+		ResponseTypes:    []string{"code"},
+		Scopes:           []string{"openid", "profile"},
+		TokenLifetime:    900,
+		Active:           true,
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
 	}
 
 	if err := store.CreateAgent(context.Background(), agent); err != nil {

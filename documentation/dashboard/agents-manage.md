@@ -104,7 +104,10 @@ the panel closes.
 
 ## CLI Parity
 
-```
-shark agent list
-shark agent list --created-by <user_id>
+`shark agent list` is not implemented in the CLI. Use the dashboard or the SDK:
+
+```python
+from shark_auth import AgentsClient
+agents = AgentsClient("https://auth.example.com", token="sk_live_...")
+agents.list_agents()
 ```

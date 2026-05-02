@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"crypto/rand"
@@ -76,20 +76,21 @@ func (s *Server) emitAgentEvent(r *http.Request, event string, payload any) {
 // POST /api/v1/agents
 func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name          string         `json:"name"`
-		Description   string         `json:"description"`
-		ClientType    string         `json:"client_type"`
-		AuthMethod    string         `json:"auth_method"`
-		RedirectURIs  []string       `json:"redirect_uris"`
-		AllowedCallbackURLs []string `json:"allowed_callback_urls"` // Alias for RedirectURIs
-		GrantTypes    []string       `json:"grant_types"`
-		ResponseTypes []string       `json:"response_types"`
-		Scopes        []string       `json:"scopes"`
-		TokenLifetime int            `json:"token_lifetime"`
-		Metadata      map[string]any `json:"metadata"`
-		LogoURI       string         `json:"logo_uri"`
-		HomepageURI   string         `json:"homepage_uri"`
-		CreatedBy     string         `json:"created_by"` // W1.5: explicit creator-user binding for cascade-revoke
+		Name                    string         `json:"name"`
+		Description             string         `json:"description"`
+		ClientType              string         `json:"client_type"`
+		AuthMethod              string         `json:"auth_method"`
+		TokenEndpointAuthMethod string         `json:"token_endpoint_auth_method"`
+		RedirectURIs            []string       `json:"redirect_uris"`
+		AllowedCallbackURLs     []string       `json:"allowed_callback_urls"` // Alias for RedirectURIs
+		GrantTypes              []string       `json:"grant_types"`
+		ResponseTypes           []string       `json:"response_types"`
+		Scopes                  []string       `json:"scopes"`
+		TokenLifetime           int            `json:"token_lifetime"`
+		Metadata                map[string]any `json:"metadata"`
+		LogoURI                 string         `json:"logo_uri"`
+		HomepageURI             string         `json:"homepage_uri"`
+		CreatedBy               string         `json:"created_by"` // W1.5: explicit creator-user binding for cascade-revoke
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))
@@ -103,6 +104,9 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	// Defaults
 	if req.ClientType == "" {
 		req.ClientType = "confidential"
+	}
+	if req.AuthMethod == "" && req.TokenEndpointAuthMethod != "" {
+		req.AuthMethod = req.TokenEndpointAuthMethod
 	}
 	if req.AuthMethod == "" {
 		req.AuthMethod = "client_secret_basic"
@@ -270,17 +274,17 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name          *string         `json:"name"`
-		Description   *string         `json:"description"`
-		RedirectURIs  *[]string       `json:"redirect_uris"`
-		AllowedCallbackURLs *[]string `json:"allowed_callback_urls"` // Alias for RedirectURIs
-		GrantTypes    *[]string       `json:"grant_types"`
-		Scopes        *[]string       `json:"scopes"`
-		TokenLifetime *int            `json:"token_lifetime"`
-		Metadata      *map[string]any `json:"metadata"`
-		LogoURI       *string         `json:"logo_uri"`
-		HomepageURI   *string         `json:"homepage_uri"`
-		Active        *bool           `json:"active"`
+		Name                *string         `json:"name"`
+		Description         *string         `json:"description"`
+		RedirectURIs        *[]string       `json:"redirect_uris"`
+		AllowedCallbackURLs *[]string       `json:"allowed_callback_urls"` // Alias for RedirectURIs
+		GrantTypes          *[]string       `json:"grant_types"`
+		Scopes              *[]string       `json:"scopes"`
+		TokenLifetime       *int            `json:"token_lifetime"`
+		Metadata            *map[string]any `json:"metadata"`
+		LogoURI             *string         `json:"logo_uri"`
+		HomepageURI         *string         `json:"homepage_uri"`
+		Active              *bool           `json:"active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errPayload("invalid_request", "Invalid JSON body"))

@@ -2,6 +2,19 @@
   "name": "@sharkauth/sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for SharkAuth agent-auth primitives",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shark-auth/shark.git",
+    "directory": "sdk/typescript"
+  },
+  "homepage": "https://github.com/shark-auth/shark#readme",
+  "bugs": {
+    "url": "https://github.com/shark-auth/shark/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -28,7 +41,8 @@
   ],
   "scripts": {
     "build": "tsup",
-    "test": "vitest run --coverage",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"

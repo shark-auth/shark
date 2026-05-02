@@ -82,23 +82,34 @@ print("jkt:", prover.jkt)
 
 ## Quickstart 3 — VaultClient
 
-Pull a fresh 3rd-party access token the Vault refreshed for you.
+Fetch a fresh 3rd-party access token from the vault using a DPoP-bound agent token.
 
 ```python
-from shark_auth import VaultClient, VaultError
+from shark_auth import VaultClient, VaultError, OAuthClient, DPoPProver
 
-vault = VaultClient(
-    auth_url="https://auth.example",
-    access_token=agent_access_token,
+prover = DPoPProver.generate()
+oauth = OAuthClient("https://auth.example")
+agent_token = oauth.get_token_with_dpop(
+    grant_type="client_credentials",
+    dpop_prover=prover,
+    client_id="shark_agent_xxx",
+    client_secret="...",
+    scope="vault:read",
 )
 
+vault = VaultClient(base_url="https://auth.example")
+
 try:
-    fresh = vault.get_fresh_token(connection_id="conn_abc")
+    fresh = vault.fetch_token(
+        provider="google_gmail",
+        bearer_token=agent_token.access_token,
+        prover=prover,
+    )
 except VaultError as e:
     print(f"vault error: {e} (status={e.status_code})")
     raise
 
-print(fresh.provider, fresh.scopes, fresh.access_token[:12] + "...")
+print(fresh.access_token[:12] + "...")
 ```
 
 ## Quickstart 4 — decode_agent_token

@@ -171,7 +171,7 @@ Server raises `OAuthError` (Python) / `TokenError` (TS) on `invalid_scope` (aske
 Pure JWT — no signature verification. Use this in middleware that has already verified the signature out-of-band.
 
 ```python
-from shark_auth import AgentTokenClaims
+from shark_auth.claims import AgentTokenClaims
 
 claims = AgentTokenClaims.parse(child.access_token)
 print(claims.sub)            # the original subject (e.g. usr_alice)
@@ -184,10 +184,10 @@ for hop in claims.delegation_chain():
 ```
 
 ```typescript
-import { decodeAgentToken } from "@sharkauth/sdk";
-
-const claims = decodeAgentToken(child.accessToken);
-for (const hop of claims.act_chain ?? []) {
+// decodeAgentToken is not yet exported from @sharkauth/sdk.
+// Decode the JWT payload manually (e.g. with jose or jwt-decode) until P1 lands.
+const claims = JSON.parse(Buffer.from(child.accessToken.split(".")[1], "base64url").toString());
+for (const hop of claims.act ?? []) {
   console.log(hop.sub, hop.scope, hop.cnf?.jkt);
 }
 ```
@@ -216,7 +216,7 @@ print(result.revoked_agent_ids, result.revoked_consent_count, result.audit_event
 
 ```typescript
 // Layer 3 — user lost their device
-const result = await c.users.revokeUserAgents("usr_alice", { reason: "device-lost" });
+const result = await c.users.revokeUserAgents("usr_alice");
 ```
 # Layer 4 — emergency rollback of a buggy agent version
 result = c.oauth.bulk_revoke_by_pattern(
@@ -260,12 +260,13 @@ The agent must reacquire tokens with the new prover — old tokens are dead.
 
 ```python
 tokens = c.agents.list_tokens("agent_abc")
-events = c.agents.get_audit_logs("agent_abc", limit=50)
+events = c.users.get_user_audit_logs("usr_alice", limit=50)
 ```
 
 ```typescript
 const tokens = await c.agents.listTokens("agent_abc");
-const events = await c.agents.getAuditLogs("agent_abc", { limit: 50 });
+// Note: per-agent audit logs are not yet exposed in the TS SDK.
+// Use c.users.getUserAuditLogs(userId) for user-scoped audit events.
 ```
 
 `AuditEvent` carries `id`, `event` (e.g. `agent.token_issued`), `actor_id`, `target_id`, `metadata`, `created_at`.

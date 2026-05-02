@@ -7,9 +7,10 @@ project_name: shark
 
 before:
   hooks:
-    - go mod tidy
-    - pnpm --prefix admin install
-    - pnpm --prefix admin build
+    - go mod download
+    - go mod verify
+    - pnpm --dir admin install --frozen-lockfile
+    - pnpm --dir admin build
 
 builds:
   - id: shark

@@ -1,4 +1,4 @@
-﻿package oauth
+package oauth
 
 import (
 	"context"
@@ -57,6 +57,13 @@ func seedAgentWithScopes(t *testing.T, store storage.Store, clientID string, sco
 		t.Fatalf("seeding agent %s: %v", clientID, err)
 	}
 	return agent
+}
+
+func startAuditLogger(t *testing.T, store storage.Store) *audit.Logger {
+	t.Helper()
+	logger := audit.NewLogger(store)
+	logger.Start(context.Background())
+	return logger
 }
 
 // mintSubjectJWT signs a JWT using the server's Sign method.
@@ -519,7 +526,8 @@ func TestScopesSubset_Logic(t *testing.T) {
 func TestExchange_AuditMetadata_ScopeFields(t *testing.T) {
 	_, srv, store := mountExchangeServer(t)
 	// Wire a real audit logger so the emission path is exercised.
-	srv.AuditLogger = audit.NewLogger(store)
+	auditLogger := startAuditLogger(t, store)
+	srv.AuditLogger = auditLogger
 
 	seedAgentWithScopes(t, store, "audit-actor", []string{"openid", "read", "write"})
 	_ = seedUser(t, store, "audit-user@example.com")
@@ -545,6 +553,7 @@ func TestExchange_AuditMetadata_ScopeFields(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
+	auditLogger.Stop()
 
 	// Query the audit log for the emitted row.
 	ctx := context.Background()
@@ -610,7 +619,8 @@ func TestExchange_AuditMetadata_ScopeFields(t *testing.T) {
 // (full pass-through) dropped_scope and requested_scope serialize as [] not null.
 func TestExchange_AuditMetadata_EmptyArrays(t *testing.T) {
 	_, srv, store := mountExchangeServer(t)
-	srv.AuditLogger = audit.NewLogger(store)
+	auditLogger := startAuditLogger(t, store)
+	srv.AuditLogger = auditLogger
 
 	seedAgentWithScopes(t, store, "empty-arr-actor", []string{"openid", "read"})
 	_ = seedUser(t, store, "empty-arr-user@example.com")
@@ -636,6 +646,7 @@ func TestExchange_AuditMetadata_EmptyArrays(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
+	auditLogger.Stop()
 
 	ctx := context.Background()
 	logs, err := store.QueryAuditLogs(ctx, storage.AuditLogQuery{
@@ -677,7 +688,8 @@ func TestExchange_AuditMetadata_EmptyArrays(t *testing.T) {
 // Proves Phase A: token-exchange correlates to an operator-issued grant.
 func TestExchange_AuditMetadata_GrantID(t *testing.T) {
 	_, srv, store := mountExchangeServer(t)
-	srv.AuditLogger = audit.NewLogger(store)
+	auditLogger := startAuditLogger(t, store)
+	srv.AuditLogger = auditLogger
 
 	seedAgentWithScopes(t, store, "grant-actor", []string{"openid", "read"})
 	subjectEmail := seedUser(t, store, "grant-user@example.com")
@@ -711,6 +723,7 @@ func TestExchange_AuditMetadata_GrantID(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
+	auditLogger.Stop()
 
 	logs, err := store.QueryAuditLogs(context.Background(), storage.AuditLogQuery{
 		Action: "oauth.token.exchanged",
@@ -748,7 +761,8 @@ func TestExchange_AuditMetadata_GrantID(t *testing.T) {
 // grant_* keys are absent (not empty/null). Proves backwards-compat.
 func TestExchange_AuditMetadata_NoGrant(t *testing.T) {
 	_, srv, store := mountExchangeServer(t)
-	srv.AuditLogger = audit.NewLogger(store)
+	auditLogger := startAuditLogger(t, store)
+	srv.AuditLogger = auditLogger
 
 	seedAgentWithScopes(t, store, "no-grant-actor", []string{"read"})
 	subjectEmail := seedUser(t, store, "no-grant-user@example.com")
@@ -767,6 +781,7 @@ func TestExchange_AuditMetadata_NoGrant(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
+	auditLogger.Stop()
 	logs, _ := store.QueryAuditLogs(context.Background(), storage.AuditLogQuery{
 		Action: "oauth.token.exchanged",
 		Limit:  10,

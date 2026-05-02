@@ -73,6 +73,7 @@ def test_rotate_dpop_key(base_url: str, admin_key: str) -> None:
         name="smoke_rotate_dpop_agent",
         scopes=["read"],
         token_endpoint_auth_method="client_secret_post",
+        grant_types=["client_credentials"],
         # Embed the initial DPoP public key in metadata so the backend
         # can derive old_jkt on rotation.
         metadata={"dpop_public_jwk": prover_old.public_jwk},

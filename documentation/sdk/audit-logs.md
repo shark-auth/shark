@@ -85,8 +85,7 @@ open("april.ndjson", "w").write(csv)
 ```
 
 ```typescript
-const text = await audit.export({
-  format: "ndjson",
+const text = await audit.export("ndjson", {
   since: "2026-04-01T00:00:00Z",
   until: "2026-05-01T00:00:00Z",
 });
@@ -110,7 +109,7 @@ print(result["deleted"])
 ```
 
 ```typescript
-const result = await audit.purge({ before: "2025-01-01T00:00:00Z", dryRun: true });
+const result = await audit.purge("2025-01-01T00:00:00Z", true);
 ```
 
 Deletes all entries strictly older than `before`. Use `dry_run=True` to preview the count without mutating.

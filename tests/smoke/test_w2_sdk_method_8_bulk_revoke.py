@@ -31,6 +31,7 @@ def _register_agent(agents: AgentsClient, name: str) -> dict:
         name=name,
         scopes=["read"],
         token_endpoint_auth_method="client_secret_post",
+        grant_types=["client_credentials"],
     )
 
 

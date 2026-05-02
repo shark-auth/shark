@@ -1,14 +1,11 @@
-﻿package testutil
+package testutil
 
 import (
-	"embed"
 	"testing"
 
+	"github.com/shark-auth/shark/cmd/shark/migrations"
 	"github.com/shark-auth/shark/internal/storage"
 )
-
-//go:embed migrations/*.sql
-var testMigrationsFS embed.FS
 
 // NewTestDB creates an in-memory SQLite database with all migrations applied.
 // The database is automatically closed when the test completes.
@@ -20,7 +17,7 @@ func NewTestDB(t *testing.T) *storage.SQLiteStore {
 		t.Fatalf("creating test db: %v", err)
 	}
 
-	if err := storage.RunMigrations(store.DB(), testMigrationsFS, "migrations"); err != nil {
+	if err := storage.RunMigrations(store.DB(), migrations.FS, "."); err != nil {
 		store.Close() //#nosec G104 -- cleanup after failed migration; test is already failing
 		t.Fatalf("running migrations: %v", err)
 	}

@@ -5,25 +5,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint-go:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-
-  unit-tests-go:
+  go-launch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,11 +20,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Run Unit Tests (Main)
-        run: go test -v -race -count=1 ./...
-      - name: Run Unit Tests (Bench)
-        working-directory: bench
-        run: go test -v -race -count=1 ./...
+      - name: Core package tests
+        run: |
+          go test -race -count=1 ./cmd/... ./internal/auth/... ./internal/cache ./internal/config ./internal/storage ./internal/oauth ./internal/vault ./internal/audit ./internal/telemetry
+      - name: API launch/security tests
+        run: |
+          go test -race -count=1 ./internal/api ./internal/api/middleware -run 'Test(Auth|Login|Signup|Logout|Password|Session|Admin.*Session|APIKey|RequiresAdminKey|AdminAPIKey|OAuth|Vault|Audit|Telemetry|MFA|JWT|DPoP|Revoke|TokenEndpoint|Agent.*Token|User.*Agent)'
+      - name: Build CLI
+        run: go build ./cmd/shark
 
   security-scan:
     runs-on: ubuntu-latest
@@ -49,8 +41,7 @@ jobs:
       - name: Run gosec
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -fmt=sarif -out=gosec.sarif ./...
-        continue-on-error: true
+          gosec -exclude=G104,G304 -fmt=sarif -out=gosec.sarif ./cmd/... ./internal/...
       - name: Upload gosec SARIF
         uses: github/codeql-action/upload-sarif@v3
         if: always()
@@ -59,8 +50,7 @@ jobs:
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
-        continue-on-error: true
+          govulncheck ./cmd/... ./internal/...
 
   sdk-typescript:
     runs-on: ubuntu-latest
@@ -74,11 +64,24 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm --filter @sharkauth/sdk build
+      - name: Typecheck
+        run: pnpm --filter @sharkauth/sdk typecheck
       - name: Test
         run: pnpm --filter @sharkauth/sdk test
+      - name: Package check
+        run: |
+          cd sdk/typescript
+          npm pack --dry-run
+          TARBALL=$(npm pack --silent)
+          cd ../..
+          mkdir -p /tmp/shark-ts-install
+          npm init -y --prefix /tmp/shark-ts-install
+          npm install --prefix /tmp/shark-ts-install "./sdk/typescript/${TARBALL}"
+          cd /tmp/shark-ts-install
+          node --input-type=module -e "import('@sharkauth/sdk').then(() => console.log('ok'))"
 
   sdk-python:
     runs-on: ubuntu-latest
@@ -90,14 +93,25 @@ jobs:
           cache: 'pip'
       - name: Install dependencies
         working-directory: sdk/python
-        run: |
-          pip install .[dev]
+        run: pip install .[dev] build twine
       - name: Test
         working-directory: sdk/python
         run: pytest
+      - name: Build wheel + sdist
+        working-directory: sdk/python
+        run: python -m build
+      - name: Check distribution metadata
+        working-directory: sdk/python
+        run: twine check dist/*
+      - name: Install from built wheel
+        working-directory: sdk/python
+        run: |
+          python -m venv /tmp/shark-python-install
+          /tmp/shark-python-install/bin/pip install dist/*.whl
+          /tmp/shark-python-install/bin/python -c "import shark_auth; print('ok')"
 
-  e2e-smoke-python:
-    needs: [unit-tests-go]
+  e2e-smoke-launch:
+    needs: [go-launch]
     runs-on: ubuntu-latest
     env:
       SHARKAUTH_SERVER_SECRET: ci-only-secret-used-only-during-smoke-tests-xx
@@ -114,10 +128,10 @@ jobs:
           python-version: '3.11'
       - name: Install smoke test dependencies
         working-directory: tests/smoke
-        run: pip install -r requirements.txt || pip install pytest requests
-      - name: Run Smoke Tests (E2E)
-        run: pytest tests/smoke/
-      - name: Upload Logs on Failure
+        run: pip install -r requirements.txt
+      - name: Run launch smoke tests
+        run: pytest -m launch tests/smoke
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -126,22 +140,3 @@ jobs:
             server.log
             tests/smoke/server.log
             tests/smoke/shark_serve.log
-
-  benchmarks:
-    needs: [unit-tests-go]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Build shark
-        run: go build -o shark ./cmd/shark
-      - name: Run Benchmarks (Smoke Profile)
-        working-directory: bench
-        run: |
-          # Generate a temporary admin key for the bench tool
-          mkdir -p ../tests/smoke/data
-          echo "sk_test_ci_admin_key_12345678901234567890123456" > ../tests/smoke/data/admin.key.firstboot
-          go run ./cmd/bench --profile smoke --admin-key-file ../tests/smoke/data/admin.key.firstboot

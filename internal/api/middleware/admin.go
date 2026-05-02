@@ -1,4 +1,4 @@
-﻿package middleware
+package middleware
 
 import (
 	"encoding/json"
@@ -33,7 +33,7 @@ func AdminOrSessionFunc(store storage.Store, rateLimiter *auth.TokenBucket, sm *
 					rawKey = parts[1]
 				}
 			}
-			if rawKey == "" {
+			if rawKey == "" && allowsAdminQueryToken(r) {
 				rawKey = r.URL.Query().Get("token")
 			}
 			// Route to admin path when key has sk_live_ prefix, session path otherwise.
@@ -54,7 +54,8 @@ func AdminOrSessionFunc(store storage.Store, rateLimiter *auth.TokenBucket, sm *
 func AdminAPIKeyFromStore(store storage.Store, rateLimiter *auth.TokenBucket) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Read Authorization header or token query param (for SSE)
+			// Read Authorization header. Query-string keys are intentionally
+			// limited to SSE routes because EventSource cannot set headers.
 			rawKey := ""
 			authHeader := r.Header.Get("Authorization")
 			if authHeader != "" {
@@ -64,7 +65,7 @@ func AdminAPIKeyFromStore(store storage.Store, rateLimiter *auth.TokenBucket) fu
 				}
 			}
 
-			if rawKey == "" {
+			if rawKey == "" && allowsAdminQueryToken(r) {
 				rawKey = r.URL.Query().Get("token")
 			}
 
@@ -120,5 +121,18 @@ func AdminAPIKeyFromStore(store storage.Store, rateLimiter *auth.TokenBucket) fu
 
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func allowsAdminQueryToken(r *http.Request) bool {
+	if r == nil || r.Method != http.MethodGet {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/v1/admin/logs/stream",
+		"/api/v1/admin/proxy/status/stream":
+		return true
+	default:
+		return false
 	}
 }

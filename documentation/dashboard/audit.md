@@ -128,4 +128,4 @@ values (random `req_*` / `sess_*` IDs that changed on every render) have been
 removed.
 
 For the canonical list of which `action` values populate which metadata fields
-see [documentation/api/audit.md](../api/audit.md).
+see [Audit logs SDK reference](../sdk/audit-logs.md).

@@ -1,1 +1,0 @@
-/home/raul/Desktop/projects/shark/.gemini/skills/gstack/codex/SKILL.md

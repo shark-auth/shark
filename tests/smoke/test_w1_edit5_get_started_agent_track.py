@@ -56,7 +56,7 @@ class TestAuditEndpoint:
 
     def test_audit_page_reachable(self):
         """The admin SPA serves /audit (or the root index.html for the hash route)."""
-        r = requests.get(f"{BASE}/audit", timeout=5, allow_redirects=True)
+        r = requests.get(f"{BASE}/admin/audit", timeout=5, allow_redirects=True)
         # SPA may return 200 with HTML, or redirect to /admin/audit — both are fine.
         assert r.status_code in (200, 301, 302), (
             f"Expected 200/30x, got {r.status_code}: {r.text[:200]}"
@@ -67,7 +67,7 @@ class TestAuditEndpoint:
     def test_audit_delegation_filter_unauth(self):
         """GET /api/v1/admin/audit?delegation=true without auth must return 401."""
         r = requests.get(
-            f"{BASE}/api/v1/admin/audit",
+            f"{BASE}/api/v1/audit-logs",
             params={"delegation": "true"},
             timeout=5,
         )

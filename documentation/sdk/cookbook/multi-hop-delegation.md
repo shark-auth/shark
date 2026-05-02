@@ -126,12 +126,8 @@ Now the token has `act -> act` — two delegation hops.
 ```python
 from shark_auth import DPoPHTTPClient
 
-http = DPoPHTTPClient(
-    base_url="https://search.api",
-    prover=search_prover,
-    access_token=search_token.access_token,
-)
-resp = http.get("/v1/search", params={"q": "from:vendor"})
+http = DPoPHTTPClient(base_url="https://search.api")
+resp = http.get_with_dpop("/v1/search", token=search_token.access_token, prover=search_prover, params={"q": "from:vendor"})
 ```
 
 ## Step 7 — resource server walks the chain
@@ -149,11 +145,11 @@ for i, hop in enumerate(claims.delegation_chain()):
 ```
 
 ```typescript
-import { decodeAgentToken } from "@sharkauth/sdk";
-
-const claims = decodeAgentToken(searchToken.accessToken);
+// decodeAgentToken is not yet exported from @sharkauth/sdk.
+// Decode the JWT payload manually until P1 lands.
+const claims = JSON.parse(Buffer.from(searchToken.accessToken.split(".")[1], "base64url").toString());
 console.log(claims.sub);
-for (const hop of claims.act_chain ?? []) {
+for (const hop of claims.act ?? []) {
   console.log(hop.sub, hop.scope, hop.cnf?.jkt);
 }
 ```

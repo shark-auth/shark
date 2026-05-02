@@ -1,4 +1,4 @@
-﻿package oauth
+package oauth
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ory/fosite"
 
+	"github.com/shark-auth/shark/cmd/shark/migrations"
 	mw "github.com/shark-auth/shark/internal/api/middleware"
 	"github.com/shark-auth/shark/internal/config"
 	"github.com/shark-auth/shark/internal/storage"
@@ -33,7 +34,7 @@ func newTestOAuthServer(t *testing.T) (*Server, storage.Store) {
 	if err != nil {
 		t.Fatalf("creating test db: %v", err)
 	}
-	if err := storage.RunMigrations(db.DB(), testMigrationsFS, "testmigrations"); err != nil {
+	if err := storage.RunMigrations(db.DB(), migrations.FS, "."); err != nil {
 		db.Close()
 		t.Fatalf("running migrations: %v", err)
 	}
@@ -791,7 +792,7 @@ func TestNewServer_KeyIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating test db: %v", err)
 	}
-	if err := storage.RunMigrations(db.DB(), testMigrationsFS, "testmigrations"); err != nil {
+	if err := storage.RunMigrations(db.DB(), migrations.FS, "."); err != nil {
 		db.Close()
 		t.Fatalf("running migrations: %v", err)
 	}

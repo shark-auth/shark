@@ -25,7 +25,7 @@ rbac.delete_role(role["id"])
 ```
 
 ```typescript
-const role = await rbac.createRole({ name: "editor", description: "..." });
+const role = await rbac.createRole("editor", "Can edit but not delete");
 await rbac.listRoles();
 await rbac.updateRole(role.id, { description: "Updated" });
 await rbac.deleteRole(role.id);
@@ -44,7 +44,7 @@ rbac.delete_permission(perm["id"])
 ```typescript
 const perm = await rbac.createPermission("documents:write", "folder_123");
 await rbac.listPermissions();
-await rbac.deletePermission(perm.id);
+// Note: deletePermission is not yet implemented in the TS SDK.
 ```
 
 ## Attach permissions to roles
@@ -55,8 +55,8 @@ rbac.detach_permission_from_role(role["id"], perm["id"])
 ```
 
 ```typescript
-await rbac.attachPermissionToRole(role.id, perm.id);
-await rbac.detachPermissionFromRole(role.id, perm.id);
+await rbac.attachPermission(role.id, perm.id);
+await rbac.detachPermission(role.id, perm.id);
 ```
 
 ## Assign roles to users
@@ -68,8 +68,8 @@ rbac.list_user_roles("usr_alice")
 ```
 
 ```typescript
-await rbac.assignRoleToUser("usr_alice", role.id);
-await rbac.revokeRoleFromUser("usr_alice", role.id);
+await rbac.assignRole("usr_alice", role.id);
+await rbac.revokeRole("usr_alice", role.id);
 await rbac.listUserRoles("usr_alice");
 ```
 

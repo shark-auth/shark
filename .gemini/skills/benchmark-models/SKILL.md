@@ -1,1 +1,0 @@
-/home/raul/Desktop/projects/shark/.gemini/skills/gstack/benchmark-models/SKILL.md

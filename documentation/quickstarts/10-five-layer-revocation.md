@@ -46,7 +46,7 @@ Expected audit log entry:
 }
 ```
 
-**API reference:** [`/documentation/api/oauth.md#revoke`](/documentation/api/oauth.md)
+**API reference:** [`../sdk/oauth-clients.md`](../sdk/oauth-clients.md)
 
 ---
 
@@ -99,7 +99,7 @@ Expected audit log entry:
 }
 ```
 
-**API reference:** [`/documentation/api/agents.md#revoke-all`](/documentation/api/agents.md)
+**API reference:** [`Delegation and agents`](../sdk/delegation-and-agents.md)
 
 ---
 
@@ -156,15 +156,15 @@ Expected audit log entry:
 }
 ```
 
-**API reference:** [`/documentation/api/users.md#revoke-agents`](/documentation/api/users.md)
+**API reference:** [`Delegation and agents`](../sdk/delegation-and-agents.md)
 
 ---
 
-## L4 — Bulk pattern revoke (v0.2)
+## L4 — Bulk pattern revoke
 
 **When:** a specific agent version or agent type is compromised across all customers. Pattern matches on `client_id` using SQLite GLOB syntax.
 
-The backend endpoint ships in v0.2 (Wave 1.6). The SDK method exists today.
+The backend endpoint and SDK method are both live today.
 
 ```python
 from shark_auth import Client
@@ -269,5 +269,5 @@ Expected audit log entry (v0.2):
 
 - Customer agent provisioning: [01 — Customer Agents](./01-customer-agents.md)
 - Delegation chains (what's in the audit trail): [11 — Delegation Chains](./11-delegation-chains.md)
-- Audit log API: [`/documentation/api/audit-logs.md`](/documentation/api/audit-logs.md)
-- Agents API: [`/documentation/api/agents.md`](/documentation/api/agents.md)
+- Audit log API: [`../sdk/audit-logs.md`](../sdk/audit-logs.md)
+- Agents API: [`Delegation and agents`](../sdk/delegation-and-agents.md)

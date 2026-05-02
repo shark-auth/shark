@@ -94,8 +94,11 @@ print(google.expires_at)
 ```
 
 ```typescript
-// TS fetchToken signature: see vault.ts.
-const google = await vault.fetchToken("google_gmail");
+// TS fetchToken takes a connection ID, not a provider slug.
+// Use listConnections() to find the correct connection ID first.
+const connections = await vault.listConnections({ limit: 10 });
+const conn = connections.items.find(c => c.provider_id === "google_gmail");
+const google = await vault.fetchToken(conn!.id);
 ```
 
 ## Step 5 — call Gmail

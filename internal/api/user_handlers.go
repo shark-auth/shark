@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"database/sql"
@@ -162,6 +162,9 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	// Revoke all session tokens for the user.
 	revokedSessionIDs, _ := s.Store.DeleteSessionsByUserID(r.Context(), id)
+	for _, sessionID := range revokedSessionIDs {
+		s.evictSessionAuth(sessionID)
+	}
 	revokedSessionCount := len(revokedSessionIDs)
 
 	// DeleteUser cascades via ON DELETE CASCADE in the schema
@@ -326,6 +329,11 @@ func (s *Server) handleDeleteMe(w http.ResponseWriter, r *http.Request) {
 			"message": "User not found",
 		})
 		return
+	}
+
+	revokedSessionIDs, _ := s.Store.DeleteSessionsByUserID(r.Context(), userID)
+	for _, sessionID := range revokedSessionIDs {
+		s.evictSessionAuth(sessionID)
 	}
 
 	// Delete the user (cascades via ON DELETE CASCADE)

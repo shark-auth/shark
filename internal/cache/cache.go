@@ -15,8 +15,8 @@ type AuthDecision struct {
 	Tier          string
 	// EffectivePermissions could be a map or slice. Using a simple struct for now.
 	// In a full implementation, this holds the flattened RBAC graph.
-	Permissions   map[string]bool 
-	ExpiresAt     time.Time
+	Permissions map[string]bool
+	ExpiresAt   time.Time
 }
 
 // Cache is a simple thread-safe, TTL-based memory cache for AuthDecisions.
@@ -63,6 +63,13 @@ func (c *Cache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.items, key)
+}
+
+// Clear removes all cached auth decisions.
+func (c *Cache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.items = make(map[string]AuthDecision)
 }
 
 // cleanupLoop periodically removes expired items to prevent unbounded growth.

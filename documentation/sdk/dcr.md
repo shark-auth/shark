@@ -13,7 +13,7 @@ dcr = DCRClient("https://auth.example.com")
 
 ```typescript
 import { DcrClient } from "@sharkauth/sdk";
-const dcr = new DcrClient({ baseUrl: "https://auth.example.com" });
+const dcr = new DcrClient("https://auth.example.com");
 ```
 
 ## Register
@@ -34,12 +34,12 @@ rat       = reg["registration_access_token"]
 
 ```typescript
 const reg = await dcr.register({
-  clientName: "My App",
-  redirectUris: ["https://app.example.com/cb"],
-  grantTypes: ["authorization_code", "refresh_token"],
-  responseTypes: ["code"],
+  client_name: "My App",
+  redirect_uris: ["https://app.example.com/cb"],
+  grant_types: ["authorization_code", "refresh_token"],
+  response_types: ["code"],
   scope: "openid profile",
-  tokenEndpointAuthMethod: "client_secret_basic",
+  token_endpoint_auth_method: "client_secret_basic",
 });
 ```
 
@@ -66,7 +66,7 @@ dcr.delete(client_id, registration_access_token=rat)
 
 ```typescript
 const info = await dcr.get(clientId, rat);
-const updated = await dcr.update(clientId, rat, { redirectUris: [...] });
+const updated = await dcr.update(clientId, rat, { redirect_uris: [...] });
 await dcr.delete(clientId, rat);
 ```
 

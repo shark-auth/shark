@@ -1,13 +1,6 @@
-# @sharkauth/node
+# @sharkauth/sdk
 
-TypeScript SDK for [SharkAuth](https://github.com/shark-auth/shark) agent-auth primitives.
-
-Implements the four primitives most agent builders reach for:
-
-1. **`DPoPProver`** — RFC 9449 DPoP proof JWTs (ES256 via `jose`).
-2. **`DeviceFlow`** — RFC 8628 device authorization grant with `slow_down` + `expired_token` handling.
-3. **`VaultClient`** — fetch auto-refreshed 3rd-party OAuth credentials from Shark's Token Vault.
-4. **`decodeAgentToken`** — decode a Shark-issued agent token payload (no signature verification).
+TypeScript SDK for [SharkAuth](https://github.com/shark-auth/shark) agent-auth primitives and v1.5 admin APIs.
 
 Targets Node 18+ (uses built-in `fetch` and `crypto.subtle`).
 
@@ -18,13 +11,33 @@ Targets Node 18+ (uses built-in `fetch` and `crypto.subtle`).
 ## Install
 
 ```sh
-npm install @sharkauth/node
+npm install @sharkauth/sdk
 ```
+
+## Exported primitives
+
+**Auth & OAuth**
+- `AuthClient` — signup, login, sessions, password reset, magic links
+- `OAuthClient` — token, revoke, introspect, refresh, PKCE, authorize URL builder
+- `DeviceFlow` — RFC 8628 device authorization grant
+- `DPoPProver` — RFC 9449 DPoP proof JWTs (ES256 via `jose`)
+
+**Admin & Platform**
+- `SharkClient` — composer client with 18 namespaces (users, agents, orgs, RBAC, audit, webhooks, proxy, branding, paywall, etc.)
+- `ApiKeysClient`, `AgentsClient`, `AuditClient`, `BrandingClient`, `ConsentsClient`, `DcrClient`, `MagicLinkClient`, `MayActClient`, `OrganizationsClient`, `PaywallClient`, `ProxyLifecycleClient`, `ProxyRulesClient`, `RbacClient`, `SessionsClient`, `UsersClient`, `WebhooksClient`
+
+**Utilities**
+- `exchangeToken` — RFC 8693 token exchange (free function)
+- `pkcePair` — PKCE verifier/challenge generator
+- `computeTotp` — TOTP code generator
+- `verifySignature` — async webhook signature verifier
+
+See `src/index.ts` for the full public API.
 
 ## Quickstart 1 — DPoP-bound device flow
 
 ```ts
-import { DPoPProver, DeviceFlow } from "@sharkauth/node";
+import { DPoPProver, DeviceFlow } from "@sharkauth/sdk";
 
 const prover = await DPoPProver.generate();
 
@@ -60,7 +73,7 @@ console.log(await res.json());
 ## Quickstart 2 — DPoPProver standalone
 
 ```ts
-import { DPoPProver } from "@sharkauth/node";
+import { DPoPProver } from "@sharkauth/sdk";
 
 // Generate a fresh P-256 keypair
 const prover = await DPoPProver.generate();
@@ -83,7 +96,7 @@ console.log("jkt:", prover.jkt);
 ## Quickstart 3 — VaultClient
 
 ```ts
-import { VaultClient, VaultError } from "@sharkauth/node";
+import { VaultClient, VaultError } from "@sharkauth/sdk";
 
 const vault = new VaultClient({
   authUrl: "https://auth.example",
@@ -93,7 +106,7 @@ const vault = new VaultClient({
 });
 
 try {
-  const fresh = await vault.exchange("conn_abc");
+  const fresh = await vault.fetchToken("conn_abc");
   console.log(fresh.provider, fresh.scopes, fresh.accessToken.slice(0, 12) + "...");
 } catch (e) {
   if (e instanceof VaultError) {
@@ -103,27 +116,23 @@ try {
 }
 ```
 
-## Quickstart 4 — decodeAgentToken
+## Quickstart 4 — SharkClient composer
 
-Decode a Shark-issued agent JWT payload without signature verification (for
-use in contexts where trust has already been established, e.g. after edge
-middleware validation).
+Most admin and platform operations go through the composer client:
 
 ```ts
-import { decodeAgentToken, TokenError } from "@sharkauth/node";
+import { SharkClient } from "@sharkauth/sdk";
 
-try {
-  const claims = decodeAgentToken(jwtString);
-  console.log(claims.sub, claims.scope);
-  console.log("DPoP-bound jkt:", claims.cnf?.jkt);
-  console.log("RFC 8693 actor:", claims.act);
-  console.log("RFC 9396 authz details:", claims.authorization_details);
-} catch (e) {
-  if (e instanceof TokenError) {
-    return { status: 401, body: String(e) };
-  }
-  throw e;
-}
+const c = new SharkClient({
+  baseUrl: "https://auth.example",
+  adminKey: "sk_live_admin",
+});
+
+const users = await c.users.listUsers();
+const agent = await c.agents.registerAgent({
+  name: "my-agent",
+  scopes: ["vault:read"],
+});
 ```
 
 ## Error classes
@@ -135,7 +144,7 @@ All errors extend `SharkAuthError`:
 | `DPoPError` | `DPoPProver` |
 | `DeviceFlowError` | `DeviceFlow` |
 | `VaultError` | `VaultClient` (has `.statusCode`) |
-| `TokenError` | `decodeAgentToken` |
+| `TokenError` | Token parsing / verification failures |
 
 ## License
 

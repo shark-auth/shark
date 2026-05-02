@@ -1,7 +1,9 @@
-﻿package storage_test
+package storage_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -23,6 +25,30 @@ func seedOAuthUser(t *testing.T, store *storage.SQLiteStore, id string) {
 	}
 	if err := store.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("seed user %q: %v", id, err)
+	}
+}
+
+func seedOAuthAgent(t *testing.T, store *storage.SQLiteStore, clientID string) {
+	t.Helper()
+	h := sha256.Sum256([]byte("test-secret"))
+	now := time.Now().UTC()
+	agent := &storage.Agent{
+		ID:               "agent_" + clientID,
+		Name:             "Agent " + clientID,
+		ClientID:         clientID,
+		ClientSecretHash: hex.EncodeToString(h[:]),
+		ClientType:       "confidential",
+		AuthMethod:       "client_secret_basic",
+		GrantTypes:       []string{"client_credentials"},
+		ResponseTypes:    []string{"code"},
+		Scopes:           []string{"openid"},
+		TokenLifetime:    900,
+		Active:           true,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	if err := store.CreateAgent(context.Background(), agent); err != nil {
+		t.Fatalf("seed agent %q: %v", clientID, err)
 	}
 }
 
@@ -117,6 +143,7 @@ func TestOAuthToken_ListAndDPoP(t *testing.T) {
 
 	userID := "usr_tok_1"
 	seedOAuthUser(t, store, userID)
+	seedOAuthAgent(t, store, "tok_1")
 
 	// Create 2 tokens for the same agent_id.
 	now := time.Now().UTC()

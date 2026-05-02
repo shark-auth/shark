@@ -124,12 +124,12 @@ def _server_up():
 
 @pytest.mark.skipif(not _server_up(), reason="Shark server not running")
 def test_audit_logs_token_exchange_endpoint():
-    """GET /api/v1/admin/audit-logs?action=token.exchange&limit=1 must return 200."""
+    """GET /api/v1/audit-logs?action=token.exchange&limit=1 must return 200."""
     headers = {}
     if ADMIN_KEY:
         headers["Authorization"] = f"Bearer {ADMIN_KEY}"
     r = requests.get(
-        f"{BASE_URL}/api/v1/admin/audit-logs",
+        f"{BASE_URL}/api/v1/audit-logs",
         params={"action": "token.exchange", "limit": "1"},
         headers=headers,
         timeout=5,
