@@ -737,7 +737,7 @@ function AttentionPanel({ healthRaw, stats, onRefresh, setPage }) {
 function UpdateProberPanel({ healthRaw }) {
   const [status, setStatus] = React.useState('checking');
   const [latestVersion, setLatestVersion] = React.useState(null);
-  const activeVersion = healthRaw?.version || 'unknown';
+  const activeVersion = normalizeReleaseVersion(healthRaw?.version);
 
   React.useEffect(() => {
     if (!healthRaw) return;
@@ -746,36 +746,34 @@ function UpdateProberPanel({ healthRaw }) {
     // and it's not a generic dev string, though we can still check registry anyway.
     let cancelled = false;
     
-    fetch('https://api.github.com/repos/sharkauth/shark/releases/latest')
+    fetch('https://api.github.com/repos/shark-auth/shark/releases/latest', {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
       .then(res => {
         if (!res.ok) throw new Error('Registry unavailable');
         return res.json();
       })
       .then(data => {
         if (cancelled) return;
-        const latest = data.tag_name ? data.tag_name.replace(/^v/, '') : null;
+        const latest = normalizeReleaseVersion(data.tag_name);
         if (!latest) throw new Error('No latest release');
         
         setLatestVersion(latest);
         
-        const active = activeVersion.replace(/^v/, '');
-        
-        if (active === 'unknown' || active === '0.0.0-dev') {
+        if (!activeVersion || activeVersion === 'dev' || activeVersion === '0.0.0-dev') {
           // Local/dev builds
           setStatus('unknown');
           return;
         }
 
-        // Basic semver compare (Major.Minor.Patch)
-        const [aMaj, aMin, aPat] = active.split('.').map(n => parseInt(n, 10) || 0);
-        const [lMaj, lMin, lPat] = latest.split('.').map(n => parseInt(n, 10) || 0);
+        const comparison = compareSemver(latest, activeVersion);
+        const latestMajor = parseSemver(latest)[0];
+        const activeMajor = parseSemver(activeVersion)[0];
 
-        if (lMaj > aMaj) {
+        if (comparison > 0 && latestMajor > activeMajor) {
           setStatus('outdated'); // Major update
-        } else if (lMaj === aMaj && lMin > aMin) {
-          setStatus('update-available'); // Minor update
-        } else if (lMaj === aMaj && lMin === aMin && lPat > aPat) {
-          setStatus('update-available'); // Patch update
+        } else if (comparison > 0) {
+          setStatus('update-available');
         } else {
           setStatus('up-to-date');
         }
@@ -797,17 +795,17 @@ function UpdateProberPanel({ healthRaw }) {
     dotColor = 'var(--success)';
     chipClass = 'success';
     chipText = 'Up to date';
-    statusText = `Binary is current (v${activeVersion})`;
+    statusText = `Binary is current (${formatReleaseVersion(activeVersion)})`;
   } else if (status === 'update-available') {
     dotColor = 'var(--warn)';
     chipClass = 'warn';
     chipText = 'Update';
-    statusText = `v${latestVersion} is available`;
+    statusText = `${formatReleaseVersion(latestVersion)} is available`;
   } else if (status === 'outdated') {
     dotColor = 'var(--danger)';
     chipClass = 'danger';
     chipText = 'Outdated';
-    statusText = `Critical update v${latestVersion} available`;
+    statusText = `Critical update ${formatReleaseVersion(latestVersion)} available`;
   } else if (status === 'error') {
     dotColor = 'var(--warn)';
     chipClass = 'warn';
@@ -817,7 +815,7 @@ function UpdateProberPanel({ healthRaw }) {
     dotColor = 'var(--fg-dim)';
     chipClass = 'faint';
     chipText = 'Dev build';
-    statusText = `Unreleased binary (v${activeVersion})`;
+    statusText = `Unreleased binary (${healthRaw?.version || 'unknown'})`;
   }
 
   return (
@@ -833,7 +831,7 @@ function UpdateProberPanel({ healthRaw }) {
           <div style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--fg-dim)', letterSpacing: '0.05em' }}>Current binary</div>
           <div className="row" style={{ alignItems: 'baseline', gap: 6 }}>
             <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-              {activeVersion !== 'unknown' ? `v${activeVersion}` : '—'}
+              {activeVersion ? formatReleaseVersion(activeVersion) : '—'}
             </span>
             {healthRaw?.commit && healthRaw.commit !== 'none' && (
               <span className="mono faint" style={{ fontSize: 10 }}>({healthRaw.commit})</span>
@@ -856,4 +854,30 @@ function UpdateProberPanel({ healthRaw }) {
       </div>
     </div>
   );
+}
+
+function normalizeReleaseVersion(value) {
+  if (!value || value === 'unknown') return null;
+  return String(value).trim().replace(/^v/i, '');
+}
+
+function formatReleaseVersion(value) {
+  return value ? `v${normalizeReleaseVersion(value)}` : '—';
+}
+
+function parseSemver(value) {
+  return normalizeReleaseVersion(value)
+    .split(/[.-]/)
+    .slice(0, 3)
+    .map(part => parseInt(part, 10) || 0);
+}
+
+function compareSemver(left, right) {
+  const a = parseSemver(left);
+  const b = parseSemver(right);
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] > b[i]) return 1;
+    if (a[i] < b[i]) return -1;
+  }
+  return 0;
 }
