@@ -151,6 +151,17 @@ class SharkClaw(App):
     def update_status_bar(self, text):
         self.query_one("#status-msg", Label).update(text)
 
+    def _boolish(self, value, default=False):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+        return bool(value)
+
     async def action_run_demo(self) -> None:
         if not Config.ADMIN_KEY:
             self.append_chat("ERROR", "Missing SHARK_ADMIN_KEY.", "red")
@@ -308,26 +319,41 @@ class SharkClaw(App):
 
         client = Client(base_url=Config.BASE_URL, token=Config.ADMIN_KEY)
         agent_id = ctx["fetcher_agent_id"]
+        admin_oauth = OAuthClient(base_url=Config.BASE_URL, token=Config.ADMIN_KEY)
         self.update_status_bar(f"REVOKING COMPROMISED AGENT {agent_id}...")
         client.agents.revoke_agent(agent_id)
 
-        revoked_agent = client.agents.get_agent(agent_id)
-        agent_inactive = revoked_agent.get("active") is False
+        revoked_agent = None
+        info = None
+        agent_inactive = False
+        token_inactive = False
+        for _ in range(10):
+            revoked_agent = client.agents.get_agent(agent_id)
+            agent_inactive = not self._boolish(revoked_agent.get("active"), default=True)
+
+            info = admin_oauth.introspect_token(ctx["fetcher_token"])
+            token_inactive = not self._boolish(info.get("active"), default=True)
+
+            if agent_inactive and token_inactive:
+                break
+            await asyncio.sleep(0.5)
+
         self.update_agent_status(agent_id[:4], "Revoked" if agent_inactive else "Revocation pending")
         if agent_inactive:
             self.append_chat("SHARKAUTH", f"Agent status verified inactive: [bold]{agent_id}[/]", "green")
         else:
             self.append_chat("SHARKAUTH", f"Agent revoke requested, but active still reads: {revoked_agent.get('active')}", "yellow")
 
-        admin_oauth = OAuthClient(base_url=Config.BASE_URL, token=Config.ADMIN_KEY)
-        info = admin_oauth.introspect_token(ctx["fetcher_token"])
-        if not info.get("active"):
+        if token_inactive:
             self.append_chat("SHARKAUTH", "Leaf token is inactive. PM-Orchestrator remains available.", "green")
         else:
             self.append_chat("SHARKAUTH", "Agent revoke completed, but token introspection still reports active.", "yellow")
 
-        self.pending_remediation = None
-        self.update_status_bar("COMPROMISED LEAF REMOVED. ROOT AGENT PRESERVED.")
+        if agent_inactive and token_inactive:
+            self.pending_remediation = None
+            self.update_status_bar("COMPROMISED LEAF REMOVED. ROOT AGENT PRESERVED.")
+        else:
+            self.update_status_bar("REVOCATION PENDING BACKEND CONFIRMATION")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         self.query_one("#repl-input").value = ""

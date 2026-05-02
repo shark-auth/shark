@@ -747,7 +747,11 @@ function UpdateProberPanel({ healthRaw }) {
     let cancelled = false;
     
     fetch('https://api.github.com/repos/shark-auth/shark/releases/latest', {
-      headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
     })
       .then(res => {
         if (!res.ok) throw new Error('Registry unavailable');
@@ -834,7 +838,20 @@ function UpdateProberPanel({ healthRaw }) {
               {activeVersion ? formatReleaseVersion(activeVersion) : '—'}
             </span>
             {healthRaw?.commit && healthRaw.commit !== 'none' && (
-              <span className="mono faint" style={{ fontSize: 10 }}>({healthRaw.commit})</span>
+              <span
+                className="mono faint"
+                title={healthRaw.commit}
+                style={{
+                  fontSize: 10,
+                  maxWidth: 110,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-block',
+                }}
+              >
+                ({healthRaw.commit.slice(0, 12)})
+              </span>
             )}
           </div>
         </div>
@@ -873,6 +890,7 @@ function parseSemver(value) {
 }
 
 function compareSemver(left, right) {
+  if (!left || !right) return 0;
   const a = parseSemver(left);
   const b = parseSemver(right);
   for (let i = 0; i < 3; i += 1) {
