@@ -77,14 +77,23 @@ export function Sessions() {
   const [selected, setSelected] = React.useState(null);
   const [query, setQuery] = React.useState('');
   const [clientFilter, setClientFilter] = useURLParam('client', 'all');
+  const [cursorStack, setCursorStack] = React.useState(['']);
   const [liveTail, setLiveTail] = React.useState(true);
   const [pulse, setPulse] = React.useState(0);
   const [jtiInput, setJtiInput] = React.useState('');
   const toast = useToast();
 
-  const { data: sessionsRaw, loading, refresh } = useAPI('/admin/sessions');
+  const pageSize = 50;
+  const pageCursor = cursorStack[cursorStack.length - 1] || '';
+  const sessionParams = new URLSearchParams({ limit: String(pageSize) });
+  if (pageCursor) sessionParams.set('cursor', pageCursor);
+  const { data: sessionsRaw, loading, refresh } = useAPI(`/admin/sessions?${sessionParams.toString()}`);
   const { data: statsRaw } = useAPI('/admin/stats');
   const sessions = (sessionsRaw?.data || []).map(normalizeSession);
+  const nextCursor = sessionsRaw?.next_cursor || '';
+  const pageIndex = cursorStack.length;
+  const canPrev = cursorStack.length > 1;
+  const canNext = !!nextCursor;
 
   // Live polling: refresh every 5s when liveTail is on
   React.useEffect(() => {
@@ -128,10 +137,24 @@ export function Sessions() {
     try {
       const r = await API.del('/admin/sessions');
       toast.success(`Revoked ${r?.revoked ?? 0} sessions`);
+      setCursorStack(['']);
+      setSelected(null);
       refresh();
     } catch (e) {
       toast.error(e?.message || 'Failed to revoke all sessions');
     }
+  };
+
+  const goPrev = () => {
+    if (!canPrev) return;
+    setSelected(null);
+    setCursorStack(stack => stack.slice(0, -1));
+  };
+
+  const goNext = () => {
+    if (!canNext) return;
+    setSelected(null);
+    setCursorStack(stack => [...stack, nextCursor]);
   };
 
   const all = sessions;
@@ -234,9 +257,20 @@ export function Sessions() {
           <div style={{ flex: 1 }}/>
 
           <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-            {filtered.length.toLocaleString()} of {loadedActive.toLocaleString()} loaded
+            Page {pageIndex.toLocaleString()} · {filtered.length.toLocaleString()} shown · {loadedActive.toLocaleString()} loaded
             {totalActive > loadedActive ? ` · ${totalActive.toLocaleString()} total` : ''}
           </span>
+
+          <div className="row" style={{ gap: 4 }}>
+            <button className="btn ghost sm" disabled={!canPrev || loading} onClick={goPrev} title="Previous page">
+              <Icon.ChevronLeft width={11} height={11}/>
+              Previous
+            </button>
+            <button className="btn ghost sm" disabled={!canNext || loading} onClick={goNext} title="Next page">
+              Next
+              <Icon.ChevronRight width={11} height={11}/>
+            </button>
+          </div>
 
           <button className="btn sm" onClick={() => {
             const rows = filtered.map(s => [s.id, s.user, s.ip, s.city, s.client, s.current ? 'current' : '', s.blocked ? 'blocked' : ''].join(','));

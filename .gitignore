@@ -6,6 +6,9 @@
 bin/
 /shark_optimized.exe
 /shark
+bench/bench
+bench/bench.exe
+bench/bench_linux
 
 # Database
 data/
