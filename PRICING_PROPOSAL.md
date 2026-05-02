@@ -1,8 +1,8 @@
-# SharkAuth — Product Definition & Agent-Centric Pricing Proposal
+# SharkAuth — Product Definition & Pricing Proposal
 
-**Status:** DRAFT v1.0
+**Status:** REVISED v3.0
 **Date:** 2026-05-01
-**Purpose:** Pricing framework for $1B revenue ambition. For review by agents, investors, and partners.
+**Revision note:** Modelo unificado MAI (Monthly Active Identities). Humanos y agentes son la misma unidad de medida. No se cobra por subagentes ni hops de delegación.
 
 ---
 
@@ -10,72 +10,65 @@
 
 SharkAuth is an open-source OAuth 2.1 authorization server built for the agentic era. It treats AI agents as first-class identities with native delegation primitives, proof-of-possession tokens, and a unified audit trail that tracks every hop from user to resource.
 
-**The one-line pitch:**
-> Auth for humans and the agents they ship. One platform. 40MB binary. Self-hosted free.
+**The pitch:**
+> Auth for products where agents act on behalf of users.
 
-**The differentiated pitch:**
-> SharkAuth ships the authorization primitives the OAuth standards already specified for agent delegation — and that no competitor has shipped as core infrastructure: RFC 8693 token exchange with nested act chains, RFC 9449 DPoP-bound tokens, five-layer cascade revocation, and a token vault where agents never see refresh tokens.
+**The one-line:**
+> Auth for humans and the agents they ship. One platform. 40MB binary. Self-hosted free.
 
 **What it is NOT:** A better Auth0. A human-auth bolt-on. A JWT middleware library. SharkAuth is purpose-built for products where agents act on behalf of users — with the audit trail, revocation blast radius, and credential vault that agents require.
 
-**Who uses it:** AI coding assistants, customer support agents, sales/outbound AI, voice AI, workflow automation AI, custom-agent platforms, vertical AI (healthcare, legal, finance), browser-based agents. See `documentation/inner_docs/general_product_guide.md` §5 for the full 10-vertical target list.
+**Who uses it:** AI coding assistants, customer support agents, sales/outbound AI, voice AI, workflow automation AI, custom-agent platforms, vertical AI (healthcare, legal, finance), browser-based agents.
 
-**Current status:** v0.9.0 shipped 2026-05-01. MIT license. Self-hosted free today. Hosted cloud tier launches Q3 2026 after Postgres migration.
+**Current status:** v0.9.0 shipped 2026-05-01. MIT license. Self-hosted free. Hosted cloud tier launches Q3 2026 after Postgres migration.
 
 ---
 
 ## The Agent Auth Moat — Five Layers
 
-The competitive moat is not any single feature. It is the combination of five revocation blast-radius layers, the token vault, and the trust chain created by DPoP + act chains + grant correlation in one system.
+The competitive moat is the combination of five revocation blast-radius layers, the token vault, and the trust chain created by DPoP + act chains + grant correlation in one system.
 
 ### Layer 1 — Token (RFC 7009)
 
 **Threat:** Agent's token leaks via prompt injection, log bleed, or network interception.
-**Response:** Revoke token + refresh family immediately. Bearer tokens are useless without the DPoP private key.
-**Economic value:** Token exfiltration yields nothing. No incident response required.
+**Response:** Revoke token + refresh family immediately. DPoP binding substantially reduces replay value — a stolen token is useless without the private key.
+**Economic value:** Surgical revocation vs. waiting for token expiry. No manual rotation across downstream services.
 
 ### Layer 2 — One Agent
 
 **Threat:** One specific agent instance is compromised (RCE, key extraction).
 **Response:** `agents.revoke_all(agent_id)` — kill every token that agent ever held.
-**Economic value:** Surgical kill vs. manual rotation across every downstream service. Minutes vs. hours. $3K-$10K/hour IR cost reduction.
+**Economic value:** Minutes vs. hours of manual IR work. $3K-$10K/hour IR cost reduction.
 
 ### Layer 3 — Customer Fleet
 
 **Threat:** Customer churns, goes rogue, or a departing employee provisioned agents before exit.
 **Response:** `users.revoke_agents(user_id)` — one call cascades to revoke every agent that customer ever spawned.
 **Economic value:**
-- Instant revocation: prevents unauthorized usage during churn disputes ($10K-$40K/month per enterprise contract)
-- GDPR Article 17 compliance: failure to revoke within 72 hours = up to 4% of global annual turnover fine
-- Rogue insider containment: average insider threat incident = $4.2M (Ponemon 2024)
+- Instant revocation prevents unauthorized usage during churn disputes
+- Rogue insider containment without manual deprovisioning across every agent
 
 ### Layer 4 — Agent Type Pattern
 
 **Threat:** Buggy agent template v3.2 deployed across 500 customers. Critical vulnerability.
 **Response:** Bulk revoke by `client_id` pattern — single call kills every agent matching `*_v3.2*` across ALL customers.
 **Economic value:**
-- Without: 500 tenants × 5 min manual coordination = 41 hours during active exploit = $123K-$410K IR cost
-- With: minutes = <$10K IR cost
-- The IR cost gap per major incident: **$100K-$400K saved per vulnerability**
+- Without: 500 tenants × 5 min manual coordination = 41 hours during active exploit
+- With: minutes
 
 ### Layer 5 — Vault Credential
 
 **Threat:** Customer's external OAuth (Google, Slack) is compromised at the provider.
-**Response:** `vault.disconnect(connection_id, cascade=true)` — disconnects the root credential and kills every derived agent token that ever used it.
-**Economic value:**
-- Google Drive breach average: $2.1M
-- Third-party OAuth abuse without cascade: spreading credential compromise across every agent using that connection
-- Vault disconnect contains the blast radius at the root
+**Response:** `vault.disconnect(connection_id, cascade=true)` — disconnects the root credential and kills every derived agent token.
+**Economic value:** Contains blast radius at the root credential. Without this, a third-party OAuth compromise spreads across every agent that ever used that connection.
 
 ### The Token Vault
 
-The vault is not a convenience feature. It is security infrastructure:
+The vault is security infrastructure, not a convenience feature:
 - Stores encrypted refresh tokens server-side. Agents never see refresh tokens.
-- Agents get short-lived access tokens via `vault.fetch_token()`. The refresh token never leaves the vault.
 - Server-side auto-refresh handles token rotation transparently.
-- One encrypted credential server-side vs. 1,000 refresh tokens scattered across 1,000 agents.
-
-**Build cost vs. buy:** To build a vault with equivalent security properties (AES-256-GCM, auto-rotation, DPoP integration, RFC 7009 cascade) costs $460K-920K one-time. SharkAuth includes it.
+- One encrypted credential server-side vs. N refresh tokens scattered across N agents.
+- Replaces months of custom OAuth token lifecycle and security engineering work.
 
 **Feature comparison:**
 
@@ -89,159 +82,227 @@ The vault is not a convenience feature. It is security infrastructure:
 | Vault disconnect cascade (Layer 5) | ✅ | ❌ | ❌ | ❌ |
 | DPoP-bound tokens | ✅ | ❌ | ❌ | ❌ |
 | RFC 8693 act chain audit | ✅ | ❌ | ❌ | ❌ |
-| Grant_id correlated audit | ✅ | ❌ | ❌ | ❌ |
+| Self-hostable, open-source | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
-## Why the Human-Auth Pricing Model Is Wrong
+## Competitive Reality
 
-Every auth vendor prices human auth by MAU. Auth0, Clerk, Stytch, WorkOS — all MAU-based pricing.
+The category is not empty. This must inform how we position and price.
 
-**For human auth, MAU is correct:**
-- One human ≈ one identity ≈ one risk unit
-- Humans authenticate ~once per session
-- The blast radius of a compromised human token is bounded by that human's permissions
+**Auth0** is pushing "Auth0 for AI Agents" with Token Vault, CIBA, and async authorization. They charge +50% on base price for the AI Agents add-on. They have a token vault (limited), some CIBA, and are connecting agents to Google/Slack/GitHub. This validates the category exists. It also means we cannot say "nobody sees this" — we can say: "SharkAuth is the open-source/self-hosted agent-auth stack with RFC-native delegation and revocation primitives."
 
-**For agent auth, MAU is wrong:**
-- One customer may have 500 agents acting on behalf of 50 users
+**Stytch** explicitly includes "AI agents" in their free tier at 10,000 MAU. This validates that agents belong in the auth pricing conversation. It also means per-agent pricing as a headline is harder to sustain when Stytch is effectively giving agent auth away in their free tier.
+
+**WorkOS** has AuthKit free up to 1M MAU, then $2,500/mo per additional million. Clerk has a generous free tier and Pro at $20/mo. These anchor expectations low for self-serve pricing.
+
+**Ory** and **HashiCorp Vault** support the infra/security-style pricing model (per-resource, per-check, usage-based). This is the most credible analog for vault and permission-layer pricing — and supports usage-based overage rather than pure per-agent flat pricing.
+
+**The correct competitive set for SharkAuth is therefore:**
+- Custom builds ($500K-2M one-time, 6-18 months)
+- Ory Permissions ($0.14/aDAU + $0.007/token) for fine-grained permissions without delegation
+- AWS Secrets Manager ($0.40/secret + $0.05/10K API calls) for vault-lite without OAuth
+- Auth0 AI Agents add-on (+50% on base) for cloud-only agent vault
+- Self-hosted Keycloak (Java, ~1GB, significant ops burden) as the self-hosted alternative with no agent-native primitives
+
+---
+
+## Why MAI (Monthly Active Identities)
+
+Every auth vendor prices human auth by MAU. For human auth, MAU is correct: one human ≈ one risk unit.
+
+For agent auth, MAU is incomplete:
+- One customer may have 500 agents acting for 50 users
 - Each agent is a separate trust lineage and blast radius
-- One compromised agent can access 50 users' worth of data
-- One vault credential compromise cascades to ALL agents using that connection
+- One compromised vault credential cascades to ALL agents using it
 
-**The unit in agent auth is not the human. It is the AGENT.**
+**The unit in agent auth is the IDENTITY — human or agent.** A developer with SSH access, a support agent bot, and a data-pipeline worker are all identities that need the same auth primitives: registration, keys, tokens, revocation, audit.
 
----
+**MAI counts them as one metric.** No distinction between "human MAU" and "agent count." No double-counting. No surprise bills because your orchestator spawned 20 sub-tasks.
 
-## The Competitive Set
-
-The correct competitive set for SharkAuth pricing is NOT Clerk at $25/seat. It is:
-
-| Alternative | Cost | What you get | What you lose |
-|---|---|---|---|
-| Custom build (internal auth team) | $500K-2M one-time | Custom delegation infrastructure | 6-18 months of dev time, ongoing maintenance |
-| Ory Permissions | $0.14/aDAU + $0.007/token | Zanzibar-style fine-grained permissions | No act chains, no vault, no cascade revoke |
-| HashiCorp Vault | $0.47/resource/mo | Secrets management for agents | No OAuth delegation, no DPoP, no audit correlation |
-| AWS Secrets Manager | $0.40/secret + $0.05/10K API calls | Ephemeral credentials for agents | No OAuth, no act chains, no delegation |
-| Incident response (breach without cascade revoke) | $180K-500K per engagement | IR when something goes wrong | Prevention is not included |
-| Data breach (credential sprawl) | $2-4M per event | — | Prevention costs more upfront |
-| Auth0 AI Agents add-on | +50% on base price | Token vault (limited), some CIBA | No act chains, no cascade revoke, no self-host |
-
-At these prices, **$25/agent/month for full five-layer revocation + DPoP + act chains + vault is a 10-50x discount** relative to the alternatives.
+**Subagents and delegation hops do NOT count as additional MAI.** A token-exchange chain `user → orchestrator → worker` is a delegation feature, not three billable identities. The orchestrator is one MAI. The worker is one MAI if it has its own client_id and DPoP keys. The intermediate token is just a hop.
 
 ---
 
-## Proposed Pricing Model
+## Pricing for Launch
 
-### Self-Hosted OSS — Free Forever
+**Principle:** Maximize adoption and conversation. Do not extract value before trust is established. In auth and security, people pay for confidence — not just features.
 
-- Core OAuth 2.1, OIDC, DPoP, RFC 8693 token exchange
-- Basic `may_act_grants`, Layer 1-3 revocation
-- SQLite, single-tenant, community support
-- **Purpose:** Developer adoption. Win the narrative. No friction.
+**Core thesis:** MAI (Monthly Active Identities) replaces MAU. One metric for humans and agents. Delegation chains are unlimited features; only persistent identities count toward the limit.
 
----
+### Public Launch Pricing
 
-### Cloud Agent Pro — Per Agent / Per Month
-
-Pricing unit is **agents** (blast radius unit), not human MAU.
-
-| Tier | Price | Agents | Vault Connections | Revocation Layers | Support |
+| Plan | Price | MAI (Monthly Active Identities) | Delegation Depth | Vault Connections | Support |
 |---|---|---|---|---|---|
-| **Starter** | $25/agent/mo | Up to 10 | 3 included | Layers 1-3 | Email |
-| **Growth** | $20/agent/mo | Up to 100 | 10 included | Layers 1-4 | Priority |
-| **Scale** | $15/agent/mo | Unlimited | Unlimited | Layers 1-5 | SLA + Slack |
+| **Self-hosted OSS** | Free forever | Unlimited | Unlimited | Unlimited | Community |
+| **Cloud Free** | $0/mo | Up to 20,000 | Max depth 2 | 3 | Community |
+| **Cloud Pro** | $49/mo | Up to 50,000 | Max depth 4 | 10 | Priority email |
+| **Cloud Team** | $199/mo | Up to 200,000 | Max depth 7 | 25 | Priority + Slack |
+| **Enterprise** | Custom, from $25K/yr | Unlimited | Unlimited | Unlimited | SLA + dedicated CS |
 
-**Why per-agent decreases with volume?** Higher agent count customers have better security hygiene and lower per-agent breach risk. Volume discount reflects reduced risk surface per agent at scale. Also: the more agents, the more critical cascade revoke becomes — that's when Layer 3-4 earn their keep.
+**What counts as 1 MAI:** Any identity that authenticates within the billing window — human user login, agent client_credentials call, device flow activation. DPoP key registration counts as identity creation; subsequent token exchanges on the same client_id do not.
 
-**Vault Connections (add-on):** $30/connection/month beyond the included count.
-- Included in tier (3/10/unlimited)
-- Each connection = one external OAuth integration (Google Workspace, Slack, GitHub, Linear, Jira, etc.)
-- Infisical charges $18/identity for secrets management (lesser security properties)
-- AWS Secrets Manager: $0.40/secret + per-API fees
+**What does NOT count as additional MAI:**
+- Delegation hops in an `act_chain` (intermediate tokens)
+- Subagents created transiently by an orchestrator (no persistent client_id)
+- Token refresh on an existing grant
+- Introspection calls
+
+**Delegation depth limit (Free tier):** Max 2 hops (user → agent). Pro unlocks depth 4 (user → agent → sub-agent → worker). Team unlocks depth 7. Enterprise unlimited. This is the soft gate on the free tier — generous enough for demos, meaningful enough to upgrade for complex multi-agent flows.
+
+### Overage Pricing
+
+| Plan | MAI overage | Vault connection overage |
+|---|---|---|
+| **Cloud Free** | Hard cap at 20,000 MAI | Hard cap at 3 |
+| **Cloud Pro** | $2 per 1,000 MAI/mo above 50K | $10 per connection/mo above 10 |
+| **Cloud Team** | $1 per 1,000 MAI/mo above 200K | $5 per connection/mo above 25 |
+| **Enterprise** | Custom | Custom |
 
 **Example customer math:**
 
-| Customer type | Agents | Vault connections | Monthly cost |
-|---|---|---|---|
-| Indie developer / small team | 5 | 2 | $125/mo |
-| Startup shipping agent product | 25 | 5 | $625/mo |
-| Mid-market with agent platform | 100 | 12 | $2,350/mo |
-| Enterprise agent platform | 500 | 30 | $8,500/mo |
-| Large enterprise | 2,000 | 100 | $32,500/mo |
+| Customer type | Humans | Agents | Total MAI | Plan | Monthly cost |
+|---|---|---|---|---|---|
+| Indie dev / small team | 3 | 2 | 5 | Cloud Free | $0 |
+| Startup shipping agent product | 15 | 35 | 50 | Cloud Pro | $49/mo |
+| Mid-market with agent platform | 80 | 420 | 500 | Cloud Pro + overage | $49 + $0 = $49 |
+| Growing platform | 200 | 1,800 | 2,000 | Cloud Pro + overage | $49 + $0 = $49 |
+| Large platform | 1,000 | 9,000 | 10,000 | Cloud Pro + overage | $49 + $0 = $49 |
+| Enterprise agent fleet | 5,000 | 45,000 | 50,000 | Cloud Team | $199/mo |
+| Large enterprise | 20,000 | 180,000 | 200,000 | Cloud Team + overage | $199 + $0 = $199 |
+| Hyperscale | 50,000 | 450,000 | 500,000 | Enterprise | Custom |
 
-**Revenue model at scale:**
+*Note: All examples under 50K MAI fit in Pro ($49/mo). Team ($199/mo) covers up to 200K MAI. This is intentionally generous — the goal is adoption, not squeezing every dollar at low scale.*
 
-| Tier | Avg ARR | Target customers | ARR |
-|---|---|---|---|
-| Starter (10 agents avg) | $3,000/yr | 5,000 | $15M |
-| Growth (50 agents avg) | $12,000/yr | 2,000 | $24M |
-| Scale (200 agents avg) | $36,000/yr | 500 | $18M |
-| Enterprise | $100,000/yr | 200 | $20M |
-| **Total addressable** | | | **$77M ARR** |
+### Enterprise Pricing
 
-Path to $1B: vertical expansion into healthcare AI agents (HIPAA compliance requires this infrastructure), legal AI agents, financial AI agents — plus geographic expansion and enterprise seat expansions.
-
----
-
-### Enterprise — Custom, $50K-500K/year
-
-- Unlimited agents, unlimited connections
+- Unlimited MAI, unlimited delegation depth
 - Private deployment (their VPC, their cloud)
 - Custom revocation patterns via API
 - Dedicated customer success
 - SLA (99.99% uptime)
 - Compliance: SOC2, HIPAA, custom
+- Starts at $25K/year
 
-**Revenue math:**
-- 100 enterprise customers at $100K ACV = $10M ARR
-- 1,000 enterprise customers at $100K ACV = $100M ARR
+**Why $25K/yr minimum:** The comparable is not Auth0's B2C pricing — it is the $500K custom build and $180K IR engagement. At those numbers, $25K/year is a discount. For regulated companies (healthcare, legal, finance), this is a rounding error compared to compliance costs.
 
 ---
 
-## Why $1B Is Achievable
+## The YC / Investor Framing
 
-**The category is nascent.** Every AI product that ships agents will need this infrastructure. The market is not saturated — it's early.
+For YC and investor conversations:
 
-**The alternatives are either nonexistent, expensive, or both.** Custom builds cost $500K-2M. Auth0 charges 50% uplift with none of the features. Ory/Keycloak have no act chains. AWS Secrets Manager has no OAuth delegation.
+> SharkAuth is open-source and free to self-host. The hosted product monetizes via Cloud plans starting at $49/mo for startups and $199/mo for teams, with enterprise contracts starting at $25K/year. The pricing unit is MAI — Monthly Active Identities — which counts humans and agents as a single metric. No distinction, no double-counting, no surprise bills when an orchestrator spawns sub-tasks.
 
-**The five-layer revocation is a category-defining moat.** No one else has it. It took 6 months of shipped Go code to build. A competitor replicating it requires 6-12 months minimum, and SharkAuth won't be standing still.
+> The open-source/self-hosted tier wins the developer narrative. The cloud tier monetizes teams that do not want to operate infrastructure. Enterprise monetizes regulated companies that need SLA, compliance, and private deployment.
 
-**The token vault is a $460K-920K build sold as a $30/mo add-on.** Customers get enterprise-grade credential infrastructure at SMB prices.
+> The category is validated: Auth0 charges +50% for their AI Agents add-on. Stytch includes agents in their free tier. WorkOS bundles agent auth into AuthKit. SharkAuth's differentiation is RFC-native delegation chains (act chains), five-layer cascade revocation, and a token vault where agents never see refresh tokens — all in a single self-hostable binary.
 
-**The unit economics improve with enterprise scale.** At 1,000 enterprise customers at $100K ACV, you're at $100M ARR with 60% gross margins (hosted Postgres, minimal infra). Add 10,000 mid-market at $12K ACV = additional $120M ARR.
+---
 
-**The path to $1B is not mass-market $19/mo pricing.** It's 20,000 mid-market teams at $1K-10K ACV + 1,000 enterprise customers at $100K-500K ACV. That's the Supabase model applied to agent auth.
+## What to Avoid Saying
+
+| Original claim | Problem | Replace with |
+|---|---|---|
+| "No competitor has shipped this" | Auth0 has shipped AI agent messaging + token vault | "No open-source or self-hosted auth server packages these as core infrastructure" |
+| "GDPR Article 17 failure = 4% global turnover fine" | Legally sloppy; ties our feature to a specific regulatory outcome | Remove or soften to: "regulatory compliance for delegated access" |
+| "Token exfiltration yields nothing" | Too absolute; if key is also compromised, risk remains | "DPoP substantially reduces the replay value of stolen tokens" |
+| "Vault is a $460K-920K build" | Sounds made up without a defensible model | "Replaces months of custom OAuth token lifecycle and security engineering" |
+| "$1B revenue ambition" | Investor-brained for a public pricing doc | Remove from public-facing doc; keep internal |
+| "$25/agent/mo as public headline" | Scares early devs; Stytch gives agent auth in free tier | MAI-based pricing: $0 for 20K MAI, $49 for 50K |
+| "We charge per subagent / delegated actor" | Contradicts MAI thesis; subagents are feature, not unit | "Delegation chains are unlimited; only persistent identities count toward MAI" |
+
+---
+
+## What to Put on the Launch Page
+
+```
+## Pricing
+
+SharkAuth is open-source and free to self-host.
+
+Cloud is coming soon — join the waitlist.
+
+### Self-hosted
+$0 forever
+- MIT licensed
+- OAuth 2.1 / OIDC
+- RFC 8693 token exchange
+- RFC 9449 DPoP
+- Agent delegation chains (unlimited depth)
+- Token vault
+- SQLite single-binary deploy
+
+### Cloud Free
+$0/mo
+- For demos and experiments
+- 20,000 MAI
+- Delegation depth: 2 hops
+- 3 vault connections
+- Community support
+
+### Cloud Pro
+$49/mo
+- For startups shipping real agentic apps
+- 50,000 MAI
+- Delegation depth: 4 hops
+- 10 vault connections
+- Priority email support
+
+### Cloud Team
+$199/mo
+- For production teams
+- 200,000 MAI
+- Delegation depth: 7 hops
+- 25 vault connections
+- Advanced audit export
+- Priority support
+
+### Enterprise
+Custom, starts at $25K/yr
+- Unlimited MAI
+- Unlimited delegation depth
+- Private deployment / VPC
+- SSO / SAML
+- SLA
+- Compliance support
+- Custom revocation policies
+```
+
+**MAI = Monthly Active Identities.** One human login and one agent client_credentials call are the same unit. An orchestrator spawning 20 sub-tasks is still one identity. You only count persistent identities with their own keys — not delegation hops.
 
 ---
 
 ## Immediate Actions
 
-1. **Remove** "$19/mo vs Auth0 $2,500/mo" from all docs and landing copy
-2. **Update** YC application pricing paragraph: "OSS free forever; hosted pricing based on per-agent-month + vault connections, starting $25/agent/mo"
-3. **Keep** BILLING_UI=false until Stripe is wired and tier model is finalized
-4. **Ship** Postgres support Q3 2026 to unblock cloud tier
-5. **Define** exact vault connection pricing ($30/connection/mo is the working number)
+1. **Remove** all references to "$19/mo" and "$29/mo" from docs and landing copy
+2. **Remove** "$1B revenue ambition" from public-facing documents
+3. **Adopt** MAI pricing model: Cloud Free 20K MAI → Pro 50K MAI $49 → Team 200K MAI $199 → Enterprise from $25K/yr
+4. **Update** all pricing tables to show MAI + delegation depth + vault connections
+5. **Update** the YC application pricing paragraph to reflect MAI model
+6. **Keep** BILLING_UI=false until Stripe is wired and cloud tier is ready
+7. **Ship** Postgres support Q3 2026 to unblock cloud tier
 
 ---
 
 ## Open Questions
 
-1. **Are you comfortable pricing per agent vs. per human MAU?** This is the foundational question. If yes, the $1B path is clear. If no, we need to discuss why.
-2. **What is the minimum viable cloud tier for launch?** The minimal cloud offering needs: hosted SharkAuth on Postgres, custom domain, email support, 3 vault connections, Layers 1-3. What's the minimum price point for that?
-3. **Enterprise pricing — will customers pay $100K/year?** The comparable is not Auth0's B2C pricing — it's the $500K custom build and $180K IR engagement. At those numbers, $100K/year is a 5-10x discount.
-4. **Vertical focus: which agent domain first?** Healthcare AI agents have the strongest compliance pull (HIPAA requires exactly this audit trail). Legal AI agents are similarly compliance-driven. Financial AI agents (Hebbia, Bloomberg terminal integrations) have the highest ACV potential.
+1. **Free tier MAI limit — is 20K right?** At 20K MAI, a startup can run 10K humans + 10K agents. That covers most early-stage products. Too generous? Maybe. But Stytch gives 10K MAU free and WorkOS gives 1M. We need to match or exceed for developer mindshare.
+2. **Delegation depth as tier gate — does it convert?** Free at depth 2 means simple user→agent flows work. Pro at depth 4 unlocks orchestrator patterns. Team at depth 7 covers almost all real-world multi-agent graphs. Is this a meaningful upgrade driver?
+3. **Enterprise minimum** — is $25K/yr the right floor, or should it be $10K/yr to capture more SMB-adjacent regulated companies?
+4. **Vertical focus** — healthcare AI agents (HIPAA) and legal AI agents (compliance-driven audit) are the strongest early enterprise targets. Which first?
 
 ---
 
 ## Sources
 
-- `documentation/inner_docs/general_product_guide.md` — product definition, 54-capability audit, competitive matrix
-- `gstack/01-launch-design.md` — demand evidence, target user, narrowest wedge
-- `gstack/04-autoplan-synthesis.md` — TD3 pricing decision (deferred)
-- `gstack/05-revisions-cold-dm-kit.md` — locked decisions, compressed calendar
-- `documentation/inner_docs/TIER_PAYWALL_DORMANT.md` — current billing backend status
-- `documentation/sdk/vault.md` — token vault architecture
-- `documentation/sdk/cookbook/multi-hop-delegation.md` — RFC 8693 act chains
-- IBM/Ponemon 2024 Cost of Data Breach Report — breach cost benchmarks
-- HashiCorp Vault pricing — secrets management comparable
-- Ory Network pricing — permissions/authorization comparable
+- Auth0 pricing page — AI Agents add-on, B2C/B2B tiers
+- Stytch pricing page — free tier includes 10K MAU + AI agents
+- WorkOS pricing page — AuthKit free up to 1M MAU
+- Clerk pricing page — Pro from $20/mo
+- Ory Network pricing — aDAU + M2M token model
+- HashiCorp Vault / HCP pricing — enterprise secrets management
+- AWS Secrets Manager pricing — per-secret + per-API-call model
+- IBM/Ponemon 2024 Cost of Data Breach Report
+- SharkAuth codebase — `internal/oauth/`, `internal/proxy/`, `internal/vault/`, `documentation/sdk/vault.md`, `documentation/sdk/cookbook/multi-hop-delegation.md`
+- SharkAuth launch docs — `gstack/01-launch-design.md`, `gstack/05-revisions-cold-dm-kit.md`

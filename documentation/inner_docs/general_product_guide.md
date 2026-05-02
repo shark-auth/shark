@@ -330,11 +330,11 @@ Every primitive has a screen. Every screen has a working revoke button.
 
 ## 16. Pricing Philosophy
 
-**Core principle:** The binary is the product. Cloud is a convenience layer, not a feature gate. Every auth feature ships in the binary at $0. This is non-negotiable. Cloud Flat Pricing for humans. No MAU. No tricks. 100% transparency.
+**Core principle:** The binary is the product. Cloud is a convenience layer, not a feature gate. Every auth feature ships in the binary at $0. This is non-negotiable. Cloud pricing is MAI-based (Monthly Active Identities). One metric for humans and agents. No double-counting. 100% transparency.
 
 
 
-**Competitive cost comparison at 100K MAU:** Clerk ~$1,020/mo. Auth0 ~$2,500/mo. SharkAuth Cloud: $49/mo for Pro (10K MAU, 100 agents). SharkAuth Self-Hosted: $0.
+**Competitive cost comparison at 100K active identities:** Clerk ~$1,020/mo (100K MAU). Auth0 ~$2,500/mo (100K MAU). SharkAuth Cloud Pro: $49/mo (up to 50K MAI). SharkAuth Self-Hosted: $0 (unlimited MAI).
 
 ---
 
