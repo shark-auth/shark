@@ -182,7 +182,8 @@ func (d *Dispatcher) Stop() {
 }
 
 // Emit records a pending delivery per matching webhook and enqueues immediate
-// delivery. Non-blocking.
+// delivery. Delivery rows are durable before jobs are scheduled so workers never
+// race ahead of persistence.
 func (d *Dispatcher) Emit(ctx context.Context, event string, payload any) error {
 	env := d.envelopePool.Get().(*EventEnvelope)
 	env.Event = event
@@ -214,14 +215,10 @@ func (d *Dispatcher) Emit(ctx context.Context, event string, payload any) error 
 			Attempt: 0, CreatedAt: now, UpdatedAt: now,
 		}
 
-		// Non-blocking enqueue for persistence
-		select {
-		case d.persistQueue <- del:
-			// Enqueued for persistence
-			d.schedule(del.ID)
-		default:
-			slog.Warn("webhook: persist queue full, dropping delivery record", "id", del.ID)
+		if err := d.store.CreateWebhookDelivery(ctx, del); err != nil {
+			return fmt.Errorf("create webhook delivery: %w", err)
 		}
+		d.schedule(del.ID)
 	}
 	return nil
 }

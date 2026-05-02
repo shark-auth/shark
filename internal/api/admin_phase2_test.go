@@ -278,7 +278,7 @@ func TestAdminDeleteSessionRevokesAndAudits(t *testing.T) {
 	}
 
 	resp := ts.DeleteWithAdminKey("/api/v1/admin/sessions/sess_kill")
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status=%d", resp.StatusCode)
 	}
 

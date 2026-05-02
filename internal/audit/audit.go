@@ -53,8 +53,9 @@ func (l *Logger) SetDispatcher(d *webhook.Dispatcher) {
 	l.dispatcher = d
 }
 
-// Log enqueues an audit event for background persistence. It returns immediately.
-// If the queue is full, the log entry may be dropped to prevent blocking the caller.
+// Log persists an audit event before returning. Audit records are part of the
+// security trail, so callers should not observe a successful security action
+// before its corresponding audit row is durable.
 func (l *Logger) Log(ctx context.Context, event *storage.AuditLog) error {
 	if event.ID == "" {
 		id, _ := gonanoid.New()
@@ -73,11 +74,11 @@ func (l *Logger) Log(ctx context.Context, event *storage.AuditLog) error {
 		event.ActorType = "user"
 	}
 
-	// Try to enqueue; don't block if the buffer is full.
-	select {
-	case l.queue <- event:
-	default:
-		slog.Warn("audit log queue full; event dropped", "action", event.Action, "actor", event.ActorID)
+	if err := l.store.CreateAuditLog(ctx, event); err != nil {
+		return err
+	}
+	if l.dispatcher != nil {
+		_ = l.dispatcher.Emit(ctx, "system.audit_log", event)
 	}
 
 	return nil
