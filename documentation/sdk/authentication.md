@@ -172,7 +172,7 @@ All methods raise `SharkAuthError` (Python) or `SharkAPIError` (TypeScript) on n
 
 ## Email config
 
-Magic-link, email-verify, password-reset, and invitation links all share a single redirect-URI allowlist configured server-side (`shark.yaml` `email.redirect_allowlist` / dashboard Branding section). The SDK forwards your `redirect_uri` verbatim — the server validates it.
+Magic-link, email-verify, password-reset, and invitation links all share a single redirect-URI allowlist configured server-side (dashboard **Settings → Email** or via `shark admin config dump`). The SDK forwards your `redirect_uri` verbatim — the server validates it.
 
 When `redirect_uri` is omitted, the server's `email.default_redirect` is used.
 

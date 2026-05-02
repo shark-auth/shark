@@ -181,7 +181,7 @@ Every hop: DPoP proof. Every token: scoped down. Every action: one immutable aud
 - `may_act_grants` table, admin CRUD, audit correlation by `grant_id`
 
 ### Platform
-- **Zero-Code Auth Proxy**: High-performance identity-injecting gateway (Shipped)
+- **Zero-Code Auth Proxy**: High-performance identity-injecting gateway (deferred; not in v0.1 launch scope)
 - **Token Vault**: AES-256-GCM encrypted-at-rest with auto-refresh (Shipped: Google, GitHub, Slack)
 - Organizations + RBAC matrix + invitations
 - Webhooks with signature verification, retry, DLQ

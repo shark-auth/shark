@@ -76,6 +76,6 @@ On the very first run, SharkAuth will:
 
 ## Configuration
 
-SharkAuth works out of the box with zero config, but you can customize it via `sharkauth.yaml` or environment variables.
+SharkAuth works out of the box with zero config. Runtime configuration is DB-backed and mutated via the dashboard or CLI (`shark admin config dump`). Bootstrap values (port, secret, base URL) can be set via environment variables.
 
-See [Configuration Guide](./guides/configuration.md) for details.
+See [CLI admin commands](./cli/06-admin.md) for details.

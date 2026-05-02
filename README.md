@@ -77,7 +77,7 @@ SharkAuth is a single static Go binary with embedded SQLite WAL. No Postgres, no
 | :--- | :--- |
 | **Agent Auth** | RFC 8693 Token Exchange, RFC 9449 DPoP, `may_act_grants`, cascade revocation, full act chains (depth ≥ 7 observed) |
 | **Human Auth** | Passkeys (FIDO2), Magic Links, MFA (TOTP), Enterprise SSO (SAML 2.0, OIDC), Argon2id passwords |
-| **Platform** | Zero-Code Auth Proxy, Multi-tenant Orgs, Wildcard RBAC, HMAC-signed Webhooks, grant_id-indexed Audit Logs |
+| **Platform** | Multi-tenant Orgs, Wildcard RBAC, HMAC-signed Webhooks, grant_id-indexed Audit Logs |
 | **Admin UI** | React dashboard embedded in the binary. One-click revocation for every session, token, and grant |
 
 ---
