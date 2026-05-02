@@ -12,7 +12,6 @@ import os
 import sys
 import asyncio
 import json
-import requests
 import time
 from datetime import datetime
 
@@ -24,15 +23,7 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.markdown import Markdown
 
-try:
-    from shark_auth import Client, DPoPProver, OAuthClient
-except ImportError:
-    # Fallback for visual testing if SDK not installed
-    class Client: pass
-    class DPoPProver: 
-        @staticmethod
-        def generate(): return "mock_prover"
-    class OAuthClient: pass
+from shark_auth import Client, DPoPProver, MayActClient, OAuthClient
 
 # --- CONFIG ---
 class Config:
@@ -169,6 +160,8 @@ class SharkClaw(App):
         
         try:
             await self.run_hybrid_demo()
+        except ImportError as e:
+            self.append_chat("ERROR", f"Missing Python dependency: {e}. Run: python -m pip install shark-auth textual", "red")
         except Exception as e:
             self.append_chat("FATAL", f"Demo interrupted: {str(e)}", "red")
 
@@ -176,15 +169,19 @@ class SharkClaw(App):
         from shark_auth import Client, DPoPProver, OAuthClient
         client = Client(base_url=Config.BASE_URL, token=Config.ADMIN_KEY)
         oauth = OAuthClient(base_url=Config.BASE_URL)
-        prover = DPoPProver.generate()
+        may_act = MayActClient(base_url=Config.BASE_URL, admin_api_key=Config.ADMIN_KEY)
+        pm_prover = DPoPProver.generate()
+        fetcher_prover = DPoPProver.generate()
 
         # --- 1. PROVISIONING (REAL) ---
         self.update_status_bar("REGISTERING AGENTS IN SHARKAUTH...")
         u_email = f"alice_{int(time.time())}@acme.com"
         user = client.users.create_user(u_email, name="Alice (CEO)", email_verified=True)
+        user_id = user["id"]
+        self.append_chat("AUTH", f"Parent user created: [dim]{user_id}[/]", "green")
         
         # Root Agent: PM-Orchestrator
-        pm = client.agents.register_agent(app_id="acme", name="PM-Orchestrator", created_by=user["id"],
+        pm = client.agents.register_agent(app_id="acme", name="PM-Orchestrator", created_by=user_id,
                                          scopes=["vault:read", "market:analyze", "data:fetch"],
                                          auth_method="client_secret_post",
                                          grant_types=["client_credentials", "urn:ietf:params:oauth:grant-type:token-exchange"])
@@ -192,12 +189,27 @@ class SharkClaw(App):
         self.update_agent_status(pm["id"][:4], "Alive")
 
         # Leaf Agent: Data-Fetcher
-        fetcher = client.agents.register_agent(app_id="acme", name="Data-Fetcher", created_by=user["id"],
+        fetcher = client.agents.register_agent(app_id="acme", name="Data-Fetcher", created_by=user_id,
                                               scopes=["data:fetch"],
                                               auth_method="client_secret_post",
+                                              token_endpoint_auth_method="client_secret_post",
                                               grant_types=["urn:ietf:params:oauth:grant-type:token-exchange"])
         self.add_agent_to_sidebar("Data-Fetcher", fetcher["id"][:4])
         self.update_agent_status(fetcher["id"][:4], "Alive")
+
+        owned = client.users.list_agents(user_id, filter="created", limit=10)
+        owned_ids = {a.get("id") for a in owned.data}
+        if pm["id"] not in owned_ids or fetcher["id"] not in owned_ids:
+            raise RuntimeError("agent ownership check failed: created_by did not bind both agents to Alice")
+        self.append_chat("AUTH", "Agents registered on behalf of Alice. [dim]created_by verified via users.list_agents(filter='created')[/]", "green")
+
+        may_act.create(
+            from_id=fetcher["client_id"],
+            to_id=pm["client_id"],
+            max_hops=2,
+            scopes=["data:fetch"],
+        )
+        self.append_chat("AUTH", "Delegation policy installed: [dim]Data-Fetcher may act for PM-Orchestrator[/]", "green")
         
         await asyncio.sleep(1)
 
@@ -206,7 +218,7 @@ class SharkClaw(App):
         await asyncio.sleep(1.5)
         
         self.update_agent_status(pm["id"][:4], "Thinking...")
-        pm_token = oauth.get_token_with_dpop(grant_type="client_credentials", dpop_prover=prover,
+        pm_token = oauth.get_token_with_dpop(grant_type="client_credentials", dpop_prover=pm_prover,
                                            client_id=pm["client_id"], client_secret=pm["client_secret"],
                                            scope="vault:read market:analyze data:fetch")
         
@@ -217,11 +229,22 @@ class SharkClaw(App):
         self.update_agent_status(pm["id"][:4], "Alive")
         self.update_agent_status(fetcher["id"][:4], "Thinking...")
         self.append_chat("PM", "Exchanging for leaf-token (depth=2). Lineage: [dim]PM[/]", "magenta")
+
+        fetcher_actor_token = oauth.get_token_with_dpop(
+            grant_type="client_credentials",
+            dpop_prover=fetcher_prover,
+            client_id=fetcher["client_id"],
+            client_secret=fetcher["client_secret"],
+            scope="data:fetch",
+        )
         
         fetcher_token = oauth.token_exchange(
             subject_token=pm_token.access_token,
-            dpop_prover=prover,
+            dpop_prover=fetcher_prover,
+            actor_token=fetcher_actor_token.access_token,
             scope="data:fetch",
+            client_id=fetcher["client_id"],
+            client_secret=fetcher["client_secret"],
         )
         
         act = fetcher_token.raw.get("act", {})
