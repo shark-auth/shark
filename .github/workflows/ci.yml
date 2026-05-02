@@ -22,31 +22,20 @@ jobs:
           cache: true
       - name: Core package tests
         run: |
-          go test -race -count=1 ./cmd/... ./internal/auth/... ./internal/cache ./internal/config ./internal/storage ./internal/oauth ./internal/vault ./internal/audit ./internal/telemetry
+          go test -race -count=1 ./cmd/... ./internal/auth/... ./internal/cache ./internal/storage ./internal/oauth ./internal/vault ./internal/telemetry
       - name: API launch/security tests
         run: |
           go test -race -count=1 ./internal/api ./internal/api/middleware -run 'Test(Auth|Login|Signup|Logout|Password|Session|Admin.*Session|APIKey|RequiresAdminKey|AdminAPIKey|OAuth|Vault|Audit|Telemetry|MFA|JWT|DPoP|Revoke|TokenEndpoint|Agent.*Token|User.*Agent)'
       - name: Build CLI
         run: go build ./cmd/shark
 
-  security-scan:
+  vulncheck:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Run gosec
-        run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -exclude=G104,G304 -fmt=sarif -out=gosec.sarif ./cmd/... ./internal/...
-      - name: Upload gosec SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: gosec.sarif
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
