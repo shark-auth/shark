@@ -170,6 +170,7 @@ class SharkClaw(App):
         client = Client(base_url=Config.BASE_URL, token=Config.ADMIN_KEY)
         oauth = OAuthClient(base_url=Config.BASE_URL)
         may_act = MayActClient(base_url=Config.BASE_URL, admin_api_key=Config.ADMIN_KEY)
+        self.pending_remediation = None
         pm_prover = DPoPProver.generate()
         fetcher_prover = DPoPProver.generate()
 
@@ -230,18 +231,9 @@ class SharkClaw(App):
         self.update_agent_status(fetcher["id"][:4], "Thinking...")
         self.append_chat("PM", "Exchanging for leaf-token (depth=2). Lineage: [dim]PM[/]", "magenta")
 
-        fetcher_actor_token = oauth.get_token_with_dpop(
-            grant_type="client_credentials",
-            dpop_prover=fetcher_prover,
-            client_id=fetcher["client_id"],
-            client_secret=fetcher["client_secret"],
-            scope="data:fetch",
-        )
-        
         fetcher_token = oauth.token_exchange(
             subject_token=pm_token.access_token,
             dpop_prover=fetcher_prover,
-            actor_token=fetcher_actor_token.access_token,
             scope="data:fetch",
             client_id=fetcher["client_id"],
             client_secret=fetcher["client_secret"],
@@ -268,25 +260,28 @@ class SharkClaw(App):
         self.append_chat("SECURITY", "VERDICT: [bold red]ROGUE_DETECTED[/]. Reason: Unauthorized exfiltration.", "red")
         await asyncio.sleep(1.5)
         
-        self.append_chat("PM", "Alice, the blast radius is contained. I am severing the trust tree.", "magenta")
+        self.pending_remediation = {
+            "user_id": user_id,
+            "pm_agent_id": pm["id"],
+            "pm_client_id": pm["client_id"],
+            "fetcher_agent_id": fetcher["id"],
+            "fetcher_client_id": fetcher["client_id"],
+            "fetcher_token": fetcher_token.access_token,
+        }
+        self.append_chat(
+            "PM",
+            "Alice, I found the compromised leaf. Remove agent UID "
+            f"[bold]{fetcher['id']}[/]. Involved tree: "
+            f"[dim]{pm['id']} ({pm['client_id']}) -> {fetcher['id']} ({fetcher['client_id']})[/]",
+            "magenta",
+        )
         await asyncio.sleep(1.5)
-        
-        # --- 4. THE KILLSWITCH HOOK (REAL AUTO-POLLING) ---
-        self.append_chat("SYSTEM", "SWITCH TO ADMIN UI: Revoke 'PM-Orchestrator' to kill the whole tree.", "blue")
-        self.update_status_bar("POLLING SHARKAUTH FOR CASCADE REVOCATION...")
-        
-        # Real auto-polling against the live server
-        while True:
-            await asyncio.sleep(1)
-            try:
-                # Introspect the leaf token. If the root was revoked, this token MUST become inactive.
-                admin_oauth = OAuthClient(base_url=Config.BASE_URL, token=Config.ADMIN_KEY)
-                info = admin_oauth.introspect_token(fetcher_token.access_token)
-                if not info.get("active"):
-                    self.trigger_sever()
-                    break
-            except:
-                pass
+
+        # --- 4. OPERATOR REMEDIATION PROMPT ---
+        self.append_chat("PM", "[bold]1[/] Remove it yourself   [bold]2[/] Delegate it to me", "magenta")
+        self.update_status_bar("AWAITING REMEDIATION CHOICE: TYPE 1 OR 2")
+        repl = self.query_one("#repl-input", Input)
+        repl.placeholder = "1 = Remove it yourself, 2 = Delegate it to me"
 
     def add_agent_to_sidebar(self, name, id_suffix):
         agent_list = self.query_one("#agent-list", ListView)
@@ -305,10 +300,53 @@ class SharkClaw(App):
         self.update_status_bar("IDENTITY TREE SEVERED. SYSTEM SAFE.")
         self.query_one("Screen").styles.background = "#1a0000"
 
+    async def remediate_compromised_agent(self) -> None:
+        ctx = getattr(self, "pending_remediation", None)
+        if not ctx:
+            self.append_chat("PM", "No active remediation target.", "yellow")
+            return
+
+        client = Client(base_url=Config.BASE_URL, token=Config.ADMIN_KEY)
+        agent_id = ctx["fetcher_agent_id"]
+        self.update_status_bar(f"REVOKING COMPROMISED AGENT {agent_id}...")
+        client.agents.revoke_agent(agent_id)
+
+        revoked_agent = client.agents.get_agent(agent_id)
+        agent_inactive = revoked_agent.get("active") is False
+        self.update_agent_status(agent_id[:4], "Revoked" if agent_inactive else "Revocation pending")
+        if agent_inactive:
+            self.append_chat("SHARKAUTH", f"Agent status verified inactive: [bold]{agent_id}[/]", "green")
+        else:
+            self.append_chat("SHARKAUTH", f"Agent revoke requested, but active still reads: {revoked_agent.get('active')}", "yellow")
+
+        admin_oauth = OAuthClient(base_url=Config.BASE_URL, token=Config.ADMIN_KEY)
+        info = admin_oauth.introspect_token(ctx["fetcher_token"])
+        if not info.get("active"):
+            self.append_chat("SHARKAUTH", "Leaf token is inactive. PM-Orchestrator remains available.", "green")
+        else:
+            self.append_chat("SHARKAUTH", "Agent revoke completed, but token introspection still reports active.", "yellow")
+
+        self.pending_remediation = None
+        self.update_status_bar("COMPROMISED LEAF REMOVED. ROOT AGENT PRESERVED.")
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         self.query_one("#repl-input").value = ""
+        choice = event.value.strip().lower()
+        ctx = getattr(self, "pending_remediation", None)
+        if ctx and choice in ["1", "remove it yourself", "manual"]:
+            self.append_chat(
+                "PM",
+                "Manual removal selected. Revoke Data-Fetcher in the admin UI: "
+                f"[bold]{ctx['fetcher_agent_id']}[/]",
+                "magenta",
+            )
+            self.update_status_bar("WAITING FOR MANUAL REMOVAL IN ADMIN UI")
+            return
+        if ctx and choice in ["2", "delegate it to me", "delegate"]:
+            await self.remediate_compromised_agent()
+            return
         # Allow a manual 'boom' for rehearsal
-        if event.value.strip().lower() in ["boom", "revoke"]:
+        if choice in ["boom", "revoke"]:
             self.trigger_sever()
 
 if __name__ == "__main__":

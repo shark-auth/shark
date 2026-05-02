@@ -1079,7 +1079,8 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose, onNavigate, onCanvasRefre
 
   if (!node) return null
 
-  const d = node.data || {}
+  const liveNode = rfNodes?.find(n => n.id === node.id) || node
+  const d = liveNode.data || {}
   const isHuman = d.isUser === true || d.type === 'human'
 
   // Derive chain context for agent nodes
@@ -1161,11 +1162,11 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose, onNavigate, onCanvasRefre
 
           {isHuman ? (
             // ── Human fields ──────────────────────────────────────────────────
-            <HumanDrawerFields node={node} onNavigate={onNavigate} />
+            <HumanDrawerFields node={liveNode} onNavigate={onNavigate} />
           ) : (
             // ── Agent fields ──────────────────────────────────────────────────
             <AgentDrawerFields
-              node={node}
+              node={liveNode}
               chainPos={chainPos}
               prevHop={prevHop}
               nextHop={nextHop}
@@ -1917,7 +1918,7 @@ export function DelegationCanvas({
     if (!rfNodes) return rfNodes
     return rfNodes.map(n => {
       const cid = n.data?.client_id || n.data?.clientId
-      const lookupKeys = [n.id, cid].filter(Boolean) as string[]
+      const lookupKeys = [n.id, stripLanePrefix(n.id), cid].filter(Boolean) as string[]
       let statusEntry: any = null
       if (agentStatus) {
         for (const k of lookupKeys) {
