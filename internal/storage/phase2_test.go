@@ -2,6 +2,7 @@
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -360,5 +361,39 @@ func TestDevEmailCRUD(t *testing.T) {
 	all, _ = store.ListDevEmails(ctx, 10)
 	if len(all) != 0 {
 		t.Fatalf("expected empty after delete, got %d", len(all))
+	}
+}
+
+func TestCountUsersWithFiltersIgnoresListCap(t *testing.T) {
+	store := testutil.NewTestDB(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	for i := 0; i < 230; i++ {
+		seedUser(
+			t,
+			store,
+			fmt.Sprintf("usr_cap_%03d", i),
+			fmt.Sprintf("user%03d@x.io", i),
+			now.Add(-time.Duration(i)*time.Minute),
+			i%2 == 0,
+		)
+	}
+
+	total, err := store.CountUsersWithFilters(ctx, storage.ListUsersOpts{})
+	if err != nil {
+		t.Fatalf("CountUsersWithFilters(all): %v", err)
+	}
+	if total != 230 {
+		t.Fatalf("CountUsersWithFilters(all): got %d, want 230", total)
+	}
+
+	mfa := true
+	filtered, err := store.CountUsersWithFilters(ctx, storage.ListUsersOpts{MFAEnabled: &mfa})
+	if err != nil {
+		t.Fatalf("CountUsersWithFilters(mfa): %v", err)
+	}
+	if filtered != 115 {
+		t.Fatalf("CountUsersWithFilters(mfa): got %d, want 115", filtered)
 	}
 }

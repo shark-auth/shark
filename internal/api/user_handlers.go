@@ -86,14 +86,13 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Total count uses the same filters but ignores limit/offset.
-	totalOpts := opts
-	totalOpts.Limit = 1000000
-	totalOpts.Offset = 0
-	allUsers, err := s.Store.ListUsers(r.Context(), totalOpts)
-	total := 0
-	if err == nil {
-		total = len(allUsers)
+	total, err := s.Store.CountUsersWithFilters(r.Context(), opts)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":   "internal_error",
+			"message": "Internal server error",
+		})
+		return
 	}
 
 	resp := make([]adminUserResponse, len(users))

@@ -2,6 +2,7 @@
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -483,6 +484,48 @@ func TestSelfCannotRevokeOthersSession(t *testing.T) {
 	// Session must still exist.
 	if _, err := ts.Store.GetSessionByID(ctx, "sess_others"); err != nil {
 		t.Fatal("foreign session was revoked")
+	}
+}
+
+func TestListUsersReturnsUncappedTotal(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	for i := 0; i < 230; i++ {
+		u := &storage.User{
+			ID:        fmt.Sprintf("usr_u_%03d", i),
+			Email:     fmt.Sprintf("u%03d@x.io", i),
+			HashType:  "argon2id",
+			Metadata:  "{}",
+			CreatedAt: now.Add(-time.Duration(i) * time.Minute).Format(time.RFC3339),
+			UpdatedAt: now.Format(time.RFC3339),
+		}
+		if i%2 == 0 {
+			u.MFAEnabled = true
+			u.MFAVerified = true
+		}
+		if err := ts.Store.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resp := ts.GetWithAdminKey("/api/v1/users?page=1&per_page=25")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var body struct {
+		Total int `json:"total"`
+		Users []struct {
+			ID string `json:"id"`
+		} `json:"users"`
+	}
+	ts.DecodeJSON(resp, &body)
+	if body.Total != 230 {
+		t.Fatalf("total: got %d, want 230", body.Total)
+	}
+	if len(body.Users) != 25 {
+		t.Fatalf("users page: got %d, want 25", len(body.Users))
 	}
 }
 

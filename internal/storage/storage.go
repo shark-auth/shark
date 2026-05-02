@@ -28,6 +28,7 @@ type Store interface {
 	GetUserByID(ctx context.Context, id string) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	ListUsers(ctx context.Context, opts ListUsersOpts) ([]*User, error)
+	CountUsersWithFilters(ctx context.Context, opts ListUsersOpts) (int, error)
 	UpdateUser(ctx context.Context, user *User) error
 	DeleteUser(ctx context.Context, id string) error
 	// MarkWelcomeEmailSent atomically flips welcome_email_sent from 0 to 1 for

@@ -206,6 +206,48 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 		opts.Limit = 200
 	}
 
+	conditions, args := userListConditions(opts)
+	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at FROM users`
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
+	}
+
+	query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+	args = append(args, opts.Limit, opts.Offset)
+
+	rows, err := s.reader.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		u, err := s.scanUserFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+func (s *SQLiteStore) CountUsersWithFilters(ctx context.Context, opts ListUsersOpts) (int, error) {
+	conditions, args := userListConditions(opts)
+
+	query := `SELECT COUNT(*) FROM users`
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
+	}
+
+	var n int
+	if err := s.reader.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+func userListConditions(opts ListUsersOpts) ([]string, []interface{}) {
 	var args []interface{}
 	var conditions []string
 
@@ -243,29 +285,7 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, opts ListUsersOpts) ([]*Use
 		args = append(args, opts.OrgID)
 	}
 
-	query := `SELECT id, email, email_verified, password_hash, hash_type, name, avatar_url, mfa_enabled, mfa_secret, mfa_verified, metadata, created_at, updated_at, last_login_at, mfa_verified_at FROM users`
-	if len(conditions) > 0 {
-		query += ` WHERE ` + strings.Join(conditions, ` AND `)
-	}
-
-	query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
-	args = append(args, opts.Limit, opts.Offset)
-
-	rows, err := s.reader.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var users []*User
-	for rows.Next() {
-		u, err := s.scanUserFromRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		users = append(users, u)
-	}
-	return users, rows.Err()
+	return conditions, args
 }
 
 func (s *SQLiteStore) UpdateUser(ctx context.Context, u *User) error {
