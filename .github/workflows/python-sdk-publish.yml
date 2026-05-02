@@ -47,7 +47,7 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+        run: twine upload --skip-existing dist/*
 
       - name: Verify post-publish availability
         shell: bash
@@ -55,7 +55,7 @@ jobs:
           VERSION="${{ inputs.version }}"
           echo "Verifying shark-auth==${VERSION} on PyPI…"
           for i in 1 2 3; do
-            if pip install --index-url https://pypi.org/simple/ "shark-auth==${VERSION}" --dry-run 2>&1 | grep -q "Would install"; then
+            if python -m pip index versions shark-auth 2>/dev/null | grep -q "Available versions: .*${VERSION}"; then
               echo "shark-auth==${VERSION} available on PyPI."
               exit 0
             fi
