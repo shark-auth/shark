@@ -1880,7 +1880,7 @@ func (s *SQLiteStore) ListActiveSessions(ctx context.Context, opts ListSessionsO
 
 	//#nosec G202 -- WHERE clauses are compile-time constant predicates; user values pass through ? placeholders in args
 	q := `SELECT s.id, s.user_id, s.ip, s.user_agent, s.mfa_passed, s.auth_method, s.expires_at, s.created_at,
-	             COALESCE(u.email, '')
+	             COALESCE(u.email, ''), COALESCE(u.mfa_enabled, 0), COALESCE(u.mfa_verified, 0)
 	      FROM sessions s
 	      LEFT JOIN users u ON u.id = s.user_id
 	      WHERE ` + strings.Join(where, " AND ") + `
@@ -1898,11 +1898,14 @@ func (s *SQLiteStore) ListActiveSessions(ctx context.Context, opts ListSessionsO
 	for rows.Next() {
 		var sw SessionWithUser
 		var mfa int
+		var userMFAEnabled, userMFAVerified int
 		if err := rows.Scan(&sw.ID, &sw.UserID, &sw.IP, &sw.UserAgent, &mfa,
-			&sw.AuthMethod, &sw.ExpiresAt, &sw.CreatedAt, &sw.UserEmail); err != nil {
+			&sw.AuthMethod, &sw.ExpiresAt, &sw.CreatedAt, &sw.UserEmail, &userMFAEnabled, &userMFAVerified); err != nil {
 			return nil, err
 		}
 		sw.MFAPassed = mfa != 0
+		sw.UserMFAEnabled = userMFAEnabled != 0
+		sw.UserMFAVerified = userMFAVerified != 0
 		out = append(out, &sw)
 	}
 	return out, rows.Err()

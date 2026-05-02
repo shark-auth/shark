@@ -177,7 +177,7 @@ class SharkClaw(App):
         # --- 1. PROVISIONING (REAL) ---
         self.update_status_bar("REGISTERING AGENTS IN SHARKAUTH...")
         u_email = f"alice_{int(time.time())}@acme.com"
-        user = client.users.create_user(u_email, name="Alice (CEO)", email_verified=True)
+        user = client.users.create_user(u_email, name="Alice (CEO)", email_verified=False)
         user_id = user["id"]
         self.append_chat("AUTH", f"Parent user created: [dim]{user_id}[/]", "green")
         
@@ -202,7 +202,7 @@ class SharkClaw(App):
         owned_ids = {a.get("id") for a in owned.data}
         if pm["id"] not in owned_ids or fetcher["id"] not in owned_ids:
             raise RuntimeError("agent ownership check failed: created_by did not bind both agents to Alice")
-        self.append_chat("AUTH", "Agents registered on behalf of Alice. [dim]created_by verified via users.list_agents(filter='created')[/]", "green")
+        self.append_chat("AUTH", "Agents registered on behalf of Alice. [dim]created_by confirmed via users.list_agents(filter='created')[/]", "green")
 
         may_act.create(
             from_id=fetcher["client_id"],

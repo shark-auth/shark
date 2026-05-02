@@ -36,9 +36,11 @@ function normalizeSession(s) {
   const ip = s.ip_address || s.ip || '';
   const authMethod = s.auth_method || s.method || '';
   const mfaRaw = s.mfa_verified != null ? s.mfa_verified : (s.mfa_passed != null ? s.mfa_passed : s.mfa);
-  // mfa: keep as string type name if present, coerce bool true → 'verified', false → null
-  // Fix: explicitly check for true to avoid 'true' being returned for users without MFA
-  const mfa = (mfaRaw === true || mfaRaw === 'true') ? 'verified' : null;
+  const userMfaEnabled = s.user_mfa_enabled === true || s.user_mfa_enabled === 'true';
+  const userMfaVerified = s.user_mfa_verified === true || s.user_mfa_verified === 'true';
+  // mfa_passed means "session is fully authenticated"; for non-MFA users it is
+  // also true. Only show MFA when the user actually has verified MFA enrolled.
+  const mfa = userMfaEnabled && userMfaVerified && (mfaRaw === true || mfaRaw === 'true') ? 'verified' : null;
   // timestamps: API returns ISO strings, mock returns ms epoch numbers
   const toMs = (v) => {
     if (!v) return 0;
@@ -81,6 +83,7 @@ export function Sessions() {
   const toast = useToast();
 
   const { data: sessionsRaw, loading, refresh } = useAPI('/admin/sessions');
+  const { data: statsRaw } = useAPI('/admin/stats');
   const sessions = (sessionsRaw?.data || []).map(normalizeSession);
 
   // Live polling: refresh every 5s when liveTail is on
@@ -141,12 +144,13 @@ export function Sessions() {
     return true;
   });
 
-  const totalActive = all.length;
+  const loadedActive = all.length;
+  const totalActive = statsRaw?.sessions?.active ?? loadedActive;
   // Aggregate stats from real sessions
   const byAuthMethod = {};
   all.forEach(s => { byAuthMethod[s.method] = (byAuthMethod[s.method] || 0) + 1; });
   const mfaCount = all.filter(s => s.mfa).length;
-  const mfaRate = totalActive > 0 ? Math.round((mfaCount / totalActive) * 100) : 0;
+  const mfaRate = loadedActive > 0 ? Math.round((mfaCount / loadedActive) * 100) : 0;
   const suspicious = all.filter(s => s.suspicious || s.blocked).length;
   const clientCounts = { web: 0, mobile: 0, api: 0, agent: 0 };
   all.forEach(s => { if (clientCounts[s.client] != null) clientCounts[s.client]++; });
@@ -163,6 +167,7 @@ export function Sessions() {
         {/* LIVE strip */}
         <LiveStrip
           totalActive={totalActive}
+          loadedActive={loadedActive}
           suspicious={suspicious}
           clientCounts={clientCounts}
           regionCounts={regionCounts}
@@ -229,7 +234,8 @@ export function Sessions() {
           <div style={{ flex: 1 }}/>
 
           <span className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-            {filtered.length.toLocaleString()} of {all.length.toLocaleString()}
+            {filtered.length.toLocaleString()} of {loadedActive.toLocaleString()} loaded
+            {totalActive > loadedActive ? ` · ${totalActive.toLocaleString()} total` : ''}
           </span>
 
           <button className="btn sm" onClick={() => {
@@ -256,7 +262,7 @@ export function Sessions() {
 
 /* ---------------- LIVE STRIP ---------------- */
 
-function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRate, byAuthMethod, pulse, live, setLive }) {
+function LiveStrip({ totalActive, loadedActive, suspicious, clientCounts, regionCounts, mfaRate, byAuthMethod, pulse, live, setLive }) {
   return (
     <div style={{
       borderBottom: '1px solid var(--hairline)',
@@ -289,8 +295,8 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
         <div className="row" style={{ gap: 10 }}>
           <span className="row" style={{ gap: 4 }}>
             <span className="dot success"/>
-            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>healthy</span>
-            <span className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{totalActive - suspicious}</span>
+            <span style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>loaded</span>
+            <span className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>{loadedActive - suspicious}</span>
           </span>
           <span className="row" style={{ gap: 4 }}>
             <span className={"dot " + (suspicious > 0 ? 'danger pulse' : 'muted')}/>
@@ -325,7 +331,7 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
             .sort((a, b) => b[1] - a[1])
             .slice(0, 4)
             .map(([method, count]) => {
-              const pct = totalActive > 0 ? count / totalActive : 0;
+              const pct = loadedActive > 0 ? count / loadedActive : 0;
               return (
                 <div key={method} className="row" style={{ gap: 8 }}>
                   <span className="mono" style={{ width: 72, fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)' }}>{method || '—'}</span>
@@ -336,8 +342,8 @@ function LiveStrip({ totalActive, suspicious, clientCounts, regionCounts, mfaRat
                 </div>
               );
             })}
-          {totalActive > 0 && (
-            <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginTop: 4 }}>MFA coverage: {mfaRate}%</div>
+          {loadedActive > 0 && (
+            <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--fg-muted)', marginTop: 4 }}>MFA coverage loaded: {mfaRate}%</div>
           )}
         </div>
       </div>

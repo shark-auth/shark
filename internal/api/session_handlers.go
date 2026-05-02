@@ -31,8 +31,10 @@ type sessionResponse struct {
 
 type adminSessionResponse struct {
 	sessionResponse
-	UserEmail string `json:"user_email"`
-	JTI       string `json:"jti,omitempty"`
+	UserEmail       string `json:"user_email"`
+	UserMFAEnabled  bool   `json:"user_mfa_enabled"`
+	UserMFAVerified bool   `json:"user_mfa_verified"`
+	JTI             string `json:"jti,omitempty"`
 }
 
 type sessionListResponse struct {
@@ -155,7 +157,9 @@ func (s *Server) handleAdminListSessions(w http.ResponseWriter, r *http.Request)
 				CreatedAt:      sw.CreatedAt,
 				LastActivityAt: sw.CreatedAt,
 			},
-			UserEmail: sw.UserEmail,
+			UserEmail:       sw.UserEmail,
+			UserMFAEnabled:  sw.UserMFAEnabled,
+			UserMFAVerified: sw.UserMFAVerified,
 		})
 	}
 

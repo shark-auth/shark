@@ -707,7 +707,9 @@ type DevEmail struct {
 // by the admin sessions list (avoids N+1 lookups in the handler).
 type SessionWithUser struct {
 	Session
-	UserEmail string `json:"user_email"`
+	UserEmail       string `json:"user_email"`
+	UserMFAEnabled  bool   `json:"user_mfa_enabled"`
+	UserMFAVerified bool   `json:"user_mfa_verified"`
 }
 
 // MethodCount is a row of GROUP BY auth_method, COUNT(*).

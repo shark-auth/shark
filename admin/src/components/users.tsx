@@ -98,7 +98,7 @@ export function Users() {
     if (missing.length === 0) return;
     Promise.all(
       missing.map(u =>
-        fetch(`/api/v1/admin/agents?created_by_user_id=${encodeURIComponent(u.id)}&limit=1`, { headers })
+        fetch(`/api/v1/agents?created_by_user_id=${encodeURIComponent(u.id)}&limit=1`, { headers })
           .then(r => r.ok ? r.json() : null)
           .then(d => ({ id: u.id, count: d?.total ?? (Array.isArray(d?.data) ? d.data.length : 0) }))
           .catch(() => ({ id: u.id, count: 0 }))
