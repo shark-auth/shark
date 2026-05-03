@@ -445,7 +445,7 @@ Produces a single binary that contains:
 | Vault providers | outbound | `internal/vault/providers.go` | Stores OAuth tokens for Google/GitHub/Slack/Microsoft/Notion/Linear/Jira on user's behalf |
 | Webhook URLs | outbound | `internal/webhook/dispatcher.go` | HMAC signed; retry with backoff; dead-letter |
 | Reverse-proxy upstreams | bidirectional | `internal/proxy/listener.go` | Drop-in auth in front of any HTTP service |
-| Anonymous telemetry | outbound | `internal/telemetry/ping.go` | Optional; sends install ID + version every 24h |
+| Anonymous telemetry | outbound | `internal/telemetry/ping.go` | Optional; sends a one-time anonymous install ID. User-Agent includes version, OS, and arch. |
 
 There is no Redis, no Postgres, no Kafka, no message queue, no separate worker process. v0.9.x is single-process by design.
 

@@ -67,7 +67,7 @@ SharkAuth is a single static Go binary with embedded SQLite WAL. No Postgres, no
 
 ### 5. Open Source, Zero Lock-In (MIT)
 
-100% open source. No telemetry, no vendor lock-in, no "free until we change our mind." Your data never leaves your infrastructure. Your auth stack is yours forever.
+100% open source. SharkAuth collects only a one-time anonymous `install_id` ping by default, with telemetry opt-out available. No user, token, session, or auth data leaves your infrastructure. No vendor lock-in, no "free until we change our mind." Your auth stack is yours forever.
 
 ---
 

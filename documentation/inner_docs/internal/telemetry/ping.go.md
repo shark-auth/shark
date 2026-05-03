@@ -6,7 +6,7 @@
 **Tests:** `ping_test.go`
 
 ## Purpose
-Anonymous install-count telemetry. Optional outbound ping loop (24h cadence) that sends system/version info to tracking endpoint. Opt-out via config or environment variable.
+Anonymous install-count telemetry. Optional outbound ping that sends a one-time `install_id` to the configured endpoint. Opt-out via config or environment variable.
 
 ## Key types / functions
 - `Config` (struct, line 42) — Enabled, Endpoint, Version, InstallIDPath
@@ -28,8 +28,8 @@ Anonymous install-count telemetry. Optional outbound ping loop (24h cadence) tha
 
 ## Notes
 - Install ID: UUID v4, generated on first boot, persisted to data/install_id
-- First ping: ~30s after boot; subsequent pings: every 24h
-- What we send: install_id, version, OS, arch, uptime, started_at, Go version
+- First successful ping: ~30s after boot; no further pings after `install_id.done` is written
+- What we send: JSON body contains only `install_id`. The HTTP User-Agent includes SharkAuth version, OS, and arch.
 - What we do NOT send: user counts, app counts, hostnames, IPs, secrets, emails
 - Opt out: telemetry.enabled: false in YAML or SHARKAUTH_TELEMETRY__ENABLED=false
 - Endpoint does not log client IPs server-side
