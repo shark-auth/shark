@@ -12,19 +12,44 @@
 <p align="center">
   <a href="https://github.com/shark-auth/shark/releases/latest"><img src="https://img.shields.io/badge/version-v0.1.0-blue?style=flat-square" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
-  <a href="#"><img src="https://img.shields.io/badge/go-1.22%2B-00ADD8?style=flat-square" alt="Go"></a>
-  <a href="#"><img src="https://img.shields.io/badge/SQLite-embedded-003B57?style=flat-square" alt="SQLite"></a>
+  <a href="https://discord.com/invite/zq9t6VSt5r"><img src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="#"><img src="https://img.shields.io/badge/go-1.22%2B-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go"></a>
+  <a href="#"><img src="https://img.shields.io/badge/React-Admin%20UI-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React"></a>
+  <a href="#"><img src="https://img.shields.io/badge/SQLite-embedded-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"></a>
+  <a href="#"><img src="https://img.shields.io/badge/OAuth%202.1%20%2F%20OIDC-FF6F00?style=flat-square" alt="OAuth 2.1 / OIDC"></a>
 </p>
 
 ---
 
-## Auth was built for humans clicking buttons. Your agents need something better.
+## Table of Contents
+
+- [The Problem](#the-problem)
+- [Install in 10 Seconds](#install-in-10-seconds)
+- [Why Teams Choose SharkAuth](#why-teams-choose-sharkauth)
+- [What You Get](#what-you-get)
+- [Getting Started](#getting-started)
+  - [Docker](#docker-fastest)
+  - [Dev Mode](#dev-mode-no-config-needed)
+  - [TypeScript SDK](#typescript-sdk)
+  - [Python SDK](#python-sdk)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Community](#community)
+- [License](#license)
+
+---
+
+## The Problem
+
+Auth was built for humans clicking buttons. Your agents need something better.
 
 When an AI agent delegates to a sub-agent, the trust chain breaks. Bearer tokens leak. Revocation becomes a mess. Auditors ask "which agent did what?" and you have no answer.
 
 **SharkAuth fixes this.** It treats agents as first-class identities with native delegation, cryptographically bound tokens, and a unified audit trail that tracks every hop from user to resource.
 
-### Install in 10 seconds
+---
+
+## Install in 10 Seconds
 
 ```bash
 curl -fsSL sharkauth.com/get | sh
@@ -42,7 +67,7 @@ shark serve
 
 ---
 
-## Why teams choose SharkAuth
+## Why Teams Choose SharkAuth
 
 ### 1. Agent Delegation That Actually Works
 
@@ -71,7 +96,7 @@ SharkAuth is a single static Go binary with embedded SQLite WAL. No Postgres, no
 
 ---
 
-## What you get
+## What You Get
 
 | Category | Highlights |
 | :--- | :--- |
@@ -82,7 +107,7 @@ SharkAuth is a single static Go binary with embedded SQLite WAL. No Postgres, no
 
 ---
 
-## Get started
+## Getting Started
 
 ### Docker (fastest)
 
@@ -122,7 +147,7 @@ session = shark.sign_in(email="alice@co.io", password="...")
 
 ---
 
-## What's coming
+## Roadmap
 
 - **Visual Flow Builder** — Drag-and-drop auth flows (MFA → SSO → Org Select)
 - **Shark Cloud** — Managed infrastructure, free to enterprise. [Join the waitlist](https://sharkauth.com/waitlist)
@@ -131,14 +156,28 @@ session = shark.sign_in(email="alice@co.io", password="...")
 
 ---
 
+## Contributing
+
+We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) to learn about our development process, how to propose bug fixes and improvements, and how to build and test your changes.
+
+Please note that this project is released with a [Contributor Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
+
+---
+
 ## Community
 
-- **Discord**: [discord.gg/sharkauth](https://discord.gg/sharkauth) — ask questions, share deployments
+- **Discord**: [discord.gg/zq9t6VSt5r](https://discord.com/invite/zq9t6VSt5r) — ask questions, share deployments
 - **Twitter**: [@raulgooo](https://twitter.com/raulgooo) — updates and agent identity threads
 - **Docs**: [sharkauth.com/docs](https://sharkauth.com/docs)
 - **Issues & PRs**: [github.com/shark-auth/shark/issues](https://github.com/shark-auth/shark/issues)
 
 Built by [Raúl](https://github.com/raulgooo) in Monterrey, Mexico. MIT licensed.
+
+---
+
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
 
 ---
 
@@ -149,5 +188,5 @@ Built by [Raúl](https://github.com/raulgooo) in Monterrey, Mexico. MIT licensed
 <p align="center">
   <a href="https://github.com/shark-auth/shark/stargazers">⭐ Star this repo</a> ·
   <a href="https://sharkauth.com/waitlist">☁️ Join Cloud Waitlist</a> ·
-  <a href="https://discord.gg/sharkauth">💬 Join Discord</a>
+  <a href="https://discord.com/invite/zq9t6VSt5r">💬 Join Discord</a>
 </p>
