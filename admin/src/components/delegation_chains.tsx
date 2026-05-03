@@ -286,7 +286,7 @@ function buildChains(entries: NormEntry[]): Chain[] {
           });
         }
       });
-      if (ev.actor && !segMap.has(ev.actor)) {
+      if (ev.actChain.length === 0 && ev.actor && !segMap.has(ev.actor)) {
         // Same shape guard for the actor fallback. ev.actor falls back to
         // actor_id which can be an agent_id in service-mode.
         const isUser = looksHuman(ev.actor) && !looksAgent(ev.actor);
