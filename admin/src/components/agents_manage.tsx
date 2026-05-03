@@ -1175,9 +1175,19 @@ function AgentSecurity({ agent }) {
   const [rotHistOpen, setRotHistOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
-  // Pull DPoP fields from the agent object (populated by GET /api/v1/agents/:id)
+  const { data: tokenData } = useAPI(
+    '/agents/' + agent.id + '/tokens?limit=10',
+    [agent.id]
+  );
+  const recentTokens = tokenData?.data || [];
+  const tokenJkt = recentTokens.find(t => t.dpop_jkt && !t.revoked_at)?.dpop_jkt
+    || recentTokens.find(t => t.dpop_jkt)?.dpop_jkt
+    || null;
+
+  // Prefer a registered agent key when present; otherwise show the most recent
+  // DPoP-bound token thumbprint so the drawer reflects how the agent is being used.
   const keyId   = agent.dpop_key_id   || agent.key_id   || null;
-  const jkt     = agent.dpop_jkt      || agent.jkt      || null;
+  const jkt     = agent.dpop_jkt      || agent.jkt      || tokenJkt;
 
   // Pull rotation history from the agent's audit log (last 5 key-rotation events)
   const { data: auditData, loading: auditLoading } = useAPI(
@@ -1248,7 +1258,7 @@ function AgentSecurity({ agent }) {
           {/* Empty state when no DPoP data */}
           {!keyId && !jkt && (
             <div className="faint" style={{ fontSize: 11, marginTop: 2 }}>
-              No DPoP keypair registered for this agent.
+              No registered or recently issued DPoP thumbprint for this agent.
             </div>
           )}
         </div>

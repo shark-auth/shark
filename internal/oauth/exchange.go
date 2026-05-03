@@ -40,6 +40,20 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var dpopJKT string
+	if proofJWT := r.Header.Get("DPoP"); proofJWT != "" {
+		jkt, dpopErr := ValidateDPoPProof(ctx, proofJWT, r.Method, dpopTokenEndpointURL(r), "", s.DPoPCache)
+		if dpopErr != nil {
+			slog.Debug("token_exchange: DPoP proof invalid", "error", dpopErr)
+			writeExchangeError(w, http.StatusBadRequest, ErrInvalidDPoPProof, dpopErr.Error())
+			return
+		}
+		dpopJKT = jkt
+	} else if s.Config != nil && s.Config.RequireDPoP {
+		writeExchangeError(w, http.StatusBadRequest, ErrInvalidDPoPProof, "DPoP header is required")
+		return
+	}
+
 	// --- Step 1: Authenticate the acting agent ---
 	clientID, clientSecret, ok := r.BasicAuth()
 	if !ok {
@@ -156,7 +170,7 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- Step 5: Build delegation chain ---
-	actClaim := buildActClaim(actingAgent.ClientID, subjectAct)
+	actClaim := buildActClaim(actingAgent.ClientID, subjectAct, dpopJKT)
 
 	// Determine audience / resource.
 	audience := r.FormValue("audience")
@@ -190,6 +204,9 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 	if audience != "" {
 		claims["aud"] = audience
 	}
+	if dpopJKT != "" {
+		claims["cnf"] = map[string]interface{}{"jkt": dpopJKT}
+	}
 
 	signedToken, err := s.Sign(claims)
 	if err != nil {
@@ -221,6 +238,7 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		TokenHash:         tokenHash,
 		Scope:             strings.Join(grantedScopes, " "),
 		Audience:          audience,
+		DPoPJKT:           dpopJKT,
 		DelegationSubject: subjectSub,
 		DelegationActor:   actingAgent.ID,
 		ExpiresAt:         expiry,
@@ -271,14 +289,14 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 			requestedScopeOut = []string{}
 		}
 		metaMap := map[string]any{
-			"act_chain":        actClaim,
-			"scope":            strings.Join(grantedScopes, " "),
-			"client_id":        actingAgent.ClientID,
-			"subject":          subjectSub,
-			"subject_scope":    subjectScopeOut,
-			"granted_scope":    grantedScopeOut,
-			"dropped_scope":    droppedScopes,
-			"requested_scope":  requestedScopeOut,
+			"act_chain":       actClaim,
+			"scope":           strings.Join(grantedScopes, " "),
+			"client_id":       actingAgent.ClientID,
+			"subject":         subjectSub,
+			"subject_scope":   subjectScopeOut,
+			"granted_scope":   grantedScopeOut,
+			"dropped_scope":   droppedScopes,
+			"requested_scope": requestedScopeOut,
 		}
 		// Only populate grant_* keys when a real grants-table row matched.
 		// Absent fields stay absent â€” keeps backwards compat with audit rows
@@ -434,8 +452,11 @@ func countHops(subjectAct map[string]interface{}) int {
 
 // buildActClaim constructs the RFC 8693 act claim for the delegation chain.
 // If the subject token already has an act claim it is nested inside.
-func buildActClaim(actingAgentID string, subjectAct map[string]interface{}) map[string]interface{} {
+func buildActClaim(actingAgentID string, subjectAct map[string]interface{}, dpopJKT string) map[string]interface{} {
 	act := map[string]interface{}{"sub": actingAgentID}
+	if dpopJKT != "" {
+		act["jkt"] = dpopJKT
+	}
 	if subjectAct != nil {
 		act["act"] = subjectAct
 	}

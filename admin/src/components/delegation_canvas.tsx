@@ -237,7 +237,8 @@ function AnimatedBezierEdge({
     curvature: 0.18,
   });
 
-  const isActive = data?.isActive;
+  const revoked = data?.revoked === true;
+  const isActive = !revoked && data?.isActive;
   // Full label contains "via token_exchange · HH:MM" — used for hover tooltip
   const label = data?.label;
   const scopeFrom: string[] | undefined = data?.scopeFrom;
@@ -245,12 +246,13 @@ function AnimatedBezierEdge({
 
   // Static pill shows "acts-as · HH:MM" (user-friendly, no RFC jargon)
   const pillLabel = React.useMemo(() => {
+    if (revoked) return 'revoked';
     if (!label) return 'acts-as';
     // Extract time portion after last " · "
     const parts = label.split(' · ');
     const ts = parts.length > 1 ? parts[parts.length - 1] : '';
     return ts ? `acts-as · ${ts}` : 'acts-as';
-  }, [label]);
+  }, [label, revoked]);
   // Hover tooltip shows full RFC detail (jargon-free on pill, technical here)
   const tooltipLabel = React.useMemo(() => {
     if (!label) return '';
@@ -302,7 +304,14 @@ function AnimatedBezierEdge({
           className="nodrag nopan"
         >
           {/* Static always-visible pill */}
-          <div className={`edge-label-pill${isActive ? ' active' : ''}`}>
+          <div
+            className={`edge-label-pill${isActive ? ' active' : ''}`}
+            style={revoked ? {
+              color: 'var(--danger, #ef4444)',
+              borderColor: 'var(--danger, #ef4444)',
+              background: 'color-mix(in oklch, var(--danger, #ef4444) 10%, var(--surface-0))',
+            } : undefined}
+          >
             {pillLabel}
           </div>
           {/* Scope delta chip — visible when scope data is available */}
@@ -723,6 +732,9 @@ export interface DCanvasEdge {
   eventId?: string
   label?: string
   isActivHop?: boolean
+  revoked?: boolean
+  revoked_at?: string
+  grantId?: string
   scopeFrom?: string[]   // scope at source hop (subject_scope from audit metadata)
   scopeTo?: string[]     // scope at target hop (granted_scope from audit metadata)
 }
@@ -855,8 +867,9 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
     const baseLabel = ts ? `via token_exchange · ${ts}` : 'via token_exchange'
     const edgeLabel = e.label || baseLabel
 
-    const isActive = e.isActivHop === true
-    const strokeColor = isActive ? 'var(--fg)' : 'var(--fg-dim)'
+    const revoked = e.revoked === true
+    const isActive = !revoked && e.isActivHop === true
+    const strokeColor = revoked ? 'var(--danger, #ef4444)' : isActive ? 'var(--fg)' : 'var(--fg-dim)'
     // Active hop: strokeWidth 1.5 (bolder than hairline 1px)
     const strokeWidth = isActive ? 1.5 : 1
 
@@ -868,7 +881,7 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
       source: e.from,
       target: e.to,
       type: 'animatedBezier',
-      className: isActive ? 'active-hop' : '',
+      className: revoked ? 'revoked-hop' : isActive ? 'active-hop' : '',
       // P0-6: arrowheads 14/18 for legibility at fitView zoom
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -880,6 +893,8 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
         stroke: strokeColor,
         // strokeWidth: 1.5 for active-hop (bolder), 1 for historical hairline
         strokeWidth,
+        opacity: revoked ? 0.58 : 1,
+        ...(revoked ? { strokeDasharray: '2 5' } : {}),
         ...(isActive ? {
           strokeDasharray: '6 4',
           animation: 'dash-march 800ms linear infinite',
@@ -888,7 +903,10 @@ export function toReactFlowEdges(edges: DCanvasEdge[]) {
       data: {
         label: edgeLabel,
         eventId: e.eventId,
+        grantId: e.grantId,
         isActive,
+        revoked,
+        revoked_at: e.revoked_at,
         scopeFrom,
         scopeTo,
       },
@@ -937,7 +955,8 @@ export function toEgoLayout(
       : ''
     // label stored for hover tooltip; "token_exchange" keyword always present
     const edgeLabel = e.label || (ts ? `via token_exchange · ${ts}` : 'via token_exchange')
-    const strokeColor = isActive ? 'var(--fg)' : 'var(--fg-dim)'
+    const revoked = e.revoked === true
+    const strokeColor = revoked ? 'var(--danger, #ef4444)' : isActive ? 'var(--fg)' : 'var(--fg-dim)'
     // Active hop: strokeWidth 1.5 (bolder than hairline 1px)
     const strokeWidth = isActive ? 1.5 : 1
     return {
@@ -945,7 +964,7 @@ export function toEgoLayout(
       source: e.from,
       target: e.to,
       type: 'animatedBezier',
-      className: isActive ? 'active-hop' : '',
+      className: revoked ? 'revoked-hop' : isActive ? 'active-hop' : '',
       // P0-6: arrowheads 14/18 for legibility at fitView zoom
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -956,9 +975,11 @@ export function toEgoLayout(
       style: {
         stroke: strokeColor,
         strokeWidth,
+        opacity: revoked ? 0.58 : 1,
+        ...(revoked ? { strokeDasharray: '2 5' } : {}),
         ...(isActive ? { strokeDasharray: '6 4', animation: 'dash-march 800ms linear infinite' } : {}),
       },
-      data: { label: edgeLabel, eventId: e.eventId, isActive, scopeFrom: e.scopeFrom, scopeTo: e.scopeTo },
+      data: { label: edgeLabel, eventId: e.eventId, grantId: e.grantId, isActive: !revoked && isActive, revoked, revoked_at: e.revoked_at, scopeFrom: e.scopeFrom, scopeTo: e.scopeTo },
     }
   }
 
@@ -1238,7 +1259,9 @@ function EdgeDrawer({ edge, rfNodes, onClose, onAuditClick, onCanvasRefresh }: {
     if (!edge) { setGrant(null); return }
     let cancelled = false
     setGrantLoading(true)
-    const qs = `from_id=${encodeURIComponent(edge.source)}&to_id=${encodeURIComponent(edge.target)}&include_revoked=true`
+    const source = stripLanePrefix(edge.source)
+    const target = stripLanePrefix(edge.target)
+    const qs = `from_id=${encodeURIComponent(source)}&to_id=${encodeURIComponent(target)}&include_revoked=true`
     API.get(`/admin/may-act?${qs}`)
       .then((d: any) => {
         if (cancelled) return
@@ -1259,7 +1282,8 @@ function EdgeDrawer({ edge, rfNodes, onClose, onAuditClick, onCanvasRefresh }: {
   const fromLabel = fromNode?.data?.label || edge.source
   const toLabel = toNode?.data?.label || edge.target
   const tsRaw = (d.label || '').match(/· (.+)$/)?.[1] || ''
-  const isActive = !!d.isActive
+  const isRevoked = d.revoked === true || !!grant?.revoked_at
+  const isActive = !isRevoked && !!d.isActive
   const tokenType = (d.label || '').includes('token_exchange') ? 'token_exchange' : '—'
 
   const scopeFrom: string[] | undefined = d.scopeFrom
@@ -1299,7 +1323,7 @@ function EdgeDrawer({ edge, rfNodes, onClose, onAuditClick, onCanvasRefresh }: {
             fontFamily: 'var(--font-mono)', fontSize: 10,
             textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)',
           }}>
-            delegation · {isActive ? 'active hop' : 'historical'}
+            delegation · {isRevoked ? 'revoked' : isActive ? 'active hop' : 'historical'}
           </span>
           <button
             onClick={onClose}
@@ -1315,9 +1339,9 @@ function EdgeDrawer({ edge, rfNodes, onClose, onAuditClick, onCanvasRefresh }: {
 
         <div style={{ flex: 1, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <DrawerField label="From" value={fromLabel} />
-          <DrawerField label="From id" value={edge.source} mono />
+          <DrawerField label="From id" value={stripLanePrefix(edge.source)} mono />
           <DrawerField label="To" value={toLabel} />
-          <DrawerField label="To id" value={edge.target} mono />
+          <DrawerField label="To id" value={stripLanePrefix(edge.target)} mono />
           <DrawerField label="Token type" value={tokenType} mono />
           <DrawerField label="Hop timestamp" value={tsRaw || '—'} />
 
@@ -1876,6 +1900,9 @@ interface DelegationCanvasProps {
   // agentStatus: id-or-client_id → {active, updated_at}. Lets the canvas
   // overlay REVOKED on historical nodes whose backing agent is now inactive.
   agentStatus?: Map<string, { active: boolean; updated_at?: string; deactivated_at?: string }>
+  // grantStatus: "from->to" → may_act grant status. Lets the canvas render
+  // externally revoked delegation grants without relying on the edge drawer.
+  grantStatus?: Map<string, { revoked_at?: string; id?: string }>
   height?: number
   fitView?: boolean
   loading?: boolean
@@ -1895,6 +1922,7 @@ export function DelegationCanvas({
   onAuditClick,
   onCanvasRefresh,
   agentStatus,
+  grantStatus,
   height = 520,
   fitView = true,
   loading = false,
@@ -1948,7 +1976,39 @@ export function DelegationCanvas({
   // hands us a new set (e.g. circular chain-button swap) — without this the
   // canvas keeps rendering the previous chain's graph.
   React.useEffect(() => { setNodes(decoratedRfNodes) }, [decoratedRfNodes, setNodes])
-  React.useEffect(() => { setEdges(rfEdges) }, [rfEdges, setEdges])
+  const decoratedRfEdges = React.useMemo(() => {
+    if (!rfEdges || !grantStatus) return rfEdges
+    return rfEdges.map(e => {
+      const source = stripLanePrefix(e.source)
+      const target = stripLanePrefix(e.target)
+      const status = grantStatus.get(`${source}->${target}`)
+      if (!status?.revoked_at) return e
+      return {
+        ...e,
+        className: 'revoked-hop',
+        markerEnd: {
+          ...e.markerEnd,
+          color: 'var(--danger, #ef4444)',
+        },
+        style: {
+          ...(e.style || {}),
+          stroke: 'var(--danger, #ef4444)',
+          opacity: 0.58,
+          strokeDasharray: '2 5',
+          animation: undefined,
+        },
+        data: {
+          ...(e.data || {}),
+          grantId: status.id || e.data?.grantId,
+          revoked: true,
+          revoked_at: status.revoked_at,
+          isActive: false,
+        },
+      }
+    })
+  }, [rfEdges, grantStatus])
+
+  React.useEffect(() => { setEdges(decoratedRfEdges) }, [decoratedRfEdges, setEdges])
   const rfApi = useReactFlow()
   // Re-fit viewport when chainKey flips. RF preserves pan/zoom across renders,
   // so swapping rfNodes alone leaves the camera on the old graph.

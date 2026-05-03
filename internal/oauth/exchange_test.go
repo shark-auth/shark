@@ -93,12 +93,20 @@ func mintSubjectJWT(t *testing.T, srv *Server, sub, scope string, extra map[stri
 // plus the HTTP status code.
 func doExchange(t *testing.T, ts *httptest.Server, actorID, actorSecret string, form url.Values) (int, map[string]interface{}) {
 	t.Helper()
+	return doExchangeWithHeaders(t, ts, actorID, actorSecret, form, nil)
+}
+
+func doExchangeWithHeaders(t *testing.T, ts *httptest.Server, actorID, actorSecret string, form url.Values, headers map[string]string) (int, map[string]interface{}) {
+	t.Helper()
 	form.Set("grant_type", grantTypeTokenExchange)
 	req, err := http.NewRequest("POST", ts.URL, strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatalf("building request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	req.SetBasicAuth(actorID, actorSecret)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -163,6 +171,70 @@ func TestExchange_Success_UserToken(t *testing.T) {
 	}
 	if _, hasNestedAct := act["act"]; hasNestedAct {
 		t.Error("expected no nested act claim for fresh delegation")
+	}
+}
+
+func TestExchange_DPoPBoundTokenIncludesAndStoresJKT(t *testing.T) {
+	ts, srv, store := mountExchangeServer(t)
+	seedAgentWithScopes(t, store, "dpop-exchange-actor", []string{"openid", "read"})
+	_ = seedUser(t, store, "dpop-user@example.com")
+
+	subjectToken := mintSubjectJWT(t, srv, "dpop-user@example.com", "openid read", nil)
+
+	priv := ecKeyPair(t)
+	jwk := ecJWK(&priv.PublicKey)
+	expectedJKT, err := ComputeJWKThumbprint(jwk)
+	if err != nil {
+		t.Fatalf("compute JWK thumbprint: %v", err)
+	}
+	proof := buildECProof(t, proofParams{
+		priv:   priv,
+		jwk:    jwk,
+		method: "POST",
+		htu:    ts.URL + "/",
+	})
+
+	form := url.Values{
+		"subject_token":      {subjectToken},
+		"subject_token_type": {tokenTypeAccessToken},
+	}
+	status, body := doExchangeWithHeaders(t, ts, "dpop-exchange-actor", "test-secret", form, map[string]string{
+		"DPoP": proof,
+	})
+
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %v", status, body)
+	}
+
+	tokenStr, _ := body["access_token"].(string)
+	parsed, err := srv.parseSubjectJWT(context.Background(), tokenStr)
+	if err != nil {
+		t.Fatalf("parsing issued token: %v", err)
+	}
+
+	cnf, ok := parsed["cnf"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected cnf claim, got %T: %v", parsed["cnf"], parsed["cnf"])
+	}
+	if got, _ := cnf["jkt"].(string); got != expectedJKT {
+		t.Fatalf("expected cnf.jkt=%q, got %q", expectedJKT, got)
+	}
+
+	act, ok := parsed["act"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected act claim, got %T", parsed["act"])
+	}
+	if got, _ := act["jkt"].(string); got != expectedJKT {
+		t.Fatalf("expected act.jkt=%q, got %q", expectedJKT, got)
+	}
+
+	jti, _ := parsed["jti"].(string)
+	stored, err := store.GetOAuthTokenByJTI(context.Background(), jti)
+	if err != nil {
+		t.Fatalf("GetOAuthTokenByJTI: %v", err)
+	}
+	if stored.DPoPJKT != expectedJKT {
+		t.Fatalf("expected stored dpop_jkt=%q, got %q", expectedJKT, stored.DPoPJKT)
 	}
 }
 
@@ -799,7 +871,7 @@ func TestExchange_AuditMetadata_NoGrant(t *testing.T) {
 // TestBuildActClaim_Logic: unit tests for the buildActClaim helper.
 func TestBuildActClaim_Logic(t *testing.T) {
 	// No prior act.
-	act := buildActClaim("agent-x", nil)
+	act := buildActClaim("agent-x", nil, "")
 	if act["sub"] != "agent-x" {
 		t.Errorf("expected sub=agent-x, got %v", act["sub"])
 	}
@@ -809,7 +881,7 @@ func TestBuildActClaim_Logic(t *testing.T) {
 
 	// With prior act.
 	prior := map[string]interface{}{"sub": "agent-y"}
-	act2 := buildActClaim("agent-z", prior)
+	act2 := buildActClaim("agent-z", prior, "")
 	if act2["sub"] != "agent-z" {
 		t.Errorf("expected sub=agent-z, got %v", act2["sub"])
 	}
@@ -819,5 +891,10 @@ func TestBuildActClaim_Logic(t *testing.T) {
 	}
 	if nested["sub"] != "agent-y" {
 		t.Errorf("expected nested sub=agent-y, got %v", nested["sub"])
+	}
+
+	act3 := buildActClaim("agent-jkt", nil, "thumbprint-123")
+	if act3["jkt"] != "thumbprint-123" {
+		t.Errorf("expected jkt=thumbprint-123, got %v", act3["jkt"])
 	}
 }

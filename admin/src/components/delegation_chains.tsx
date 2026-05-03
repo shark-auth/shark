@@ -158,6 +158,7 @@ type NormEntry = ReturnType<typeof normalizeEntry>;
 
 interface Chain {
   rootSub: string;
+  rootLabel?: string;
   latestAt: string;
   events: NormEntry[];
   segments: Array<{
@@ -171,6 +172,70 @@ interface Chain {
   }>;
   lastAction: string;
   lastTarget: string;
+}
+
+function displayChainRoot(chain: Chain) {
+  return chain.rootLabel || chain.rootSub;
+}
+
+function displaySegment(seg: Chain['segments'][0]) {
+  return seg.label || seg.sub;
+}
+
+function grantKey(from?: string, to?: string) {
+  if (!from || !to) return ''
+  return `${stripLanePrefix(from)}->${stripLanePrefix(to)}`
+}
+
+function edgeGrantStatus(grantStatus: Map<string, any> | undefined, from?: string, to?: string) {
+  if (!grantStatus) return null
+  return grantStatus.get(grantKey(from, to)) || null
+}
+
+function isGrantRevoked(grantStatus: Map<string, any> | undefined, from?: string, to?: string) {
+  return !!edgeGrantStatus(grantStatus, from, to)?.revoked_at
+}
+
+function buildIdentityMap(agentsData: any, usersData: any) {
+  const m = new Map<string, { label: string; kind: 'agent' | 'user' }>();
+  const agents = agentsData?.data || agentsData?.agents || (Array.isArray(agentsData) ? agentsData : []);
+  for (const a of agents) {
+    const label = a.name || a.display_name || a.client_name || a.client_id || a.id;
+    const entry = { label, kind: 'agent' as const };
+    for (const k of [a.id, a.client_id, a.clientId]) {
+      if (k) m.set(stripLanePrefix(String(k)), entry);
+    }
+  }
+
+  const users = usersData?.users || usersData?.data || (Array.isArray(usersData) ? usersData : []);
+  for (const u of users) {
+    const label = u.name || u.email || u.id;
+    const entry = { label, kind: 'user' as const };
+    for (const k of [u.id, u.email]) {
+      if (k) m.set(stripLanePrefix(String(k)), entry);
+    }
+  }
+  return m;
+}
+
+function enrichChainLabels(chains: Chain[], identities: Map<string, { label: string; kind: 'agent' | 'user' }>) {
+  if (!identities || identities.size === 0) return chains;
+  return chains.map(chain => {
+    const rootIdentity = identities.get(stripLanePrefix(chain.rootSub));
+    return {
+      ...chain,
+      rootLabel: rootIdentity?.label || chain.rootLabel,
+      segments: chain.segments.map(seg => {
+        const identity = identities.get(stripLanePrefix(seg.sub)) || (seg.label ? identities.get(stripLanePrefix(seg.label)) : undefined);
+        if (!identity) return seg;
+        return {
+          ...seg,
+          label: identity.label,
+          isUser: identity.kind === 'user',
+        };
+      }),
+    };
+  });
 }
 
 function buildChains(entries: NormEntry[]): Chain[] {
@@ -272,7 +337,7 @@ function ChainBreadcrumb({
   );
 
   const renderSegment = (seg: Chain['segments'][0], i: number) => {
-    const label = seg.label || seg.sub;
+    const label = displaySegment(seg);
     const jkt = jktShort(seg.jkt);
     const isClickable = !seg.isUser && !!seg.sub;
     const display = jkt ? `${label} (${jkt}…)` : label;
@@ -346,6 +411,7 @@ function ChainDrawer({
   onAuditClick,
   onAgentClick,
   agentStatus,
+  grantStatus,
   onCanvasRefresh,
 }: {
   chain: Chain;
@@ -353,6 +419,7 @@ function ChainDrawer({
   onAuditClick: (id: string, grantId?: string) => void;
   onAgentClick: (sub: string) => void;
   agentStatus?: Map<string, any>;
+  grantStatus?: Map<string, any>;
   onCanvasRefresh?: () => void;
 }) {
   const [expandedTokens, setExpandedTokens] = React.useState<Set<number>>(new Set());
@@ -370,7 +437,7 @@ function ChainDrawer({
       type: seg.isUser ? 'humanNode' : 'agentNode',
       position: { x: i * 200, y: 60 },
       data: {
-        label: seg.label || seg.sub,
+        label: displaySegment(seg),
         jkt: seg.jkt,
         isUser: seg.isUser,
         chainPos: i + 1,
@@ -386,20 +453,24 @@ function ChainDrawer({
       const fromId = prev.sub || prev.label || String(i);
       const toId = seg.sub || seg.label || String(i + 1);
       const ev = chain.events[i];
+      const grant = edgeGrantStatus(grantStatus, fromId, toId);
       const isActive = !!ev?.created_at && (now - new Date(ev.created_at).getTime()) < 60_000;
       return {
         id: `${fromId}->${toId}`,
         from: fromId,
         to: toId,
         timestamp: ev?.created_at,
-        isActivHop: isActive,
+        isActivHop: isActive && !grant?.revoked_at,
+        revoked: !!grant?.revoked_at,
+        revoked_at: grant?.revoked_at,
+        grantId: grant?.id,
         eventId: ev?.id,
         scopeFrom: seg.subjectScope.length > 0 ? seg.subjectScope : prev.grantedScope,
         scopeTo: seg.grantedScope,
       };
     });
     return toReactFlowEdges(rawEdges);
-  }, [chain.segments, chain.events]);
+  }, [chain.segments, chain.events, grantStatus]);
 
   const jktChecks: Array<{ ok: boolean; reason: string }> = chain.segments.map((seg, i) => {
     if (i === 0) return { ok: true, reason: 'origin' };
@@ -452,7 +523,7 @@ function ChainDrawer({
             display: 'block',
             marginTop: 1,
           }} title={chain.rootSub}>
-            {chain.rootSub}
+            {displayChainRoot(chain)}
           </span>
         </div>
         <button className="btn ghost icon sm" onClick={onClose}>
@@ -488,6 +559,7 @@ function ChainDrawer({
               }}
               onAuditClick={onAuditClick}
               agentStatus={agentStatus}
+              grantStatus={grantStatus}
               onCanvasRefresh={onCanvasRefresh}
               fitView
             />
@@ -521,7 +593,7 @@ function ChainDrawer({
                   }}>
                     {check.ok ? '[ok]' : '[mismatch]'}
                   </span>
-                  <span className="mono" style={{ flex: 1, fontSize: 10.5 }}>{seg.label || seg.sub}</span>
+                  <span className="mono" style={{ flex: 1, fontSize: 10.5 }}>{displaySegment(seg)}</span>
                   <span style={{ color: 'var(--fg-dim)', fontSize: 9.5, opacity: 0.6 }}>{check.reason}</span>
                 </div>
               );
@@ -563,7 +635,7 @@ function ChainDrawer({
                     opacity: 0.4,
                     flexShrink: 0,
                   }}/>
-                  <span className="mono" style={{ flex: 1, fontSize: 10.5 }}>{seg.label || seg.sub}</span>
+                  <span className="mono" style={{ flex: 1, fontSize: 10.5 }}>{displaySegment(seg)}</span>
                   {seg.jkt && (
                     <span style={{ color: 'var(--fg-dim)', fontSize: 9.5, fontFamily: 'var(--font-mono)', opacity: 0.6 }}>
                       jkt:{seg.jkt.slice(0, 8)}…
@@ -707,7 +779,7 @@ function relTime(iso: string): string {
 
 /** Build "alice@corp → research-agent → tool-agent" path string */
 function chainPath(segments: Chain['segments']): string {
-  const labels = segments.map(s => s.label || s.sub);
+  const labels = segments.map(displaySegment);
   if (labels.length <= 4) return labels.join(' → ');
   return labels[0] + ' → … → ' + labels[labels.length - 1];
 }
@@ -789,7 +861,7 @@ function ChainSelectorItem({
           whiteSpace: 'nowrap',
           transition: 'color 80ms',
         }} title={chain.rootSub}>
-          {chain.rootSub}
+          {displayChainRoot(chain)}
         </span>
 
         {/* Relative time */}
@@ -857,7 +929,8 @@ function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] }
     const segs = chain.segments;
 
     // Build lane label: "alice@corp · N-hop · HH:MM"
-    const root = chain.rootSub.length > 18 ? chain.rootSub.slice(0, 16) + '…' : chain.rootSub;
+    const rootDisplay = displayChainRoot(chain);
+    const root = rootDisplay.length > 18 ? rootDisplay.slice(0, 16) + '…' : rootDisplay;
     const hopCount = segs.length;
     const ts = chain.latestAt
       ? new Date(chain.latestAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -872,7 +945,7 @@ function buildGraph(chains: Chain[]): { nodes: GraphNode[]; edges: GraphEdge[] }
       const id = `lane${laneIdx}__${seg.sub || seg.label || String(i)}`;
       nodes.push({
         id,
-        label: seg.label || seg.sub,
+        label: displaySegment(seg),
         isUser: seg.isUser,
         layer: i,
         slotInLayer: 0,
@@ -907,12 +980,14 @@ function ChainCanvas({
   setPage,
   onAuditClick,
   agentStatus,
+  grantStatus,
   onCanvasRefresh,
 }: {
   chains: Chain[];
   setPage?: (p: string, extra?: any) => void;
   onAuditClick: (id: string, grantId?: string) => void;
   agentStatus?: Map<string, any>;
+  grantStatus?: Map<string, any>;
   onCanvasRefresh?: () => void;
 }) {
   const [selectedChain, setSelectedChain] = React.useState<Chain | null>(null);
@@ -929,10 +1004,13 @@ function ChainCanvas({
     const edges = graphEdges.map((e) => ({
       ...e,
       id: e.from + '->' + e.to,
-      isActivHop: !!e.timestamp && (now - new Date(e.timestamp).getTime()) < 60_000,
+      isActivHop: !!e.timestamp && (now - new Date(e.timestamp).getTime()) < 60_000 && !isGrantRevoked(grantStatus, e.from, e.to),
+      revoked: isGrantRevoked(grantStatus, e.from, e.to),
+      revoked_at: edgeGrantStatus(grantStatus, e.from, e.to)?.revoked_at,
+      grantId: edgeGrantStatus(grantStatus, e.from, e.to)?.id,
     }));
     return toReactFlowEdges(edges);
-  }, [graphEdges]);
+  }, [graphEdges, grantStatus]);
 
   // Per-chain nodes/edges for focused view
   const chainRFNodes = React.useMemo(() => {
@@ -943,7 +1021,7 @@ function ChainCanvas({
       type: seg.isUser ? 'humanNode' : 'agentNode',
       position: { x: i * 200, y: 80 },
       data: {
-        label: seg.label || seg.sub,
+        label: displaySegment(seg),
         jkt: seg.jkt,
         isUser: seg.isUser,
         chainPos: i + 1,
@@ -960,19 +1038,23 @@ function ChainCanvas({
       const fromId = prev.sub || prev.label || String(i);
       const toId = seg.sub || seg.label || String(i + 1);
       const ev = selectedChain.events[i];
+      const grant = edgeGrantStatus(grantStatus, fromId, toId);
       const isActive = !!ev?.created_at && (now - new Date(ev.created_at).getTime()) < 60_000;
       return {
         id: `${fromId}->${toId}`,
         from: fromId,
         to: toId,
         timestamp: ev?.created_at,
-        isActivHop: isActive,
+        isActivHop: isActive && !grant?.revoked_at,
+        revoked: !!grant?.revoked_at,
+        revoked_at: grant?.revoked_at,
+        grantId: grant?.id,
         eventId: ev?.id,
         scopeFrom: seg.subjectScope.length > 0 ? seg.subjectScope : prev.grantedScope,
         scopeTo: seg.grantedScope,
       };
     });
-  }, [selectedChain]);
+  }, [selectedChain, grantStatus]);
 
   const chainRFEdgesBuilt = React.useMemo(
     () => chainRFEdges ? toReactFlowEdges(chainRFEdges) : null,
@@ -1173,6 +1255,7 @@ function ChainCanvas({
             }}
             onAuditClick={onAuditClick}
             agentStatus={agentStatus}
+            grantStatus={grantStatus}
             onCanvasRefresh={onCanvasRefresh}
             fitView
             chainKey={selectedChain.rootSub}
@@ -1245,6 +1328,7 @@ function ChainCanvas({
         }}
         onAuditClick={onAuditClick}
         agentStatus={agentStatus}
+        grantStatus={grantStatus}
         onCanvasRefresh={onCanvasRefresh}
         fitView
       />
@@ -1296,9 +1380,11 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
 
   const { data: exchangeData, loading: loadingExchange, refresh: refreshExchange } = useAPI(exchangeParams);
   const { data: retrieveData, loading: loadingRetrieve, refresh: refreshRetrieve } = useAPI(retrieveParams);
+  const { data: mayActData, refresh: refreshMayAct } = useAPI('/admin/may-act?include_revoked=true');
   // Agent roster for status overlay on canvas (revoked node greyscale).
   // Cheap: one list call, cached by useAPI.
   const { data: agentsData, refresh: refreshAgents } = useAPI('/agents?limit=500');
+  const { data: usersData, refresh: refreshUsers } = useAPI('/users?limit=200');
   const agentStatusMap = React.useMemo(() => {
     const m = new Map<string, any>();
     const list = agentsData?.data || (Array.isArray(agentsData) ? agentsData : []);
@@ -1310,8 +1396,40 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
     return m;
   }, [agentsData]);
 
-  const refresh = () => { refreshExchange(); refreshRetrieve(); refreshAgents(); };
+  const identityMap = React.useMemo(
+    () => buildIdentityMap(agentsData, usersData),
+    [agentsData, usersData],
+  );
+
+  const grantStatusMap = React.useMemo(() => {
+    const m = new Map<string, any>();
+    const list = mayActData?.grants || mayActData?.data || (Array.isArray(mayActData) ? mayActData : []);
+    for (const g of list) {
+      if (!g?.from_id || !g?.to_id) continue;
+      const k = grantKey(g.from_id, g.to_id);
+      const existing = m.get(k);
+      const existingLive = existing && !existing.revoked_at;
+      const candidateLive = !g.revoked_at;
+      if (!existing || (candidateLive && !existingLive) || (candidateLive === existingLive && String(g.created_at || '') > String(existing.created_at || ''))) {
+        m.set(k, { id: g.id, revoked_at: g.revoked_at, created_at: g.created_at });
+      }
+    }
+    return m;
+  }, [mayActData]);
+
+  const refresh = React.useCallback((opts?: { silent?: boolean }) => {
+    refreshExchange(opts);
+    refreshRetrieve(opts);
+    refreshAgents(opts);
+    refreshUsers(opts);
+    refreshMayAct(opts);
+  }, [refreshExchange, refreshRetrieve, refreshAgents, refreshUsers, refreshMayAct]);
   usePageActions({ onRefresh: refresh });
+
+  React.useEffect(() => {
+    const t = window.setInterval(() => refresh({ silent: true }), 5000);
+    return () => window.clearInterval(t);
+  }, [refresh]);
 
   React.useEffect(() => {
     try { localStorage.setItem('shark_chains_view', viewMode); } catch {}
@@ -1323,8 +1441,8 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
     const rawExchange = exchangeData?.items || exchangeData?.audit_logs || exchangeData?.data || (Array.isArray(exchangeData) ? exchangeData : []);
     const rawRetrieve = retrieveData?.items || retrieveData?.audit_logs || retrieveData?.data || (Array.isArray(retrieveData) ? retrieveData : []);
     const all = [...rawExchange, ...rawRetrieve].map(normalizeEntry);
-    return buildChains(all);
-  }, [exchangeData, retrieveData]);
+    return enrichChainLabels(buildChains(all), identityMap);
+  }, [exchangeData, retrieveData, identityMap]);
 
   // A chain is "revoked" if any agent segment has agentStatus.active === false.
   const isChainRevoked = React.useCallback((chain: Chain) =>
@@ -1332,12 +1450,17 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
       if (seg.isUser) return false;
       const status = agentStatusMap?.get(seg.sub) || agentStatusMap?.get(stripLanePrefix(seg.sub));
       return status?.active === false;
-    }), [agentStatusMap]);
+    }) || chain.segments.slice(1).some((seg, i) => {
+      const prev = chain.segments[i];
+      const fromId = prev.sub || prev.label || String(i);
+      const toId = seg.sub || seg.label || String(i + 1);
+      return isGrantRevoked(grantStatusMap, fromId, toId);
+    }), [agentStatusMap, grantStatusMap]);
 
   const filteredChains = React.useMemo(() => {
     return allChains.filter(c => {
-      if (actorFilter && !c.rootSub.toLowerCase().includes(actorFilter.toLowerCase()) &&
-          !c.segments.some(s => (s.label || s.sub).toLowerCase().includes(actorFilter.toLowerCase()))) {
+      if (actorFilter && !displayChainRoot(c).toLowerCase().includes(actorFilter.toLowerCase()) &&
+          !c.segments.some(s => displaySegment(s).toLowerCase().includes(actorFilter.toLowerCase()))) {
         return false;
       }
       if (revokedFilter === 'hide' && isChainRevoked(c)) return false;
@@ -1499,6 +1622,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
               setPage={setPage}
               onAuditClick={navigateToAudit}
               agentStatus={agentStatusMap}
+              grantStatus={grantStatusMap}
               onCanvasRefresh={refresh}
             />
           )}
@@ -1580,7 +1704,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
                     >
                       <td style={{ ...tdStyle, maxWidth: 140 }}>
                         <span className="mono" style={{ fontSize: 10.5, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {chain.rootSub.length > 20 ? chain.rootSub.slice(0, 18) + '…' : chain.rootSub}
+                          {displayChainRoot(chain).length > 20 ? displayChainRoot(chain).slice(0, 18) + '…' : displayChainRoot(chain)}
                         </span>
                       </td>
                       <td style={{ ...tdStyle, minWidth: 200 }}>
@@ -1682,6 +1806,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
           onAuditClick={navigateToAudit}
           onAgentClick={navigateToAgent}
           agentStatus={agentStatusMap}
+          grantStatus={grantStatusMap}
           onCanvasRefresh={refresh}
         />
       )}
