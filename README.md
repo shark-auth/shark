@@ -78,7 +78,7 @@ Real delegated authority using **RFC 8693 Token Exchange**. SharkAuth issues `ma
 
 <p align="center">
   <img src="images/demo.gif" width="480" alt="SharkAuth Demo" />
-  <br /><em>10-second demo: install, boot, and issue a DPoP-bound agent token.</em>
+  <br /><em>Demo: user delegates to an agent, which delegates to a sub-agent — every hop cryptographically signed and auditable.</em>
 </p>
 
 ### 2. Tokens Bound to Keys, Not Bearers (RFC 9449 DPoP)
