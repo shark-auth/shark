@@ -77,8 +77,8 @@ SHARK_DEV_MODE=1 shark serve
 Real delegated authority using **RFC 8693 Token Exchange**. SharkAuth issues `may_act_grants` that are revocable, time-limited, and hop-constrained. No more prompt-level "trust me" delegation.
 
 <p align="center">
-  <img src="images/del_chains1.png" width="600" alt="Delegation Chain Audit" />
-  <br /><em>Audit every hop: User → Researcher → Tool Agent.</em>
+  <img src="images/demo.gif" width="640" alt="SharkAuth Demo" />
+  <br /><em>10-second demo: install, boot, and issue a DPoP-bound agent token.</em>
 </p>
 
 ### 2. Tokens Bound to Keys, Not Bearers (RFC 9449 DPoP)
