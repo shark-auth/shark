@@ -28,6 +28,16 @@ def _create_cc_agent(admin_key: str, name: str, scopes: list) -> dict:
     return resp.json()
 
 
+def _create_may_act_grant(admin_key: str, from_id: str, to_id: str, scopes: list) -> dict:
+    resp = requests.post(
+        f"{BASE_URL}/api/v1/admin/may-act",
+        json={"from_id": from_id, "to_id": to_id, "max_hops": 3, "scopes": scopes},
+        headers=_admin_headers(admin_key),
+    )
+    assert resp.status_code == 201, f"may_act grant create failed: {resp.text}"
+    return resp.json()
+
+
 def _get_token(client_id: str, client_secret: str, scope: str = "") -> str:
     data = {"grant_type": "client_credentials"}
     if scope:
@@ -64,7 +74,17 @@ class TestTokenExchange:
             admin_key, "smoke-tex-worker",
             ["task:execute"],
         )
+        grant = _create_may_act_grant(
+            admin_key,
+            wkr["client_id"],
+            mgr["client_id"],
+            ["task:orchestrate"],
+        )
         yield mgr, wkr
+        requests.delete(
+            f"{BASE_URL}/api/v1/admin/may-act/{grant['id']}",
+            headers=_admin_headers(admin_key),
+        )
         for agent in (mgr, wkr):
             requests.delete(
                 f"{BASE_URL}/api/v1/agents/{agent['id']}",
