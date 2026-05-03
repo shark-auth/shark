@@ -63,6 +63,9 @@ go install github.com/shark-auth/shark/cmd/shark@latest
 shark serve
 # => admin UI : http://localhost:8080/admin
 # => issuer   : http://localhost:8080
+
+# Dev mode (in-memory DB, magic links to stdout)
+SHARK_DEV_MODE=1 shark serve
 ```
 
 ---
@@ -121,7 +124,7 @@ docker run -p 8080:8080 -v shark-data:/data ghcr.io/shark-auth/shark
 ### Dev mode (no config needed)
 
 ```bash
-shark serve --dev
+SHARK_DEV_MODE=1 shark serve
 ```
 
 Magic links print to stdout. In-memory database. Perfect for rapid prototyping.
@@ -129,21 +132,21 @@ Magic links print to stdout. In-memory database. Perfect for rapid prototyping.
 ### TypeScript SDK
 
 ```typescript
-import { SharkClient } from "@sharkauth/sdk";
+import { AuthClient } from "@sharkauth/sdk";
 
-const shark = new SharkClient({ baseUrl: "http://localhost:8080" });
+const auth = new AuthClient("http://localhost:8080");
 
-// Sign in with DPoP protection
-const session = await shark.signIn({ email: "alice@co.io", password: "..." });
+// Sign in
+const session = await auth.login("alice@co.io", "Strong-Pwd-2026");
 ```
 
 ### Python SDK
 
 ```python
-from sharkauth import SharkClient
+from shark_auth import AuthClient
 
-shark = SharkClient(base_url="http://localhost:8080")
-session = shark.sign_in(email="alice@co.io", password="...")
+auth = AuthClient("http://localhost:8080")
+session = auth.login("alice@co.io", "Strong-Pwd-2026")
 ```
 
 **→ [Read the full docs](https://sharkauth.com/docs)**
