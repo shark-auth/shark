@@ -101,7 +101,7 @@ function normalizeEntry(e: any) {
     return [];
   };
 
-  const actChain: Array<{ sub: string; jkt?: string; label?: string }> =
+  const rawActChain: Array<{ sub: string; jkt?: string; label?: string }> =
     resolveChain(e.act_chain).length > 0
       ? resolveChain(e.act_chain)
       : resolveChain(meta.act_chain).length > 0
@@ -109,6 +109,16 @@ function normalizeEntry(e: any) {
         : e.oauth?.act
           ? [{ sub: e.oauth.act.sub || '', label: e.oauth.act.email || e.oauth.act.sub || 'user' }]
           : [];
+
+  // RFC 8693 nests the current actor first and previous actors under `act`.
+  // The chain canvas needs subject -> actor -> actor, so prepend the subject
+  // and reverse the nested actor list.
+  const subject = meta.subject || e.subject || e.delegation_subject || e.target_id || '';
+  const subjectJKT = meta.subject_jkt || meta.subjectJKT || '';
+  const actChain: Array<{ sub: string; jkt?: string; label?: string }> =
+    subject
+      ? [{ sub: subject, jkt: subjectJKT }, ...[...rawActChain].reverse()]
+      : rawActChain;
 
   // Pick the most readable root id. For service-mode chains where the root is
   // an agent, prefer the label/sub over actor_email — actor_email is empty
@@ -473,12 +483,9 @@ function ChainDrawer({
   }, [chain.segments, chain.events, grantStatus]);
 
   const jktChecks: Array<{ ok: boolean; reason: string }> = chain.segments.map((seg, i) => {
-    if (i === 0) return { ok: true, reason: 'origin' };
-    const prev = chain.segments[i - 1];
-    if (!seg.jkt) return { ok: true, reason: 'no jkt claim' };
-    if (!prev.jkt) return { ok: true, reason: 'prior hop has no jkt to compare' };
-    const ok = seg.jkt === prev.jkt;
-    return { ok, reason: ok ? 'jkt matches prior hop' : `jkt drift: expected ${prev.jkt?.slice(0,8)} got ${seg.jkt?.slice(0,8)}` };
+    if (!seg.jkt) return { ok: false, reason: 'no jkt claim' };
+    if (i === 0) return { ok: true, reason: 'origin DPoP-bound' };
+    return { ok: true, reason: 'actor DPoP-bound' };
   });
 
   return (

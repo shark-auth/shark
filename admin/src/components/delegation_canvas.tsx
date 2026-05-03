@@ -469,7 +469,7 @@ function AgentNode({ data, selected }: { data: any; selected?: boolean }) {
       }}
       onMouseLeave={e => {
         if (!selected) {
-          (e.currentTarget as HTMLElement).style.borderColor = 'var(--hairline-strong)';
+          (e.currentTarget as HTMLElement).style.borderColor = revoked ? 'var(--danger, #ef4444)' : 'var(--hairline-strong)';
           (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.28)';
         }
       }}
@@ -1571,7 +1571,7 @@ function AgentDrawerFields({ node, chainPos, prevHop, nextHop, tokenType, hopTs,
   const d = node.data || {}
   const toast = useToast()
   // d.revoked is set by canvas when agentStatus.active === false OR fresh kill.
-  const isRevoked = d.revoked === true || d.active === false
+  const isRevoked = d.revoked === true || d.active === false || !!d.revoked_at
   const status = isRevoked ? 'inactive' : 'active'
   const statusColor = status === 'active' ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'
   const revokedAt = d.revoked_at
@@ -1957,13 +1957,16 @@ export function DelegationCanvas({
       const fresh = lookupKeys.some(k => freshlyRevoked.has(k))
       const revokedFromStatus = statusEntry && statusEntry.active === false
       const revoked = fresh || revokedFromStatus || n.data?.revoked === true
+      const revokedAt = revoked
+        ? (statusEntry?.deactivated_at || statusEntry?.updated_at || n.data?.revoked_at)
+        : undefined
       if (!revoked && !statusEntry) return n
       return {
         ...n,
         data: {
           ...n.data,
           revoked,
-          revoked_at: statusEntry?.deactivated_at || statusEntry?.updated_at,
+          revoked_at: revokedAt,
           active: statusEntry?.active,
         },
       }

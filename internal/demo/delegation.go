@@ -246,13 +246,28 @@ func queryAuditEvents(ctx context.Context, hc *http.Client, opts DelegationOptio
 			continue
 		}
 		found = true
-		// Try to parse a list response; accept both {"events":[...]} and [...].
+		// Try to parse common list response envelopes plus a raw array.
 		var listResp struct {
-			Events []map[string]any `json:"events"`
+			Events    []map[string]any `json:"events"`
+			Data      []map[string]any `json:"data"`
+			Items     []map[string]any `json:"items"`
+			AuditLogs []map[string]any `json:"audit_logs"`
 		}
-		if err := json.Unmarshal(raw, &listResp); err == nil && listResp.Events != nil {
-			total += len(listResp.Events)
-			continue
+		if err := json.Unmarshal(raw, &listResp); err == nil {
+			switch {
+			case listResp.Events != nil:
+				total += len(listResp.Events)
+				continue
+			case listResp.Data != nil:
+				total += len(listResp.Data)
+				continue
+			case listResp.Items != nil:
+				total += len(listResp.Items)
+				continue
+			case listResp.AuditLogs != nil:
+				total += len(listResp.AuditLogs)
+				continue
+			}
 		}
 		var arr []map[string]any
 		if err := json.Unmarshal(raw, &arr); err == nil {
@@ -361,15 +376,15 @@ func createAgent(ctx context.Context, hc *http.Client, opts DelegationOptions, n
 // ---------------------------------------------------------------------------
 
 func configurePolicies(ctx context.Context, hc *http.Client, opts DelegationOptions, agents []AgentInfo) error {
-	// user-proxy (agents[0]) may act on behalf of email-service (agents[1])
-	// email-service (agents[1]) may act on behalf of followup-service (agents[2])
+	// email-service (agents[1]) may act on behalf of user-proxy (agents[0]).
+	// followup-service (agents[2]) may act on behalf of email-service (agents[1]).
 	policies := []struct {
 		actorIdx  int // the agent that HOLDS the may_act permission
 		targetIdx int // the agent it may impersonate
 		scopes    []string
 	}{
-		{0, 1, []string{"email:read", "email:write", "vault:read"}},
-		{1, 2, []string{"email:read", "vault:read"}},
+		{1, 0, []string{"email:read", "vault:read"}},
+		{2, 1, []string{"email:read"}},
 	}
 
 	for _, p := range policies {
@@ -432,7 +447,7 @@ func runChain(ctx context.Context, hc *http.Client, opts DelegationOptions, agen
 	// Token 2: email-service requests token exchange from user-proxy.
 	// Scope NARROWS: drops email:write — email-service only needs to read mail.
 	fmt.Print("  → Token 2 (email-service, token-exchange, scope=email:read vault:read)... ")
-	tok2, err := issueTokenExchange(ctx, hc, opts, agents[1], agents[0], tok1.AccessToken, "email:read vault:read", tokenURL)
+	tok2, err := issueTokenExchange(ctx, hc, opts, agents[1], tok1.AccessToken, "email:read vault:read", tokenURL)
 	if err != nil {
 		return nil, VaultResult{}, fmt.Errorf("token 2 (exchange hop 1): %w", err)
 	}
@@ -442,7 +457,7 @@ func runChain(ctx context.Context, hc *http.Client, opts DelegationOptions, agen
 	// Token 3: followup-service requests token exchange from email-service.
 	// Scope NARROWS further: drops vault:read — followup only needs to read email.
 	fmt.Print("  → Token 3 (followup-service, token-exchange, scope=email:read)... ")
-	tok3, err := issueTokenExchange(ctx, hc, opts, agents[2], agents[1], tok2.AccessToken, "email:read", tokenURL)
+	tok3, err := issueTokenExchange(ctx, hc, opts, agents[2], tok2.AccessToken, "email:read", tokenURL)
 	if err != nil {
 		return nil, VaultResult{}, fmt.Errorf("token 3 (exchange hop 2): %w", err)
 	}
@@ -550,7 +565,7 @@ func issueClientCredentials(ctx context.Context, hc *http.Client, opts Delegatio
 // let the server apply its default policy.
 // Per RFC 8693 the actor is identified by the Basic-auth client_credentials of
 // actorAgent — no separate actor_token parameter is needed.
-func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOptions, targetAgent, actorAgent AgentInfo, subjectToken, requestedScope, tokenURL string) (TokenInfo, error) {
+func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOptions, targetAgent AgentInfo, subjectToken, requestedScope, tokenURL string) (TokenInfo, error) {
 	proof, err := makeDPoPProof(targetAgent.Key, http.MethodPost, tokenURL, "")
 	if err != nil {
 		return TokenInfo{}, fmt.Errorf("dpop proof: %w", err)
@@ -573,7 +588,7 @@ func issueTokenExchange(ctx context.Context, hc *http.Client, opts DelegationOpt
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("DPoP", proof)
 	// Actor identified by client_credentials in Basic auth (RFC 8693 §2.1).
-	req.SetBasicAuth(actorAgent.ClientID, actorAgent.ClientSecret)
+	req.SetBasicAuth(targetAgent.ClientID, targetAgent.ClientSecret)
 
 	resp, err := hc.Do(req)
 	if err != nil {

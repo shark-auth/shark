@@ -113,6 +113,7 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 	subjectSub, _ := subjectClaims["sub"].(string)
 	subjectScope, _ := subjectClaims["scope"].(string)
 	subjectAct, _ := subjectClaims["act"].(map[string]interface{})
+	subjectJKT := claimDPoPJKT(subjectClaims)
 
 	// --- Step 3: Validate scope narrowing ---
 	requestedScopeStr := r.FormValue("scope")
@@ -298,6 +299,13 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 			"dropped_scope":   droppedScopes,
 			"requested_scope": requestedScopeOut,
 		}
+		if subjectJKT != "" {
+			metaMap["subject_jkt"] = subjectJKT
+		}
+		if dpopJKT != "" {
+			metaMap["actor_jkt"] = dpopJKT
+			metaMap["dpop_jkt"] = dpopJKT
+		}
 		// Only populate grant_* keys when a real grants-table row matched.
 		// Absent fields stay absent â€” keeps backwards compat with audit rows
 		// emitted before grants existed.
@@ -461,6 +469,15 @@ func buildActClaim(actingAgentID string, subjectAct map[string]interface{}, dpop
 		act["act"] = subjectAct
 	}
 	return act
+}
+
+func claimDPoPJKT(claims gojwt.MapClaims) string {
+	cnf, ok := claims["cnf"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	jkt, _ := cnf["jkt"].(string)
+	return jkt
 }
 
 // splitScopes splits a space-separated scope string into individual tokens.
