@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	mw "github.com/shark-auth/shark/internal/api/middleware"
+	"github.com/shark-auth/shark/internal/oauth"
 	"github.com/shark-auth/shark/internal/storage"
 	"github.com/shark-auth/shark/internal/vault"
 )
@@ -728,6 +729,26 @@ func (s *Server) handleVaultGetToken(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope",scope="vault:read"`)
 		writeJSON(w, http.StatusForbidden, errPayload("insufficient_scope", "Token lacks vault:read scope"))
 		return
+	}
+
+	// DPoP binding check for bound tokens
+	if tok.DPoPJKT != "" {
+		proofJWT := r.Header.Get("DPoP")
+		if proofJWT == "" {
+			w.Header().Set("WWW-Authenticate", `DPoP error="invalid_dpop_proof"`)
+			writeJSON(w, http.StatusUnauthorized, errPayload("invalid_dpop_proof", "DPoP header is required"))
+			return
+		}
+		htu := r.URL.Scheme + "://" + r.Host + r.URL.Path
+		if htu == "://" {
+			htu = r.RequestURI
+		}
+		jkt, err := oauth.ValidateDPoPProof(r.Context(), proofJWT, r.Method, htu, "", s.OAuthServer.DPoPCache)
+		if err != nil || jkt != tok.DPoPJKT {
+			w.Header().Set("WWW-Authenticate", `DPoP error="invalid_dpop_proof"`)
+			writeJSON(w, http.StatusUnauthorized, errPayload("invalid_dpop_proof", "Invalid DPoP proof"))
+			return
+		}
 	}
 
 	providerName := chi.URLParam(r, "provider")

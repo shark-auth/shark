@@ -199,7 +199,7 @@ export function IdentityHub() {
 
   const [socialDrawer, setSocialDrawer] = React.useState<null | { provider: string; cfg: any }>(null);
 
-  const adminKey = typeof localStorage !== 'undefined' ? localStorage.getItem('shark_admin_key') || '' : '';
+  const adminKey = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('shark_admin_key') || '' : '';
   const headers = { Authorization: `Bearer ${adminKey}`, 'Content-Type': 'application/json' };
 
   // SSO + device-code state (live via direct fetch — separate endpoints)

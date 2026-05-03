@@ -302,7 +302,7 @@ export function TopBar({ page, onOpenPalette, setPage }) {
       <button
         className="btn ghost sm"
         title="Sign out"
-        onClick={() => { localStorage.removeItem('shark_admin_key'); window.location.reload(); }}
+        onClick={() => { sessionStorage.removeItem('shark_admin_key'); window.location.reload(); }}
         style={{ color: 'var(--fg-dim)', fontSize: 11 }}
       >
         Sign out

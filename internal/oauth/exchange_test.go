@@ -89,6 +89,10 @@ func mintSubjectJWT(t *testing.T, srv *Server, sub, scope string, extra map[stri
 	return tokenStr
 }
 
+func mayAct(actor string) map[string]interface{} {
+	return map[string]interface{}{"may_act": []interface{}{actor}}
+}
+
 // doExchange fires a token-exchange request and returns the decoded response body
 // plus the HTTP status code.
 func doExchange(t *testing.T, ts *httptest.Server, actorID, actorSecret string, form url.Values) (int, map[string]interface{}) {
@@ -134,7 +138,7 @@ func TestExchange_Success_UserToken(t *testing.T) {
 	seedAgentWithScopes(t, store, "actor-agent", []string{"openid", "read"})
 	_ = seedUser(t, store, "user@example.com")
 
-	subjectToken := mintSubjectJWT(t, srv, "user@example.com", "openid read", nil)
+	subjectToken := mintSubjectJWT(t, srv, "user@example.com", "openid read", mayAct("actor-agent"))
 
 	form := url.Values{
 		"subject_token":      {subjectToken},
@@ -179,7 +183,7 @@ func TestExchange_DPoPBoundTokenIncludesAndStoresJKT(t *testing.T) {
 	seedAgentWithScopes(t, store, "dpop-exchange-actor", []string{"openid", "read"})
 	_ = seedUser(t, store, "dpop-user@example.com")
 
-	subjectToken := mintSubjectJWT(t, srv, "dpop-user@example.com", "openid read", nil)
+	subjectToken := mintSubjectJWT(t, srv, "dpop-user@example.com", "openid read", mayAct("dpop-exchange-actor"))
 
 	priv := ecKeyPair(t)
 	jwk := ecJWK(&priv.PublicKey)
@@ -249,7 +253,8 @@ func TestExchange_Success_DelegationChain(t *testing.T) {
 	// Subject token already has act: {sub: agent-a} from a prior exchange.
 	existingAct := map[string]interface{}{"sub": "agent-a"}
 	subjectToken := mintSubjectJWT(t, srv, "chainuser@example.com", "openid read", map[string]interface{}{
-		"act": existingAct,
+		"act":     existingAct,
+		"may_act": []interface{}{"agent-b"},
 	})
 
 	form := url.Values{
@@ -293,7 +298,7 @@ func TestExchange_ScopeNarrowing(t *testing.T) {
 	ts, srv, store := mountExchangeServer(t)
 	seedAgentWithScopes(t, store, "narrow-actor", []string{"openid", "read", "write"})
 
-	subjectToken := mintSubjectJWT(t, srv, "user-narrow", "openid read write", nil)
+	subjectToken := mintSubjectJWT(t, srv, "user-narrow", "openid read write", mayAct("narrow-actor"))
 
 	form := url.Values{
 		"subject_token":      {subjectToken},
@@ -331,7 +336,7 @@ func TestExchange_ScopeEscalation_Rejected(t *testing.T) {
 	seedAgentWithScopes(t, store, "escalate-actor", []string{"openid", "read", "admin"})
 
 	// Subject token only has "openid read" - requesting "admin" is escalation.
-	subjectToken := mintSubjectJWT(t, srv, "user-esc", "openid read", nil)
+	subjectToken := mintSubjectJWT(t, srv, "user-esc", "openid read", mayAct("escalate-actor"))
 
 	form := url.Values{
 		"subject_token":      {subjectToken},
@@ -515,7 +520,7 @@ func TestExchange_AudiencePropagation(t *testing.T) {
 	ts, srv, store := mountExchangeServer(t)
 	seedAgentWithScopes(t, store, "aud-actor", []string{"openid", "read"})
 
-	subjectToken := mintSubjectJWT(t, srv, "aud-user", "openid read", nil)
+	subjectToken := mintSubjectJWT(t, srv, "aud-user", "openid read", mayAct("aud-actor"))
 
 	form := url.Values{
 		"subject_token":      {subjectToken},
@@ -605,7 +610,7 @@ func TestExchange_AuditMetadata_ScopeFields(t *testing.T) {
 	_ = seedUser(t, store, "audit-user@example.com")
 
 	// Subject has "openid read write"; request only "read" â†’ should drop "openid" + "write".
-	subjectToken := mintSubjectJWT(t, srv, "audit-user@example.com", "openid read write", nil)
+	subjectToken := mintSubjectJWT(t, srv, "audit-user@example.com", "openid read write", mayAct("audit-actor"))
 
 	form := url.Values{
 		"subject_token":      {subjectToken},
@@ -698,7 +703,7 @@ func TestExchange_AuditMetadata_EmptyArrays(t *testing.T) {
 	_ = seedUser(t, store, "empty-arr-user@example.com")
 
 	// No "scope" param â†’ full pass-through; dropped_scope and requested_scope should be [].
-	subjectToken := mintSubjectJWT(t, srv, "empty-arr-user@example.com", "openid read", nil)
+	subjectToken := mintSubjectJWT(t, srv, "empty-arr-user@example.com", "openid read", mayAct("empty-arr-actor"))
 
 	form := url.Values{
 		"subject_token":      {subjectToken},
@@ -850,21 +855,16 @@ func TestExchange_AuditMetadata_NoGrant(t *testing.T) {
 	req.SetBasicAuth("no-grant-actor", "test-secret")
 	rr := httptest.NewRecorder()
 	srv.HandleToken(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
 	}
 	auditLogger.Stop()
 	logs, _ := store.QueryAuditLogs(context.Background(), storage.AuditLogQuery{
 		Action: "oauth.token.exchanged",
 		Limit:  10,
 	})
-	if len(logs) == 0 {
-		t.Fatal("no audit row")
-	}
-	var meta map[string]json.RawMessage
-	_ = json.Unmarshal([]byte(logs[0].Metadata), &meta)
-	if _, ok := meta["grant_id"]; ok {
-		t.Errorf("grant_id should be absent when no grant matches; meta: %s", logs[0].Metadata)
+	if len(logs) != 0 {
+		t.Fatalf("denied exchange should not emit oauth.token.exchanged audit rows; got %d", len(logs))
 	}
 }
 

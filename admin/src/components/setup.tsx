@@ -259,7 +259,7 @@ export function Setup() {
       if (data.dev_inbox_url) setDevInboxURL(data.dev_inbox_url);
       // Store the admin key so the dashboard can display a full-width one-time banner.
       if (adminKey) {
-        try { localStorage.setItem('shark_first_boot_pending_key', adminKey); } catch {}
+        try { sessionStorage.setItem('shark_first_boot_pending_key', adminKey); } catch {}
       }
       setStep('done');
     } catch (err) {

@@ -97,7 +97,7 @@ function useProxyStatus(enabled: boolean) {
     };
 
     const startStream = () => {
-      const key = localStorage.getItem('shark_admin_key');
+      const key = sessionStorage.getItem('shark_admin_key');
       if (!key) { startPoll(); return; }
       try {
         es = new EventSource(`/api/v1/admin/proxy/status/stream?token=${key}`);

@@ -14,11 +14,12 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/shark-auth/shark/internal/storage"
 	gojwt "github.com/golang-jwt/jwt/v5"
+	"github.com/shark-auth/shark/internal/storage"
 )
 
 // dpopWindow is the maximum age (and future skew) accepted for a DPoP iat claim.
@@ -334,7 +335,30 @@ func RequireDPoPMiddleware(cache *DPoPJTICache) func(http.Handler) http.Handler 
 func htuMatches(claim, request string) bool {
 	claim = stripQueryFragment(claim)
 	request = stripQueryFragment(request)
-	return strings.EqualFold(claim, request)
+
+	claimURL, err := url.Parse(claim)
+	if err != nil || claimURL.Scheme == "" || claimURL.Host == "" {
+		return claim == request
+	}
+	requestURL, err := url.Parse(request)
+	if err != nil || requestURL.Scheme == "" || requestURL.Host == "" {
+		return claim == request
+	}
+
+	if !strings.EqualFold(claimURL.Scheme, requestURL.Scheme) ||
+		!strings.EqualFold(claimURL.Host, requestURL.Host) {
+		return false
+	}
+
+	claimPath := claimURL.EscapedPath()
+	requestPath := requestURL.EscapedPath()
+	if claimPath == "" {
+		claimPath = "/"
+	}
+	if requestPath == "" {
+		requestPath = "/"
+	}
+	return claimPath == requestPath
 }
 
 // stripQueryFragment removes query string and fragment from a URL string.

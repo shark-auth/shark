@@ -1,13 +1,13 @@
 // @ts-nocheck
 // TODO Wave 1.6 backend: add /api/v1/audit-logs/chains aggregator endpoint.
-// Current implementation queries GET /api/v1/audit-logs?action=oauth.token.exchanged&limit=50
-// and GET /api/v1/audit-logs?action=vault.token.retrieved&limit=50, then groups by act_chain
-// root subject client-side. A dedicated /audit-logs/chains endpoint would return pre-aggregated
+// Current implementation queries GET /api/v1/audit-logs?action=oauth.token.exchanged
+// and GET /api/v1/audit-logs?action=vault.token.retrieved, following next_cursor pagination,
+// then groups by act_chain client-side. A dedicated /audit-logs/chains endpoint would return pre-aggregated
 // chain objects with all hops, reducing round-trips and enabling server-side pagination.
 
 import React from 'react'
 import { Icon, CopyField } from './shared'
-import { useAPI } from './api'
+import { API, useAPI } from './api'
 import { usePageActions } from './useKeyboardShortcuts'
 import { DelegationCanvasWithProvider, toReactFlowNodes, toReactFlowEdges, stripLanePrefix } from './delegation_canvas'
 import { useURLParam } from './useURLParams'
@@ -1347,6 +1347,66 @@ function ChainCanvas({
 
 const PAGE_SIZE = 20;
 
+function auditItems(data: any): any[] {
+  return data?.items || data?.audit_logs || data?.data || (Array.isArray(data) ? data : []);
+}
+
+function nextCursor(data: any): string {
+  return data?.next_cursor || data?.nextCursor || data?.pagination?.next_cursor || data?.meta?.next_cursor || '';
+}
+
+function withCursor(path: string, cursor: string): string {
+  if (!cursor) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}cursor=${encodeURIComponent(cursor)}`;
+}
+
+function usePaginatedAuditLogs(path: string, deps?: any[]) {
+  const [data, setData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const abortRef = React.useRef<AbortController | null>(null);
+
+  const refresh = React.useCallback((opts?: { silent?: boolean }) => {
+    if (!path) { setLoading(false); return; }
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    if (!opts?.silent) setLoading(true);
+    setError(null);
+
+    (async () => {
+      const all: any[] = [];
+      let cursor = '';
+      let firstPage: any = null;
+      for (let page = 0; page < 25; page += 1) {
+        const current = await API.get(withCursor(path, cursor), controller.signal);
+        if (controller.signal.aborted) return;
+        if (!firstPage) firstPage = current;
+        all.push(...auditItems(current));
+        cursor = nextCursor(current);
+        if (!cursor) break;
+      }
+      if (controller.signal.aborted) return;
+      setData({ ...(firstPage || {}), items: all, data: all, audit_logs: all, next_cursor: cursor || '' });
+      setError(null);
+    })()
+      .catch(e => {
+        if (e.name === 'AbortError' || controller.signal.aborted) return;
+        setError(e.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+  }, [path, ...(deps || [])]);
+
+  React.useEffect(() => {
+    refresh();
+    return () => { if (abortRef.current) abortRef.current.abort(); };
+  }, [refresh]);
+
+  return { data, loading, error, refresh, setData };
+}
+
 export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: any) => void }) {
   const [timeRange, setTimeRange] = React.useState<TimeRange>('24h');
   const [actorFilter, setActorFilter] = React.useState('');
@@ -1364,7 +1424,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const exchangeParams = React.useMemo(() => {
     const p = new URLSearchParams();
     p.set('action', 'oauth.token.exchanged');
-    p.set('limit', '50');
+    p.set('limit', '200');
     if (timeRange !== 'all') {
       const hours: Record<string, number> = { '1h': 1, '24h': 24, '7d': 168 };
       const h = hours[timeRange];
@@ -1376,7 +1436,7 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   const retrieveParams = React.useMemo(() => {
     const p = new URLSearchParams();
     p.set('action', 'vault.token.retrieved');
-    p.set('limit', '50');
+    p.set('limit', '200');
     if (timeRange !== 'all') {
       const hours: Record<string, number> = { '1h': 1, '24h': 24, '7d': 168 };
       const h = hours[timeRange];
@@ -1385,8 +1445,8 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
     return '/audit-logs?' + p.toString();
   }, [timeRange]);
 
-  const { data: exchangeData, loading: loadingExchange, refresh: refreshExchange } = useAPI(exchangeParams);
-  const { data: retrieveData, loading: loadingRetrieve, refresh: refreshRetrieve } = useAPI(retrieveParams);
+  const { data: exchangeData, loading: loadingExchange, refresh: refreshExchange } = usePaginatedAuditLogs(exchangeParams, [timeRange]);
+  const { data: retrieveData, loading: loadingRetrieve, refresh: refreshRetrieve } = usePaginatedAuditLogs(retrieveParams, [timeRange]);
   const { data: mayActData, refresh: refreshMayAct } = useAPI('/admin/may-act?include_revoked=true');
   // Agent roster for status overlay on canvas (revoked node greyscale).
   // Cheap: one list call, cached by useAPI.
@@ -1445,8 +1505,8 @@ export function DelegationChains({ setPage }: { setPage?: (p: string, extra?: an
   React.useEffect(() => { setPageNum(0); }, [timeRange, actorFilter, statusFilter, revokedFilter]);
 
   const allChains = React.useMemo(() => {
-    const rawExchange = exchangeData?.items || exchangeData?.audit_logs || exchangeData?.data || (Array.isArray(exchangeData) ? exchangeData : []);
-    const rawRetrieve = retrieveData?.items || retrieveData?.audit_logs || retrieveData?.data || (Array.isArray(retrieveData) ? retrieveData : []);
+    const rawExchange = auditItems(exchangeData);
+    const rawRetrieve = auditItems(retrieveData);
     const all = [...rawExchange, ...rawRetrieve].map(normalizeEntry);
     return enrichChainLabels(buildChains(all), identityMap);
   }, [exchangeData, retrieveData, identityMap]);

@@ -110,6 +110,15 @@ func RequireSessionFunc(sm *auth.SessionManager, jwtMgr *jwtpkg.Manager, authCac
 				// session token carries SessionID; access token does not
 				sessionID := ""
 				if claims.TokenType == "session" {
+					if claims.SessionID == "" {
+						writeJSONError(w, http.StatusUnauthorized, "unauthorized", "Session JWT missing session_id")
+						return
+					}
+					// Verify the session row still exists in the DB
+					if _, err := sm.ValidateSession(r.Context(), claims.SessionID); err != nil {
+						writeJSONError(w, http.StatusUnauthorized, "unauthorized", "Session has been revoked or deleted")
+						return
+					}
 					sessionID = claims.SessionID
 				}
 				ctx := r.Context()

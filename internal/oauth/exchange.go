@@ -108,6 +108,10 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 			writeExchangeError(w, http.StatusBadRequest, "invalid_token", "subject_token has been revoked")
 			return
 		}
+		if tok, err := s.RawStore.GetOAuthTokenByJTI(ctx, subjectJTI); err == nil && tok != nil && tok.RevokedAt != nil {
+			writeExchangeError(w, http.StatusBadRequest, "invalid_token", "subject_token has been revoked")
+			return
+		}
 	}
 
 	subjectSub, _ := subjectClaims["sub"].(string)
@@ -131,18 +135,9 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		grantedScopes = subjectScopes
 	}
 
-	// --- Step 4: Check may_act (permissive if absent) ---
-	if mayAct, hasMayAct := subjectClaims["may_act"]; hasMayAct {
-		if !isMayActAllowed(mayAct, actingAgent.ClientID) {
-			writeExchangeError(w, http.StatusForbidden, "access_denied", "acting agent is not permitted by may_act")
-			return
-		}
-	}
-
-	// --- Step 4b: correlate to a may_act_grants row (best-effort) ---
+	// --- Step 4: Check may_act or live grant ---
 	// Look up a live grant matching (acting -> subject). Try client_id first, then
 	// agent ID; the table is operator-managed and either form may be canonical.
-	// Absence is fine â€” JWT may_act path stays authoritative.
 	var matchedGrant *storage.MayActGrant
 	if subjectSub != "" {
 		now := time.Now().UTC()
@@ -153,7 +148,15 @@ func (s *Server) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// --- Step 4c: enforce max_hops and scopes on matchedGrant ---
+	mayAct, hasMayAct := subjectClaims["may_act"]
+	if hasMayAct && isMayActAllowed(mayAct, actingAgent.ClientID) {
+		// proceed
+	} else if matchedGrant == nil {
+		writeExchangeError(w, http.StatusForbidden, "access_denied", "not authorized: token exchange requires a live may_act grant")
+		return
+	}
+
+	// --- Step 4b: enforce max_hops and scopes on matchedGrant ---
 	if matchedGrant != nil {
 		// enforce max_hops
 		currentHops := countHops(subjectAct)

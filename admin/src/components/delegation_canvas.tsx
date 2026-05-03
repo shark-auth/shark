@@ -1233,6 +1233,7 @@ function NodeDrawer({ node, rfNodes, rfEdges, onClose, onNavigate, onCanvasRefre
 // Backend doesn't yet expose grant-level fields (max_hops, expires_at, revoked,
 // grant_id) on token-exchange events; surfaced as "—" until /api/v1/may-act
 // joins are added (see follow-up note in coverage matrix).
+// Audit/event loaders should follow next_cursor when paginating backend results.
 
 function EdgeDrawer({ edge, rfNodes, onClose, onAuditClick, onCanvasRefresh }: {
   edge: { id: string; source: string; target: string; data: any } | null
@@ -1775,9 +1776,10 @@ function AgentGrantsTables({ agentId }: { agentId: string }) {
   const [to, setTo] = React.useState<any[] | null>(null)
   React.useEffect(() => {
     let cancelled = false
+    const canonicalId = stripLanePrefix(agentId)
     Promise.all([
-      API.get(`/admin/may-act?from_id=${encodeURIComponent(agentId)}&include_revoked=true`).catch(() => null),
-      API.get(`/admin/may-act?to_id=${encodeURIComponent(agentId)}&include_revoked=true`).catch(() => null),
+      API.get(`/admin/may-act?from_id=${encodeURIComponent(canonicalId)}&include_revoked=true`).catch(() => null),
+      API.get(`/admin/may-act?to_id=${encodeURIComponent(canonicalId)}&include_revoked=true`).catch(() => null),
     ]).then(([a, b]) => {
       if (cancelled) return
       setFrom(a?.grants || [])

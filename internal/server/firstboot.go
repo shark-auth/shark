@@ -162,6 +162,9 @@ func RunFirstBoot(ctx context.Context, store *storage.SQLiteStore, cfg *config.C
 	// 4c: admin API key
 	var fullKey, keyHash, keyPrefix, keySuffix string
 	if bootstrapKey := os.Getenv("SHARKAUTH_BOOTSTRAP_ADMIN_KEY"); bootstrapKey != "" {
+		if !strings.HasPrefix(bootstrapKey, "sk_live_") {
+			return nil, fmt.Errorf("firstboot: SHARKAUTH_BOOTSTRAP_ADMIN_KEY must start with sk_live_")
+		}
 		fullKey = bootstrapKey
 		keyHash, keyPrefix, keySuffix = auth.DeriveKeyMetadata(fullKey)
 	} else {

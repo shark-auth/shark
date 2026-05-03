@@ -92,7 +92,7 @@ export function Users() {
   // Fetch agent counts for all visible users in parallel on list change
   React.useEffect(() => {
     if (!rawUsers || rawUsers.length === 0) return;
-    const key = localStorage.getItem('shark_admin_key');
+    const key = sessionStorage.getItem('shark_admin_key');
     const headers: any = key ? { Authorization: `Bearer ${key}` } : {};
     const missing = rawUsers.filter(u => !(u.id in agentCounts));
     if (missing.length === 0) return;
@@ -469,7 +469,7 @@ function CreateUserSlideover({ onClose, onCreated }) {
 
     // Direct fetch so we can read status code for 409 vs 400 branching.
     try {
-      const key = localStorage.getItem('shark_admin_key');
+      const key = sessionStorage.getItem('shark_admin_key');
       const res = await fetch('/api/v1/admin/users', {
         method: 'POST',
         headers: {

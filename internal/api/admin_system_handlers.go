@@ -615,7 +615,10 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 			PreviousProvider *string `json:"previous_provider"`
 		} `json:"email"`
 		Server struct {
-			CORSRelaxed *bool `json:"cors_relaxed"`
+			BaseURL     *string  `json:"base_url"`
+			Port        *int     `json:"port"`
+			CORSOrigins []string `json:"cors_origins"`
+			CORSRelaxed *bool    `json:"cors_relaxed"`
 		} `json:"server"`
 		Audit struct {
 			Retention       *string `json:"retention"`
@@ -702,6 +705,15 @@ func (s *Server) handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request)
 	if req.Email.Password != nil && *req.Email.Password != "********" {
 		cfg.Email.Password = *req.Email.Password
 		cfg.SMTP.Password = *req.Email.Password
+	}
+	if req.Server.BaseURL != nil {
+		cfg.Server.BaseURL = *req.Server.BaseURL
+	}
+	if req.Server.Port != nil {
+		cfg.Server.Port = *req.Server.Port
+	}
+	if req.Server.CORSOrigins != nil {
+		cfg.Server.CORSOrigins = req.Server.CORSOrigins
 	}
 	if req.Server.CORSRelaxed != nil {
 		cfg.Server.CORSRelaxed = *req.Server.CORSRelaxed

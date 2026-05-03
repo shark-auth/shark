@@ -11,25 +11,7 @@ export function Login({ onLogin }) {
   const [hintOpen, setHintOpen] = React.useState(
     () => localStorage.getItem('shark.admin.lastLogin') === null
   );
-  // First-boot key banner: fetch once, show if the file is still present.
-  const [firstbootKey, setFirstbootKey] = React.useState('');
-  const [firstbootPath, setFirstbootPath] = React.useState('');
-  const [keyCopied, setKeyCopied] = React.useState(false);
-  React.useEffect(() => {
-    fetch('/api/v1/admin/firstboot/key')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d && d.key) { setFirstbootKey(d.key); setFirstbootPath(d.path || ''); }
-      })
-      .catch(() => {});
-  }, []);
-  const copyFirstbootKey = async () => {
-    try {
-      await navigator.clipboard.writeText(firstbootKey);
-      setKeyCopied(true);
-      setTimeout(() => setKeyCopied(false), 2000);
-    } catch {}
-  };
+
   // Bootstrap-consume attempted? Used to suppress the "Invalid token"
   // error turning into a re-try loop on re-renders.
   const bootstrapTried = React.useRef(false);
@@ -62,7 +44,6 @@ export function Login({ onLogin }) {
           const body = await res.json();
           const minted = body?.api_key;
           if (minted) {
-            localStorage.setItem('shark_admin_key', minted);
             onLogin(minted);
             return;
           }
@@ -90,8 +71,6 @@ export function Login({ onLogin }) {
         headers: { Authorization: 'Bearer ' + trimmed },
       });
       if (res.ok) {
-        localStorage.setItem('shark_admin_key', trimmed);
-        localStorage.setItem('shark.admin.lastLogin', String(Date.now()));
         onLogin(trimmed);
       } else if (res.status === 401) {
         setError('Invalid API key. Lost your key? Check data/admin.key.firstboot or restart shark serve fresh.');
@@ -124,64 +103,6 @@ export function Login({ onLogin }) {
           <SharkFullLogo width={160} />
         </div>
 
-        {/* First-boot key banner — hidden once admin is bootstrapped */}
-        {firstbootKey && (
-          <div style={{
-            padding: '10px 12px',
-            border: '1px solid var(--hairline-strong)',
-            borderRadius: 4,
-            background: 'var(--surface-1)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-          }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-dim)', fontWeight: 600 }}>
-              First-boot setup key
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <code style={{
-                flex: 1,
-                fontSize: 12,
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--fg)',
-                overflowX: 'auto',
-                whiteSpace: 'nowrap',
-                background: 'var(--surface-2)',
-                padding: '4px 8px',
-                borderRadius: 3,
-                border: '1px solid var(--hairline)',
-              }}>
-                {firstbootKey}
-              </code>
-              <button
-                type="button"
-                onClick={copyFirstbootKey}
-                style={{
-                  flexShrink: 0,
-                  height: 28,
-                  padding: '0 10px',
-                  fontSize: 11,
-                  background: 'var(--surface-2)',
-                  border: '1px solid var(--hairline-strong)',
-                  borderRadius: 3,
-                  color: keyCopied ? 'var(--success, #16a34a)' : 'var(--fg-muted)',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >
-                {keyCopied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-            {firstbootPath && (
-              <div style={{ fontSize: 10, color: 'var(--fg-faint)', fontFamily: 'var(--font-mono)' }}>
-                also at {firstbootPath}
-              </div>
-            )}
-            <div style={{ fontSize: 10, color: 'var(--fg-dim)', lineHeight: 1.5 }}>
-              Paste the key above into the input and sign in. This banner disappears once admin is configured.
-            </div>
-          </div>
-        )}
 
         {/* Input */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

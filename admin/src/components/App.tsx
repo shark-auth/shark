@@ -38,7 +38,7 @@ import { HelpButton } from './HelpButton'
 import { DelegationChains } from './delegation_chains'
 
 export function App() {
-  const [apiKey, setApiKey] = React.useState(() => localStorage.getItem('shark_admin_key') || '');
+  const [apiKey, setApiKey] = React.useState(() => sessionStorage.getItem('shark_admin_key') || '');
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
 
   const getPageFromURL = () => {
@@ -67,9 +67,9 @@ export function App() {
 
   React.useEffect(() => {
     if (apiKey) {
-      localStorage.setItem('shark_admin_key', apiKey);
+      sessionStorage.setItem('shark_admin_key', apiKey);
     } else {
-      localStorage.removeItem('shark_admin_key');
+      sessionStorage.removeItem('shark_admin_key');
     }
   }, [apiKey]);
 
@@ -85,13 +85,13 @@ export function App() {
 
   // First-boot: pending admin key banner
   const [firstBootKey, setFirstBootKey] = React.useState<string>(() => {
-    try { return localStorage.getItem('shark_first_boot_pending_key') || ''; } catch { return ''; }
+    try { return sessionStorage.getItem('shark_first_boot_pending_key') || ''; } catch { return ''; }
   });
   const [bannerCopied, setBannerCopied] = React.useState(false);
 
   const dismissFirstBootBanner = () => {
     try {
-      localStorage.removeItem('shark_first_boot_pending_key');
+      sessionStorage.removeItem('shark_first_boot_pending_key');
       localStorage.setItem('shark_first_boot_done', '1');
     } catch {}
     setFirstBootKey('');

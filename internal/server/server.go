@@ -115,6 +115,9 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	if v := os.Getenv("SHARK_DB_PATH"); v != "" {
 		cfg.Storage.Path = v
 	}
+	if os.Getenv("SHARK_DEV_MODE") == "1" {
+		cfg.Server.DevMode = true
+	}
 
 	// W15a: warn when legacy proxy fields coexist with the new listeners
 	// block. Resolve() already decided listeners win; surfacing the warning
@@ -212,11 +215,31 @@ func Build(ctx context.Context, opts Options) (*Bootstrap, error) {
 	// tables, generates server.secret + JWT signing key + admin API key,
 	// prints setup URL + admin key once. Non-fatal if not first boot
 	// (just loads existing secret from DB into cfg.Server.Secret).
+	// Load DB-persisted runtime config overlay before first-boot so that
+	// RunFirstBoot can generate secrets on top of any existing DB state.
+	if rtCfg, err := config.LoadRuntime(ctx, store); err == nil {
+		cfg = rtCfg
+	}
+	// Re-apply env overrides so that headless orchestration (pytest,
+	// Docker, systemd) always wins over DB-persisted defaults.
+	if v := os.Getenv("SHARK_PORT"); v != "" {
+		if p, perr := strconv.Atoi(v); perr == nil && p > 0 {
+			cfg.Server.Port = p
+		}
+	}
+	if v := os.Getenv("SHARK_DB_PATH"); v != "" {
+		cfg.Storage.Path = v
+	}
+	if os.Getenv("SHARK_DEV_MODE") == "1" {
+		cfg.Server.DevMode = true
+	}
+
 	fbResult, err := RunFirstBoot(ctx, store, cfg, opts)
 	if err != nil {
 		store.Close() //#nosec G104
 		return nil, fmt.Errorf("first-boot bootstrap: %w", err)
 	}
+
 	// W17: write full admin key to a one-time file alongside the DB so
 	// scripted setups (CI / pytest smoke / docker entrypoint) can grab it.
 	// File deleted by orchestrator after first read; perms 0600.

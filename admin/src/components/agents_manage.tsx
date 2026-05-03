@@ -1590,7 +1590,7 @@ function DelegationsTab({ agent, setPage }) {
   React.useEffect(() => {
     if (!agent?.id) return;
     let cancelled = false;
-    const headers = { Authorization: `Bearer ${localStorage.getItem('shark_admin_key')}` };
+    const headers = { Authorization: `Bearer ${sessionStorage.getItem('shark_admin_key')}` };
 
     const load = async () => {
       try {

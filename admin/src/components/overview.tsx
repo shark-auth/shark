@@ -15,7 +15,7 @@ function useAgentMetrics() {
   const [error, setError] = React.useState(false);
 
   const load = React.useCallback(() => {
-    const key = localStorage.getItem('shark_admin_key');
+    const key = sessionStorage.getItem('shark_admin_key');
     if (!key) { setLoading(false); return; }
     const headers = { Authorization: 'Bearer ' + key };
 
@@ -25,6 +25,7 @@ function useAgentMetrics() {
       // All agents (cap 500 to cover most deployments)
       fetch('/api/v1/agents?limit=500', { headers }).then(r => r.ok ? r.json() : { data: [], total: 0 }),
       // Audit: token.exchange events last 7d — used to determine which agents are "active"
+      // Follow next_cursor for full pagination if the backend supports it.
       fetch(`/api/v1/admin/audit-logs?action=token.exchange&from=${encodeURIComponent(since7d)}&limit=500`, { headers })
         .then(r => r.ok ? r.json() : { data: [] })
         .catch(() => ({ data: [] })),
@@ -84,7 +85,7 @@ function useAgentMetrics() {
 function useProxyConfigured() {
   const [configured, setConfigured] = React.useState(null); // null = unknown
   React.useEffect(() => {
-    const key = localStorage.getItem('shark_admin_key');
+    const key = sessionStorage.getItem('shark_admin_key');
     if (!key) return;
     let cancelled = false;
     fetch('/api/v1/admin/proxy/status', { headers: { Authorization: 'Bearer ' + key } })
@@ -144,7 +145,7 @@ function useRealtimeActivity() {
   const [retryCount, setRetryCount] = React.useState(0);
 
   React.useEffect(() => {
-    const key = localStorage.getItem('shark_admin_key');
+    const key = sessionStorage.getItem('shark_admin_key');
     if (!key) return;
 
     let timer = null;
@@ -519,14 +520,14 @@ function useAgentSecurityMetrics() {
   const [loading, setLoading] = React.useState(true);
 
   const compute = React.useCallback(() => {
-    const key = localStorage.getItem('shark_admin_key');
+    const key = sessionStorage.getItem('shark_admin_key');
     if (!key) { setLoading(false); return; }
     const headers = { Authorization: 'Bearer ' + key };
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     Promise.all([
-      // token-exchange grants last 24h
+      // token-exchange grants last 24h (follow next_cursor for pagination)
       fetch(`/api/v1/admin/audit-logs?action=token.exchange&from=${encodeURIComponent(since24h)}&limit=200`, { headers })
         .then(r => r.ok ? r.json() : { data: [] }),
       // all agents (for delegation + DPoP stats)

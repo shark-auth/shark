@@ -90,6 +90,15 @@ function rewriteToLocalhost(url: string): string {
   } catch { return url; }
 }
 
+function isSafeURL(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 // ── Slide-over detail panel ──────────────────────────────────────────────────
 
 function EmailSlideOver({ email, onClose }: { email: any; onClose: () => void }) {
@@ -209,16 +218,26 @@ function EmailSlideOver({ email, onClose }: { email: any; onClose: () => void })
           flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <a
-              href={magicLink || magicLinkRaw}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn sm"
-              style={{ textDecoration: 'none', fontSize: 11.5, gap: 5 }}
-            >
-              <Icon.External width={10} height={10}/>
-              Open link
-            </a>
+            {isSafeURL(magicLink || magicLinkRaw || '') ? (
+              <a
+                href={magicLink || magicLinkRaw}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn sm"
+                style={{ textDecoration: 'none', fontSize: 11.5, gap: 5 }}
+              >
+                <Icon.External width={10} height={10}/>
+                Open link
+              </a>
+            ) : (
+              <span
+                className="btn sm"
+                style={{ textDecoration: 'none', fontSize: 11.5, gap: 5, cursor: 'default' }}
+              >
+                <Icon.External width={10} height={10}/>
+                Open link
+              </span>
+            )}
             <button
               className="btn ghost sm"
               style={{ fontSize: 11.5 }}

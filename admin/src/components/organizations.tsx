@@ -999,7 +999,7 @@ function CreateOrgSlideover({ onClose, onCreated }) {
     if (metadata.trim()) body.metadata = metadata.trim();
 
     try {
-      const key = localStorage.getItem('shark_admin_key');
+      const key = sessionStorage.getItem('shark_admin_key');
       const res = await fetch('/api/v1/admin/organizations', {
         method: 'POST',
         headers: {

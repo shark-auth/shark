@@ -288,7 +288,7 @@ func TestResource_TokenExchange_ResourceParam(t *testing.T) {
 	ts, srv, store := mountExchangeServer(t)
 	seedAgentWithScopes(t, store, "res-exchange-actor", []string{"openid", "read"})
 
-	subjectToken := mintSubjectJWT(t, srv, "res-exchange-user", "openid read", nil)
+	subjectToken := mintSubjectJWT(t, srv, "res-exchange-user", "openid read", mayAct("res-exchange-actor"))
 
 	form := url.Values{
 		"subject_token":      {subjectToken},
@@ -338,9 +338,9 @@ func buildAuthorizeReq(client fosite.Client, userID, resource string) *fosite.Re
 		form.Set("resource", resource)
 	}
 	return &fosite.Request{
-		ID:          "authcode-res-req",
-		RequestedAt: time.Now().UTC(),
-		Client:      client,
+		ID:             "authcode-res-req",
+		RequestedAt:    time.Now().UTC(),
+		Client:         client,
 		RequestedScope: fosite.Arguments{"openid"},
 		GrantedScope:   fosite.Arguments{"openid"},
 		Session: &fosite.DefaultSession{
@@ -362,9 +362,9 @@ func buildTokenReqWithResource(client fosite.Client, userID, resource string) *f
 		form.Set("resource", resource)
 	}
 	return &fosite.Request{
-		ID:          "tok-res-req-" + resource,
-		RequestedAt: time.Now().UTC(),
-		Client:      client,
+		ID:             "tok-res-req-" + resource,
+		RequestedAt:    time.Now().UTC(),
+		Client:         client,
 		RequestedScope: fosite.Arguments{"openid"},
 		GrantedScope:   fosite.Arguments{"openid"},
 		Session: &fosite.DefaultSession{
@@ -376,4 +376,3 @@ func buildTokenReqWithResource(client fosite.Client, userID, resource string) *f
 		Form: form,
 	}
 }
-

@@ -1096,7 +1096,7 @@ function ExportAuditDrawer({ onClose }) {
     setBusy(true);
     try {
       // Backend streams CSV; use raw fetch with auth header so we can get a Blob.
-      const key = localStorage.getItem('shark_admin_key');
+      const key = sessionStorage.getItem('shark_admin_key');
       const res = await fetch('/api/v1/admin/audit-logs/export', {
         method: 'POST',
         headers: {
