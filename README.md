@@ -80,7 +80,10 @@ Real delegated authority using **RFC 8693 Token Exchange**. SharkAuth issues `ma
 
 ### 2. Tokens Bound to Keys, Not Bearers (RFC 9449 DPoP)
 
-Bearer tokens are a liability. SharkAuth ships **Demonstrating Proof-of-Possession** by default. Every token is cryptographically bound to the agent's private key. Stolen via prompt injection or log leak? Useless without the key.
+Bearer tokens are a liability. SharkAuth ships **Demonstrating Proof-of-Possession** by default for tokens it issues. Every SharkAuth token is cryptographically bound to the agent's private key. Stolen via prompt injection or log leak? Useless without the key.
+
+> **Current:** DPoP is enforced on all SharkAuth-issued tokens.  
+> **Roadmap:** Extend SharkAuth to issue DPoP-bound tokens that agents use to call downstream services directly — so the agent never touches a raw bearer token, even when talking to third-party APIs.
 
 ### 3. Complete Provenance in One Query
 
