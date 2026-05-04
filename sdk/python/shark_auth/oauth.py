@@ -634,10 +634,11 @@ class OAuthClient:
         self,
         *,
         subject_token: str,
+        client_id: str,
+        client_secret: str,
         dpop_prover: DPoPProver,
         scope: str | None = None,
         audience: str | None = None,
-        actor_token: str | None = None,
         subject_token_type: str = "urn:ietf:params:oauth:token-type:access_token",
         requested_token_type: str = "urn:ietf:params:oauth:token-type:access_token",
         **extra: Any,
@@ -655,6 +656,12 @@ class OAuthClient:
         ----------
         subject_token:
             The existing access token to exchange (e.g. ``token.access_token``).
+        client_id:
+            OAuth ``client_id`` of the acting agent. Required for server-side
+            authentication and ``may_act`` policy enforcement.
+        client_secret:
+            OAuth ``client_secret`` of the acting agent. Paired with
+            ``client_id`` for authentication.
         dpop_prover:
             Same :class:`~shark_auth.DPoPProver` used for the original token
             (key binding preserved).
@@ -664,9 +671,6 @@ class OAuthClient:
         audience:
             Restrict the new token to a specific resource server. ``None``
             omits the parameter.
-        actor_token:
-            Optional ``act``-claim parent (the agent doing the delegation).
-            When provided, ``actor_token_type`` is automatically included.
         subject_token_type:
             RFC 8693 type URI for ``subject_token``.
             Defaults to ``"urn:ietf:params:oauth:token-type:access_token"``.
@@ -703,6 +707,8 @@ class OAuthClient:
         ... )
         >>> child = client.token_exchange(
         ...     subject_token=parent.access_token,
+        ...     client_id="agent-a",
+        ...     client_secret="s3cr3t",
         ...     dpop_prover=prover,
         ...     scope="mcp:read",
         ...     audience="https://mcp.example.com",
@@ -718,6 +724,8 @@ class OAuthClient:
         # Build RFC 8693 form body.
         body: Dict[str, str] = {
             "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "client_id": client_id,
+            "client_secret": client_secret,
             "subject_token": subject_token,
             "subject_token_type": subject_token_type,
             "requested_token_type": requested_token_type,
@@ -726,9 +734,6 @@ class OAuthClient:
             body["scope"] = scope
         if audience is not None:
             body["audience"] = audience
-        if actor_token is not None:
-            body["actor_token"] = actor_token
-            body["actor_token_type"] = "urn:ietf:params:oauth:token-type:access_token"
         for k, v in extra.items():
             body[k] = str(v)
 

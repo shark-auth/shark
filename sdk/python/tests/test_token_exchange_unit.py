@@ -64,6 +64,8 @@ def test_happy_path_form_body_and_dpop(client: OAuthClient, prover: DPoPProver) 
 
     token = client.token_exchange(
         subject_token=SUBJECT_TOKEN,
+        client_id="agent-a",
+        client_secret="s3cr3t",
         dpop_prover=prover,
         scope="mcp:read",
     )
@@ -78,6 +80,8 @@ def test_happy_path_form_body_and_dpop(client: OAuthClient, prover: DPoPProver) 
 
     # Required RFC 8693 form fields.
     assert captured["grant_type"] == GRANT_TYPE_EXCHANGE
+    assert captured["client_id"] == "agent-a"
+    assert captured["client_secret"] == "s3cr3t"
     assert captured["subject_token"] == SUBJECT_TOKEN
     assert captured["subject_token_type"] == TOKEN_TYPE_ACCESS
     assert captured["requested_token_type"] == TOKEN_TYPE_ACCESS
@@ -108,6 +112,8 @@ def test_with_audience(client: OAuthClient, prover: DPoPProver) -> None:
 
     client.token_exchange(
         subject_token=SUBJECT_TOKEN,
+        client_id="agent-a",
+        client_secret="s3cr3t",
         dpop_prover=prover,
         audience="https://mcp.example.com",
     )
@@ -118,12 +124,12 @@ def test_with_audience(client: OAuthClient, prover: DPoPProver) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. With actor_token — body includes actor_token + actor_token_type
+# 3. With client_id + client_secret — body includes auth fields
 # ---------------------------------------------------------------------------
 
 @resp_lib.activate
-def test_with_actor_token(client: OAuthClient, prover: DPoPProver) -> None:
-    """actor_token and actor_token_type both appear when actor_token is given."""
+def test_with_client_auth(client: OAuthClient, prover: DPoPProver) -> None:
+    """client_id and client_secret both appear in the form body."""
     captured: dict = {}
 
     def capture(request):  # type: ignore[no-untyped-def]
@@ -134,12 +140,13 @@ def test_with_actor_token(client: OAuthClient, prover: DPoPProver) -> None:
 
     client.token_exchange(
         subject_token=SUBJECT_TOKEN,
+        client_id="agent-a",
+        client_secret="s3cr3t",
         dpop_prover=prover,
-        actor_token="eyJhbGci.actor-stub",
     )
 
-    assert captured["actor_token"] == "eyJhbGci.actor-stub"
-    assert captured["actor_token_type"] == TOKEN_TYPE_ACCESS
+    assert captured["client_id"] == "agent-a"
+    assert captured["client_secret"] == "s3cr3t"
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +166,8 @@ def test_missing_scope_omits_scope_field(client: OAuthClient, prover: DPoPProver
 
     client.token_exchange(
         subject_token=SUBJECT_TOKEN,
+        client_id="agent-a",
+        client_secret="s3cr3t",
         dpop_prover=prover,
         # scope deliberately omitted
     )
@@ -186,6 +195,8 @@ def test_invalid_scope_raises_oauth_error(client: OAuthClient, prover: DPoPProve
     with pytest.raises(OAuthError) as exc_info:
         client.token_exchange(
             subject_token=SUBJECT_TOKEN,
+            client_id="agent-a",
+            client_secret="s3cr3t",
             dpop_prover=prover,
             scope="mcp:admin",
         )
@@ -215,6 +226,8 @@ def test_revoked_subject_token_raises_oauth_error(client: OAuthClient, prover: D
     with pytest.raises(OAuthError) as exc_info:
         client.token_exchange(
             subject_token="revoked-token",
+            client_id="agent-a",
+            client_secret="s3cr3t",
             dpop_prover=prover,
         )
 
@@ -235,6 +248,8 @@ def test_cnf_jkt_populated_when_present(client: OAuthClient, prover: DPoPProver)
 
     token = client.token_exchange(
         subject_token=SUBJECT_TOKEN,
+        client_id="agent-a",
+        client_secret="s3cr3t",
         dpop_prover=prover,
     )
 
@@ -248,6 +263,8 @@ def test_cnf_jkt_none_when_absent(client: OAuthClient, prover: DPoPProver) -> No
 
     token = client.token_exchange(
         subject_token=SUBJECT_TOKEN,
+        client_id="agent-a",
+        client_secret="s3cr3t",
         dpop_prover=prover,
     )
 

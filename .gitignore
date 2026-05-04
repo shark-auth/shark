@@ -131,21 +131,7 @@ playbook/
 gstack/
 .impeccable.md
 /docs/
-
-# Artifacts / sensitive docs
-pricingproposal.md
-PRICING_PROPOSAL.md
-copy_grounding.md
-
-# Build binaries (never commit compiled artifacts)
-shark
-shark.exe
-shark_optimized.exe
-shark_optimized.exe~
-
-# Agent / tool directories
-.gstack/
-.secpunch/
+docs_change.md
 
 # Agent temporary files
 /home/raul/.gemini/tmp/shark/
