@@ -173,11 +173,12 @@ Please note that this project is released with a [Contributor Code of Conduct](C
 ## Community
 
 - **Discord**: [discord.gg/zq9t6VSt5r](https://discord.com/invite/zq9t6VSt5r) — ask questions, share deployments
-- **Twitter**: [@raulgooo](https://twitter.com/raulgooo) — updates and agent identity threads
+- **Twitter**: [@raulgooo](https://twitter.com/raulgcc1) — updates and agent identity threads
 - **Docs**: [sharkauth.com/docs](https://sharkauth.com/docs)
 - **Issues & PRs**: [github.com/shark-auth/shark/issues](https://github.com/shark-auth/shark/issues)
 
-Built by [Raúl](https://github.com/raulgooo) in Monterrey, Mexico. MIT licensed.
+**Shark is a work in progress, expect bugs for now.**
+Built by [Raúl R. Gzz.](https://github.com/raulgooo) in Monterrey, Mexico. MIT licensed.
 
 ---
 
