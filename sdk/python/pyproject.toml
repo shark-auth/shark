@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "shark-auth"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python SDK for SharkAuth agent-auth primitives (DPoP, device flow, token vault, agent tokens)."
 readme = "README.md"
 license = { text = "MIT" }
