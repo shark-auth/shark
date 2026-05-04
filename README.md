@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>The open-source identity platform built for AI agents.</strong><br />
-  One ~29 MB binary. OAuth 2.1, OIDC, RFC 8693 Token Exchange, and DPoP. Zero config.
+  One ~29 MB binary. OAuth 2. RFC 8693 Token Exchange, and DPoP. Zero config.
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@ Auth was built for humans clicking buttons. Your agents need something better.
 
 When an AI agent delegates to a sub-agent, the trust chain breaks. Bearer tokens leak. Revocation becomes a mess. Auditors ask "which agent did what?" and you have no answer.
 
-**SharkAuth fixes this.** It treats agents as first-class identities with native delegation, cryptographically bound tokens, and a unified audit trail that tracks every hop from user to resource.
+**SharkAuth aims to solve this.** It treats agents as first-class identities with native delegation, cryptographically bound tokens, and a unified audit trail that tracks every hop from user to resource.
 
 ---
 
@@ -94,7 +94,7 @@ One `grant_id` correlates every token, every hop, and every resource touched. Re
 
 ### 4. One Binary. Zero Dependencies. Anywhere.
 
-SharkAuth is a single static Go binary with embedded SQLite WAL. No Postgres, no Redis, no Docker, no Helm charts. It cold-starts in 38 ms and runs on a Raspberry Pi as easily as it runs in Kubernetes.
+SharkAuth is a single static Go binary with embedded SQLite WAL. No Postgres, no Redis, no Docker, no Helm charts.
 
 ### 5. Open Source, Zero Lock-In (MIT)
 
@@ -114,11 +114,11 @@ SharkAuth is a single static Go binary with embedded SQLite WAL. No Postgres, no
 ---
 
 ## Getting Started
-
-### Docker (fastest)
+Get the binary via the install script then:
+### Running Shark
 
 ```bash
-docker run -p 8080:8080 -v shark-data:/data ghcr.io/shark-auth/shark
+shark serve
 ```
 
 ### Dev mode (no config needed)
@@ -127,7 +127,6 @@ docker run -p 8080:8080 -v shark-data:/data ghcr.io/shark-auth/shark
 SHARK_DEV_MODE=1 shark serve
 ```
 
-Magic links print to stdout. In-memory database. Perfect for rapid prototyping.
 
 ### TypeScript SDK
 
