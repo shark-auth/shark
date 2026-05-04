@@ -24,11 +24,11 @@
 ## Table of Contents
 
 - [The Problem](#the-problem)
+- [Watch a Demo](#demo)
 - [Install in 10 Seconds](#install-in-10-seconds)
 - [Why Teams Choose SharkAuth](#why-teams-choose-sharkauth)
 - [What You Get](#what-you-get)
 - [Getting Started](#getting-started)
-  - [Docker](#docker-fastest)
   - [Dev Mode](#dev-mode-no-config-needed)
   - [TypeScript SDK](#typescript-sdk)
   - [Python SDK](#python-sdk)
@@ -40,7 +40,7 @@
 ---
 
 ## The Problem
-
+https://www.sharkauth.com/#demo
 Auth was built for humans clicking buttons. Your agents need something better.
 
 When an AI agent delegates to a sub-agent, the trust chain breaks. Bearer tokens leak. Revocation becomes a mess. Auditors ask "which agent did what?" and you have no answer.
@@ -48,6 +48,18 @@ When an AI agent delegates to a sub-agent, the trust chain breaks. Bearer tokens
 **SharkAuth aims to solve this.** It treats agents as first-class identities with native delegation, cryptographically bound tokens, and a unified audit trail that tracks every hop from user to resource.
 
 ---
+
+## Watch a Demo
+
+
+
+https://github.com/user-attachments/assets/9049206c-df2f-464f-a240-b5b020ff0ac7
+
+
+
+
+
+
 
 ## Install in 10 Seconds
 
