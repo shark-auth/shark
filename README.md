@@ -24,7 +24,7 @@
 ## Table of Contents
 
 - [The Problem](#the-problem)
-- [Watch a Demo](#demo)
+- [Watch a Demo](#watch-a-demo)
 - [Install in 10 Seconds](#install-in-10-seconds)
 - [Why Teams Choose SharkAuth](#why-teams-choose-sharkauth)
 - [What You Get](#what-you-get)
@@ -40,7 +40,6 @@
 ---
 
 ## The Problem
-https://www.sharkauth.com/#demo
 Auth was built for humans clicking buttons. Your agents need something better.
 
 When an AI agent delegates to a sub-agent, the trust chain breaks. Bearer tokens leak. Revocation becomes a mess. Auditors ask "which agent did what?" and you have no answer.
