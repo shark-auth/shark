@@ -5,8 +5,8 @@
 <h1 align="center">SharkAuth</h1>
 
 <p align="center">
-  <strong>The open-source identity platform built for AI agents.</strong><br />
-  One ~29 MB binary. OAuth 2. RFC 8693 Token Exchange, and DPoP. Zero config.
+  <strong>The open-source identity provider built for AI agents.</strong><br />
+  One ~29 MB binary. OAuth 2.1 RFC 8693 Token Exchange, and DPoP. Zero config.
 </p>
 
 <p align="center">
