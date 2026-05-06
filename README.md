@@ -201,6 +201,7 @@ Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
 <p align="center">
   <strong>If your product ships agents, the auth stack starts here.</strong>
 </p>
+<a href="https://fazier.com" target="_blank"><img src="https://fazier.com/api/v1//public/badges/launch_badges.svg?badge_type=launched&theme=light" width=120 alt="Fazier badge" /></a>
 
 <p align="center">
   <a href="https://github.com/shark-auth/shark/stargazers">⭐ Star this repo</a> ·
