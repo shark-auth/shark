@@ -141,3 +141,13 @@ replace_strings.py
 slurp
 sharky.svg
 sharkyrectangular.svg
+
+# Folders to ignore per user request
+marketing/
+innovafest2026/
+content/
+startup/
+
+# graphify temp artifacts
+graphify-out/cache/
+graphify-out/transcripts/

@@ -1,0 +1,3746 @@
+{
+  "/home/raul/Desktop/projects/shark/replace_strings.py": {
+    "mtime": 1777479093.541452,
+    "hash": "f6345cdef7082d18eb540c445bc5de8a"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/scoreboard.py": {
+    "mtime": 1777301538.930916,
+    "hash": "7ad9618b842fe5074dfae2cc3d03b5a8"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/vanilla-bearer-server/server.py": {
+    "mtime": 1777301538.933297,
+    "hash": "72ba1a8d9c4b9067ceaee50a5fb22f35"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/defender/agent.py": {
+    "mtime": 1777301538.930916,
+    "hash": "42affbff67788af0d4f183cf444a65a8"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/attacker/replay.py": {
+    "mtime": 1777301538.930916,
+    "hash": "d079cd7f371a4e30a7fc6997d996f058"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/attacker/forge.py": {
+    "mtime": 1777301538.930861,
+    "hash": "231b9d293ad20f3648a03217a0c611db"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/attacker/refresh_steal.py": {
+    "mtime": 1777301538.930916,
+    "hash": "fc32e99f2902c65972f7e1220e99ea8b"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/attacker/htu_mismatch.py": {
+    "mtime": 1777301538.930916,
+    "hash": "6a8eba15aebe60c91fc03d8db34ec622"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/attacker/jti_replay.py": {
+    "mtime": 1777301538.930916,
+    "hash": "a1efa014ab0789addd373979e33d6c1d"
+  },
+  "/home/raul/Desktop/projects/shark/demos/dpop_defense/attacker/time_travel.py": {
+    "mtime": 1777301538.930916,
+    "hash": "941fee70ec8dca2b2e28262db8895546"
+  },
+  "/home/raul/Desktop/projects/shark/demos/token_vault/auto_refresh_test.py": {
+    "mtime": 1777301538.9342968,
+    "hash": "8ccc96f4199e5f02b4208329335fb633"
+  },
+  "/home/raul/Desktop/projects/shark/demos/token_vault/gemma-worker/agent.py": {
+    "mtime": 1777301538.9348779,
+    "hash": "c8a0fac76595f267ee502de22061b1f7"
+  },
+  "/home/raul/Desktop/projects/shark/demos/token_vault/connect-flow/server.py": {
+    "mtime": 1777301538.9348779,
+    "hash": "2bc195ff80ad722dbe35ccbcbc1ba8aa"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/audit_replay.py": {
+    "mtime": 1777301538.929297,
+    "hash": "dab248b843a9e9ce954d47f07378dd29"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/resources/mock_resource.py": {
+    "mtime": 1777301538.9304814,
+    "hash": "503d809e286e9bf341889a8a2bdf5918"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/agents/followup.py": {
+    "mtime": 1777301538.929297,
+    "hash": "dd10c0f224ede39059f95e642fbb03b4"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/agents/triage.py": {
+    "mtime": 1777301538.929297,
+    "hash": "4e063cc50142b697ee76a55428378ea4"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/agents/email.py": {
+    "mtime": 1777301538.929297,
+    "hash": "9ae53582dacaaadefbf24e9eaa523ffe"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/agents/__init__.py": {
+    "mtime": 1777301538.9242969,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/agents/crm.py": {
+    "mtime": 1777301538.929297,
+    "hash": "ce4b49637cd616f5db9ae584787299b9"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/agents/gmail_tool.py": {
+    "mtime": 1777301538.929297,
+    "hash": "afdd84aed263f5369972d972ef3af2ae"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/agents/knowledge.py": {
+    "mtime": 1777301538.929297,
+    "hash": "ac8581737891c7ff06c99965f13603df"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/orchestrator/main.py": {
+    "mtime": 1777301538.9304814,
+    "hash": "22c83caf725a6268a49dd0ed02c26bfe"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/orchestrator/revoke.py": {
+    "mtime": 1777301538.9304814,
+    "hash": "1311d9bef223f842de97ff76e9d822f4"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/orchestrator/__init__.py": {
+    "mtime": 1777301538.9302306,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/lib/decode.py": {
+    "mtime": 1777301538.9302306,
+    "hash": "159290a1b8eb69b18ba518eb88d246cc"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/lib/__init__.py": {
+    "mtime": 1777301538.929297,
+    "hash": "565b04e6c99b745b4717f217c5bb4a05"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/lib/exchange.py": {
+    "mtime": 1777301538.9302306,
+    "hash": "6a4985dd9ebde2d8f9452572a18b471f"
+  },
+  "/home/raul/Desktop/projects/shark/admin/vite.config.d.ts": {
+    "mtime": 1776958738.9447808,
+    "hash": "9fcf75521f4c43fd8b75300e0f63b867"
+  },
+  "/home/raul/Desktop/projects/shark/admin/vite.config.ts": {
+    "mtime": 1776958738.9451602,
+    "hash": "f8e2e9e0b4498daa702f4c85d0343ec3"
+  },
+  "/home/raul/Desktop/projects/shark/admin/vite.config.js": {
+    "mtime": 1776958738.9449773,
+    "hash": "3b36e0d565fb6829f3feb94f5b076bbc"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted-entry.tsx": {
+    "mtime": 1776958738.941366,
+    "hash": "48d7c8ebe64e3fef6c18b64c26aee11f"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/vite-env.d.ts": {
+    "mtime": 1776958738.9443579,
+    "hash": "49fd2a3ace37b3c4897617fb02927bdd"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/featureFlags.ts": {
+    "mtime": 1777301538.8492963,
+    "hash": "9f7e7d83f66e58637ddefd5e6f88a33f"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/main.tsx": {
+    "mtime": 1777301538.8502963,
+    "hash": "75cba39cfd57663f64cbdd3813fcf3e1"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/CommandPalette.tsx": {
+    "mtime": 1777319905.0135114,
+    "hash": "682a67becfc32528d5c9502d02f31791"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/App.tsx": {
+    "mtime": 1777913285.519927,
+    "hash": "a3150edd6077cd922fc9cc1b150933c8"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/get_started.tsx": {
+    "mtime": 1777564326.1569824,
+    "hash": "2329c182851814e7f754132d1edebcff"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/settings.tsx": {
+    "mtime": 1777913285.521927,
+    "hash": "47535d126c235c9e805cd74e9e023d17"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/email_settings.tsx": {
+    "mtime": 1777315532.9775782,
+    "hash": "0f9191e54b53156f707cf7b5ea161659"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/empty_shell.tsx": {
+    "mtime": 1777301538.837296,
+    "hash": "bb3d3a2294f04467af91c062c8d3b065"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/mock.tsx": {
+    "mtime": 1777301538.8402963,
+    "hash": "cc0e484f891c6b05cf05d4d4b41f87d0"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/api_keys.tsx": {
+    "mtime": 1777401350.9696667,
+    "hash": "6f7d241bbd8a9a4766afb2db4d8af243"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/audit.tsx": {
+    "mtime": 1777913285.519927,
+    "hash": "de440cff81f055936a011a354472f8da"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/ErrorBoundary.tsx": {
+    "mtime": 1777301538.819296,
+    "hash": "b52472070a4b329e8763ff20e16ff719"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/sso.tsx": {
+    "mtime": 1776958738.9346511,
+    "hash": "1047070b4641732fef42981d5baaa7ef"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/shared.tsx": {
+    "mtime": 1776971752.3342729,
+    "hash": "96ab6b983e4e05e64683e251c3ba8493"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/rbac.tsx": {
+    "mtime": 1777301538.8452961,
+    "hash": "58e31251990fe3d4a6f3eb36949c71fc"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/overview.tsx": {
+    "mtime": 1777913285.521927,
+    "hash": "2875f32696ab7df40f3fb8a3322f5146"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/coming_soon.tsx": {
+    "mtime": 1777479093.0246298,
+    "hash": "0ecfde1c389d9be2e700e136c5ec8ec8"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/HelpButton.tsx": {
+    "mtime": 1776958738.9241471,
+    "hash": "583540874a44996c861f1c4ca4101357"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/compliance.tsx": {
+    "mtime": 1777479093.0316298,
+    "hash": "d74e10b1b66d7cbec2dd7c8fe3398dbf"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/applications.tsx": {
+    "mtime": 1777301538.820296,
+    "hash": "2fb2209115193ebf33437c88c0dd22dd"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/useKeyboardShortcuts.tsx": {
+    "mtime": 1776958738.9351122,
+    "hash": "def0d21a7b6aedd61cae25fae237841c"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/proxy_wizard.tsx": {
+    "mtime": 1776958738.931947,
+    "hash": "910273fb734be8ecd263683687dd4d54"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/proxy_config_real.tsx": {
+    "mtime": 1777913285.521927,
+    "hash": "eea4e1d6dced4c3cb1e35997500f8660"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/consents_manage.tsx": {
+    "mtime": 1777409097.5333579,
+    "hash": "43ff8b0dd58d3f2f50c0ad87f12c8f78"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/TeachEmptyState.tsx": {
+    "mtime": 1776958738.9241471,
+    "hash": "6925dbf92f77de5a5bf0b010d5bd176b"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/QuickCreate.tsx": {
+    "mtime": 1776958738.9241471,
+    "hash": "bf0ce502b2ab1784df69a9311484a361"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/delegation_chains.tsx": {
+    "mtime": 1777913285.5209272,
+    "hash": "aebb866b8960eeed789a9469c00cc6e3"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/vault_manage.tsx": {
+    "mtime": 1777320994.9731472,
+    "hash": "f6e12f760a1fc1dd0fd52d06bce2e54a"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/setup.tsx": {
+    "mtime": 1777913285.521927,
+    "hash": "8c8c1c17896366462af0a8860d433cb7"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/MailEditor.tsx": {
+    "mtime": 1777913285.519927,
+    "hash": "2c9426d4fd0fa0cc87738a1741c12d2a"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/dev_email.tsx": {
+    "mtime": 1777913285.5209272,
+    "hash": "af08dbce2b944908699220700ab465d1"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/authentication.tsx": {
+    "mtime": 1777301538.8322961,
+    "hash": "3856292ce8fb23ec02d450d08467452d"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/rbac_matrix.tsx": {
+    "mtime": 1776958738.9331372,
+    "hash": "699699e2db5d62efb4f63bceb56b1891"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/organizations.tsx": {
+    "mtime": 1777913285.5209272,
+    "hash": "d47797dfafc21c8df922f33ced2d95be"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/sessions.tsx": {
+    "mtime": 1777913285.521927,
+    "hash": "47777d53f13eca5dc4bc8577fc51fac6"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/useURLParams.tsx": {
+    "mtime": 1776958738.9351122,
+    "hash": "3ec8321fe4596c49008e923c43650566"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/webhooks.tsx": {
+    "mtime": 1777321000.616116,
+    "hash": "2926fc85c02ec8436f42d352543c0775"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/proxy_config.tsx": {
+    "mtime": 1777479093.0386298,
+    "hash": "228e514ea654ac2d1fc9ea11b81c5f9d"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/users.tsx": {
+    "mtime": 1777913285.521927,
+    "hash": "71dba643b12204e53c5dbdf0a319bb14"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/login.tsx": {
+    "mtime": 1777913285.5209272,
+    "hash": "56520d4274fdc9899061f4831b3f01df"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/PhaseGate.tsx": {
+    "mtime": 1776958738.9241471,
+    "hash": "17574cedc53e320ab61bd6d207a1ff94"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/device_flow.tsx": {
+    "mtime": 1776958738.929054,
+    "hash": "3bcd894782dbd8207a5fdaf4715f6f15"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/signing_keys.tsx": {
+    "mtime": 1776958738.934335,
+    "hash": "b084237504da76e27a7a121204d15942"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/Walkthrough.tsx": {
+    "mtime": 1776972340.3500173,
+    "hash": "07678f3b8d3ce3dc0f09cbf70ab726a3"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/branding.tsx": {
+    "mtime": 1777314946.3643034,
+    "hash": "4370352834fa9f2e600fbecc5709b7d9"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/toast.tsx": {
+    "mtime": 1776958738.9348502,
+    "hash": "945dac4de85abe5d29bbf720950db506"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/api.tsx": {
+    "mtime": 1777913285.519927,
+    "hash": "514ca259d5cb677a681ee5900fa2baac"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/delegation_canvas.tsx": {
+    "mtime": 1777913285.5209272,
+    "hash": "ccb7aaa6f98ebe67ae7907f45414df3a"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/system_settings.tsx": {
+    "mtime": 1777301538.8492963,
+    "hash": "f397a783d9884a1203a841a77adf1c5f"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/Notifications.tsx": {
+    "mtime": 1776958738.9241471,
+    "hash": "e68138fb329dc795480e6a86c982894c"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/session_debugger.tsx": {
+    "mtime": 1776958738.9334397,
+    "hash": "99e16af65618fa904e01d98346ffeadd"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/identity_hub.tsx": {
+    "mtime": 1777913285.5209272,
+    "hash": "2478db358dba8af13a1a91198b310f94"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/CLIFooter.tsx": {
+    "mtime": 1776958738.9227657,
+    "hash": "4ec5d10b0d68b68bf19319fa8b2b7704"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/agents_manage.tsx": {
+    "mtime": 1777913285.519927,
+    "hash": "dbd73df820814c71cbbf889ca9888549"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/layout.tsx": {
+    "mtime": 1777913285.5209272,
+    "hash": "9d20448d0fbd8831c237ddcb306c710d"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/branding/integrations_tab.tsx": {
+    "mtime": 1776958738.9274817,
+    "hash": "4ff635b3964e34b7e30c2b9e7c552461"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/branding/visuals_tab.tsx": {
+    "mtime": 1776958738.9278991,
+    "hash": "2ee807b508183cf385523505deb52767"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/components/branding/email_tab.tsx": {
+    "mtime": 1777315566.1998115,
+    "hash": "66e9454d1e9f32cc2a5b2fc8a9c934fa"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/App.tsx": {
+    "mtime": 1776958738.941366,
+    "hash": "d695a3d8827bb36418539206b92825dd"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/signup.tsx": {
+    "mtime": 1776958738.9437113,
+    "hash": "f8bd4ec08707f98e228d40b3b7aae78c"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/magic.tsx": {
+    "mtime": 1776958738.9430268,
+    "hash": "b966462a299fbbe8ec32b11a5b5286e9"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/verify.tsx": {
+    "mtime": 1776958738.9439173,
+    "hash": "4d823af18f729cbbfa28d5adb3e7cf68"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/passkey.tsx": {
+    "mtime": 1776958738.9433763,
+    "hash": "c314e6adbafad919cb483ef9a95d3960"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/forgot_password.tsx": {
+    "mtime": 1776958738.9424474,
+    "hash": "671116ca0ec06fb667baaf4666db9d73"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/reset_password.tsx": {
+    "mtime": 1776958738.943523,
+    "hash": "d28128e2438d5a861844fe41e60c04ec"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/error.tsx": {
+    "mtime": 1776958738.9422174,
+    "hash": "73cb250395eaaa526808dc369b513d4c"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/mfa.tsx": {
+    "mtime": 1776958738.9432287,
+    "hash": "e3783d2d518b48875ecc10492b8c5278"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/hosted/routes/login.tsx": {
+    "mtime": 1776958738.9428692,
+    "hash": "56fc1f973265a78433990606eb5c86dd"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/index.ts": {
+    "mtime": 1776958738.9393744,
+    "hash": "1bfc6333ca3bb5cb5989d438d3e7cd0f"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/ForgotPasswordForm.tsx": {
+    "mtime": 1776958738.937088,
+    "hash": "6da3230ad132c438f09c5926fd4e134c"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/ResetPasswordForm.tsx": {
+    "mtime": 1776958738.937088,
+    "hash": "10239d3c9cab42e38cbcd740d1ba42be"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/ErrorPage.tsx": {
+    "mtime": 1776958738.937088,
+    "hash": "c1a063056120e7884f7cfadf1c022ec2"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/MFAForm.tsx": {
+    "mtime": 1776958738.937088,
+    "hash": "6612fb37e7f75dba55152411fdbdb31a"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/SignInForm.tsx": {
+    "mtime": 1776958738.9378119,
+    "hash": "49192a20b4fdde1e98f67eb46d5826d7"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/EmailVerify.tsx": {
+    "mtime": 1776958738.9368052,
+    "hash": "15afedc10739570139972114394a88f5"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/OAuthProviderButton.tsx": {
+    "mtime": 1776958738.937088,
+    "hash": "42e52569c91b069f46fd5173ddef773a"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/PasskeyButton.tsx": {
+    "mtime": 1776958738.937088,
+    "hash": "c0b8f6fff08f969d4277a37db7202905"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/index.ts": {
+    "mtime": 1776958738.9378119,
+    "hash": "37d4edb03a52e2a98692c395ad418821"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/SignUpForm.tsx": {
+    "mtime": 1776958738.9378119,
+    "hash": "cb58b6c3feafe269fd0f5a956238539c"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/composed/MagicLinkSent.tsx": {
+    "mtime": 1776958738.937088,
+    "hash": "ee2660a9055084fd2741edccf93a1bea"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/primitives/Card.tsx": {
+    "mtime": 1776958738.9396162,
+    "hash": "7c75ac06823640660ffd905361224884"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/primitives/Toast.tsx": {
+    "mtime": 1776958738.9409912,
+    "hash": "cf34a87182fcf67fa1ab90d3fc71e19a"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/primitives/Tabs.tsx": {
+    "mtime": 1776958738.9407883,
+    "hash": "c4848f3cab49a96bf6c317579f2d3251"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/primitives/Input.tsx": {
+    "mtime": 1776958738.9401221,
+    "hash": "361968f3b0ec21539c69abc61a33312e"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/primitives/FormField.tsx": {
+    "mtime": 1776958738.9399433,
+    "hash": "80ac724faa768969d14f9cf4caa91658"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/primitives/Modal.tsx": {
+    "mtime": 1776958738.9404385,
+    "hash": "ba640068cd5c80059b770c6b2953a6b6"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/design/primitives/Button.tsx": {
+    "mtime": 1776958738.9393744,
+    "hash": "77f4aec0f42ab8e2b6cc93d88a2afac8"
+  },
+  "/home/raul/Desktop/projects/shark/examples/agent_delegation.py": {
+    "mtime": 1777319750.8163524,
+    "hash": "7578b1354c9cf472226711c07023ca48"
+  },
+  "/home/raul/Desktop/projects/shark/examples/_dpop_helper.py": {
+    "mtime": 1776958738.9578547,
+    "hash": "60471958906f22d9c1f8b01acc5bbf45"
+  },
+  "/home/raul/Desktop/projects/shark/examples/hello_agent.py": {
+    "mtime": 1776958738.95805,
+    "hash": "e4b149a1e864ab284605349c2958898c"
+  },
+  "/home/raul/Desktop/projects/shark/examples/demo_agents.py": {
+    "mtime": 1777913285.5249271,
+    "hash": "075e651a0ff4a24e678dbfb19d380e64"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/next-env.d.ts": {
+    "mtime": 1776958738.960923,
+    "hash": "b5ed9dd8b4c5ba8e5ab8e6a379c15838"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/next.config.mjs": {
+    "mtime": 1777301539.057298,
+    "hash": "4de54cdce35ac975fb8c4d75ebf48ce4"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/app/page.tsx": {
+    "mtime": 1776958738.9602594,
+    "hash": "f01ea9bc695856f976ece8d0c04ba55b"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/app/providers.tsx": {
+    "mtime": 1777301539.057298,
+    "hash": "a1db438d9691f707f14ba64e6adeafdd"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/app/_home-client.tsx": {
+    "mtime": 1777301539.054298,
+    "hash": "e12a5e5d61f7ca801679a33b041e07d1"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/app/layout.tsx": {
+    "mtime": 1776958738.9599125,
+    "hash": "40d5e423a34d4032be4e48b22ad02e28"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/app/shark/callback/page.tsx": {
+    "mtime": 1776958738.9606373,
+    "hash": "105e7dc46017371c866080936cef35ad"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/app/shark/callback/_callback-client.tsx": {
+    "mtime": 1777301539.057298,
+    "hash": "904c85b26cc9fac9fe0867172133c177"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/app/dashboard/page.tsx": {
+    "mtime": 1776958738.9594712,
+    "hash": "6e9d12ee2d0716d2c861f4622492ef4b"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/app/dashboard/_dashboard-client.tsx": {
+    "mtime": 1777301539.054298,
+    "hash": "37eaeac71acceb9ed7a11bd215014500"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/vitest.config.ts": {
+    "mtime": 1776958739.0158896,
+    "hash": "d1082230a20d8317a12eecbda0eb1a52"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/tsup.config.ts": {
+    "mtime": 1776958739.0158896,
+    "hash": "6f2d06a29d855215d077ff9deed929e7"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/index.ts": {
+    "mtime": 1776958739.015347,
+    "hash": "0a744ee350abf0a3093e2c35dc41b2a7"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/client.ts": {
+    "mtime": 1776958739.012957,
+    "hash": "5d9adf5015b5e283b526ad940576ee69"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/jwt.ts": {
+    "mtime": 1776958739.013336,
+    "hash": "72f49a8f38f8f2a8336b3c5148be0ed5"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/types.ts": {
+    "mtime": 1776958739.0137243,
+    "hash": "df76b37449e91f64de9d64a5399995cd"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/storage.ts": {
+    "mtime": 1776975768.857312,
+    "hash": "63f75ab564a55299033b789e5f62b8ad"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/auth.ts": {
+    "mtime": 1776975781.014386,
+    "hash": "a311d6254b7931f969bbdbe941d37644"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/index.ts": {
+    "mtime": 1776958739.0131502,
+    "hash": "0fa8c47caa689f3f9447375464cac271"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/dpop.ts": {
+    "mtime": 1776975742.3211415,
+    "hash": "fdd6b7ba5939d9a35ba75e901bce5578"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/__tests__/storage.test.ts": {
+    "mtime": 1776958739.0123055,
+    "hash": "00b97960858ca322dac52ad87c2841b8"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/__tests__/jwt.test.ts": {
+    "mtime": 1776958739.0123055,
+    "hash": "1b4ced4b8a50e17029aac355b7dbebd3"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/core/__tests__/auth.test.ts": {
+    "mtime": 1776958739.012079,
+    "hash": "5217f39caa5ff84baad94d6d7525411f"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/MFAChallenge.tsx": {
+    "mtime": 1776958739.0089784,
+    "hash": "d9d9ee021da6a5ac38056cb748994afa"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/SharkCallback.tsx": {
+    "mtime": 1776958739.0092351,
+    "hash": "134477e8b61d0e7766d012f438cfa3e6"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/SignedOut.tsx": {
+    "mtime": 1776958739.0098124,
+    "hash": "19aebc52e4f50d4e57578164ec897b8f"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/SignUp.tsx": {
+    "mtime": 1776958739.0092351,
+    "hash": "e6d5838879280dc2f2ca62121f6f8c4f"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/SignIn.tsx": {
+    "mtime": 1776958739.0092351,
+    "hash": "2e0c5540664f445b99a3a39487b2e1a7"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/SignedIn.tsx": {
+    "mtime": 1776958739.0092351,
+    "hash": "f7a3986a3d8abe2cfba955d864a2063f"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/PasskeyButton.tsx": {
+    "mtime": 1776958739.0092351,
+    "hash": "f36b40275695e47705ef1d9397464494"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/index.ts": {
+    "mtime": 1776958739.0114887,
+    "hash": "b0ee660341df5e2eddf9265a1cddc747"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/OrganizationSwitcher.tsx": {
+    "mtime": 1776958739.0092351,
+    "hash": "4040994355a0e76a34a9d65f4517ff72"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/UserButton.tsx": {
+    "mtime": 1776958739.0098124,
+    "hash": "3f9041056f4b1a261eaa76f6b04dcd4b"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/SharkProvider.tsx": {
+    "mtime": 1777301539.1392987,
+    "hash": "03ba72bf7a3801c924879b6b2b4fd51e"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/__tests__/SharkProvider.test.tsx": {
+    "mtime": 1776958739.0098124,
+    "hash": "a3a05139fbe321c98b46f6c233c67e18"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/__tests__/SignedOut.test.tsx": {
+    "mtime": 1776958739.0114887,
+    "hash": "d6e1bab6004173899590dbd33205b431"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/components/__tests__/SignedIn.test.tsx": {
+    "mtime": 1776958739.0114887,
+    "hash": "6ba46ef51b8c8c8e1b59029e2f077012"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/hooks/useAuth.ts": {
+    "mtime": 1776975819.0956357,
+    "hash": "82bb098a2230372869267d62bbe9ffcd"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/hooks/useUser.ts": {
+    "mtime": 1776958739.0150127,
+    "hash": "920c3ab88c3ec90634145fd668fc6a40"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/hooks/useOrganization.ts": {
+    "mtime": 1776958739.014801,
+    "hash": "750307d120e34913b441f110ab812f70"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/hooks/index.ts": {
+    "mtime": 1776958739.01404,
+    "hash": "389f466d7a29ee96020f33f0f32dd7e6"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/hooks/context.ts": {
+    "mtime": 1776975793.3804698,
+    "hash": "70ede8e7044c6017c8ec3902e769bae6"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/hooks/useSession.ts": {
+    "mtime": 1776958739.0150127,
+    "hash": "1afd6f921ee64518265c6a5d324efe8c"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/src/hooks/__tests__/hooks.test.tsx": {
+    "mtime": 1776958739.0138106,
+    "hash": "1654f971bf8cbc29abd37e650f9d9650"
+  },
+  "/home/raul/Desktop/projects/shark/secpunch/test_security_punch.py": {
+    "mtime": 1777913285.5498996,
+    "hash": "208c174f5f1aae801a3015fbbf558cd9"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/fixtures/fixtures.go": {
+    "mtime": 1777301538.9011638,
+    "hash": "db2c871e08bbd1c5913525014fbabd0e"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/metrics/histogram.go": {
+    "mtime": 1777301538.9011638,
+    "hash": "9f51db8ca8405b4027ced56cc54be9b9"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/output/console.go": {
+    "mtime": 1777301538.9011638,
+    "hash": "b6ecffad38a3c58f2ddf63f27dd78d4d"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/client/client.go": {
+    "mtime": 1777301538.9009414,
+    "hash": "9231f948b55ce1e77dbd0b3e1348fb79"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/client/dpop.go": {
+    "mtime": 1777301538.9011638,
+    "hash": "6f70adba88b02fe0c281f62fdf1120ae"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/cascade_revoke_user_agents.go": {
+    "mtime": 1777307438.2268987,
+    "hash": "45484e6fa536ce25cd4bf14e0167b6e7"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/signup_storm.go": {
+    "mtime": 1777301538.9015398,
+    "hash": "44d317ae817e871192d97238cf45998f"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/login_burst.go": {
+    "mtime": 1777301538.9015398,
+    "hash": "5515b9c4e066ea34095dc0672c597527"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/vault_read_concurrent.go": {
+    "mtime": 1777307640.9142776,
+    "hash": "104c0a209a0f3c139014bb23a5537076"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/oauth_client_credentials.go": {
+    "mtime": 1777301538.9015398,
+    "hash": "7ce6dc9d76d02c7f439b52536d62b4ae"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/token_exchange_chain.go": {
+    "mtime": 1777307801.3873682,
+    "hash": "13097463954e6faf715377e919fde929"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/oauth_dpop.go": {
+    "mtime": 1777307461.2230825,
+    "hash": "c7281a45192b42c9cf999b96ac59f403"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/common.go": {
+    "mtime": 1777301538.9011638,
+    "hash": "7f15ab60f1699bc007f5c787a8430043"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/scenario.go": {
+    "mtime": 1777301538.9015398,
+    "hash": "7cb17f57e26581708f6e736caaa50e78"
+  },
+  "/home/raul/Desktop/projects/shark/bench/internal/scenario/rbac_permission_check_hot.go": {
+    "mtime": 1777307992.0386846,
+    "hash": "2c998e078eb9e1e6580f70ff1bb39b4a"
+  },
+  "/home/raul/Desktop/projects/shark/bench/cmd/bench/main.go": {
+    "mtime": 1777479093.06263,
+    "hash": "b6befde43a74fee780680f9116dfc10a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/rbac/org_rbac_test.go": {
+    "mtime": 1777479093.531364,
+    "hash": "8a064b1c91f84ac665cea996618ad51c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/rbac/middleware.go": {
+    "mtime": 1777479093.5310986,
+    "hash": "6073acdf8e0d883152d93ff502be3455"
+  },
+  "/home/raul/Desktop/projects/shark/internal/rbac/rbac.go": {
+    "mtime": 1777479093.5316353,
+    "hash": "7ccdd5f9bd2bc76f13a2256e27024873"
+  },
+  "/home/raul/Desktop/projects/shark/internal/rbac/org_middleware.go": {
+    "mtime": 1777479093.531364,
+    "hash": "562acb38eaad20d637886dac49a91361"
+  },
+  "/home/raul/Desktop/projects/shark/internal/rbac/rbac_test.go": {
+    "mtime": 1777479093.5316353,
+    "hash": "59745ad7caed84492511696f9f739d74"
+  },
+  "/home/raul/Desktop/projects/shark/internal/admin/admin_test.go": {
+    "mtime": 1777913285.5369272,
+    "hash": "c8ad5f5ff43a26f5c2a841178b9fce18"
+  },
+  "/home/raul/Desktop/projects/shark/internal/admin/admin.go": {
+    "mtime": 1777913285.5369272,
+    "hash": "a6f46981ac4a076aeafaaebe3cf97df4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/user/user.go": {
+    "mtime": 1777479093.5393157,
+    "hash": "34eaf09cf0a257e0868c8d46faac1782"
+  },
+  "/home/raul/Desktop/projects/shark/internal/server/bootlog.go": {
+    "mtime": 1777301539.1312985,
+    "hash": "99c780cf2828e8e1556005a81b0fe4b5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/server/server.go": {
+    "mtime": 1777913285.5469272,
+    "hash": "190e91500ec4b5cad290971ce097ac62"
+  },
+  "/home/raul/Desktop/projects/shark/internal/server/firstboot_test.go": {
+    "mtime": 1777479093.5316353,
+    "hash": "8cb3f646e06851489969df1b31dafcd6"
+  },
+  "/home/raul/Desktop/projects/shark/internal/server/seed_app.go": {
+    "mtime": 1777479093.5320425,
+    "hash": "c35f970e99baf12a8ad5e88e97997301"
+  },
+  "/home/raul/Desktop/projects/shark/internal/server/browser.go": {
+    "mtime": 1777301539.1312985,
+    "hash": "b3c47000b2876a42cf805034cfab4ef0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/server/browser_test.go": {
+    "mtime": 1777301539.1312985,
+    "hash": "32b70601d3eafef2a1724b569b808ebe"
+  },
+  "/home/raul/Desktop/projects/shark/internal/server/firstboot.go": {
+    "mtime": 1777913285.5469272,
+    "hash": "51cb93018ef8b96861ee849f9add496b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/sso/oidc.go": {
+    "mtime": 1777479093.5324187,
+    "hash": "c0af8ad940def42d1bf6957bf18c4384"
+  },
+  "/home/raul/Desktop/projects/shark/internal/sso/saml.go": {
+    "mtime": 1777479093.5324187,
+    "hash": "3b68166e35207de471fd8c78c233883f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/sso/sso_test.go": {
+    "mtime": 1777479093.5324187,
+    "hash": "4d4c05b89593e8c48053c01e1317dffa"
+  },
+  "/home/raul/Desktop/projects/shark/internal/sso/connection.go": {
+    "mtime": 1777479093.5324187,
+    "hash": "80274d5235b83b7891c12e342b95847c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/transparent_test.go": {
+    "mtime": 1776965578.3464448,
+    "hash": "5b6f3585578b01d99ba31b20fbf5a905"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/repro_test.go": {
+    "mtime": 1776962740.319507,
+    "hash": "31d8b40e744a39356e7cc4b3b38877a0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/lifecycle.go": {
+    "mtime": 1777045481.8286884,
+    "hash": "03654ee52bdef4f7426194225d393a95"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/rules_test.go": {
+    "mtime": 1777479093.5310986,
+    "hash": "b07721a0ff12a57c3998da76a031af98"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/proxy_dpop_test.go": {
+    "mtime": 1777913285.5469272,
+    "hash": "6d315884a23d3182cb476e8da3f68728"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/listener_test.go": {
+    "mtime": 1776958738.9941533,
+    "hash": "fd2b83ce62e1dbd45ec7a7790d033573"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/headers.go": {
+    "mtime": 1777479093.530317,
+    "hash": "9d5b0e383412f6ebc26caccbd3686b4e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/config.go": {
+    "mtime": 1776958738.9934635,
+    "hash": "c2c75161e2e74f75081c2e27831a3446"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/headers_test.go": {
+    "mtime": 1777479093.530317,
+    "hash": "dfd2d65c787e76fc1d6f9f078daaf433"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/circuit.go": {
+    "mtime": 1776958738.9931028,
+    "hash": "b737828977af5cbb3d11438e14222a6c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/rules.go": {
+    "mtime": 1777479093.5309653,
+    "hash": "f0bf26ed96cc2b3b325965224a7935e4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/lifecycle_test.go": {
+    "mtime": 1777045481.8286884,
+    "hash": "58aa2375b4223be4be1768bde5a9d46a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/proxy.go": {
+    "mtime": 1777479093.530698,
+    "hash": "a9d79fc8af9f8f5ce9b2f14e6a6f93eb"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/circuit_test.go": {
+    "mtime": 1776958738.9934635,
+    "hash": "9f53fc955232eec3315e956ca8b84374"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/proxy_test.go": {
+    "mtime": 1777045481.8286884,
+    "hash": "367ebb988b6fcb4f6262fdc23948d56a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/lru.go": {
+    "mtime": 1776958738.9941533,
+    "hash": "78a8b093ce8093a1230aa6c4dab0f0e0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/proxy/listener.go": {
+    "mtime": 1776958738.9939518,
+    "hash": "a96da911deef5354b4aff87b490409a2"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/sender.go": {
+    "mtime": 1775492373.622711,
+    "hash": "2770341276ad83d4f6c46f07997b6cb4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/redirects_test.go": {
+    "mtime": 1777479093.526723,
+    "hash": "6e2c3340707c2c9bef1502ebfc0ce5ed"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/smtp.go": {
+    "mtime": 1777479093.526723,
+    "hash": "03d892a106837f5337f96ef0fc157e20"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/devinbox.go": {
+    "mtime": 1777479093.5264683,
+    "hash": "270769b87f8966c260ff604707339262"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/shark_email.go": {
+    "mtime": 1776363293.9560401,
+    "hash": "8c515f4a232850f5c1a2f0b5e5b1caad"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/resend.go": {
+    "mtime": 1777479093.526723,
+    "hash": "d4711a4ee0485fcebc545c0888bb29a4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/templates.go": {
+    "mtime": 1777479093.526723,
+    "hash": "1d4f266c1f62432e7c6f2975279113b6"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/redirects.go": {
+    "mtime": 1777315463.449088,
+    "hash": "41d725fbcf5d20249de72746ccf3a915"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/handlers_test.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "a4ae7b6898e18b945ddf28d0efcd5b95"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/dcr.go": {
+    "mtime": 1777479093.526723,
+    "hash": "a546503ec255c845c7af92f4d83f8018"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/server.go": {
+    "mtime": 1777479093.5296316,
+    "hash": "d0fab51e60d105c7fd31741d8e926b3d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/errors_test.go": {
+    "mtime": 1776958738.990949,
+    "hash": "24bd439a6ba0b64ed73a85c818017dbe"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/introspect.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "2b5c9cc32f2389589b392b14bd1f2755"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/device.go": {
+    "mtime": 1777479093.527243,
+    "hash": "0a100b34b8a7b4285b4ac6e103833356"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/errors.go": {
+    "mtime": 1776958738.9908123,
+    "hash": "f59347efc662e4257d5d9109ccb27401"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/store.go": {
+    "mtime": 1777479093.5300608,
+    "hash": "04fa544056b0ced6fdbea77a82dc3a15"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/dcr_rotation_test.go": {
+    "mtime": 1776958738.9897501,
+    "hash": "11f947cbdd2c69eaf5f935495de5cec0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/dcr_test.go": {
+    "mtime": 1776958738.9898462,
+    "hash": "c7ee1989af48cb74d50016e62834a29d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/store_test.go": {
+    "mtime": 1777913285.5469272,
+    "hash": "a14ca4fd66bf8b372ef305059457be7f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/metadata.go": {
+    "mtime": 1777301539.1312985,
+    "hash": "10352f429c3bf154a141530900ae2b57"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/exchange.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "ef9eea136f0e1e54610d3dbd573343da"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/resource_test.go": {
+    "mtime": 1777913285.5469272,
+    "hash": "68f0e0e241f8b3625a2dc26c51b56810"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/audience.go": {
+    "mtime": 1776958738.9889731,
+    "hash": "e175126f36cfc91cdbbba86da27ba477"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/jwt_access_token_test.go": {
+    "mtime": 1776958738.9921854,
+    "hash": "644858e5830e4a9038e3d04540f72a16"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/revoke.go": {
+    "mtime": 1776958738.9921854,
+    "hash": "7b85200e63e9e9e918dbd83e43c4d1cd"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/exchange_test.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "8a7165bdf0036ad36c0f64f441a658a8"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/introspect_test.go": {
+    "mtime": 1777913285.5469272,
+    "hash": "c408809be3ca528d844bc88607bffae4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/handlers.go": {
+    "mtime": 1777479093.5289574,
+    "hash": "c013dae9adb8d9f22001c2c13c92a740"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/session.go": {
+    "mtime": 1776958738.9927695,
+    "hash": "b0d55a562e15d40c13e4e7a394f798b0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/device_test.go": {
+    "mtime": 1777479093.5281086,
+    "hash": "c767ee6163fe423d3af154d49537879c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/metadata_test.go": {
+    "mtime": 1777322463.6549969,
+    "hash": "3c8025f6a5936682feedeb08d43d4cc6"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/consent.go": {
+    "mtime": 1776958738.989067,
+    "hash": "3b9db424b3b40a624fff3205bd0c5a26"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/dpop.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "f840d9aae29484c6e9c7ce9ff59f0798"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/dpop_test.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "fabc4d24fa9c1ed84ce6c9847dccd204"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/testmigrations/00001_init.sql": {
+    "mtime": 1777319750.8183525,
+    "hash": "88f7e896d49eb9ea4626f7c5c3bca88b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/magiclink.go": {
+    "mtime": 1777479093.5197346,
+    "hash": "37492fc9a40cc888d724691543dd2d6c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/lockout.go": {
+    "mtime": 1777301539.1102984,
+    "hash": "7c8736e1761560d4bf5b692615880535"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/apikey_test.go": {
+    "mtime": 1775779522.9826717,
+    "hash": "39d88b77cad57da4be0f3b2e3542a3a9"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/apikey.go": {
+    "mtime": 1777481466.3905163,
+    "hash": "ba36ef08b8ef76fea8a32cff5cbda676"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/password_test.go": {
+    "mtime": 1777479093.5206316,
+    "hash": "095e98f1f9174bdc57d04f33d1fcad45"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/passkey.go": {
+    "mtime": 1777479093.520495,
+    "hash": "a9b34328c47f6772e845e91f41c4ea98"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/oauth.go": {
+    "mtime": 1777479093.520271,
+    "hash": "f6c40a74d2a9a6dc4950e0b3699b1be7"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/fieldcrypt.go": {
+    "mtime": 1776098644.7349567,
+    "hash": "76c3d618aed7ef93358ed7aa291e0aa8"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/password_policy.go": {
+    "mtime": 1776098540.3089328,
+    "hash": "422e6bcde4cc1cff839bb46017f03d3f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/mfa_test.go": {
+    "mtime": 1777479093.520042,
+    "hash": "66b8b56a37a4b40e8cda60b71b6ceff5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/session.go": {
+    "mtime": 1777479093.5222282,
+    "hash": "677e09bbcbfe322ac41c295128577629"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/mfa.go": {
+    "mtime": 1777479093.5197346,
+    "hash": "e15ee7d281d06eb831c1617bbe155c6d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/jwt/es256.go": {
+    "mtime": 1776958738.985527,
+    "hash": "bb5bd3214610288a7c2e2efbb310d3ef"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/jwt/export_test.go": {
+    "mtime": 1776440757.658674,
+    "hash": "b3864e35c7fcecaaef46f70e07b19e88"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/jwt/es256_test.go": {
+    "mtime": 1776958738.985527,
+    "hash": "6d620482e6829b99f0343d60eab029a4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/jwt/keys.go": {
+    "mtime": 1776958738.985527,
+    "hash": "db86083e1d1bfc5159991fed8ab6ce3e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/jwt/manager.go": {
+    "mtime": 1777479093.5186315,
+    "hash": "76a75d5f1949537f97aa2e86056ff223"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/jwt/revoke.go": {
+    "mtime": 1776440489.869126,
+    "hash": "842ad53170f2bc5204c37826025ae339"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/jwt/manager_test.go": {
+    "mtime": 1777479093.5195363,
+    "hash": "a4a8f641b8aa1f74c043a7158b14921d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/redirect/redirect_test.go": {
+    "mtime": 1777479093.5222282,
+    "hash": "851a2f44ef5aee28b1cad49fbd543b19"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/redirect/redirect.go": {
+    "mtime": 1776440614.5418274,
+    "hash": "4ed49a6a3fc23c31e84441f55fc0742b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/providers/discord.go": {
+    "mtime": 1777479093.5212944,
+    "hash": "959df948571c25500736f49615a2a93d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/providers/apple.go": {
+    "mtime": 1777479093.5209234,
+    "hash": "32ef578c9792b1898f3c8abb8a4dc295"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/providers/google.go": {
+    "mtime": 1777479093.5216315,
+    "hash": "c880fca4b23bd92df018b960b2ff5545"
+  },
+  "/home/raul/Desktop/projects/shark/internal/auth/providers/github.go": {
+    "mtime": 1777479093.521489,
+    "hash": "42306e2cdad134a5007c7cd746d890c2"
+  },
+  "/home/raul/Desktop/projects/shark/internal/telemetry/ping_test.go": {
+    "mtime": 1777913285.5479274,
+    "hash": "eea46ca5ed2b4bd0330b84f8aa7061b3"
+  },
+  "/home/raul/Desktop/projects/shark/internal/telemetry/ping.go": {
+    "mtime": 1777913285.5479274,
+    "hash": "be28e458dd330d87bfe93470ddd52810"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/organization_handlers.go": {
+    "mtime": 1777479093.5084908,
+    "hash": "e20f91cdc7932f2040c88fc28b06df59"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/session_agent_p1_test.go": {
+    "mtime": 1777479093.5156898,
+    "hash": "291d4ea0e59160797c95eb27134b18a2"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/devinbox_handlers.go": {
+    "mtime": 1777301539.1012983,
+    "hash": "ed48f0d57ceb92fd008d21d683e2a0ae"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/webhook_handlers.go": {
+    "mtime": 1777479093.5182638,
+    "hash": "000f012b6e20491aad17acd8d89097c7"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/proxy_handlers.go": {
+    "mtime": 1777479093.5095265,
+    "hash": "12c5452bea521e241701217eb3b0b248"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/audit_p1_test.go": {
+    "mtime": 1777479093.497664,
+    "hash": "f0584ab624c91ca36d30701c7d83a674"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/docs_handler.go": {
+    "mtime": 1777301539.1012983,
+    "hash": "a0ed31a79e2e10660d82ad1e164710f4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/setup_handlers.go": {
+    "mtime": 1777479093.5166254,
+    "hash": "0ffb39f23d35eb623248d78d88c273f7"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/errors_test.go": {
+    "mtime": 1776958738.9763894,
+    "hash": "1d42e38acc279de67c7a1208f31e4713"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_oauth_handlers.go": {
+    "mtime": 1777479093.4914603,
+    "hash": "b047d8b395ded31a395a88caa6f39c0a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/org_rbac_integration_test.go": {
+    "mtime": 1777479093.5076315,
+    "hash": "d1405104378d831b613b6db84a9610c2"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/proxy_rules_handlers.go": {
+    "mtime": 1777479093.5136316,
+    "hash": "25cf961248b7ce4e12c109f46d3b0586"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/proxy_admin_v15_handlers.go": {
+    "mtime": 1777479093.5095265,
+    "hash": "d377c9c06213272350726d122c47753d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/oauth_redirect_integration_test.go": {
+    "mtime": 1777479093.5046315,
+    "hash": "336420960b18776f8e77f5b4cc624edd"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/flow_handlers.go": {
+    "mtime": 1777479093.5000927,
+    "hash": "f19412bcfc51c69c3a81ccb7bafffbdc"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/agent_handlers_test.go": {
+    "mtime": 1777479093.4951918,
+    "hash": "6b055e89fc98096455d9121a129e0a40"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/jwt_revoke_handlers.go": {
+    "mtime": 1777479093.5012443,
+    "hash": "c108e8294132b754a3129f4e190374f4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/proxy_lifecycle_handlers.go": {
+    "mtime": 1777045481.8256884,
+    "hash": "edfa228660cff97792798b07f5725b72"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/auth_handlers_test.go": {
+    "mtime": 1777479093.4986582,
+    "hash": "2b77d9022aca121352ac223559467f1b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/webhooks_test.go": {
+    "mtime": 1777479093.5182638,
+    "hash": "d35bd1179d84f70f42a4250f71aa80f8"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/webhook_emit.go": {
+    "mtime": 1777479093.5180614,
+    "hash": "12e22694660be73196862155a8fa8165"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/email_template_handlers_test.go": {
+    "mtime": 1777479093.4990585,
+    "hash": "c11e1ffa2890fe90eb8f86a111feb7da"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/may_act_handlers_test.go": {
+    "mtime": 1777479093.5026314,
+    "hash": "4a383482bb3041de98788a717991ad63"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_organization_handlers.go": {
+    "mtime": 1777479093.4919684,
+    "hash": "1a3860a1230368c2cc0aeb8e0b08a8d9"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/org_rbac_handlers.go": {
+    "mtime": 1777479093.5046315,
+    "hash": "c0527cd18e9c05a6e6d3ad5e77bcd0d0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/apikey_handlers.go": {
+    "mtime": 1777479093.4951918,
+    "hash": "035654c74962b707a83eb85bbf4e82dd"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_user_handlers.go": {
+    "mtime": 1777479093.4926555,
+    "hash": "b6c3bea08b3daff032cc006355bff0b0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/vault_handlers_test.go": {
+    "mtime": 1777479093.5176315,
+    "hash": "c37f89a2019b4c114bd789a4031418e3"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/email_verify_welcome_test.go": {
+    "mtime": 1777479093.4996314,
+    "hash": "3ac8be4073c3988f2bb3c6d621037886"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/mfa_handlers_test.go": {
+    "mtime": 1777479093.5026314,
+    "hash": "493419a3796c67d9136fa2d0c2dfd388"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/consent_handlers.go": {
+    "mtime": 1777479093.4986582,
+    "hash": "2dfa2460375e4ff71a2690c5984e32b1"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/system_handlers.go": {
+    "mtime": 1777479093.5166316,
+    "hash": "c6f87cf068eca019e23e4588b2bcc3ac"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_bootstrap_handlers.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "4aaa4a52f2537d0b02209a2d532b4e4d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/rbac_handlers.go": {
+    "mtime": 1777479093.5146315,
+    "hash": "3fd00515195f22e2c820ec6b1d429352"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/mfa_pending_test.go": {
+    "mtime": 1777479093.5026314,
+    "hash": "4746fc45ef90e4a60681fb26cab1a48b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_org_phase2_test.go": {
+    "mtime": 1777479093.4916751,
+    "hash": "22fdf125fb0329ac20cecfff3356edf9"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/oauth_handlers_test.go": {
+    "mtime": 1777479093.5045474,
+    "hash": "4da4ae410d5a0a2ac410990fbf6d1eff"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/session_handlers.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "0702b61b0a702bd263f2766c9778e39d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/sso_handlers.go": {
+    "mtime": 1777564326.182983,
+    "hash": "4b6c415e17de3be0ba48a6c5217db6f6"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/application_slug.go": {
+    "mtime": 1776958738.973788,
+    "hash": "1515950c628c2c5d822238b5a81672cc"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/errors.go": {
+    "mtime": 1776958738.9762106,
+    "hash": "e2429e2084faa670685adc84bbbe0e54"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/organizations_test.go": {
+    "mtime": 1777479093.5084908,
+    "hash": "b6e46eba2f9cb4c723065adb4d0f4ec2"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_config_shape_test.go": {
+    "mtime": 1777479093.4906316,
+    "hash": "2dfac4f803620b14b5b83732520bf05c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/rbac_handlers_test.go": {
+    "mtime": 1777479093.5154083,
+    "hash": "a1c82ddc6f7cc50793a321bb22ca91a8"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_application_handlers_test.go": {
+    "mtime": 1777479093.4906316,
+    "hash": "e185a3655b5dc48acbbc956ca4ccc5cd"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/email_config_handlers_test.go": {
+    "mtime": 1777479093.4990585,
+    "hash": "aa3773e427f5cf997024452757b8a16d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/branding_handlers_test.go": {
+    "mtime": 1777479093.4986582,
+    "hash": "1e005111fd402f92c7714650345a6008"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/email_verify_handlers.go": {
+    "mtime": 1777479093.4990585,
+    "hash": "ddc2c45c44ef14abcfdb9d309c8aa913"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_system_handlers_email_provider_test.go": {
+    "mtime": 1777479093.4926555,
+    "hash": "96e2c6022900b5afad195ef0f28fd205"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/user_handlers.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "0fb7de97974c3f4ae3782835b1f09d11"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/sso_handlers_test.go": {
+    "mtime": 1777479093.5166316,
+    "hash": "59b35fcd7c0ac4291134c5de1c1c2568"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/application_slug_test.go": {
+    "mtime": 1776958738.9741678,
+    "hash": "99a20a80fff2c14673be66f69d5df22a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/branding_handlers.go": {
+    "mtime": 1776958738.974805,
+    "hash": "06bda4c5003d78aa091e9b7be572a7b5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/magiclink_handlers_test.go": {
+    "mtime": 1777479093.5023296,
+    "hash": "f85c0522a481bc134f302bffe12953ca"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/system_handlers_test.go": {
+    "mtime": 1777479093.5166316,
+    "hash": "e7e8e8015acee561e082ebbff7b40366"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/snippet_handlers.go": {
+    "mtime": 1777301539.1082985,
+    "hash": "bfe9e6194995ac3bcb681d8bb6880f41"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/magiclink_handlers.go": {
+    "mtime": 1777479093.5016315,
+    "hash": "39ddf17a2b82b527eeae45e39b8f132f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/email_config_handlers.go": {
+    "mtime": 1777315474.3731651,
+    "hash": "aa18dbe38b728949a0db8e6e51fd1513"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_bootstrap_handlers_test.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "14ade6878cff821858245e8c76c467db"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/agent_handlers.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "85c9d960dd7f19c750faccda36a6358d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/user_agents_handlers.go": {
+    "mtime": 1777479093.5166316,
+    "hash": "52cb4fd9237e60f6d65f866f5a250349"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/proxy_resolvers.go": {
+    "mtime": 1777479093.5116315,
+    "hash": "2f5bd3267241e066bec88e60a7b36693"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_phase2_test.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "fc70af137ec712c316d98c0bfe77163e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/user_handlers_test.go": {
+    "mtime": 1777479093.5166316,
+    "hash": "a6a754c4cd1fa4c64d277ffa1825c03a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/flow_handlers_test.go": {
+    "mtime": 1777479093.5003471,
+    "hash": "e20ef569db951387e8767620fc86eccf"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/auth_handlers.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "e6ef80a23fa2917374944b9ee8662b52"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/may_act_handlers.go": {
+    "mtime": 1777479093.5026314,
+    "hash": "18f6d1a8e1f27a98f9d3a0c4e9360766"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/email_template_handlers.go": {
+    "mtime": 1777479093.4990585,
+    "hash": "334cf71ff11bd1710e11d20bf259eb30"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/vault_handlers.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "5e099199f192772291be8ec7172eaa57"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/flow_mfa_handlers.go": {
+    "mtime": 1777479093.5005596,
+    "hash": "64810ccf73cdd1c1347d40b511f4c6eb"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/passkey_handlers.go": {
+    "mtime": 1777479093.5090668,
+    "hash": "2f231fe8d334b30b59215c4059b336a1"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/application_slug_integration_test.go": {
+    "mtime": 1777479093.4966745,
+    "hash": "60f779bddf65a42596ade44610c2495c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_system_handlers.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "de308f5a3a964f85b3ca82147fe7d855"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/oauth_handlers.go": {
+    "mtime": 1777479093.5036316,
+    "hash": "0950c738169fb9b40d41b940c9bd7555"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/proxy_handlers_test.go": {
+    "mtime": 1777479093.5106316,
+    "hash": "6fd45008eb89d4a708e2555619582c6b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/router.go": {
+    "mtime": 1777479093.5156898,
+    "hash": "9275c6bc2bb6ad6ffe394eb4d6e41769"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/p2_queue19_test.go": {
+    "mtime": 1777479093.5086315,
+    "hash": "dc487abced3a84c81ebdb3452127c5e2"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/hosted_assets_handler.go": {
+    "mtime": 1776958738.9773796,
+    "hash": "7d12d597d7facd880b13c0c00bbc0ee4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/snippet_handlers_test.go": {
+    "mtime": 1777479093.5166316,
+    "hash": "ab295e619b7d7b5187cd7a9b1b410c2e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/p2_bugs_test.go": {
+    "mtime": 1777479093.5086315,
+    "hash": "0186e7a6a28bb354dd9127d4e26d7221"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/hosted_assets_handler_test.go": {
+    "mtime": 1777479093.5006316,
+    "hash": "dd9a4e293a5ffd8bcb6897b5ef7e82ed"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/well_known_handlers.go": {
+    "mtime": 1777479093.518529,
+    "hash": "0d38240972136b4fb0bb392276519d1b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_system_handlers_cors_test.go": {
+    "mtime": 1777479093.4926555,
+    "hash": "9a5832fadbc63d1144cb091d5d6f4048"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/agent_policies_handlers.go": {
+    "mtime": 1777301539.1002984,
+    "hash": "f1937b7891187af9571029628159ae55"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/scenario_agent_test.go": {
+    "mtime": 1777479093.5156898,
+    "hash": "71e622a9c2ec36a9ac07b26bec9225cc"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/mfa_handlers.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "7e4ccd6abcafa94b10816e0112419b41"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/passkey_handlers_test.go": {
+    "mtime": 1777479093.509276,
+    "hash": "5cf698a6d9c52cacc68861e2f4e4c6e6"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/setup_handlers_test.go": {
+    "mtime": 1777479093.5166316,
+    "hash": "e66da28596c47448edd12b19b771c620"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/hosted_handlers.go": {
+    "mtime": 1777479093.5012443,
+    "hash": "b28f037370a70203ad5df9dd16ac5631"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/application_handlers.go": {
+    "mtime": 1777479093.4966745,
+    "hash": "a5c64305682aba10fff276ec400c4ac5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/audit_handlers.go": {
+    "mtime": 1777479093.4966745,
+    "hash": "ea5888bc2802e9513af0f635e7f8e148"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_user_handlers_test.go": {
+    "mtime": 1777479093.4936314,
+    "hash": "36a2be61146fc5e4cb21bcda4b79ac7e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/hosted_handlers_test.go": {
+    "mtime": 1777479093.5012443,
+    "hash": "10b40e86b76dcd0db04364ea3eb63cc5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/admin_stats_handlers.go": {
+    "mtime": 1777564326.182983,
+    "hash": "ced4a80e9f337d05b189951db4fbbe1e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/apikey_handlers_test.go": {
+    "mtime": 1777479093.4951918,
+    "hash": "f8fc16afd22efc785421e2199596ec7b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/admin_test.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "d14519c3a1193269b55693708631d27a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/bodylimit.go": {
+    "mtime": 1776357254.3000288,
+    "hash": "0ca66e5ac45a6063bd2ac1a238788f4c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/security_headers.go": {
+    "mtime": 1777301539.1042984,
+    "hash": "df7c8694f45d77db305e1a915ff1bceb"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/apikey.go": {
+    "mtime": 1777479093.5026314,
+    "hash": "a1c4e159e15ff1d7ba5b1e00f9525d6b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/ratelimit.go": {
+    "mtime": 1776958738.9793782,
+    "hash": "fb80d25cdfc41c789ddfb5ce79d986f7"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/cors.go": {
+    "mtime": 1775576272.8483071,
+    "hash": "64208868bf53243d9a84d22d1d988279"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/auth.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "2624eef00b5bf9cb76e8feab3d6117ff"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/drain.go": {
+    "mtime": 1777301539.1042984,
+    "hash": "f6b6b3cd0fda6dcae5e5c006ff4526c0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/ratelimit_test.go": {
+    "mtime": 1777479093.5036316,
+    "hash": "e4677211b7d6d117d958909d75e85f87"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/admin.go": {
+    "mtime": 1777913285.5449274,
+    "hash": "2fe6019cb7725f0dd795be976568650f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/auth_jwt_test.go": {
+    "mtime": 1777479093.5036316,
+    "hash": "b16d26de8ce19fb8c86d3432c791ad77"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/middleware/bodylimit_test.go": {
+    "mtime": 1777479093.5036316,
+    "hash": "8f90f73a0c7a725287003d4dbd5727bd"
+  },
+  "/home/raul/Desktop/projects/shark/internal/demo/delegation.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "55ebbb559de682abbb36e9c036bbaa97"
+  },
+  "/home/raul/Desktop/projects/shark/internal/demo/template.go": {
+    "mtime": 1777301539.1250548,
+    "hash": "9f9b62ca9babc4e0018550d409b5590a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/demo/template/inline.js": {
+    "mtime": 1777301539.1272986,
+    "hash": "b8da39388c1412b0ee53d35c37bd35cb"
+  },
+  "/home/raul/Desktop/projects/shark/internal/authflow/engine_test.go": {
+    "mtime": 1777479093.5236316,
+    "hash": "ee607723aed048e2575e8008fc166d1b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/authflow/steps.go": {
+    "mtime": 1777479093.5236316,
+    "hash": "82afae35f6d5f9a77bfa7bc0e1419633"
+  },
+  "/home/raul/Desktop/projects/shark/internal/authflow/conditions.go": {
+    "mtime": 1776958738.9864902,
+    "hash": "be3677b27a5d1aced1a382d9ffcfaacb"
+  },
+  "/home/raul/Desktop/projects/shark/internal/authflow/mfa_challenges.go": {
+    "mtime": 1776958738.9875531,
+    "hash": "070fa230101c2c19d8023a6b2674774f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/authflow/steps_wired_test.go": {
+    "mtime": 1777479093.5246196,
+    "hash": "8ef4f3c5375e55e5035d3eb47b530c76"
+  },
+  "/home/raul/Desktop/projects/shark/internal/authflow/engine.go": {
+    "mtime": 1777479093.5236316,
+    "hash": "0fd50d3dddf628fe872c6052ba7ce6ae"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/server.go": {
+    "mtime": 1777479093.5393157,
+    "hash": "32d533d2156f261e52d1383aa45da0d5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/factories.go": {
+    "mtime": 1777479093.5386317,
+    "hash": "1a7da5b740dfb895b49906c01a8a342e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/db.go": {
+    "mtime": 1777913285.5479274,
+    "hash": "8d0957ebcab55699bd202b10e1784e91"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/config.go": {
+    "mtime": 1777479093.5376396,
+    "hash": "818c3bdfb318cc49ccf3a8108950c1a3"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/email.go": {
+    "mtime": 1777479093.5386317,
+    "hash": "befb6683427b8b561c33821a689efaff"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/cli/e2e_test.go": {
+    "mtime": 1777479093.5376396,
+    "hash": "67c3e86cfcf4e28da4c5721fc476e769"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/cli/proxy_rules_e2e_test.go": {
+    "mtime": 1777479093.5376396,
+    "hash": "387072afa7c44151e2e03f6e8af10f25"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/cli/harness.go": {
+    "mtime": 1777479093.5376396,
+    "hash": "a08e0a16ee5778760988d3ea37cbeb27"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/e2e/phase3_test.go": {
+    "mtime": 1777564326.1919832,
+    "hash": "20d011f66e217710005eabe06ba77184"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00017_branding_and_email_templates.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "9590bba3c6cdb2819fb67d0f8fdc9a13"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00012_auth_flows.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "4db6a43aaa0231fcc4fd8e227f07db68"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00008_applications.sql": {
+    "mtime": 1776440419.2237475,
+    "hash": "1e64e2191382c0cc0827c004f186e14b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00020_application_slug.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "44b1267fe93e7ac4c5645150cddfef28"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00027_vault_provider_extra_auth_params.sql": {
+    "mtime": 1777307711.3777542,
+    "hash": "d53a0b7df59a474abe49c7d9919ebc91"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00006_jwt.sql": {
+    "mtime": 1776440355.6554203,
+    "hash": "6a565a9b8e99a6ed4c008e9821c8e9c1"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00011_vault.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "d14c53bdfe320cba5a178ad05938d6bf"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00022_proxy_rules_app_id.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "a87eec29f8d523ebee62897cc356354c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00009_last_login_at.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "9e9064a840e13b5194543711958fe533"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00023_proxy_rules_tier_match.sql": {
+    "mtime": 1777045481.8306885,
+    "hash": "e363f5a82d30ac2619dc1a337d556b61"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00018_client_secret_rotation.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "1b378c774b8a5b25ce970a63644fd8b4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00015_proxy_rules.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "756210c3676b85f8cb90b1430c03883e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00003_phase2_stats.sql": {
+    "mtime": 1776360371.7404785,
+    "hash": "f23af5fda1bb0ceb435a0cb0a1554c61"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00010_oauth.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "dceee8961e07c54c61b4aa3029f64a47"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00019_mfa_pending_verification.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "f2c77c33e4b3e6bf69656ecc0c273101"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00013_oauth_pkce_sessions.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "67ce814c8bb0e690ffc6953aa618c99f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00004_organizations.sql": {
+    "mtime": 1776362149.8456085,
+    "hash": "6aacd50573d5b05c7cb033e979a320d4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00016_audit_logs_extended_filters.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "ad47a54c03c9b35c773247e4fd642346"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00014_oauth_token_request_id.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "0b1454ca5208bfb980d8848e516e6e4b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00021_proxy_transparent_fields.sql": {
+    "mtime": 1776958739.0055127,
+    "hash": "0cb716c3be2d225bfc0216847c2519fd"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00025_branding_design_tokens.sql": {
+    "mtime": 1777045481.8306885,
+    "hash": "bb8987d87d35d4d337a05eb35cec5517"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00002_indexes.sql": {
+    "mtime": 1776360371.7402098,
+    "hash": "fce9e1d7dc6299334a7c4d60cfbac17b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00001_init.sql": {
+    "mtime": 1775779522.98329,
+    "hash": "fd7d92477e6f3b2914bba8fc364928f9"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00007_org_rbac.sql": {
+    "mtime": 1776440384.303566,
+    "hash": "a3650565849c9389db09d83d7f2363cc"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00026_system_config.sql": {
+    "mtime": 1777301539.1382987,
+    "hash": "b5f87f8a09422e7589a1efe210cb60ff"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00024_proxy_rules_m2m.sql": {
+    "mtime": 1777045481.8306885,
+    "hash": "d1c8a03f1e9aae79a4622b3a74283167"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00028_may_act_grants.sql": {
+    "mtime": 1777319750.8511345,
+    "hash": "d528b78e1d9d9e9aea009570de4cba76"
+  },
+  "/home/raul/Desktop/projects/shark/internal/testutil/migrations/00005_webhooks.sql": {
+    "mtime": 1776362686.1575022,
+    "hash": "62c3d2ecfc11ec6a85a88afb9b763198"
+  },
+  "/home/raul/Desktop/projects/shark/internal/webhook/dispatcher.go": {
+    "mtime": 1777913285.5479274,
+    "hash": "7ea92eb73d573551894fd8839a373ce4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/webhook/dispatcher_test.go": {
+    "mtime": 1777479093.5406315,
+    "hash": "1cbaa86d1d4da2910c279f89b6ec73be"
+  },
+  "/home/raul/Desktop/projects/shark/internal/audit/audit.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "25d456a5deb4d637838f38cf141b62dc"
+  },
+  "/home/raul/Desktop/projects/shark/internal/audit/middleware.go": {
+    "mtime": 1775492373.6220977,
+    "hash": "053bf7579f3290eb3f4e0bf5e589d1af"
+  },
+  "/home/raul/Desktop/projects/shark/internal/audit/audit_test.go": {
+    "mtime": 1777479093.5186315,
+    "hash": "d0e3058b40e49eb54dea90951cab7953"
+  },
+  "/home/raul/Desktop/projects/shark/internal/version/version.go": {
+    "mtime": 1777479093.5406315,
+    "hash": "388cd8417103c84b9602bd67317221c2"
+  },
+  "/home/raul/Desktop/projects/shark/internal/vault/providers_test.go": {
+    "mtime": 1777479093.5396316,
+    "hash": "39658686c0cc44b374545ab04cb87734"
+  },
+  "/home/raul/Desktop/projects/shark/internal/vault/providers.go": {
+    "mtime": 1777479093.5396316,
+    "hash": "8ed6eb326d80e2a76bc04cfdceda59ea"
+  },
+  "/home/raul/Desktop/projects/shark/internal/vault/vault_test.go": {
+    "mtime": 1777479093.5406213,
+    "hash": "90d7d73450a02a0ea1085654b17e5eab"
+  },
+  "/home/raul/Desktop/projects/shark/internal/vault/vault.go": {
+    "mtime": 1777479093.5403376,
+    "hash": "ce3b27d0f012ff8351c806f188d5b6e4"
+  },
+  "/home/raul/Desktop/projects/shark/internal/cli/cli_test.go": {
+    "mtime": 1777479093.5256317,
+    "hash": "1a7c8d1cf1d01bedaf99448c94889b9c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/cli/output.go": {
+    "mtime": 1777301539.1202357,
+    "hash": "1e493a835615f2e2d4456e27c80a0b03"
+  },
+  "/home/raul/Desktop/projects/shark/internal/cli/listing.go": {
+    "mtime": 1777301539.1202357,
+    "hash": "240133e2c2cdc432b569701e2f3eedf9"
+  },
+  "/home/raul/Desktop/projects/shark/internal/cli/logger.go": {
+    "mtime": 1777301539.1202357,
+    "hash": "f2438a97091aa1c7911a975ccb23bafe"
+  },
+  "/home/raul/Desktop/projects/shark/internal/cli/branding.go": {
+    "mtime": 1777479093.5256317,
+    "hash": "e71ad856a4c592f317a0a18f32424784"
+  },
+  "/home/raul/Desktop/projects/shark/internal/config/runtime.go": {
+    "mtime": 1777479093.5261526,
+    "hash": "80bc5f268b19250d67773d70d5b3c204"
+  },
+  "/home/raul/Desktop/projects/shark/internal/config/config.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "8b894c2a654dc8356fada1f9b59ac769"
+  },
+  "/home/raul/Desktop/projects/shark/internal/config/mode_state.go": {
+    "mtime": 1777405891.7722993,
+    "hash": "b0a0f10f0ee133bdc007b37ee2d559bc"
+  },
+  "/home/raul/Desktop/projects/shark/internal/config/config_test.go": {
+    "mtime": 1777047984.8871686,
+    "hash": "43a440738556bcbab69c0fc26a458cc3"
+  },
+  "/home/raul/Desktop/projects/shark/internal/config/bootstrap.go": {
+    "mtime": 1777301539.1202357,
+    "hash": "121f57606cb3a5c4d4239203adb7876e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/cache/cache.go": {
+    "mtime": 1777913285.5459273,
+    "hash": "2e6b1552c8c3b8c449ba2467f90904cc"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/auth_flows_sqlite.go": {
+    "mtime": 1777479093.5336316,
+    "hash": "874b027f2281a38f602e12f57348e22e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/phase2_test.go": {
+    "mtime": 1777913285.5479274,
+    "hash": "ebfc96931756c8702a45b7212577f5b7"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/secrets_test.go": {
+    "mtime": 1777479093.5356433,
+    "hash": "04e37d6129652f47c1a6300f5211651f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/email_templates_export.go": {
+    "mtime": 1776958738.9971771,
+    "hash": "43580e6e93d9a2a9a4e318d6210cf417"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/oauth_sqlite_test.go": {
+    "mtime": 1777913285.5469272,
+    "hash": "d0ad90c814ba5bf7755552c85e9bee59"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/sqlite.go": {
+    "mtime": 1777913285.5479274,
+    "hash": "83f576332e21331960356552aa6dc4d8"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/email_templates_test.go": {
+    "mtime": 1777479093.5346882,
+    "hash": "b6e098467a89a950eb5d6347aef40305"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/storage.go": {
+    "mtime": 1777913285.5479274,
+    "hash": "b8d5cc660160623b4f33c2fc5a60d9bd"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/applications_test.go": {
+    "mtime": 1777479093.533482,
+    "hash": "22c5b783d597782b26acc179bf9023d5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/vault_sqlite.go": {
+    "mtime": 1777564326.1919832,
+    "hash": "8793ed3eeb8984c3d85e1cff9021b291"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/system_config.go": {
+    "mtime": 1777479093.5366316,
+    "hash": "86d836e1baa4dea4ce90a339389c4681"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/webhooks_test.go": {
+    "mtime": 1777479093.5376396,
+    "hash": "5bba33d567896408366224a2cee2b0d5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/agents.go": {
+    "mtime": 1777301539.1312985,
+    "hash": "25c9fe30b9b3975cca59a9bf73254781"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/sqlite_webhooks.go": {
+    "mtime": 1777479093.5366068,
+    "hash": "178c4889392cd84659fe3d64b81c304a"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/orgs_test.go": {
+    "mtime": 1777479093.5346882,
+    "hash": "11e4c68d4ff72af8265a02b04dc4c95f"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/auth_flows_sqlite_test.go": {
+    "mtime": 1777479093.5340314,
+    "hash": "2a5325bb0b63bcb361a809befda5e443"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/agents_sqlite.go": {
+    "mtime": 1777564326.191032,
+    "hash": "70ae8b17efe4e7248c31583edb46e0e6"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/email_templates.go": {
+    "mtime": 1777479093.5343106,
+    "hash": "e13d1d5860b7956763d57b54681c968c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/applications.go": {
+    "mtime": 1777479093.5326316,
+    "hash": "741674743525ac2e624ed4e80f679bb5"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/email_templates_seed.go": {
+    "mtime": 1777564326.1919832,
+    "hash": "3722d48a7c6e00c911f929052808b23c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/proxy_rules_sqlite.go": {
+    "mtime": 1777479093.5354707,
+    "hash": "b1f9d744a3574d5f8a7f4d328f6e6afb"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/proxy_rules.go": {
+    "mtime": 1777045481.8300853,
+    "hash": "30e5dd4008534ba7be2e05ffd11fd455"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/system_config_test.go": {
+    "mtime": 1777479093.5371351,
+    "hash": "b157b8f8f5fba0329029d3ebae159127"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/oauth.go": {
+    "mtime": 1776958738.9975576,
+    "hash": "bae5dd01bdafe3632024af8b1705d51b"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/auth_flows.go": {
+    "mtime": 1776958738.9963794,
+    "hash": "1273aa5e06496f49e430cbff2c8ce69e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/branding_test.go": {
+    "mtime": 1777479093.5343106,
+    "hash": "fe058e1904d261e574c8cbd6144ab71c"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/user_tier.go": {
+    "mtime": 1777479093.5373523,
+    "hash": "81b590867b79f77ed751ddaf330fa397"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/sqlite_orgs.go": {
+    "mtime": 1777479093.5360966,
+    "hash": "7bc14f05f5b28a286b22a9b77e615172"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/welcome_email_test.go": {
+    "mtime": 1777479093.5376396,
+    "hash": "87a805912bccc78d577274e0851242f2"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/migrations.go": {
+    "mtime": 1777404822.3001862,
+    "hash": "da0b9deebf0caf9be9a9d305793a6e44"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/jwt_keys.go": {
+    "mtime": 1777479093.5346882,
+    "hash": "5bbe4cad985d76993a2731f2f69c379d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/vault.go": {
+    "mtime": 1777308642.1626534,
+    "hash": "865c03591be329b5f589fb0d72c7c3cc"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/sqlite_test.go": {
+    "mtime": 1777479093.5360966,
+    "hash": "868c332b184365e8881d4684825026f3"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/oauth_sqlite.go": {
+    "mtime": 1777479093.5346882,
+    "hash": "42af04106b5ea9aba4b83636b82063f0"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/agents_sqlite_test.go": {
+    "mtime": 1777479093.5326316,
+    "hash": "b2c6dc50c5436a2c2563d46ea9e4e57d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/vault_sqlite_test.go": {
+    "mtime": 1777479093.5376396,
+    "hash": "21b1cf33322c96ae1943762ba06e4cee"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/branding.go": {
+    "mtime": 1777479093.5340314,
+    "hash": "d58ee1757c5aaca9fa73824a2fcf9744"
+  },
+  "/home/raul/Desktop/projects/shark/internal/storage/org_rbac.go": {
+    "mtime": 1777479093.5346882,
+    "hash": "44aad08ecfd55ddf48ac04cccb285a7d"
+  },
+  "/home/raul/Desktop/projects/shark/internal/identity/identity.go": {
+    "mtime": 1777045481.8276885,
+    "hash": "60f98975703e056f7fe901a8497f5883"
+  },
+  "/home/raul/Desktop/projects/shark/internal/identity/identity_test.go": {
+    "mtime": 1777045481.8281705,
+    "hash": "bc828175331c7763434aa5b249235288"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/main.go": {
+    "mtime": 1777479093.4656315,
+    "hash": "1a594f41dc90c0e3b6ced6f448d5c284"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/session_show.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "96e144c419d2d001c7fbb1351e9b7d51"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/proxy_admin.go": {
+    "mtime": 1777479093.4635055,
+    "hash": "6c0109cf8e3fbd14a32ae0a0cafda122"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/api_key_revoke.go": {
+    "mtime": 1777301538.9072967,
+    "hash": "3d0bbf9339a483f804fc031d15c1bd4a"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/audit_export.go": {
+    "mtime": 1777301538.9102967,
+    "hash": "40619eb2f20dea0ff07fe04e7c0f3b38"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/adminapi.go": {
+    "mtime": 1777057699.9824305,
+    "hash": "d63ad0cf8bf06c0d0e4982d4c0140346"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/sso.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "3ddb8946d8ab3b128386112500034ace"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/user_show.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "dfbb97f44c6654b512add078ef4ba507"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/app_update.go": {
+    "mtime": 1777301538.9102967,
+    "hash": "680683a6e0e2b7a59409c892cd0fd3cf"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/agent_register.go": {
+    "mtime": 1777479093.4616966,
+    "hash": "81fcd6b2d24260a604c64b30c2bd1bd4"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/app_show.go": {
+    "mtime": 1777301538.9082968,
+    "hash": "4f538b4aeaf60f5e589e5875fb370295"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/api_key_rotate.go": {
+    "mtime": 1777301538.9072967,
+    "hash": "0317f8c01743642cb3b2d90ca7959e68"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/session_list.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "78195a4f9e2d14c99767dba1c3667470"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/sso_create.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "1258b5e8759cc7f9232c0209704e6bc1"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/reset_test.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "08391730c0a537766beafe244011a2dc"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/cli.go": {
+    "mtime": 1777301538.9102967,
+    "hash": "c6708c0e57a2b767e06c8211deb175d9"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/paywall.go": {
+    "mtime": 1777057772.9679294,
+    "hash": "c8314ba69834ccceda1a9a195c5bcab6"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/proxy_admin_test.go": {
+    "mtime": 1777057862.1345387,
+    "hash": "c7a3c75041aac011549f1a32a62e3d3f"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/api_key.go": {
+    "mtime": 1777301538.9072967,
+    "hash": "3f1dbfc7af622d9613a475a67e64358d"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/root.go": {
+    "mtime": 1777479093.4646313,
+    "hash": "4e368cd9044330c16408e21cfd146ad2"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/doctor.go": {
+    "mtime": 1777479093.461921,
+    "hash": "ec9a53ad0824999eb0006a7a1a0f0e21"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/auth_config_show.go": {
+    "mtime": 1777301538.9102967,
+    "hash": "c9c0cc9b98fed7bcf28cf3845730b6b0"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/app_create.go": {
+    "mtime": 1777301538.9082968,
+    "hash": "21342ea1cd2b514480b73ed424f40361"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/app_delete.go": {
+    "mtime": 1777301538.9082968,
+    "hash": "d71d439c713e2a0a7340e0e59bc252b0"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/audit.go": {
+    "mtime": 1777301538.9102967,
+    "hash": "300d311406132febacc32860e402b0e8"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/user_update.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "a384c301356e69d40e3c8148ea7d8ae9"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/agent_delete.go": {
+    "mtime": 1777301538.9022968,
+    "hash": "a8814b28bf78216cb772384eb9f30580"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/user_list.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "887f76e29b83d0bdfc1169350a635f8c"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/app_test.go": {
+    "mtime": 1777301538.9082968,
+    "hash": "83c368d6de924d0a089394ed2843f328"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/debug.go": {
+    "mtime": 1777301538.9112968,
+    "hash": "2839adf12456d28702a9d3034f94cc67"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/sso_update.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "771cebe149e9da8bdd26d483905d438f"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/agent_rotate_secret.go": {
+    "mtime": 1777301538.9072967,
+    "hash": "f5abf0a079cc80b5a299eed082844412"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/vault_provider_show.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "a0e6ff0ebfe16f4c290f68851912ce46"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/agent_update.go": {
+    "mtime": 1777301538.9072967,
+    "hash": "3ef0c64df2ae2309d210ac02364b859e"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/session_revoke.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "7b549a3c7c9f16c65ab8ae38fc8f3954"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/org.go": {
+    "mtime": 1777301538.9132967,
+    "hash": "b8269d3cef42d848cfac65c2b50c1a00"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/consent_list.go": {
+    "mtime": 1777301538.9112968,
+    "hash": "4e232533051dca10508e1d9f1c487f45"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/api_key_list.go": {
+    "mtime": 1777301538.9072967,
+    "hash": "6ef6028122a884b2ef2406ba8efaba51"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/json_output_test.go": {
+    "mtime": 1776958738.9487698,
+    "hash": "1bea4587b4befef147a0bc19097fefa6"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/proxy_jwks.go": {
+    "mtime": 1777479093.4645958,
+    "hash": "9918174561aab773931701b7bf1be12c"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/mode_test.go": {
+    "mtime": 1777479093.4632766,
+    "hash": "e32cbb7b9026b67f058c0c9c90101ca1"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/keys.go": {
+    "mtime": 1777301538.9132967,
+    "hash": "cc3ddd48bfa60dc2f96512cb6597cfe2"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/app_list.go": {
+    "mtime": 1777301538.9082968,
+    "hash": "39359963e73e8c740fe47106c81c9693"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/api_key_create.go": {
+    "mtime": 1777402433.949468,
+    "hash": "2a0ed5a5cc18184fb68c0e60b5ca7e49"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/admin_config_dump.go": {
+    "mtime": 1777301538.9022968,
+    "hash": "6ad96299542aac4c0fd96fdd5ecdcd9f"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/proxy_jwks_test.go": {
+    "mtime": 1776958738.9504595,
+    "hash": "3938f968d0f9d69774ff39a087d0bbf7"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/app.go": {
+    "mtime": 1776442843.6649058,
+    "hash": "8f956e38b186f443858885085f43e695"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/sso_list.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "ec5a313e163a2bea2beb70999cb42a1b"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/demo.go": {
+    "mtime": 1777479093.461921,
+    "hash": "9883fd9111129f320438f436795589ec"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/debug_decode_jwt.go": {
+    "mtime": 1777301538.9112968,
+    "hash": "21ed37f02010750179039a08eb8fe450"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/branding_test.go": {
+    "mtime": 1777057876.214635,
+    "hash": "fd0070d34585d08aaa7001fa16231e66"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/agent_show.go": {
+    "mtime": 1777301538.9072967,
+    "hash": "9ff8518862c46cad0bc6f06454e5c91d"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/proxy.go": {
+    "mtime": 1777047984.8801687,
+    "hash": "897a5db9e935f828b3f3ebc42e400e66"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/auth_config.go": {
+    "mtime": 1777301538.9102967,
+    "hash": "c55f544d815fb0ac084174a1110542bf"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/org_show.go": {
+    "mtime": 1777301538.9132967,
+    "hash": "a29c0a818540cabcbaf1ded243d412b6"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/user_tier.go": {
+    "mtime": 1777479093.4655852,
+    "hash": "6036389e92c919319531cc339cdc78b3"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/mode.go": {
+    "mtime": 1777479093.4626315,
+    "hash": "c9eb19948a369bcb40486bca7e2fe889"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/user_delete.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "7d8e2d4f350bc6eab17716c1189ad571"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/app_rotate.go": {
+    "mtime": 1777301538.9082968,
+    "hash": "64b5c25110ffe5533dd4d3b52b05187e"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/whoami.go": {
+    "mtime": 1777479093.4655852,
+    "hash": "a42d753c7b3e77008cfa2e6ce512d04d"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/init_removed_test.go": {
+    "mtime": 1777301538.9132967,
+    "hash": "54a409f41665b37eab24f931db8d36ce"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/vault.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "ea6792d44e1ecaf4d14769417a465746"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/serve_test.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "641c92a7284d4e851ab43d69cb334d44"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/sso_show.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "d85b43dd7ac70db5d1fb53edfc04de5c"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/admin.go": {
+    "mtime": 1777301538.9022968,
+    "hash": "b9249224d2ed89efd97f781d843a1e20"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/health.go": {
+    "mtime": 1777479093.461921,
+    "hash": "89db96753782abf5a003de3ea51abb8c"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/proxy_test.go": {
+    "mtime": 1777057952.078153,
+    "hash": "2f0128465200f05c4b35d6042505f46f"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/version.go": {
+    "mtime": 1777479093.4655852,
+    "hash": "c74058cceb3369fc20565e655ecb3e13"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/session.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "55dd908b65b5516b85be609b9d42981d"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/serve.go": {
+    "mtime": 1777479093.4646313,
+    "hash": "874c32ed1c588f1956939ab02c141528"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/reset.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "83082e8ad8f43dada9a2351dbd3d2bb1"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/consent.go": {
+    "mtime": 1777301538.9112968,
+    "hash": "26ff5718133b693935932126e8adf16b"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/user_tier_test.go": {
+    "mtime": 1777057889.5614297,
+    "hash": "2cda1bddab1ab4f1c23f613ca1b6e70f"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/branding.go": {
+    "mtime": 1777479093.461921,
+    "hash": "9b66b1c46b6a7ab389641c675dff33d6"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/sso_delete.go": {
+    "mtime": 1777301538.9162967,
+    "hash": "cb2cc989fa5e504ee87c4e27a680280a"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/agent_revoke_tokens.go": {
+    "mtime": 1777301538.9072967,
+    "hash": "352372f1162424bbf49955e065681b66"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/user_create.go": {
+    "mtime": 1777301538.9192967,
+    "hash": "eeaf4b4a9e26081ddb6de2d7e0ca7042"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00008_applications.sql": {
+    "mtime": 1776443565.1855245,
+    "hash": "1e64e2191382c0cc0827c004f186e14b"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00006_jwt.sql": {
+    "mtime": 1776443565.1845245,
+    "hash": "6a565a9b8e99a6ed4c008e9821c8e9c1"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00023_proxy_rules_tier_match.sql": {
+    "mtime": 1777045481.8255408,
+    "hash": "e363f5a82d30ac2619dc1a337d556b61"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00003_phase2_stats.sql": {
+    "mtime": 1776443565.183196,
+    "hash": "f23af5fda1bb0ceb435a0cb0a1554c61"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00004_organizations.sql": {
+    "mtime": 1776443565.183623,
+    "hash": "6aacd50573d5b05c7cb033e979a320d4"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00025_branding_design_tokens.sql": {
+    "mtime": 1777045481.8255408,
+    "hash": "bb8987d87d35d4d337a05eb35cec5517"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00002_indexes.sql": {
+    "mtime": 1776443565.1826127,
+    "hash": "fce9e1d7dc6299334a7c4d60cfbac17b"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00001_init.sql": {
+    "mtime": 1776443565.1815245,
+    "hash": "fd7d92477e6f3b2914bba8fc364928f9"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00007_org_rbac.sql": {
+    "mtime": 1776443565.1851945,
+    "hash": "a3650565849c9389db09d83d7f2363cc"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00024_proxy_rules_m2m.sql": {
+    "mtime": 1777045481.8255408,
+    "hash": "f91804e2a1dc623e2956245185987355"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/cmd/testdata/migrations/00005_webhooks.sql": {
+    "mtime": 1776443565.184325,
+    "hash": "62c3d2ecfc11ec6a85a88afb9b763198"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00017_branding_and_email_templates.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "9590bba3c6cdb2819fb67d0f8fdc9a13"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00029_user_deletion_cascades.sql": {
+    "mtime": 1777409013.2407906,
+    "hash": "6908064bd952644618046ea3962ac7cb"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00012_auth_flows.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "4db6a43aaa0231fcc4fd8e227f07db68"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00008_applications.sql": {
+    "mtime": 1776440414.6447234,
+    "hash": "1e64e2191382c0cc0827c004f186e14b"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/fs.go": {
+    "mtime": 1777056847.5005543,
+    "hash": "81658036296c465b93cc71ba25047e9c"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00020_application_slug.sql": {
+    "mtime": 1776958738.9525576,
+    "hash": "dd79d14fa2f65186279754f03661271b"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00027_vault_provider_extra_auth_params.sql": {
+    "mtime": 1777308951.9763482,
+    "hash": "d53a0b7df59a474abe49c7d9919ebc91"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00030_dpop_jtis.sql": {
+    "mtime": 1777479093.4660716,
+    "hash": "cdd01efa4ec73be2d29b9bacd2b9c233"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00006_jwt.sql": {
+    "mtime": 1776440351.1223974,
+    "hash": "6a565a9b8e99a6ed4c008e9821c8e9c1"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00011_vault.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "d14c53bdfe320cba5a178ad05938d6bf"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00022_proxy_rules_app_id.sql": {
+    "mtime": 1776958738.9529374,
+    "hash": "a87eec29f8d523ebee62897cc356354c"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00009_last_login_at.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "9e9064a840e13b5194543711958fe533"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00023_proxy_rules_tier_match.sql": {
+    "mtime": 1777045481.8255408,
+    "hash": "e363f5a82d30ac2619dc1a337d556b61"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00018_client_secret_rotation.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "770c2bb1f63cb6145bae14a009c619ed"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00015_proxy_rules.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "756210c3676b85f8cb90b1430c03883e"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00003_phase2_stats.sql": {
+    "mtime": 1776360332.0932357,
+    "hash": "f23af5fda1bb0ceb435a0cb0a1554c61"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00010_oauth.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "80539999b26169f749a220b585ccbf20"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00019_mfa_pending_verification.sql": {
+    "mtime": 1776958738.9523494,
+    "hash": "cad33c579e94b28b1fce236cbc8013a2"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00013_oauth_pkce_sessions.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "67ce814c8bb0e690ffc6953aa618c99f"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00004_organizations.sql": {
+    "mtime": 1776362146.572489,
+    "hash": "6aacd50573d5b05c7cb033e979a320d4"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00016_audit_logs_extended_filters.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "28e34541073164ad99c526c41730e692"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00014_oauth_token_request_id.sql": {
+    "mtime": 1776958738.9512146,
+    "hash": "0b1454ca5208bfb980d8848e516e6e4b"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00021_proxy_transparent_fields.sql": {
+    "mtime": 1776958738.9527543,
+    "hash": "0cb716c3be2d225bfc0216847c2519fd"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00025_branding_design_tokens.sql": {
+    "mtime": 1777045481.8256884,
+    "hash": "368c705ed6696174ef1003eae0dc0b50"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00002_indexes.sql": {
+    "mtime": 1776098913.077023,
+    "hash": "fce9e1d7dc6299334a7c4d60cfbac17b"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00001_init.sql": {
+    "mtime": 1775779522.9819427,
+    "hash": "fd7d92477e6f3b2914bba8fc364928f9"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00007_org_rbac.sql": {
+    "mtime": 1776440378.5845368,
+    "hash": "a3650565849c9389db09d83d7f2363cc"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00026_system_config.sql": {
+    "mtime": 1777301538.920297,
+    "hash": "b5f87f8a09422e7589a1efe210cb60ff"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00024_proxy_rules_m2m.sql": {
+    "mtime": 1777045481.8255408,
+    "hash": "d1c8a03f1e9aae79a4622b3a74283167"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00028_may_act_grants.sql": {
+    "mtime": 1777319750.8423526,
+    "hash": "f6ffcf08afdd3252545d43f6d8e8d031"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/migrations/00005_webhooks.sql": {
+    "mtime": 1776362682.3496156,
+    "hash": "62c3d2ecfc11ec6a85a88afb9b763198"
+  },
+  "/home/raul/Desktop/projects/shark/tests/stress/stress.go": {
+    "mtime": 1777479093.6881263,
+    "hash": "343025151a81ffbe4a949dc660947c74"
+  },
+  "/home/raul/Desktop/projects/shark/tests/sdk/test_claims.py": {
+    "mtime": 1777301539.176299,
+    "hash": "224c4b4a113f28964bebd86a8e3e0844"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_vault_proxy_flows.py": {
+    "mtime": 1777301539.189299,
+    "hash": "022895421265bec890247400d9fcdaec"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_method_7_list_agents.py": {
+    "mtime": 1777301539.1942992,
+    "hash": "03c7191b9602f39f904956175d96f746"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_agent_flow_refresh_rotation.py": {
+    "mtime": 1777301539.177299,
+    "hash": "1ab8325979693f176b9ad0e342794656"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w17_identity_settings_cleanup.py": {
+    "mtime": 1777301539.1902993,
+    "hash": "8d5c1bcb7a08faa8bc69a50c68c6c660"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_bulk_pattern_revoke.py": {
+    "mtime": 1777564326.1959832,
+    "hash": "eec37b294cf11e4a38d043c50347935d"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_proxy_dpop.py": {
+    "mtime": 1777301539.1852992,
+    "hash": "ab2e37c2fac5792e402cd488cfde9eda"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_cli_ops.py": {
+    "mtime": 1777301539.180299,
+    "hash": "d0e9b32129434749f62801ac00b70e68"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w1_edit3_delegation_policies.py": {
+    "mtime": 1777301539.1932993,
+    "hash": "644458a155bb7e0cf400d9e93ab6051d"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_oauth_flows.py": {
+    "mtime": 1776958739.0279183,
+    "hash": "e99a893e4637ac6f1aeb199e857655f6"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_stats_audit.py": {
+    "mtime": 1776958739.0279183,
+    "hash": "54948ec6cbcfacc2086a06fa2d372d32"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_overview_real_metrics.py": {
+    "mtime": 1777913285.5498996,
+    "hash": "b377585d3f52dacf091fd69f74cf7d0c"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_cascade_revoke.py": {
+    "mtime": 1777301539.179299,
+    "hash": "faa2562fe45894f94c754530333cfe9a"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_auth.py": {
+    "mtime": 1776958739.0279183,
+    "hash": "5da846c2de74b5509ccfe509a62148b9"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_sdk_integration.py": {
+    "mtime": 1777301539.189299,
+    "hash": "fb80743d7a7458657c40cc37ad6032ce"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_email_redirect_wiring.py": {
+    "mtime": 1777301539.183299,
+    "hash": "423d57220947b42e4e91f0cd35b21be4"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_proxy_tier_gate.py": {
+    "mtime": 1777301539.189299,
+    "hash": "0c9b5b0a3ad7ecce48faf5b9604dbdf1"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w19_delegation_canvas.py": {
+    "mtime": 1777301539.1902993,
+    "hash": "c074c81c4a317985b3d09823a64ee9ec"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_http_with_dpop.py": {
+    "mtime": 1777301539.1942992,
+    "hash": "b71673d2a4c71160430313648ec423db"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_cli_user_sso_agent_session.py": {
+    "mtime": 1777564326.1969833,
+    "hash": "64a9abfb4dcc372a06ab0fd85d9b4b3b"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_f8_quickstart_doc.py": {
+    "mtime": 1777301539.184299,
+    "hash": "2cada02f1f5d0b8f97c24ed2cca7fadf"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w17_get_started_rebuild.py": {
+    "mtime": 1777301539.1902993,
+    "hash": "afff7053dc4a22bbf601435f010b7df3"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_agent_flow_device.py": {
+    "mtime": 1777301539.177299,
+    "hash": "335af07e787cca698ee34d5b1c2884b5"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w3_demo_vault_hop.py": {
+    "mtime": 1777301539.1962993,
+    "hash": "c4b667497cd8371487ceb773154ee99d"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_f3_get_started_first_agent.py": {
+    "mtime": 1777301539.184299,
+    "hash": "ff3ed734b1583d8267702f00b9742075"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_webhooks_crud_and_delivery.py": {
+    "mtime": 1777301539.1972992,
+    "hash": "b1b3d8575297fafdcdb30bc31601f524"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w17_dev_email_banner.py": {
+    "mtime": 1777301539.189299,
+    "hash": "b2a15972d16a4e52f4fc741448c5c432"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_agent_flow_token_exchange.py": {
+    "mtime": 1777913285.5498996,
+    "hash": "bd2a8246ec3bd62668ffced52c274bc8"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w3_demo_html_report.py": {
+    "mtime": 1777301539.1962993,
+    "hash": "88fc04d9995e820061e2e745ef871331"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_method_5_agents_extras.py": {
+    "mtime": 1777301539.1942992,
+    "hash": "af38662ab29200a1ab56a2e3ad147ce6"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_user_sessions.py": {
+    "mtime": 1777913285.5499272,
+    "hash": "d2c12d3219f23d963050e2f33fb74c75"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_method_6_revoke_agents.py": {
+    "mtime": 1777301539.1942992,
+    "hash": "3883efc9cf11b84c5598d47f06aefcd2"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_delegation_audit_emission.py": {
+    "mtime": 1777301539.183299,
+    "hash": "0e6fc613d62d816c08ef794e6eba71f9"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_metadata.py": {
+    "mtime": 1777301539.184299,
+    "hash": "6e1c1103d9c9710224bf43236dd6d378"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_proxy_header_spoof_strip.py": {
+    "mtime": 1777301539.1852992,
+    "hash": "0b48f78f4d1a020769703c688833d809"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w1_edit5_get_started_agent_track.py": {
+    "mtime": 1777913285.5499272,
+    "hash": "83ee810079ed7b9bd29cbf33a47f5ab7"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_sdk_ergonomics.py": {
+    "mtime": 1776976045.9971092,
+    "hash": "0e9fe4326b448781d82bda05fd2c5e36"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w1_edit1_dpop_security_tab.py": {
+    "mtime": 1777301539.1902993,
+    "hash": "600d696ede648559d573be2c676b8681"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_agent_flow_dpop.py": {
+    "mtime": 1777301539.177299,
+    "hash": "e377552e99877abd6b626425a5cd7ed5"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_method_4_claims.py": {
+    "mtime": 1777301539.1942992,
+    "hash": "f4eb27a4933c139c508435b0ca9b6247"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_audit_no_random.py": {
+    "mtime": 1777301539.178299,
+    "hash": "a987f28fa2c2ef38e236d6afcfe8a618"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_method_8_bulk_revoke.py": {
+    "mtime": 1777913285.5499272,
+    "hash": "9d3a339525edf55750ce8ff1b388f9f4"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w15_advanced.py": {
+    "mtime": 1777301539.189299,
+    "hash": "dcf0036761c4aa38ffd05ef481d4cb7b"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_dev_email.py": {
+    "mtime": 1777301539.183299,
+    "hash": "4955e28cc1648da513118d5bbe68b1ff"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_device_flow_disabled.py": {
+    "mtime": 1777402464.842807,
+    "hash": "098982157143883d4efbd189ace6eab7"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_f10_openapi_scalar.py": {
+    "mtime": 1777479093.6866322,
+    "hash": "3b819faa23059d8d5d8b133ace1f316c"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_method_10_rotate_dpop.py": {
+    "mtime": 1777913285.5499272,
+    "hash": "ec22c695d99163271106f6b6ef536581"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_f5_doctor_command.py": {
+    "mtime": 1777564326.1979833,
+    "hash": "d7f23b6e05499f1028fef0d67b2b38cb"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w1_edit2_audit_breadcrumb.py": {
+    "mtime": 1777301539.1932993,
+    "hash": "0c6013e043435d67ecb0a8a03a81df07"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_rbac_compliance.py": {
+    "mtime": 1776958739.0279183,
+    "hash": "332438b3998c381f40c60fd4c2657ef0"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_dev_email_race_and_provider.py": {
+    "mtime": 1777301539.183299,
+    "hash": "16638781effd6618896cd817cd11fbb9"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_f4_serve_rerun_banner.py": {
+    "mtime": 1777564326.1979833,
+    "hash": "7e69e4f40c94a5e5b0d20841290ad80a"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_admin_polish_bundle.py": {
+    "mtime": 1777301539.1769667,
+    "hash": "408d7f616a09180c3dc27dd0fe403f2b"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w18_boot_polish.py": {
+    "mtime": 1777301539.1902993,
+    "hash": "ba08fbf7598d5a978d421a83108911dd"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_method_9_vault.py": {
+    "mtime": 1777308642.1749403,
+    "hash": "f4ba624ad2f0026d0538e39b868f5cad"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/conftest.py": {
+    "mtime": 1777913285.5498996,
+    "hash": "d5b55d1625eed012e6cefd4a40c7a2f8"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_f6_delegation_chain_render.py": {
+    "mtime": 1777301539.184299,
+    "hash": "709e404dcbc6e7d0f5b6bcc8a4164128"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w15_delete_user_revokes_tokens.py": {
+    "mtime": 1777301539.189299,
+    "hash": "a1a3fb941fa58cfecae52cd7f8151b52"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_f2_login_hint.py": {
+    "mtime": 1777301539.184299,
+    "hash": "ff6418fd44aaa41df19e04552b0dbfdc"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_f7_delegation_canvas.py": {
+    "mtime": 1777301539.184299,
+    "hash": "f2cb04fe16d182482876ad357990a3d4"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_proxy_lifecycle.py": {
+    "mtime": 1777301539.1882992,
+    "hash": "9cc602a66a1cbafe69eb5ee047fb4e4e"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_org_rbac.py": {
+    "mtime": 1776958739.0279183,
+    "hash": "4cadbd1df91217427794f3b924654945"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_admin_deep.py": {
+    "mtime": 1776958739.0279183,
+    "hash": "8eca429025de10cc483cac119182923b"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_agent_flow_dcr.py": {
+    "mtime": 1777301539.177299,
+    "hash": "f1d89af541e7ddbd60a16c46040616b1"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_agents_table_filters.py": {
+    "mtime": 1777301539.178299,
+    "hash": "5035c63b8f37b4793e2af5f1c13b05c2"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_proxy_rules_idempotency.py": {
+    "mtime": 1777301539.189299,
+    "hash": "607f209f7d3df863ddff50950df6682e"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_admin_mgmt.py": {
+    "mtime": 1777301539.1769667,
+    "hash": "eac6013c5810b2fdd119c97140e72ed7"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_delegation_chains_page.py": {
+    "mtime": 1777301539.183299,
+    "hash": "0d83ad3ccbbbc22685a8d747ab7a2a21"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_get_token_dpop.py": {
+    "mtime": 1777301539.1942992,
+    "hash": "c880970d4d6580ff3f4ab9797f6f0840"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w1_edit4_agent_security_card.py": {
+    "mtime": 1777913285.5499272,
+    "hash": "33d9be7c23f364411d096cc180f420a4"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w15_gateway.py": {
+    "mtime": 1776958739.0279183,
+    "hash": "9a45c005aabcee89c830c206bbfd334a"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w15_disable_revokes_tokens.py": {
+    "mtime": 1777301539.189299,
+    "hash": "939ca97172adac4c1b7c43d06d3d18c2"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w17_coming_soon_routes.py": {
+    "mtime": 1777913285.5499272,
+    "hash": "5fc9282d7ab9d9707166f48f01c8f537"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_vault_disconnect_cascade.py": {
+    "mtime": 1777913285.5499272,
+    "hash": "03421c37cc82a1a4e83f2ab020d05201"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_oauth_advanced.py": {
+    "mtime": 1777301539.184299,
+    "hash": "5d2a3b606146a40a4129c86f64c719b6"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w3_demo_command.py": {
+    "mtime": 1777564326.1999834,
+    "hash": "a590fff2892f415c957c7b645b2cf76e"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_proxy_paywall_render.py": {
+    "mtime": 1777301539.189299,
+    "hash": "1b74d21213c6700d676a3554f743cbb0"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_agent_flow_pkce.py": {
+    "mtime": 1777301539.177299,
+    "hash": "cf37c2389b3c31491ec73e2d855be977"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/test_w2_sdk_token_exchange.py": {
+    "mtime": 1777301539.1962993,
+    "hash": "b006b1551b1963c71ad9eedad7c21f5c"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/claims.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "54c16e6794e8f657dbac47646f34ee58"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/paywall.py": {
+    "mtime": 1777057732.1816506,
+    "hash": "9d4ba80605223eb38c9d11b03bbc24a3"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/rbac.py": {
+    "mtime": 1777301539.1602988,
+    "hash": "c582f0545e22600fc9f2ae5d1776b89c"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/proxy_rules.py": {
+    "mtime": 1777308642.1677153,
+    "hash": "a68c19b5f213f38111bb40b12f48bdfa"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/api_keys.py": {
+    "mtime": 1777301539.155299,
+    "hash": "75d579f0c2c00de18c9c4c6fecaafb09"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/audit.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "98356052576976760b03c7fcd3984888"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/agents.py": {
+    "mtime": 1777301539.155299,
+    "hash": "5ab7e28dd1740507589d887800a8cb3e"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/organizations.py": {
+    "mtime": 1777301539.1572988,
+    "hash": "4b707bbfc20670774db56175bbc8ab39"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/session.py": {
+    "mtime": 1776975960.8494556,
+    "hash": "1039037c057d7cbec8eee43e52cb835d"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/proxy_lifecycle.py": {
+    "mtime": 1777057712.2685144,
+    "hash": "91ddf43db52d59ccc15340f269451c96"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/dcr.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "94f8ec83d27a85b95392f14ebc9e908d"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/__init__.py": {
+    "mtime": 1777319750.8193524,
+    "hash": "08ceb43ae1f1339f86d58c85bb4ae0f7"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/_http.py": {
+    "mtime": 1776958739.0204446,
+    "hash": "7b62c602c53677c57b8560f98a90c4eb"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/sessions.py": {
+    "mtime": 1777301539.1632988,
+    "hash": "0bb8974200c2067c9e872ee00ef2dce4"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/oauth.py": {
+    "mtime": 1777913285.5479274,
+    "hash": "eab694e87722b2af88f9265eaa7d1b7f"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/auth.py": {
+    "mtime": 1777308642.1666543,
+    "hash": "129890a0f2749eb8830bcba60d18138f"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/device_flow.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "09f64a390a6eba13cde5356e4d08e614"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/mfa.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "cd9fd8a2d5c67fc467aaa6df53c97c9e"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/may_act.py": {
+    "mtime": 1777319750.8513913,
+    "hash": "e9cda04c3a1ebc626c684e8beb2cc337"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/dpop.py": {
+    "mtime": 1776975948.202472,
+    "hash": "7a0571e8234b06b6653953222d3631a5"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/client.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "ef71b99f55799c1747e4bc4fc7d9162b"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/webhooks.py": {
+    "mtime": 1777301539.164299,
+    "hash": "a0741847767ae82d05d2b42ca54f7904"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/users.py": {
+    "mtime": 1777308642.1679754,
+    "hash": "486c3c418c441b5e65ee50dba9cc0f42"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/errors.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "0012a76a5c20b04df2c4ea61f9785707"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/vault.py": {
+    "mtime": 1777308642.1683629,
+    "hash": "1330e114d5377dc7a5695d807429a578"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/apps.py": {
+    "mtime": 1777308642.1666028,
+    "hash": "f1ff05968b75df2bf0adcc5743f76e4f"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/branding.py": {
+    "mtime": 1777057720.8815734,
+    "hash": "232b9c1e38ec7352e373e9ff4c49891d"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/consents.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "3d6f598d350cad545cc03a62f07cd53e"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/magic_link.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "736171329e4493592e898acf6c16d31e"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/shark_auth/http_client.py": {
+    "mtime": 1777301539.1562989,
+    "hash": "0af7c86e1781ee875a75c7ce13b73ed7"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_get_token_with_dpop_unit.py": {
+    "mtime": 1777301539.164299,
+    "hash": "ee394598cac16bc9d6fd5f2cefcda9ab"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_vault.py": {
+    "mtime": 1777913285.5489273,
+    "hash": "d4fb7630c650ec0bdc8400f22b645b86"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_auth.py": {
+    "mtime": 1777304056.099181,
+    "hash": "b59fc36743889d51e605a45d61b19b3d"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_may_act.py": {
+    "mtime": 1777319750.8515582,
+    "hash": "2ddd347d2a1a3ef7c0f815f2a1968667"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_token_exchange_unit.py": {
+    "mtime": 1777913285.5489273,
+    "hash": "e52834a95a6b41b7d2d0da1526a04048"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_paywall.py": {
+    "mtime": 1777057841.9214005,
+    "hash": "9774326fbfff21289d69b5223d4b5dea"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_proxy_rules.py": {
+    "mtime": 1777308642.1692064,
+    "hash": "042ded939d9152038c7195c7b95aae60"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_device_flow.py": {
+    "mtime": 1777913285.5479274,
+    "hash": "b78a13b44a45063ec9d704cb1074474f"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_dpop.py": {
+    "mtime": 1776958739.0223067,
+    "hash": "20a0bb325643444bbaf3d96ad83377a1"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_tokens.py": {
+    "mtime": 1776958739.0224454,
+    "hash": "903fa63b73d990bce8469352a7fd14cc"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/conftest.py": {
+    "mtime": 1776958739.021794,
+    "hash": "7d16af7f8f37aa45fc6dbfab29f210f1"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_proxy_lifecycle.py": {
+    "mtime": 1777057817.451707,
+    "hash": "6f26dad929862b35d3d53bde3e24f35f"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_branding.py": {
+    "mtime": 1777057829.1163132,
+    "hash": "074e0c22b5426b53948ab644f93bbfbd"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_agents.py": {
+    "mtime": 1777308642.1683629,
+    "hash": "b82b3f3f3fa11c5b25bb59f805b32c79"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_users.py": {
+    "mtime": 1777308642.1692064,
+    "hash": "0d7aa9c4b2258a639426b32f0553afb9"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_smoke_admin.py": {
+    "mtime": 1777305346.9398637,
+    "hash": "558a46ea18df952cd5cbcf9f6f438cc0"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/tests/test_http_with_dpop_unit.py": {
+    "mtime": 1777301539.164299,
+    "hash": "d57739fe74ba7fbd46ac2c92bc50b4bb"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/vitest.config.ts": {
+    "mtime": 1776958739.0257778,
+    "hash": "95ee1e78718444217cff14b11836ee49"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/tsup.config.ts": {
+    "mtime": 1776958739.0255938,
+    "hash": "33b292a17d32dadca904bca0fac2bc02"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/proxyRules.test.ts": {
+    "mtime": 1777308642.173182,
+    "hash": "e442829a17a828ff6577710febe4f7fa"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/proxyLifecycle.test.ts": {
+    "mtime": 1777058074.5252314,
+    "hash": "25aec24c2f9d0374e3de3ed29d12f586"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/users.test.ts": {
+    "mtime": 1777308642.173347,
+    "hash": "70c913a794e5ba7d7d3529ed9cff086d"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/sharkClient.test.ts": {
+    "mtime": 1777058074.5262249,
+    "hash": "4e1cb3c26dd3279f9096c169fe52fbba"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/paywall.test.ts": {
+    "mtime": 1777058074.524055,
+    "hash": "07eb0a72377177f389f05b8e85e3cfd0"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/vault.test.ts": {
+    "mtime": 1777564326.1959832,
+    "hash": "743154d974468e864d5357642beb1172"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/auth.test.ts": {
+    "mtime": 1777304200.3723636,
+    "hash": "5c6321227320229247e9030ae3f02169"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/smoke.test.ts": {
+    "mtime": 1777307661.8824189,
+    "hash": "53bab02d30da7e3c1308fa82abe79bea"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/branding.test.ts": {
+    "mtime": 1777058074.5235302,
+    "hash": "ccf1119971ff7ddfb4f0a6d311e25e27"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/mayAct.test.ts": {
+    "mtime": 1777319750.8518777,
+    "hash": "5647033e9a616577d0d0cac960105138"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/agents.test.ts": {
+    "mtime": 1777308642.1726544,
+    "hash": "679083fca28c7a7936c31da0a08cb9e6"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/deviceFlow.test.ts": {
+    "mtime": 1776958739.0244017,
+    "hash": "b196a41dee5f7f12bdfd706ef30fe613"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/test/dpop.test.ts": {
+    "mtime": 1776958739.0246503,
+    "hash": "4f89e662b1554a4d25d898bc33baa5b0"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/http.ts": {
+    "mtime": 1776958739.0239832,
+    "hash": "b625a4e0e8125eacee332a5ed41cf936"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/webhooks.ts": {
+    "mtime": 1777301539.173299,
+    "hash": "ecbeff83e4038de2977d354f0af7a2df"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/sessions.ts": {
+    "mtime": 1777301539.173299,
+    "hash": "edb912619ab0aa34ac3e69558f804558"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/organizations.ts": {
+    "mtime": 1777301539.173299,
+    "hash": "c97c7fb7f65de8627810e6bce157ba97"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/vault.ts": {
+    "mtime": 1777398425.1510658,
+    "hash": "d6670199f51427ff9b2423203e5de226"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/errors.ts": {
+    "mtime": 1777058074.520457,
+    "hash": "c7d6cc7a408f63cc27c6466fb9318dd0"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/branding.ts": {
+    "mtime": 1777058074.5199416,
+    "hash": "485099ca2e4336a50f6e99f045ab3b0d"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/exchange.ts": {
+    "mtime": 1776974895.0440361,
+    "hash": "1c6ea2bd03d52d89d0563420328648ba"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/paywall.ts": {
+    "mtime": 1777058074.5210402,
+    "hash": "59d8076d56367d57e05f8bcc6825f9c4"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/dcr.ts": {
+    "mtime": 1777301539.169299,
+    "hash": "310c5cee4c6fa76c85fdc0febbc36243"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/mayAct.ts": {
+    "mtime": 1777319750.8517263,
+    "hash": "423f5a8559118e82e1f91a76b5750f99"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/apiKeys.ts": {
+    "mtime": 1777301539.165299,
+    "hash": "0171a18691830ea66bc18f5ec9baf17d"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/proxyLifecycle.ts": {
+    "mtime": 1777058074.5214255,
+    "hash": "a55644fef3b4229d48adc160fc4f88dd"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/auth.ts": {
+    "mtime": 1777308642.1706545,
+    "hash": "d0dc50e5a7513bbc924d86bdbf2caed1"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/users.ts": {
+    "mtime": 1777308642.1713853,
+    "hash": "a58334b14b486d1e92b7540dd4ad768f"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/index.ts": {
+    "mtime": 1777319750.8203523,
+    "hash": "f99e5b063e80a8bbff7ee506a393a9de"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/mfa.ts": {
+    "mtime": 1777301539.172299,
+    "hash": "a58cdf3858b1dd73faafe3569bb60cfd"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/audit.ts": {
+    "mtime": 1777301539.1662989,
+    "hash": "d94b76c3faa2fe32ac154e95ef3816d3"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/oauth.ts": {
+    "mtime": 1777301539.173299,
+    "hash": "171cb2f83bb4c86f03abe9bdbcef480e"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/apps.ts": {
+    "mtime": 1777308642.1705353,
+    "hash": "c8921fdd8c3cb01dc3201520e00b6a04"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/agents.ts": {
+    "mtime": 1777308642.1701646,
+    "hash": "3b2f91dcc7a381e709bc50c6772f67e0"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/consents.ts": {
+    "mtime": 1777301539.1662989,
+    "hash": "079fcbc5c36c54dece0c708f872233e5"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/sharkClient.ts": {
+    "mtime": 1777301539.173299,
+    "hash": "a2c90484dbd477c201fded4c4fb449e2"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/dpop.ts": {
+    "mtime": 1776975389.7674985,
+    "hash": "4882b0d000cd7d883322568fbd267e55"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/rbac.ts": {
+    "mtime": 1777301539.173299,
+    "hash": "76786c116cfbcfb302a97c89dfe8ae2b"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/proxyRules.ts": {
+    "mtime": 1777308642.171117,
+    "hash": "e972c194e7b535667996ce5583a1fdf3"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/magicLink.ts": {
+    "mtime": 1777301539.172299,
+    "hash": "ddbddcda7adbbd7f48b36075b1d1aa5e"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/src/deviceFlow.ts": {
+    "mtime": 1777301539.172299,
+    "hash": "6eff09a063840d56888fdef378f3ab30"
+  },
+  "/home/raul/Desktop/projects/shark/tools/agent_demo_tester.py": {
+    "mtime": 1777479093.6886253,
+    "hash": "8a47c5731d383a6787259f196cf0fa34"
+  },
+  "/home/raul/Desktop/projects/shark/tools/agent_demo_concierge.py": {
+    "mtime": 1777301539.1972992,
+    "hash": "60f10ba9f58dea7a5e3797bb49175816"
+  },
+  "/home/raul/Desktop/projects/shark/migrations/00027_vault_provider_extra_auth_params.sql": {
+    "mtime": 1777307382.5395706,
+    "hash": "d53a0b7df59a474abe49c7d9919ebc91"
+  },
+  "/home/raul/Desktop/projects/shark/migrations/00026_system_config.sql": {
+    "mtime": 1777301539.1392987,
+    "hash": "b5f87f8a09422e7589a1efe210cb60ff"
+  },
+  "/home/raul/Desktop/projects/shark/CONTRIBUTING.md": {
+    "mtime": 1777913285.519927,
+    "hash": "7ce250f0d6f3e09a704c9514b0ce5116"
+  },
+  "/home/raul/Desktop/projects/shark/PRODUCT.md": {
+    "mtime": 1777569915.4202127,
+    "hash": "2137a03b7e74a2f229cb806fcdbe6274"
+  },
+  "/home/raul/Desktop/projects/shark/README.md": {
+    "mtime": 1777913285.519927,
+    "hash": "0049ac2e32c1e076a1f694f2d444f119"
+  },
+  "/home/raul/Desktop/projects/shark/CODE_OF_CONDUCT.md": {
+    "mtime": 1777913285.519927,
+    "hash": "74ae96cb900ed4a67d65c41c9389984d"
+  },
+  "/home/raul/Desktop/projects/shark/pnpm-workspace.yaml": {
+    "mtime": 1777564326.1929832,
+    "hash": "bf6beff3f2d840e8e756435a9226f8c9"
+  },
+  "/home/raul/Desktop/projects/shark/sharkauth.local.yaml": {
+    "mtime": 1776099297.456126,
+    "hash": "b4e3b7d178ed8fdede77b183ad27773e"
+  },
+  "/home/raul/Desktop/projects/shark/demo-report.html": {
+    "mtime": 1777499605.5068564,
+    "hash": "e5bcd2c44cb6c65501f781ed02fc495f"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_03_HEADLESS_CI_AGENT.md": {
+    "mtime": 1777301538.9216564,
+    "hash": "b592481f5890f5b936c6622c667c0d50"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_05_DPOP_ATTACK_DEFENSE.md": {
+    "mtime": 1777301538.9216564,
+    "hash": "eafc19de0770bfde7401f9de1f10a433"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_02_DELEGATION_CHAIN.md": {
+    "mtime": 1777301538.9216564,
+    "hash": "cea615cb36ec86663bc0305bd21ad297"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_03_ENTERPRISE_COMPLIANCE.md": {
+    "mtime": 1777301538.9216564,
+    "hash": "260171369bbe5d27a91152028332a838"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_04_WHITELABEL_RESELLER.md": {
+    "mtime": 1777301538.9216564,
+    "hash": "1859c3d949927309be6b3e590d731f40"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_01_AGENT_MARKETPLACE.md": {
+    "mtime": 1777301538.920297,
+    "hash": "f7dfa8226e649701762729ff64e4d31c"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_04_TOKEN_VAULT.md": {
+    "mtime": 1777479093.4663656,
+    "hash": "87fcd6d2b27c59b5b186556bb8f0534c"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_02_EDGE_PAYWALL_GATEWAY.md": {
+    "mtime": 1777301538.9216564,
+    "hash": "b0e0b1d7062241bda35ba17b4787d832"
+  },
+  "/home/raul/Desktop/projects/shark/demos/DEMO_01_MCP_COLD_START.md": {
+    "mtime": 1777301538.9216564,
+    "hash": "63115229a6f6852bc6fa85d785e7c372"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/README.md": {
+    "mtime": 1777301538.9242969,
+    "hash": "356b139e4318904058973e1e05edc993"
+  },
+  "/home/raul/Desktop/projects/shark/demos/delegation/DEMO.md": {
+    "mtime": 1777301538.923297,
+    "hash": "c8d3afb4663bd419ee7ce1968062a101"
+  },
+  "/home/raul/Desktop/projects/shark/admin/index.html": {
+    "mtime": 1777913285.519927,
+    "hash": "65755aa94c7494c5d45478cb2742f2f5"
+  },
+  "/home/raul/Desktop/projects/shark/admin/hosted.html": {
+    "mtime": 1776958738.9208555,
+    "hash": "ed22de25d9e4b19460ad4256855a559a"
+  },
+  "/home/raul/Desktop/projects/shark/examples/README.md": {
+    "mtime": 1776958738.957651,
+    "hash": "dd59d27a8605801dde7e5f5c39a36e8b"
+  },
+  "/home/raul/Desktop/projects/shark/examples/react-next/README.md": {
+    "mtime": 1777301539.054298,
+    "hash": "a15b0b2d6bdfe5d22fda550b934ab57a"
+  },
+  "/home/raul/Desktop/projects/shark/packages/shark-auth-react/README.md": {
+    "mtime": 1777301539.1392987,
+    "hash": "dec554f1b94adb85202d0c16bce7a14e"
+  },
+  "/home/raul/Desktop/projects/shark/secpunch/SECURITY_PUNCHLIST.md": {
+    "mtime": 1777913285.5489273,
+    "hash": "6793133d6b500101a2383a83add4b3fc"
+  },
+  "/home/raul/Desktop/projects/shark/gstack/02-yc-application.md": {
+    "mtime": 1777913285.5249271,
+    "hash": "f4f81da3d4f342b8bf6fdd868f799306"
+  },
+  "/home/raul/Desktop/projects/shark/bench/PHASE_B_PLAN.md": {
+    "mtime": 1777306450.3417869,
+    "hash": "271ccf455d06afc02b6e2ab375c562cc"
+  },
+  "/home/raul/Desktop/projects/shark/bench/RESULTS.md": {
+    "mtime": 1777308304.9048765,
+    "hash": "489235df49b69958aba4b0b69160eca1"
+  },
+  "/home/raul/Desktop/projects/shark/bench/HANDOFF.md": {
+    "mtime": 1777308642.1546543,
+    "hash": "c92a8eb3a1a1a849bf3e53152c5da245"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/positioning-statement.md": {
+    "mtime": 1777926752.1225972,
+    "hash": "cd44c51a6193fb733200d249c762d4be"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/positioning-doc.md": {
+    "mtime": 1778009335.8399813,
+    "hash": "5e8dd4528f1e2dfb5a2b07f192a70cf8"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/innovafest.md": {
+    "mtime": 1777996869.4347425,
+    "hash": "a0af13cba49098b0638747b562c7d825"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/pitch-full.md": {
+    "mtime": 1778009263.1720777,
+    "hash": "249bd6c90eec1b4e3009c40ee3bd6f6b"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/pitch-5min.md": {
+    "mtime": 1778009273.184206,
+    "hash": "d4a97463b1a2a0f71a514d4727672955"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/pitch-1min.md": {
+    "mtime": 1778009297.27451,
+    "hash": "93b3c95122b7df859458ec381bd48ece"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/README.md": {
+    "mtime": 1778009323.0288267,
+    "hash": "cde6561a834bfcc98689494ccc0a6912"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/PROGRESS.md": {
+    "mtime": 1777926480.4315748,
+    "hash": "4dab2a3249de16286be757071f93edf0"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/agent-first-strategy.md": {
+    "mtime": 1778001937.4788878,
+    "hash": "3228505c674ab0ee22265459318e9e16"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/grounded-stats.md": {
+    "mtime": 1778009449.539273,
+    "hash": "d27a4298a31d95ead16c42a6be5f37e2"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/action-plan-30-days.md": {
+    "mtime": 1777926470.2314591,
+    "hash": "622bbc6a2005db96d41030237507f54d"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/skill.md": {
+    "mtime": 1778002272.6710463,
+    "hash": "6aef27828a07a7367827ac75925c51d8"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/competitive-alternatives.md": {
+    "mtime": 1778009370.4263887,
+    "hash": "c2d397405092c6c448859f2862e000f4"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/innovafest-video-script.md": {
+    "mtime": 1778009221.016521,
+    "hash": "d93d170a9a951ed990ba31915855ee96"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/pitch-appendix.md": {
+    "mtime": 1778009354.9102077,
+    "hash": "52b28fede4a567a966bcb8a6f0d14eff"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/pitch-scorecard.md": {
+    "mtime": 1778009352.6141806,
+    "hash": "5e4187388cb97aa6a047ae5dd7b392b8"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/reddit-post-llmdevs.md": {
+    "mtime": 1778011494.337,
+    "hash": "3cfa78226c12f0503a84d3eb2bd561fc"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/innovafest-pitch.pdf.md": {
+    "mtime": 1778009137.7693427,
+    "hash": "4f4a3b26cc35466259b9f471af33fe76"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/innovafest-pitch-print.md": {
+    "mtime": 1778009157.4336312,
+    "hash": "45dab132b0845c77737b6b6ffd99bf7f"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/pricing-landscape.md": {
+    "mtime": 1777926833.9714897,
+    "hash": "d74b29e704d8ba8a210946d0088e62dd"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/battle-plan-outcompete.md": {
+    "mtime": 1778000409.7562141,
+    "hash": "1f3fc1aa7e13380a5244a962c282e880"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/pitch-2min.md": {
+    "mtime": 1778009283.803341,
+    "hash": "383fb56b3f83fdfbf501d02ca30cfe99"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/competitors-report.md": {
+    "mtime": 1778009362.7382994,
+    "hash": "6ab1892690aae01ae308771d0dd0617f"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/competitive-matrix.md": {
+    "mtime": 1777926721.7932646,
+    "hash": "0a5250070180a5de77c292ca57341206"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/market-category-analysis.md": {
+    "mtime": 1777926996.6582458,
+    "hash": "a15a4fe923f3f9429fcd469d83870f5c"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/pitch-email.md": {
+    "mtime": 1778009316.162743,
+    "hash": "fd7db7346ac2535212da409bb0d17145"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/messaging-implications.md": {
+    "mtime": 1778009343.4880726,
+    "hash": "2fd044dab6ccf056ce28e8fca8a73e4b"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/innovafest-analysis.md": {
+    "mtime": 1778009193.1541388,
+    "hash": "2350812ecbe168eee6adb4db1fc40437"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/00-intake/brainstorm.md": {
+    "mtime": 1777924295.607831,
+    "hash": "d63c32b9edf6f61e7123939e3a7f35ab"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/00-intake/brief.md": {
+    "mtime": 1777924254.9365377,
+    "hash": "95d0108ac41bb1eaff3e3ec9a19f3208"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/02-strategy/lean-canvas.md": {
+    "mtime": 1778010230.5828538,
+    "hash": "9fec3bbbdc48bfc6972c85a50efd3cad"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/02-strategy/business-model.md": {
+    "mtime": 1777926238.7267706,
+    "hash": "4a27f01b1efbf3c41893fa8e8ffbe107"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/02-strategy/go-to-market.md": {
+    "mtime": 1777926285.6613264,
+    "hash": "3fd92c54524be52aa58e505f96bb5279"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/02-strategy/positioning.md": {
+    "mtime": 1777926259.8510215,
+    "hash": "ea289e599a83638a285bd74778b4bf75"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/02-strategy/value-proposition.md": {
+    "mtime": 1778010228.4178386,
+    "hash": "8341d74db470bc95ed7fb894c76c54d9"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/competitor-deep-dive/updated-competitive-landscape.md": {
+    "mtime": 1778000302.3768456,
+    "hash": "4b39c46123e83f3d0da8e4bbe75599ae"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/competitor-deep-dive/casdoor-analysis.md": {
+    "mtime": 1778000186.9134748,
+    "hash": "4bf96b49012b8593562cf22f338fddf8"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/competitor-deep-dive/zeroid-analysis.md": {
+    "mtime": 1778000179.501452,
+    "hash": "9aeeb212955bebbf1280d8ee70325d5b"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/battle-cards/auth0.md": {
+    "mtime": 1777926954.6407943,
+    "hash": "ab02f0014d6369ed683c3acb95aa4594"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/battle-cards/clerk.md": {
+    "mtime": 1777927142.0187995,
+    "hash": "cb413f5a7e69af31cc76f5b166aeaa3c"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/battle-cards/stytch.md": {
+    "mtime": 1777927080.3641422,
+    "hash": "13b3cdc05ef317c9eabca3842f01fd5b"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/battle-cards/ory.md": {
+    "mtime": 1777927017.927474,
+    "hash": "3845c1d664ce8e332dcc27bbb2e5265a"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/battle-cards/keycloak.md": {
+    "mtime": 1777926893.1051304,
+    "hash": "38485aa0848d62ad4c1dbf2006812598"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/market-analysis.md": {
+    "mtime": 1778010160.0173547,
+    "hash": "01409a8a05dfa8bcec4adf527d1bc4e4"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/research-gate.md": {
+    "mtime": 1778010091.261857,
+    "hash": "3fe05f8b7cc882f9bbc567001373d2a9"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/competitor-landscape.md": {
+    "mtime": 1778010150.163284,
+    "hash": "36ec0e905d1d82ef63bb56c9d366f22c"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/industry-trends.md": {
+    "mtime": 1778010106.6119692,
+    "hash": "4bc389e98dae202af15bb228136efb33"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/confidence-dashboard.md": {
+    "mtime": 1778010097.7699046,
+    "hash": "a372fb487b54cdb81ca42064d86fb068"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/target-audience.md": {
+    "mtime": 1778010144.2752419,
+    "hash": "9bc9df79cdfc5cf2d34aeba1de464748"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/trends.md": {
+    "mtime": 1778010219.048773,
+    "hash": "eb4f20bf5f371c4a0f07088423022237"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/indirect-competitors.md": {
+    "mtime": 1777925234.2215607,
+    "hash": "bc7d4b0cc204fb4ce3cb6ed5f22d8690"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/adjacent-markets.md": {
+    "mtime": 1777924578.4938688,
+    "hash": "d2241314c6e991dcf6b2370457d48830"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/market-size.md": {
+    "mtime": 1777924960.8666177,
+    "hash": "74d7785d12a5d119c5f8bae9e09fb420"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/geographic-entry.md": {
+    "mtime": 1777925750.8214588,
+    "hash": "493e7164153e039c0b21c317d55ec0c6"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/pricing-deep-dive.md": {
+    "mtime": 1777925852.8998852,
+    "hash": "dd282c0e045e7cc9cb8cfb2b86f62559"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/demand-signals.md": {
+    "mtime": 1777925607.329313,
+    "hash": "a84f3c53a4fc2eced5cc9679b9d89e7e"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/direct-competitors.md": {
+    "mtime": 1777925369.3052533,
+    "hash": "b06bd74471aa48b2c500e0bf43c009d8"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/partnerships.md": {
+    "mtime": 1777925664.2131858,
+    "hash": "5c116375f4ccfd90f67f9edd71a4fd91"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/target-audience.md": {
+    "mtime": 1777925625.6435974,
+    "hash": "5cf283699fa30a5b15554a6f3ba8c0be"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/distribution.md": {
+    "mtime": 1777925775.2478068,
+    "hash": "66385f5deb88a75b93b0dc4547d1f74b"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/competitor-gtm.md": {
+    "mtime": 1777925266.949245,
+    "hash": "be0ae6cfd0f4622233a47e3d3e7623fa"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/customer-voice.md": {
+    "mtime": 1778010252.413006,
+    "hash": "d602a915e256337a53b150f16d8ec1a9"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/regulatory.md": {
+    "mtime": 1777924610.333098,
+    "hash": "5aa757fc220c9ce6c2ac17299c96a452"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/01-discovery/raw/emerging-competitors.md": {
+    "mtime": 1777925335.197605,
+    "hash": "5d9c8465a286005ffd1cd760d763cb90"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/06-validation/scorecard.md": {
+    "mtime": 1778010235.4998882,
+    "hash": "f53d154ffc8c79f1d26c297fecd61118"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/06-validation/assumptions-tracker.md": {
+    "mtime": 1778010232.8638697,
+    "hash": "7a14ef0a494aa285af135c64c35addd3"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/06-validation/experiment-design.md": {
+    "mtime": 1777926399.0506456,
+    "hash": "8d22d17ac3e2c11c3e73f85726392d9f"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/06-validation/validation-playbook.md": {
+    "mtime": 1777926345.8040302,
+    "hash": "7fdd2cd76cf5963d07c99cce823707a0"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/06-validation/kill-criteria.md": {
+    "mtime": 1777926366.0122645,
+    "hash": "92c14a68a1b193a04856782852b68d2b"
+  },
+  "/home/raul/Desktop/projects/shark/startup/sharkauth/06-validation/risk-analysis.md": {
+    "mtime": 1777926322.7387614,
+    "hash": "1324f3dfcda2efd32af21d7a04f983c9"
+  },
+  "/home/raul/Desktop/projects/shark/content/hacker-news.md": {
+    "mtime": 1777916615.2098496,
+    "hash": "da5af03f1acaf526346ab8bc3bd8ad27"
+  },
+  "/home/raul/Desktop/projects/shark/content/short-form-scripts.md": {
+    "mtime": 1777916615.2102747,
+    "hash": "0f2f6c16e48f9c4fe7ad1c1b69bd0654"
+  },
+  "/home/raul/Desktop/projects/shark/content/x-thread.md": {
+    "mtime": 1777916615.2096279,
+    "hash": "a44a613bdfd2fbf9f39b57f6cbceff73"
+  },
+  "/home/raul/Desktop/projects/shark/content/linkedin-rescue-protocol.md": {
+    "mtime": 1777920842.6668348,
+    "hash": "f2aaa778fbe3cdf966a9afc7a78c983b"
+  },
+  "/home/raul/Desktop/projects/shark/content/linkedin-post-2.md": {
+    "mtime": 1777916615.21025,
+    "hash": "06ea39f99b94b352c99b2e911639a7ed"
+  },
+  "/home/raul/Desktop/projects/shark/content/reddit-posts.md": {
+    "mtime": 1777916615.2100477,
+    "hash": "8b8aee02706eef1a3d3f5caf8a81c4b1"
+  },
+  "/home/raul/Desktop/projects/shark/content/x-thread-2.md": {
+    "mtime": 1777916615.2100863,
+    "hash": "8a2ed0e2a7345d8a5f2ba56b6f6e4ab7"
+  },
+  "/home/raul/Desktop/projects/shark/content/devto-post.md": {
+    "mtime": 1777916615.2092419,
+    "hash": "1e0d2b0ceb0e4d08de7cb903b8f3af19"
+  },
+  "/home/raul/Desktop/projects/shark/content/linkedin-rewrite.md": {
+    "mtime": 1777918034.7978036,
+    "hash": "f18ca740b09e93602dfbb4ef57c22981"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/layout.html": {
+    "mtime": 1777564326.191032,
+    "hash": "feb3b164ba8a6c7e924ee9cae51f8af7"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/templates/magic_link.html": {
+    "mtime": 1775492373.6230533,
+    "hash": "bac4a7297aebfd50c890a40e2f3f12bd"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/templates/verify_email.html": {
+    "mtime": 1775492373.6231713,
+    "hash": "bc50f725bdb57096889beb9197a18b29"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/templates/password_reset.html": {
+    "mtime": 1775576272.8483071,
+    "hash": "5b4068362550fb4aeda173192c35cd3e"
+  },
+  "/home/raul/Desktop/projects/shark/internal/email/templates/organization_invitation.html": {
+    "mtime": 1776362279.014548,
+    "hash": "61e6ad4c90352e257f833321b758ac22"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/consent_templates/error.html": {
+    "mtime": 1776958738.9891813,
+    "hash": "75788fcd9f0100604d6e612c78cf6eeb"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/consent_templates/device_success.html": {
+    "mtime": 1776958738.9891813,
+    "hash": "e929191c58f0e17899868b4a2db14779"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/consent_templates/consent.html": {
+    "mtime": 1776958738.989067,
+    "hash": "0def0cb6ff30c5be74f9da8766cc3143"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/consent_templates/device_consent.html": {
+    "mtime": 1776958738.9891813,
+    "hash": "5f438843ccedad0b84c7bfa76da02aee"
+  },
+  "/home/raul/Desktop/projects/shark/internal/oauth/consent_templates/device_verify.html": {
+    "mtime": 1776958738.9891813,
+    "hash": "db6a0732ae71b6a4e3a0a43cde19c543"
+  },
+  "/home/raul/Desktop/projects/shark/internal/api/docs/openapi.bundled.yaml": {
+    "mtime": 1777479093.4990585,
+    "hash": "b1d46a78502a5ee0846e69d7a39a8da1"
+  },
+  "/home/raul/Desktop/projects/shark/cmd/shark/landingcopyactual.md": {
+    "mtime": 1777564809.1939175,
+    "hash": "19ec984f4299b98091b85f31ac797050"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke_test.yaml": {
+    "mtime": 1777479093.6881263,
+    "hash": "f75e12b0a83ee0100069fede5091f158"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/MAPPING.md": {
+    "mtime": 1776958739.0277202,
+    "hash": "4ead80e708176b284b9461ac8f2eb37d"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/TEST_RESULTS.md": {
+    "mtime": 1776958739.0277884,
+    "hash": "91164c660700734f814a34391cfd5f91"
+  },
+  "/home/raul/Desktop/projects/shark/tests/smoke/requirements.txt": {
+    "mtime": 1777913285.5498996,
+    "hash": "a712f2962115e2d6c57dd107b23a622e"
+  },
+  "/home/raul/Desktop/projects/shark/marketing/product-marketing-context.md": {
+    "mtime": 1777916619.507951,
+    "hash": "0ce93eef73960b2dcf5273fa37588a50"
+  },
+  "/home/raul/Desktop/projects/shark/marketing/daily-checklist.md": {
+    "mtime": 1777918048.6399088,
+    "hash": "b11a6a73693df9be3a7e80a7862707e0"
+  },
+  "/home/raul/Desktop/projects/shark/marketing/launch-week-playbook.md": {
+    "mtime": 1777918065.1040335,
+    "hash": "cb15a709cf5e08ae9ee8ee2bc6f008ee"
+  },
+  "/home/raul/Desktop/projects/shark/marketing/directories/directory-tracker.md": {
+    "mtime": 1777916619.5088317,
+    "hash": "b76ce8da70cd783a286b0d3d14bfae52"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/python/README.md": {
+    "mtime": 1777913285.5479274,
+    "hash": "e972301b1bea5867e2b5bbc661b1a9bc"
+  },
+  "/home/raul/Desktop/projects/shark/sdk/typescript/README.md": {
+    "mtime": 1777913285.5489273,
+    "hash": "497fbec438a853f352ef8b910bcb5898"
+  },
+  "/home/raul/Desktop/projects/shark/innovafest2026/Convocatoria-Monterrey-09-marzo-2026.pdf": {
+    "mtime": 1777923823.479413,
+    "hash": "50dde44cc6eeb3208765f1745963a472"
+  },
+  "/home/raul/Desktop/projects/shark/sharkyrectangular.svg": {
+    "mtime": 1776469647.3505952,
+    "hash": "a277d37ed0af65ee112c64e575566c10"
+  },
+  "/home/raul/Desktop/projects/shark/sharky.svg": {
+    "mtime": 1776466493.699115,
+    "hash": "0aa0a99b8ee2de2cfc5940b7d37c8605"
+  },
+  "/home/raul/Desktop/projects/shark/data/assets/branding/47b3966b7a8342dbda77ef2eaf53cd3580e7d5b231d7ece52e9c0d1e410dfdfb.svg": {
+    "mtime": 1776893419.5657701,
+    "hash": "a277d37ed0af65ee112c64e575566c10"
+  },
+  "/home/raul/Desktop/projects/shark/data/assets/branding/72cc07246b6e4128408004c63a91592e2c8caf74176a1bf9bd88f5c7c2e2e761.svg": {
+    "mtime": 1776890587.9878824,
+    "hash": "0e648475c8073457edc7c36c55f8dd9a"
+  },
+  "/home/raul/Desktop/projects/shark/data/assets/branding/a0fe3fb58bc08efd81e8f30d8fbaf2c50269e859de11b4c396a0a50e28ac8e2a.png": {
+    "mtime": 1776967018.2938483,
+    "hash": "c859e83d1efbcc21f25a6629c0d26b99"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/assets/sharky-full.png": {
+    "mtime": 1776958738.9217968,
+    "hash": "10710d0b05095a19135db10fc8c14ac2"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/assets/sharky-glyph.png": {
+    "mtime": 1776958738.9220636,
+    "hash": "4db50b2a355dd29fac9e0ff66931e74a"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/assets/sharky-wordmark.png": {
+    "mtime": 1776958738.9220636,
+    "hash": "b9a2305c3f1cb15501794c20e40c2fd7"
+  },
+  "/home/raul/Desktop/projects/shark/admin/src/assets/sharky-icon.png": {
+    "mtime": 1776958738.9220636,
+    "hash": "2fcb3244144e10d7f4bc2155d8d7c9b6"
+  },
+  "/home/raul/Desktop/projects/shark/images/dashboard.png": {
+    "mtime": 1777572976.0636165,
+    "hash": "67378cbfaee344fe5f15c7016fa4f578"
+  },
+  "/home/raul/Desktop/projects/shark/images/demo.gif": {
+    "mtime": 1777913285.5359273,
+    "hash": "3b1fb1d55568c93ed12bb4f7cdd6ac7a"
+  },
+  "/home/raul/Desktop/projects/shark/images/del_chains1.png": {
+    "mtime": 1777321261.4962595,
+    "hash": "ff46270ab4f1e906777c056591d978ea"
+  },
+  "/home/raul/Desktop/projects/shark/images/del_chains4.png": {
+    "mtime": 1777321409.246141,
+    "hash": "c7149a7be66977a507d4d8fa14cc086c"
+  },
+  "/home/raul/Desktop/projects/shark/images/del_chains3.png": {
+    "mtime": 1777321351.4047256,
+    "hash": "9cfcb59cf203b5d770929f855e3bb580"
+  },
+  "/home/raul/Desktop/projects/shark/images/del_chains2.png": {
+    "mtime": 1777321304.3020625,
+    "hash": "cc45f33a5fefabf0071908ff2764e86a"
+  },
+  "/home/raul/Desktop/projects/shark/videos/demoo1.mp4": {
+    "mtime": 1777493947.4254334,
+    "hash": "e32a71ff69381ac57141838f12cc8a46"
+  }
+}
