@@ -731,7 +731,7 @@ type DayCount struct {
 type ListUsersOpts struct {
 	Limit         int
 	Offset        int
-	Search        string // optional email/name search
+	Search        string // optional id/email/name search
 	MFAEnabled    *bool  // filter by mfa_enabled
 	EmailVerified *bool  // filter by email_verified
 	RoleID        string // filter by role assignment
