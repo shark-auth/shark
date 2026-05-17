@@ -257,9 +257,9 @@ func userListConditions(opts ListUsersOpts) ([]string, []interface{}) {
 		args = append(args, opts.RoleID)
 	}
 	if opts.Search != "" {
-		conditions = append(conditions, `(email LIKE ? OR name LIKE ?)`)
+		conditions = append(conditions, `(id LIKE ? OR email LIKE ? OR name LIKE ?)`)
 		search := "%" + opts.Search + "%"
-		args = append(args, search, search)
+		args = append(args, search, search, search)
 	}
 	if opts.MFAEnabled != nil {
 		conditions = append(conditions, `mfa_enabled = ?`)

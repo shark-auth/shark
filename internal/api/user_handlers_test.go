@@ -94,6 +94,45 @@ func TestAdminListUsers_SnakeCaseShape(t *testing.T) {
 	}
 }
 
+func TestAdminListUsers_SearchMatchesUserID(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	u := &storage.User{
+		ID:        "usr_agent_owner_123",
+		Email:     "agent-owner@example.com",
+		HashType:  "argon2id",
+		Metadata:  "{}",
+		CreatedAt: now.Format(time.RFC3339),
+		UpdatedAt: now.Format(time.RFC3339),
+	}
+	if err := ts.Store.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := ts.GetWithAdminKey("/api/v1/users?search=usr_agent_owner_123")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var body struct {
+		Users []struct {
+			ID    string `json:"id"`
+			Email string `json:"email"`
+		} `json:"users"`
+		Total int `json:"total"`
+	}
+	ts.DecodeJSON(resp, &body)
+
+	if body.Total != 1 {
+		t.Fatalf("total: got %d, want 1", body.Total)
+	}
+	if len(body.Users) != 1 || body.Users[0].ID != "usr_agent_owner_123" {
+		t.Fatalf("users: got %+v, want usr_agent_owner_123", body.Users)
+	}
+}
+
 // TestAdminGetUser_SnakeCaseShape verifies the single-user endpoint also
 // emits snake_case keys.
 func TestAdminGetUser_SnakeCaseShape(t *testing.T) {
